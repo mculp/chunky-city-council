@@ -48,6 +48,43 @@ No. It changes name on the way, and TIGER leaves no gap.
 - **MTFCC table:** S1750 (748 features, Census internal use) isn't in the table, and no selected road uses it. S1730 is in the table, but these two counties have none.
 - **Widths and surfaces** are assumed defaults by road class, and `overrides` is empty because nothing yet supports an override.
 
+## Road graph build
+
+Output of `.venv/bin/python tools/build_roads.py`, which writes `data/roads.json`:
+
+```text
+TIGER/Line 2025, read from data/raw/
+  US 80: 3 edge(s), 265 vertices, S1200 7.3 m asphalt (class), walk n1 n2 n3 n4, features 1104259460504 1105084070834
+  Adams Street: 2 edge(s), 74 vertices, S1200 7.3 m asphalt (class), walk n2 n5 n6, features 1104259409674 1104259460560 1106087296718 1106087438880
+  Church St: 1 edge(s), 18 vertices, S1400 6.0 m asphalt (class), walk n5 n7, features 110168391385
+  Meehan-Savoy Rd: 1 edge(s), 520 vertices, S1400 6.0 m asphalt (class), walk n3 n8, features 1104259508037 110470585272
+Nodes:
+  n1 clip x -4663, z 183: us_80
+  n2 junction x -283, z -23: us_80 adams_st
+  n3 junction x 5808, z -216: us_80 meehan_savoy_rd
+  n4 clip x 6258, z -574: us_80
+  n5 junction x -281, z -199: adams_st church_st
+  n6 clip x -292, z -1666: adams_st, connects to I-20
+  n7 end x -1097, z -410: church_st
+  n8 end x 14919, z 6058: meehan_savoy_rd
+Report:
+  US 80 joins at the county line at -88.914715, 32.327867 (x 1254, z -227)
+  Adams Street reaches I-20 at -88.931164, 32.340809 (x -292, z -1666)
+  Geometric check: no crossing away from a shared vertex
+  Geometric check: no near-miss under 5 m
+  All selected roads connect by shared vertices
+Wrote data/roads.json
+```
+
+For the docs:
+
+- **Shape.** No road branches or has a second component, so each walks as one line. Every vertex in `roads.json` is a TIGER vertex.
+- **Clip nodes.** `kind: clip` means TIGER's line carries on past that node and the graph cuts it there. The node is the last whole TIGER vertex inside the bound, never an interpolated one, as the config requires. So Adams Street's terminal node is `clip`, with `connectsTo: I-20`.
+- **`connectsTo`.** The build sets it from the data, not from the config: the terminal has to lie on I-20 or on a ramp connected to I-20 through other ramps. The build fails if the road touches one before `clipAt`.
+- **Walk direction.** US 80 runs west to east. Each other road runs away from where it joins the graph, so Adams Street runs from US 80 towards I-20, Church St from Adams Street heading west, and Meehan-Savoy Rd from US 80.
+- **Near-misses.** A gap within 5 m of a vertex the two roads share counts as that junction and isn't reported. On this data that hides nothing: no non-touching pair of segments from different roads is under 5 m, even without the exclusion.
+- **`source.files`.** It lists only the zips the build reads, so for now just the two road files.
+
 ## Inspector output
 
 ```text
