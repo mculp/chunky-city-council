@@ -1,0 +1,59 @@
+{
+  "notes": {
+    "selection": "nearest_component: group the features carrying the road's tigerNames into components by shared vertices, take the one nearest the origin, and fail unless it is under maxDistanceM away and contains every name in tigerNames.",
+    "clip": "Bounds are true metres, before any compression. Keep the whole TIGER vertices with xMinM <= x <= xMaxM. Never interpolate an end vertex, so every vertex keeps its TIGER lon/lat.",
+    "mtfcc": "width is paved width in metres. Widths and surfaces are assumed defaults by road class, not surveyed: TIGER records neither.",
+    "overrides": "Road id to {width, surface, reason}. Empty because there is no evidence for any override yet.",
+    "compressionBands": "Set in step 5."
+  },
+  "roads": [
+    {
+      "id": "us_80",
+      "name": "US 80",
+      "tigerNames": ["US Hwy 80"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1000 },
+      "clip": {
+        "xMinM": -4670,
+        "xMaxM": 6310,
+        "basis": "500 m past the west trestle (x -4160.2) and the Meehan Savoy Rd junction (x 5807.8), rounded out to 10 m. US 80 crosses each bound once. It ends at TIGER vertices x -4663, z 183 and x 6258, z -574."
+      }
+    },
+    {
+      "id": "adams_st",
+      "name": "Adams Street",
+      "tigerNames": ["Adams St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1000 },
+      "continuation": {
+        "tigerNames": ["Chunkey Duffee Rd", "Chunky Duffee Rd", "State Hwy 889"],
+        "fromEnd": "north",
+        "clipAt": { "lon": -88.931164, "lat": 32.340809 },
+        "basis": "TIGER's Adams St ends 870 m from US 80, short of I-20. All three names carry the same geometry from its north end to clipAt, so take that geometry once. clipAt is the road's first contact with an S1630 ramp of the I-20 interchange, 774.0 m on, and TIGER leaves no gap. The road's first shared vertex with I-20 itself is 144.4 m further north."
+      }
+    },
+    {
+      "id": "church_st",
+      "name": "Church St",
+      "tigerNames": ["Church St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1000 }
+    },
+    {
+      "id": "meehan_savoy_rd",
+      "name": "Meehan-Savoy Rd",
+      "tigerNames": ["Meehan Savoy Rd S", "Meehan Savoy Rd W"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 6000 }
+    }
+  ],
+  "mtfcc": {
+    "S1100": { "label": "Primary road", "width": 7.3, "surface": "asphalt" },
+    "S1200": { "label": "Secondary road", "width": 7.3, "surface": "asphalt" },
+    "S1400": { "label": "Local neighborhood road, rural road or city street", "width": 6.0, "surface": "asphalt" },
+    "S1500": { "label": "Vehicular trail (4WD)", "width": 3.5, "surface": "dirt" },
+    "S1630": { "label": "Ramp", "width": 5.0, "surface": "asphalt" },
+    "S1640": { "label": "Service drive", "width": 6.0, "surface": "asphalt" },
+    "S1730": { "label": "Alley", "width": 3.5, "surface": "gravel" },
+    "S1740": { "label": "Private road for service vehicles", "width": 3.5, "surface": "gravel" },
+    "S1780": { "label": "Parking lot road", "width": 6.0, "surface": "asphalt" }
+  },
+  "overrides": {},
+  "compressionBands": []
+}
