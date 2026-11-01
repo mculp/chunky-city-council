@@ -12,7 +12,7 @@ Read `docs/art-direction.md` before changing anything visible. `reference/stucke
 - No Gen Z or Gen Alpha slang in game text.
 - Roads come from Census TIGER/Line data. Never derive geometry from Google imagery or commit any. Comparing by eye is fine, and differences get filed as corrections.
 - Buildings come from FEMA and ORNL's USA Structures, which is CC BY 4.0, so its credit stays with it. Street View is for writing down what a building looks like, in words, in `tools/structure_notes.json`. No business names, people's names or street addresses go in there, because most of these are someone's home. Real businesses go under invented names.
-- No music without rights.
+- No music without rights. `data/sound.md` says what's known about the rights to what's in `audio/`.
 - Keep it working on a phone with touch controls. The target is 30+ zombies on screen at 30 fps.
 - Keep `prefers-reduced-motion` working.
 
@@ -30,6 +30,7 @@ Read `docs/art-direction.md` before changing anything visible. `reference/stucke
 
 - Game data is JSON under `data/`, such as `data/roads.json`, with its schema documented alongside it.
 - Dialogue and the relationship meters are in `data/cast.json`, documented in `data/cast.md`.
+- What every sound and part of the score is, and how loud, is in `data/sound.json`, documented in `data/sound.md`. A file in `audio/` and one line there take a sound's place, without touching the code.
 - Scripts that generate it go in `tools/`. Commit the generated JSON. Raw downloads such as TIGER zips go in `data/raw/`, which is gitignored.
 - Python tools run from a `.venv/` at the repo root, also gitignored, with dependencies pinned in `tools/requirements.txt`. Don't install anything globally.
 
@@ -66,6 +67,10 @@ Then open http://localhost:8000.
 `npm run drive` finds every kind of vehicle where it's parked and drives it with real key presses and the phone's stick: along the real roads and off them, into walls, through the crowd, into the river, and out again.
 
 `npm run field` walks onto the ball field from Adams St, runs the bases, and checks that the fence and backstop stop him and that the gates let him through, on foot and in a pickup.
+
+`npm run sound` plays the game with the sound on, in real time: nothing until a touch, the mute, a hidden tab, the score through the opening, his feet on each surface, driving, the crowd, and a track and a voice line swapped in with nothing changed but `data/sound.json`. It can't say whether any of it sounds good.
+
+`npm run sound:make` says what making the music and sounds with ElevenLabs on fal would cost, and `-- --go` makes them. `data/sound.md` has the rest.
 
 `npm run water` walks into a pond and swims across it, floods a pickup in another, and checks that the crowd keeps out, that nothing real ended up under water, and that the ponds are on the map. The ponds are in `data/water.json`, documented in `data/water.md`.
 

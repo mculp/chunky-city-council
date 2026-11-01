@@ -1,0 +1,155 @@
+{
+  "music": {
+    "styles": ["instrumental", "Southern gothic", "dark ambient Americana", "post-apocalyptic Mississippi at dusk", "worn analog tape", "lo-fi grit", "D minor", "resonator slide guitar", "sparse", "patient"],
+    "avoid": ["vocals", "singing", "choir", "spoken word", "lyrics", "EDM", "trap", "pop", "bright major key", "cheerful", "epic orchestral trailer", "fade out at the end"],
+    "tracks": {
+      "hang": {
+        "states": { "title": {}, "hang": {} },
+        "avoid": ["drums", "melody that resolves"],
+        "sections": [
+          { "name": "The rope", "seconds": 40, "styles": ["almost nothing", "a long low drone", "one bowed metal note held", "a detuned resonator guitar plucked far away every few bars", "dread", "tape hiss"] },
+          { "name": "Under the bridge", "seconds": 35, "styles": ["the drone thickens", "low strings swell slowly and recede", "slide guitar answers itself from far off", "no percussion", "stays unresolved"] }
+        ]
+      },
+      "river": {
+        "states": { "river": {}, "bank": { "gain": 0.7 } },
+        "avoid": ["drums"],
+        "sections": [
+          { "name": "Cold water", "seconds": 40, "styles": ["slow pulsing sub bass like a heartbeat under water", "submerged muffled slide guitar", "long washes of reverb", "weightless"] },
+          { "name": "The far bank", "seconds": 35, "styles": ["the guitar comes up out of the water", "exhausted relief", "a little warmth", "still uneasy"] }
+        ]
+      },
+      "run": {
+        "states": { "run": {} },
+        "styles": ["116 BPM", "urgent"],
+        "avoid": ["slow", "quiet intro", "ambient"],
+        "sections": [
+          { "name": "It's coming apart", "seconds": 30, "styles": ["driving floor tom and rusted metal percussion", "distorted low guitar riff", "tense rising strings", "starts at full tilt"] },
+          { "name": "Don't look back", "seconds": 30, "styles": ["the same riff, harder", "snare cracks", "bowed metal screeching above", "no let-up"] }
+        ]
+      },
+      "fever": {
+        "states": { "dream": { "once": true } },
+        "styles": ["hallucination", "seasick"],
+        "sections": [
+          { "name": "The fever", "seconds": 22, "styles": ["pitch-bending tape warble", "a detuned music box", "reversed swells", "slow sickly vibrato", "dreamlike and wrong", "swells to a peak and falls away"] }
+        ]
+      },
+      "wake": {
+        "states": { "wake": { "once": true } },
+        "avoid": ["drums"],
+        "sections": [
+          { "name": "Coming to", "seconds": 16, "styles": ["a thin high sustained tone slowly fading", "faint low heartbeat thuds", "one slide guitar note at the very end", "open and empty"] }
+        ]
+      },
+      "town": {
+        "states": { "town": { "next": ["chase"] } },
+        "styles": ["slow fingerpicked resonator guitar", "lonely", "a hot night in an empty small town", "quiet menace underneath", "room to breathe"],
+        "takes": [
+          {
+            "sections": [
+              { "name": "Front porches", "seconds": 60, "styles": ["just the guitar", "long gaps between phrases", "a far-off low drone"] },
+              { "name": "Down the road", "seconds": 60, "styles": ["sparse upright bass notes join", "brushed kick drum very far away", "slide guitar takes the melody", "no build"] }
+            ]
+          },
+          {
+            "sections": [
+              { "name": "The rail line", "seconds": 60, "styles": ["bowed bass and a dusty harmonium drone", "guitar harmonics", "very still"] },
+              { "name": "Nobody home", "seconds": 60, "styles": ["fingerpicked guitar returns in a lower register", "a distant bell-like plucked note", "worn out", "no build"] }
+            ]
+          }
+        ]
+      },
+      "chase": {
+        "states": { "chase": {} },
+        "styles": ["92 BPM", "stalking"],
+        "avoid": ["quiet intro", "resolution"],
+        "sections": [
+          { "name": "They've seen him", "seconds": 40, "styles": ["heavy slow pulse from low toms and rusted metal hits", "low distorted guitar drones", "dissonant bowed strings closing in"] },
+          { "name": "Closer", "seconds": 35, "styles": ["same pulse", "more of them", "strings climb in semitones and never arrive", "rising dread"] }
+        ]
+      },
+      "grabbed": {
+        "states": { "grabbed": {} },
+        "styles": ["138 BPM", "panic"],
+        "avoid": ["quiet intro"],
+        "sections": [
+          { "name": "Hands on him", "seconds": 30, "styles": ["frantic pounding drums", "screeching bowed metal", "tremolo strings", "claustrophobic"] }
+        ]
+      },
+      "failed": {
+        "states": { "failed": { "once": true } },
+        "avoid": ["drums"],
+        "sections": [
+          { "name": "That's it", "seconds": 10, "styles": ["a low dying drone falling in pitch", "one last slack guitar string", "then nothing"] }
+        ]
+      },
+      "end": {
+        "states": { "end": { "once": true } },
+        "avoid": ["drums"],
+        "sections": [
+          { "name": "Still here", "seconds": 60, "styles": ["slow slide guitar melody that finally comes home to D", "warm tape", "worn out relief", "a small hope", "it may end softly"] }
+        ]
+      }
+    }
+  },
+  "cues": {
+    "step.dirt": { "takes": 3, "seconds": 0.5, "prompt": "single footstep of a work boot on dry packed dirt and gravel, close up, no other sound" },
+    "step.road": { "takes": 3, "seconds": 0.5, "prompt": "single footstep of a work boot on cracked asphalt road, close up, dry, no other sound" },
+    "step.wood": { "takes": 3, "seconds": 0.5, "prompt": "single footstep of a boot on an old hollow wooden bridge plank, slight creak, close up, no other sound" },
+    "step.mud": { "takes": 3, "seconds": 0.5, "prompt": "single footstep sinking into wet river mud, squelch, close up, no other sound" },
+    "rope.creak": { "takes": 3, "seconds": 1, "prompt": "thick old hemp rope creaking under a heavy weight as it slowly swings, fibers straining, no other sound" },
+    "rope.saw": { "takes": 2, "seconds": 0.5, "prompt": "knife sawing through thick hemp rope, one short stroke, fibers ripping, close up" },
+    "rope.snap": { "seconds": 0.8, "prompt": "thick rope snapping under tension, sharp crack and fibers whipping apart" },
+    "fall.air": { "seconds": 1.4, "stereo": true, "prompt": "wind rushing past a body falling through the air, rising whoosh, no impact" },
+    "splash.big": { "seconds": 2.5, "stereo": true, "prompt": "heavy body plunging into a river from high up, deep hollow splash, water settling, close up" },
+    "splash.small": { "takes": 2, "seconds": 1, "prompt": "small object dropping into still pond water, short plop and ripples" },
+    "swim.stroke": { "takes": 3, "seconds": 1, "prompt": "one swimming stroke in a dark river, an arm pulling through water, gentle slosh and drips" },
+    "swing": { "takes": 2, "seconds": 0.5, "prompt": "heavy sledgehammer swung fast through the air, single low whoosh, no impact" },
+    "hit.flesh": { "takes": 3, "seconds": 0.5, "prompt": "heavy blunt hit on a body, meaty thud, short, no voice" },
+    "hit.wood": { "takes": 3, "seconds": 0.5, "prompt": "sledgehammer hitting a wooden wall, solid knock, short" },
+    "hit.metal": { "takes": 3, "seconds": 0.8, "prompt": "sledgehammer hitting sheet metal, loud clang with a short ring" },
+    "hurt": { "seconds": 0.6, "prompt": "dull heavy thud to the body with a brief ringing in the ears, no voice" },
+    "break.wood": { "takes": 3, "seconds": 1, "prompt": "wooden post and planks smashing apart, splintering crack and clatter" },
+    "break.metal": { "takes": 2, "seconds": 1, "prompt": "thin metal signpost bent and torn off, metallic screech and clang" },
+    "rubble": { "takes": 2, "seconds": 2, "prompt": "section of a wall collapsing, bricks and boards falling in a heap, dust settling" },
+    "tree.fall": { "seconds": 3, "prompt": "small tree cracking at the base and crashing to the ground, branches snapping, heavy thud" },
+    "explosion": { "seconds": 4, "stereo": true, "prompt": "car exploding outdoors, deep low boom, fireball roar, debris falling, distant echo" },
+    "fire.catch": { "takes": 2, "seconds": 1, "prompt": "flames catching suddenly on gasoline, low whoomp and crackle" },
+    "can.clink": { "seconds": 0.5, "prompt": "dented tin food can picked up, two light metal clinks" },
+    "can.slosh": { "seconds": 0.8, "prompt": "metal gas can lifted, liquid sloshing inside" },
+    "ui.tap": { "seconds": 0.5, "prompt": "soft short click of a worn wooden button, dry, very quiet" },
+    "ui.paper": { "seconds": 0.5, "prompt": "folded paper map opened, quick crinkle" },
+    "glitch": { "seconds": 0.5, "stereo": true, "prompt": "short digital glitch, bit-crushed stutter and static burst, tape dropout" },
+    "fail": { "seconds": 1.5, "stereo": true, "prompt": "low dull impact and a deep falling tone, dark, no voice" },
+    "vehicle.start": { "seconds": 1.5, "prompt": "old pickup truck engine cranking and catching, starter whine then rumble" },
+    "vehicle.door": { "seconds": 0.6, "prompt": "old truck door slammed shut, tinny metal thunk, rattling window" },
+    "crash": { "takes": 2, "seconds": 1.5, "prompt": "car crashing into a wall at speed, crunching metal, shattering glass" },
+    "flood": { "seconds": 2, "prompt": "car engine sputtering and dying as water floods it, gurgling bubbles, hiss of steam" },
+    "bridge.groan": { "takes": 2, "seconds": 3, "prompt": "old iron bridge groaning under strain, deep metal creak, rivets popping" },
+    "plank.crack": { "takes": 3, "seconds": 0.6, "prompt": "old wooden plank cracking and breaking underfoot, sharp splintering" },
+    "bridge.fall": { "seconds": 6, "stereo": true, "prompt": "large old iron and timber bridge collapsing into a river, long roll of cracking beams and twisting steel, huge splashes" },
+    "snake.hiss": { "takes": 2, "seconds": 1.5, "prompt": "snake hissing close by, dry sustained hiss, no other sound" },
+    "snake.strike": { "takes": 2, "seconds": 0.5, "prompt": "snake striking fast, a quick lunge through water, sharp splash and snap" },
+    "bite.sting": { "seconds": 1.5, "stereo": true, "prompt": "sudden sharp sting of pain as a high ringing in the ears over a dull heartbeat thud, no voice" },
+    "dream.swell": { "seconds": 6, "stereo": true, "prompt": "slow eerie dreamlike swell of reversed sound rising, warped tape, then falling away" },
+    "wake.heart": { "seconds": 1, "prompt": "one slow heavy human heartbeat, lub-dub, muffled, close" },
+    "frog.a": { "takes": 2, "seconds": 1.2, "prompt": "single bullfrog croak at night, deep, close, no other sound" },
+    "frog.b": { "takes": 2, "seconds": 1.2, "prompt": "small tree frogs peeping at night, short chirrs, no other sound" },
+    "frog.c": { "seconds": 1.5, "prompt": "large bullfrog with a deep slow double call, no other sound" },
+    "groan.low": { "takes": 4, "seconds": 2, "prompt": "hoarse dry human throat groan, low, sick and tired, no words, close mic" },
+    "groan.hunt": { "takes": 4, "seconds": 1.5, "prompt": "hungry rasping human snarl rising in pitch, excited, no words" },
+    "groan.grab": { "takes": 3, "seconds": 1.5, "prompt": "wet snarling and gasping right next to the ear, struggling, frantic, no words" },
+    "amb.wind": { "seconds": 20, "loop": true, "influence": 0.4, "prompt": "gentle steady wind through dead pine trees at dusk, no birds, no music" },
+    "amb.river": { "seconds": 20, "loop": true, "influence": 0.4, "prompt": "slow wide muddy river flowing around old bridge pilings, gentle lapping, no birds, no music" },
+    "amb.crickets": { "seconds": 20, "loop": true, "influence": 0.4, "prompt": "Southern summer night, steady chorus of crickets and distant katydids, no frogs, no birds, no music" },
+    "amb.fire": { "seconds": 10, "loop": true, "influence": 0.4, "prompt": "large fire burning steadily, crackling wood and roaring flames, no wind" },
+    "engine.car": { "seconds": 6, "loop": true, "prompt": "old sedan engine idling steadily, constant revs, exhaust close up, no gear changes" },
+    "engine.pickup": { "seconds": 6, "loop": true, "prompt": "big old V8 pickup truck engine idling steadily, deep rumble, constant revs" },
+    "engine.quad": { "seconds": 6, "loop": true, "prompt": "small four-wheeler single-cylinder engine idling steadily, constant revs" },
+    "engine.golf": { "seconds": 6, "loop": true, "prompt": "electric golf cart motor, steady quiet whine and hum" },
+    "vehicle.road": { "seconds": 6, "loop": true, "prompt": "car tires rolling on asphalt at a steady speed, road noise only, no engine" },
+    "vehicle.dirt": { "seconds": 6, "loop": true, "prompt": "car tires rolling on gravel and dirt at a steady speed, stones crunching, no engine" },
+    "vehicle.skid": { "seconds": 3, "loop": true, "prompt": "tires skidding on asphalt, steady screech, no engine" }
+  }
+}

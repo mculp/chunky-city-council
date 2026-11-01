@@ -30,6 +30,11 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `data/structures.md`: where that data comes from, what's left out and why, and how to regenerate it
 - `data/water.json`: the ponds within reach of those roads, generated from USGS's National Hydrography Dataset and corrections made by eye on a public-domain aerial
 - `data/water.md`: where that data comes from, what's left out and why, and how to regenerate it
+- `data/sound.json`: what every sound and part of the score is, and how loud
+- `data/sound.md`: how to swap a sound with a file and a line, where voice recordings go, and how to make music and sounds with ElevenLabs on fal
+- `audio/`: recorded and generated sounds, each with its line in `data/sound.json`
+- `src/sound.js`: the levels, the mute, the sounds, the loops, the score and the voice lines
+- `src/soundbank.js`: every sound worked out from numbers, which is what plays when a sound has no file
 - `tools/`: the scripts that fetch the source data, build the road graph and plot it
 - `tools/smoke.mjs`: plays Chapter 1 in Chrome (`npm i`, then `npm run smoke`)
 - `tools/walk-roads.mjs`: walks every road end to end in Chrome (`npm run walk`)
@@ -38,6 +43,8 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/play-drive.mjs`: drives every kind of vehicle in Chrome, on the roads and off them, into walls and through the crowd (`npm run drive`)
 - `tools/play-field.mjs`: walks onto the ball field and tries its fence and gates, on foot and in a pickup (`npm run field`)
 - `tools/play-water.mjs`: swims across a pond, floods a pickup in another and checks what's under them (`npm run water`)
+- `tools/play-sound.mjs`: plays the game with the sound on and checks what it's playing (`npm run sound`)
+- `tools/make-sound.mjs`: makes the music and sounds in `tools/sound_prompts.json` with ElevenLabs on fal, and says what it'd cost first (`npm run sound:make`)
 - `tools/play-wreck.mjs`: crashes, burns and blows up the town in Chrome and reports what the worst of it costs (`npm run wreck`)
 - `tools/map-overlay.mjs`: draws TIGER's lines over a top-down capture of the game and measures the difference (`npm run overlay`)
 - `tools/structure-overlay.mjs`: draws the game's buildings over a public-domain aerial of the same ground (`npm run overlay:structures`)

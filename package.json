@@ -11,6 +11,8 @@
     "drive": "node tools/play-drive.mjs",
     "field": "node tools/play-field.mjs",
     "water": "node tools/play-water.mjs",
+    "sound": "node tools/play-sound.mjs",
+    "sound:make": "node tools/make-sound.mjs",
     "wreck": "node tools/play-wreck.mjs",
     "overlay:structures": "node tools/structure-overlay.mjs",
     "overlay": "node tools/map-overlay.mjs"

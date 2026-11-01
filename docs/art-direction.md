@@ -110,6 +110,17 @@ Between the end of the bridge run and the edge of town there isn't a word, and n
 - **He comes to.** Face down on the planks of the Chunky River Bridge, with the fever still in the sky. It takes a few seconds more to leave him.
 - **Reduced motion.** The same scene with a still camera: the tint and the fade, no warping, no shake and no glitch, in under half the time.
 
+## Sound
+
+The night comes first: wind, insects, the river and frogs near water, all of it thin enough that a footstep carries. The music is slow and has a lot of room in it, a low drone and a slide guitar a long way off, and it only gets a pulse when something's after him.
+
+- **The rope snapping is the loudest silence in the game.** The music cuts as it goes, so there's only air and then the splash, and it comes back under the water.
+- **The bridge** gets drums and a pulse. **The bite** cuts everything dead. **The fever** takes the night away altogether and leaves the music going out of tune. **Waking** is his heart.
+- **The crowd** mutter to themselves. One that's noticed him says so, louder the closer it is, and the music turns on him until they've been gone a while.
+- **Nothing speaks for him.** His voice is the owner's to record. There's a place for each line, and no line exists until there's a recording of it.
+
+`data/sound.md` has how it's all kept.
+
 ## What only the reference has
 
 The game has the reference's clean character, holds, timed bursts, full bottle, drawstrings and particles. These stay in the reference on purpose:
