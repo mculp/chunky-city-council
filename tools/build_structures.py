@@ -45,6 +45,7 @@ NAIP_TILE_M = 1000  # At 1 m a pixel, which is plenty for one colour a roof.
 OPENING_M = 150  # Nothing stands within this of the bridge, in world metres: the opening scene has to stay as it was.
 CLEARANCE_M = 1.0  # Between two buildings a compressed stretch of road has pushed together.
 ROAD_CLEAR_M = 1.5  # Past the road's edge.
+ROAD_NUDGE_M = 8.0  # How far a real building gets moved off a road before it's given up on.
 RAIL_CLEAR_M = 5.0  # Past the middle of the track.
 RIVER_CLEAR_M = 22.0  # Past the middle of the river, where the bank has come up to the level of the land.
 
@@ -376,6 +377,62 @@ def roof_colour(ring, tiles, refresh):
 COMPASS = {"north": (0, -1), "south": (0, 1), "east": (1, 0), "west": (-1, 0)}
 
 
+def true_of(world, wx, wz, x, z):
+    """The true position that lands on these world coordinates, from one nearby, because a compressed stretch of map doesn't keep distances."""
+    for _ in range(60):
+        ax, az = world.from_true(x, z)
+        x += wx - ax
+        z += wz - az
+    return x, z
+
+
+def on_a_road(ring_world, wx, wz, world):
+    """Whether a footprint stands on a road or too close to its edge."""
+    edges = list(zip(ring_world, ring_world[1:] + ring_world[:1]))
+    for w, l in world.roads:
+        if any(seg_dist(p[0], p[1], a, b) < w / 2 + ROAD_CLEAR_M or seg_dist(a[0], a[1], p, q) < w / 2 + ROAD_CLEAR_M for a, b in zip(l, l[1:]) if seg_dist(wx, wz, a, b) < 200 for p, q in edges):
+            return True
+    return False
+
+
+def off_the_road(ring_world, wx, wz, world):
+    """How far to slide a footprint so it clears the road, straight away from the nearest one, or None if it's more than ROAD_NUDGE_M.
+
+    A TIGER line and a footprint are each a few metres out, so a real building beside a road can read as standing on it. It's better moved a little than lost.
+    """
+    dx, dz = 0.0, 0.0
+    for _ in range(int(ROAD_NUDGE_M / 0.5)):
+        _, _, ((ax, az), (bx, bz)) = world.nearest_road(wx + dx, wz + dz)
+        ux, uz = bx - ax, bz - az
+        t = max(0, min(1, ((wx + dx - ax) * ux + (wz + dz - az) * uz) / (ux * ux + uz * uz or 1)))
+        ox, oz = wx + dx - (ax + ux * t), wz + dz - (az + uz * t)
+        l = math.hypot(ox, oz) or 1
+        dx += ox / l * 0.5
+        dz += oz / l * 0.5
+        if not on_a_road([(p[0] + dx, p[1] + dz) for p in ring_world], wx + dx, wz + dz, world):
+            return dx, dz
+    return None
+
+
+def lean_of(ring, lean, world):
+    """The wall a lean-to stands on and how far along it, from what the note says about it."""
+    edge = door_edge(ring, world, lean["faces"])
+    (ax, az), (bx, bz) = ring[edge], ring[(edge + 1) % len(ring)]
+    wall = math.hypot(bx - ax, bz - az)
+    out = {"edge": edge, "deep": lean["deep"], "t0": 0.0, "t1": round2(wall)}
+    if "length" in lean:
+        # from the end furthest towards `from`
+        tx, tz = COMPASS[lean["from"]]
+        if (bx - ax) * tx + (bz - az) * tz > 0:
+            out["t0"] = round2(wall - lean["length"])
+        else:
+            out["t1"] = round2(lean["length"])
+    for k in ("post", "slope"):
+        if k in lean:
+            out[k] = lean[k]
+    return out
+
+
 def door_edge(ring_world, world, faces=None):
     """Which wall the door goes in: the longest one that faces the way it's told, the nearest road or, far from any, the track."""
     cx, cz = centroid(ring_world)
@@ -437,6 +494,9 @@ def main():
         ring = footprint(f)
         if "clip" in note:
             ring = clip_ring(ring, note["clip"]["axis"], note["clip"]["max"])
+        if note.get("seen") and "shape" in note:
+            ox, oz = centroid(ring)
+            ring = [(ox + dx, oz + dz) for dx, dz in note["shape"]]
         cx, cz = centroid(ring)
         wx, wz = world.from_true(cx, cz)
         far = min(world.nearest(wx, wz, [l for _, l in world.roads]), world.nearest(wx, wz, world.rail))
@@ -448,9 +508,16 @@ def main():
     # What goes first if a compressed stretch of road hasn't room for everyone: what's been looked at, then what
     # isn't a house, then whatever's nearest the road
     candidates.sort(key=lambda s: (not s["note"].get("seen"), s["use"] in ("house", "mobile", "shed"), s["road"], s["id"]))
-    placed, dropped = [], []
+    placed, dropped, nudged = [], [], []
     cells = {}
     for s in candidates:
+        if s["note"].get("seen") and "move" in s["note"]:
+            mx, mz = s["note"]["move"]
+            s["cx"] += mx
+            s["cz"] += mz
+            s["ring"] = [(p[0] + mx, p[1] + mz) for p in s["ring"]]
+            s["wx"], s["wz"] = world.from_true(s["cx"], s["cz"])
+        s["at"] = (s["cx"], s["cz"])
         ring_world = [(s["wx"] + p[0] - s["cx"], s["wz"] + p[1] - s["cz"]) for p in s["ring"]]
         reason = None
         if s["note"].get("condition") == "gone":
@@ -458,11 +525,16 @@ def main():
         elif abs(s["wx"]) < OPENING_M and abs(s["wz"]) < OPENING_M:
             reason = "opening"
         else:
-            edges = list(zip(ring_world, ring_world[1:] + ring_world[:1]))
-            for w, l in world.roads:
-                if any(seg_dist(p[0], p[1], a, b) < w / 2 + ROAD_CLEAR_M or seg_dist(a[0], a[1], p, q) < w / 2 + ROAD_CLEAR_M for a, b in zip(l, l[1:]) if seg_dist(s["wx"], s["wz"], a, b) < 200 for p, q in edges):
+            if on_a_road(ring_world, s["wx"], s["wz"], world):
+                moved = off_the_road(ring_world, s["wx"], s["wz"], world)
+                if moved is None:
                     reason = "road"
-                    break
+                else:
+                    s["wx"] += moved[0]
+                    s["wz"] += moved[1]
+                    s["at"] = true_of(world, s["wx"], s["wz"], s["cx"], s["cz"])
+                    ring_world = [(p[0] + moved[0], p[1] + moved[1]) for p in ring_world]
+                    nudged.append((s["id"], round(math.hypot(*moved), 1)))
             if not reason and any(seg_dist(p[0], p[1], a, b) < RAIL_CLEAR_M for l in world.rail for a, b in zip(l, l[1:]) if seg_dist(s["wx"], s["wz"], a, b) < 200 for p in ring_world):
                 reason = "track"
             if not reason and any(seg_dist(p[0], p[1], a, b) < RIVER_CLEAR_M for l in world.river for a, b in zip(l, l[1:]) if seg_dist(s["wx"], s["wz"], a, b) < 200 for p in ring_world):
@@ -490,7 +562,7 @@ def main():
         note = s["note"]
         look = looks_of(s["use"], s["sqm"], seed)
         if note.get("seen"):
-            for k in ("walls", "roof", "roofMat", "floors", "porch", "carport", "open", "shutters", "condition", "steep", "doors", "bays", "lit", "trimColor", "doorColor"):
+            for k in ("walls", "roof", "roofMat", "floors", "porch", "carport", "open", "shutters", "condition", "steep", "doors", "bays", "lit", "trimColor", "doorColor", "eaves", "pitch", "gableColor", "band", "vent", "cross"):
                 if k in note:
                     look[k] = note[k]
             look["wallColor"] = note.get("wallColor", look.get("wallColor") if look["walls"] == note.get("walls", look["walls"]) else None)
@@ -499,10 +571,12 @@ def main():
         named = look.pop("wallColor", None)
         wall = named if named and named.startswith("#") else WALL_COLORS.get(named) or WALL_DEFAULT[look["walls"]]
         roof = note.get("roofColor") or (None if args.no_aerial else roof_colour(s["ring"], tiles, args.refresh)) or ROOF_DEFAULT[look["roofMat"]]
-        out = {"id": s["id"], "x": round2(s["cx"]), "z": round2(s["cz"]), "ring": [[round2(p[0] - s["cx"]), round2(p[1] - s["cz"])] for p in s["ring"]], "sqm": round(s["sqm"]), "use": note.get("use", s["use"]), **look, "wallColor": wall, "roofColor": roof, "door": door_edge(s["world_ring"], world, note.get("doorFaces"))}
+        out = {"id": s["id"], "x": round2(s["at"][0]), "z": round2(s["at"][1]), "ring": [[round2(p[0] - s["cx"]), round2(p[1] - s["cz"])] for p in s["ring"]], "sqm": round(s["sqm"]), "use": note.get("use", s["use"]), **look, "wallColor": wall, "roofColor": roof, "door": door_edge(s["world_ring"], world, note.get("doorFaces"))}
         for k, default in (("porch", "none"), ("carport", False), ("shutters", False), ("condition", None), ("steep", False)):
             if out.get(k, default) == default:
                 out.pop(k, None)
+        if note.get("seen") and "lean" in note:
+            out["lean"] = lean_of(s["ring"], note["lean"], world)
         if note.get("seen"):
             out["seen"] = True
         if note.get("what"):
@@ -511,6 +585,7 @@ def main():
 
     print("kept", len(structures), "by eye", sum(1 for s in structures if s.get("seen")), "outside the map", outside)
     print("dropped", Counter(d["why"] for d in dropped).most_common())
+    print("moved off a road", nudged)
     print("uses", Counter(s["use"] for s in structures).most_common())
     print("roofs from the aerial", sum(1 for s in structures if s["roofColor"] not in ROOF_DEFAULT.values()), "tiles", len(tiles))
 

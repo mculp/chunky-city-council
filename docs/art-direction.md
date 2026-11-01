@@ -78,7 +78,7 @@ Night in an abandoned Mississippi town.
 
 - **Palette:** night `#07050b`, ink `#120b14`, cream `#f1e6cf`, rust `#ec803a`, cyan `#6fd6c8`, hot `#e3285c`, dusk `#a99bc0`.
 - **Sky:** horizon `#e0662a`, clouds `#1d1230`, moonlight `#c9d4ff`, purple fog `#2a1838`.
-- **Surfaces:** flat-shaded terrain and foliage, ink outlines on buildings and steel, kudzu `#3f7a35` over everything left standing.
+- **Surfaces:** flat-shaded terrain and foliage, ink outlines on buildings and steel, kudzu `#3f7a35` over everything left standing. On a building it lies flat to the walls, spilling from under the eaves or climbing from the ground, and never stands off them in mounds.
 - **The bridge:** a rusted truss with an orange rail (`#d76a2c`).
 - **The town:** the real one. Every building is at its real position, with its real footprint, in siding, brick, block or ribbed metal, and with kudzu on it. See `data/structures.md`. The town hall is the little block one on the corner of Commerce St, the post office is across Commerce from it, the gas station's canopy stands in front of the old store it belonged to, and Miss Odessa's church is the brick one at Adams and Church St. Real businesses go under invented names.
 - **The roads:** asphalt lighter than the ground, with patches, cracks and polished wheel paths. Double yellow down US 80 and Adams St, dashed yellow on the smaller roads, white edge lines on all of them, worn away in long stretches and speckled up close. A gravel shoulder thins out into the dirt. Paint stops short of junctions and railroad crossings. By the bridge, it's still the first scene's dark road.
