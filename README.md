@@ -32,7 +32,8 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `data/water.md`: where that data comes from, what's left out and why, and how to regenerate it
 - `data/sound.json`: what every sound and part of the score is, and how loud
 - `data/sound.md`: how to swap a sound with a file and a line, where voice recordings go, and how to make music and sounds with ElevenLabs on fal
-- `audio/`: recorded and generated sounds, each with its line in `data/sound.json`
+- `data/sound-new.json`: the same for what's been made with ElevenLabs on fal, heard at `#sounds-new` and `#new`, and never at `#sounds` or in the game unless the owner chooses it
+- `audio/`: the files that sheet plays, with what made each in `audio/manifest.json`
 - `src/sound.js`: the levels, the mute, the sounds, the loops, the score and the voice lines
 - `src/soundbank.js`: every sound worked out from numbers, which is what plays when a sound has no file
 - `tools/`: the scripts that fetch the source data, build the road graph and plot it
@@ -47,6 +48,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/make-sound.mjs`: makes the music and sounds in `tools/sound_prompts.json` with ElevenLabs on fal, and says what it'd cost first (`npm run sound:make`)
 - `tools/set-fal-key.sh`: saves a fal key for that, readable only by you
 - `tools/measure-sound.mjs`: measures every file in `audio/` in Chrome and draws their spectrograms, since nothing here can hear (`npm run sound:measure`)
+- `tools/level-sound.mjs`: sets the levels in `data/sound-new.json` to match the old sheet's, so comparing them is about the sound (`npm run sound:level`)
 - `tools/play-wreck.mjs`: crashes, burns and blows up the town in Chrome and reports what the worst of it costs (`npm run wreck`)
 - `tools/map-overlay.mjs`: draws TIGER's lines over a top-down capture of the game and measures the difference (`npm run overlay`)
 - `tools/structure-overlay.mjs`: draws the game's buildings over a public-domain aerial of the same ground (`npm run overlay:structures`)
@@ -57,3 +59,4 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - Building footprints: [USA Structures](https://www.arcgis.com/home/item.html?id=0ec8512ad21e4bb987d7e848d14e7e24) by Oak Ridge National Laboratory (ORNL) and the Federal Emergency Management Agency (FEMA) Geospatial Response Office, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). We've clipped a few, moved them along compressed road and added what they look like.
 - Roof colours, and the ponds' corrections: USDA National Agriculture Imagery Program, public domain.
 - Ponds: US Geological Survey National Hydrography Dataset, public domain.
+- The music and sounds in `audio/`: generated with ElevenLabs' models on fal. `data/sound.md` has what's on record about the rights.

@@ -96,6 +96,8 @@ check('and his heart when he wakes', has(opening.wake.heard, 'wake.heart'), open
 const feet = await g(async () => {
   const out = {}, walk = async (x, z) => { G.place(x, z); await run(.2); Snd.forget(); const s = G.surfaceUnder(); G.key('w', true); await run(1.4); G.key('w', false); return [s, Snd.state().heard]; };
   let t = 0; while (G.S.mode !== 'town' && t < 8) { await run(.2); t += .2; }
+  // the score goes by the mode a frame ago if he got up partway through a frame's work
+  await run(.1);
   out.mode = G.S.mode; out.music = Snd.state().music;
   Snd.forget(); out.deck = [G.surfaceUnder()]; G.key('w', true); await run(1.2); G.key('w', false); out.deck.push(Snd.state().heard);
   out.road = await walk(...G.map.fromTrue(-283, -100));

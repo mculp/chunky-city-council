@@ -13,7 +13,7 @@ const TRACK_TOP = .5;
 const read = (p) => JSON.parse(readFileSync(new URL(`../${p}`, import.meta.url), 'utf8'));
 const OLD = read('data/sound.json'), NEW = read('data/sound-new.json');
 
-// Runs in the page. What a sound comes to once it's been weighted, by its one name and its files or by its recipe
+// Runs in the page: how loud a recipe or a file comes out, weighted
 const setUpInPage = async () => {
   const { render, RATE, RECIPES, variantsOf } = await import('/src/soundbank.js');
   const weigh = (ctx, input) => {
@@ -78,7 +78,7 @@ for (const [name, c] of Object.entries(NEW.cues)) {
 }
 console.log(rows.join('\n'));
 
-// ---------------- the score, a part at a time. The drone's first read off the meter with the old sheet's layers playing.
+// ---------------- the score, a part at a time. The page plays the old sheet, so the meter's reading its drone.
 await page.keyboard.press('x');
 await page.waitForFunction(() => window.__game.sound.state().ctx === 'running', null, { timeout: 5000 });
 await page.evaluate(() => { window.__game.sound.meter(); });

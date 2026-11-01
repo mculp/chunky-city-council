@@ -95,9 +95,9 @@
   },
   "cues": {
     "step.dirt": { "takes": 3, "seconds": 1.2, "prompt": "single footstep of a work boot on dry packed dirt and gravel, close up, no other sound" },
-    "step.road": { "takes": 3, "seconds": 1.2, "prompt": "one single boot footstep on cracked asphalt, sharp scuff and heel strike, only one step, close up, dry, no other sound", "influence": 0.6 },
-    "step.wood": { "takes": 3, "seconds": 1.2, "prompt": "one single boot footstep on a hollow wooden plank, sharp wooden knock, only one step, close up, no other sound", "influence": 0.6 },
-    "step.mud": { "takes": 3, "seconds": 1.2, "prompt": "one single footstep squelching into thick wet mud, only one step, close up, no water running, no other sound", "influence": 0.6 },
+    "step.road": { "takes": 3, "seconds": 0.8, "prompt": "one single boot footstep on cracked asphalt, sharp scuff and heel strike, only one step, close up, dry, no other sound", "influence": 0.6 },
+    "step.wood": { "takes": 3, "seconds": 0.8, "prompt": "one single boot footstep on a hollow wooden plank, sharp wooden knock, only one step, close up, no other sound", "influence": 0.6 },
+    "step.mud": { "takes": 3, "seconds": 0.8, "prompt": "one single footstep squelching into thick wet mud, only one step, close up, no water running, no other sound", "influence": 0.6 },
     "rope.creak": { "takes": 3, "seconds": 1, "prompt": "thick old hemp rope creaking under a heavy weight as it slowly swings, fibers straining, no other sound" },
     "rope.saw": { "takes": 2, "seconds": 1, "prompt": "knife sawing through thick hemp rope, one short stroke, fibers ripping, close up" },
     "rope.snap": { "seconds": 1.5, "prompt": "thick hemp rope under a heavy load snapping, loud sharp crack with a low thump, fibers whipping apart, close up" },

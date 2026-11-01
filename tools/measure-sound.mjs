@@ -81,8 +81,9 @@ const measureInPage = async ({ b64, spectrogram }) => {
   // How long the sound takes to arrive once it's started, and how many separate hits are in it. A trim can't take off a faint tick before the real hit.
   const fold = (i) => { let a = 0; for (const d of chans) a = Math.max(a, Math.abs(d[i])); return a; };
   let arrive = first; while (arrive < n && fold(arrive) < peak * .3) arrive++;
+  // A second step 12 dB down is still a second step
   const ms = Math.floor(rate * .01); let hits = 0, under = 99;
-  for (let at = first; at + ms <= n; at += ms) { let top = 0; for (let i = at; i < at + ms; i++) top = Math.max(top, fold(i)); if (top > peak * .5) { if (under >= 8) hits++; under = 0; } else if (top < peak * .15) under++; }
+  for (let at = first; at + ms <= n; at += ms) { let top = 0; for (let i = at; i < at + ms; i++) top = Math.max(top, fold(i)); if (top > peak * .25) { if (under >= 5) hits++; under = 0; } else if (top < peak * .1) under++; }
   return { seconds: n / rate, rate, chans: chans.length, peak, rms, clipped, leads: first / rate, trails: (n - 1 - last) / rate, startRms: loudness(0, edge), endRms: loudness(n - edge, n), wrap, lows: bands[0] / bandSum, mids: bands[1] / bandSum, highs: bands[2] / bandSum, swells, comesBack, late: (arrive - first) / rate, hits, png };
 };
 
@@ -106,9 +107,10 @@ for (const file of files) {
   if (track && m.comesBack) wrong.push(`fades out, then ${m.comesBack.toFixed(1)} s more comes back`);
   // a loop comes round every few seconds, so anything that stands out in it comes round too
   if (loop && m.swells > (cue?.uneven ? 24 : 6)) wrong.push(`swells ${m.swells.toFixed(1)} dB`);
-  // a footstep or a blow has to land when it happens, and only once
+  // a footstep or a blow has to land when it happens, and only once. So does a swing, though it takes longer to arrive, and a squelch can have a suck and a drip.
   if (/^(step|hit)\./.test(name) && m.late > .2) wrong.push(`arrives ${m.late.toFixed(2)} s after it starts`);
-  if (/^(step|hit)\./.test(name) && m.hits > 1) wrong.push(`${m.hits} hits in it`);
+  if (name === 'swing' && m.late > .35) wrong.push(`arrives ${m.late.toFixed(2)} s after it starts`);
+  if (/^(step|hit)\.|^swing$/.test(name) && m.hits > (name === 'step.mud' ? 2 : 1)) wrong.push(`${m.hits} hits in it`);
   if (wrong.length) problems.push(`${rel}: ${wrong.join(', ')}`);
   rows.push([rel.replace(/^audio\//, '').padEnd(28), `${m.seconds.toFixed(1)}s`.padStart(7), `${(size / 1024).toFixed(0)}KB`.padStart(7), `${m.chans}ch`.padStart(4), `pk ${db(m.peak)}`.padStart(9), `rms ${db(m.rms)}`.padStart(10), `in ${m.leads.toFixed(2)}`.padStart(8), `out ${m.trails.toFixed(2)}`.padStart(9), `lo/mid/hi ${Math.round(m.lows * 100)}/${Math.round(m.mids * 100)}/${Math.round(m.highs * 100)}`.padStart(20), `late ${m.late.toFixed(2)}`.padStart(10), `hits ${m.hits}`.padStart(8), `swell ${m.swells.toFixed(1)}`.padStart(11), wrong.length ? `  <- ${wrong.join(', ')}` : ''].join(' '));
 }

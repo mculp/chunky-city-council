@@ -20,7 +20,7 @@ Whatever the file's like, it comes out sitting with the rest. Its silence comes 
 | Field | What it does |
 |---|---|
 | `file` | The file, or a list of takes |
-| `gain` | How loud, from 0 to 1 |
+| `gain` | How loud against the others. 1 is as it comes |
 | `bus` | `effects` or `ambience`. It's `effects` if it isn't given |
 | `reach` | How many metres away it can be heard, for anything played at a place |
 | `spread` | How far its pitch wanders from one play to the next |
@@ -42,13 +42,13 @@ Whatever the file's like, it comes out sitting with the rest. Its silence comes 
 | Field | What it does |
 |---|---|
 | `file` | A track, or a list that's played in turn. Parts that name the same file share it, and it runs straight on from one to the next |
-| `gain` | How loud this part plays it, from 0 to 1 |
+| `gain` | How loud this part plays it. 1 is as it comes |
 | `once` | Plays it through once, rather than coming round again |
 | `next` | Parts of the game to fetch ahead of time, so that they come in straight away |
 | `quick` | Cuts rather than fades |
 | `bed`, `air`, `guitar`, `pulse`, `bpm`, `wobble` | The drone that plays if there's no file, or until it's come |
 
-Tracks don't have to be made to loop. The silence comes off both ends, and each one fades into itself or the next over 5 seconds as it comes round. They're levelled as they load, so they come out at about the same loudness as each other, and `levels.music` sets them all. Only the track that's wanted comes down. A long track takes a lot of memory once it's decoded, about 57 MB for two and a half minutes, so a phone keeps the last two and anything else the last four. Keep them to a couple of minutes.
+Tracks don't have to be made to loop. The silence comes off both ends, and each one fades into itself or the next over 5 seconds as it comes round. A full second of quiet in a track's last 15 seconds counts as its end, because a generated track can fade out and then have noise after it. They're levelled as they load, so they come out at about the same loudness as each other, and `levels.music` sets them all. Only the track that's wanted comes down. A long track takes a lot of memory once it's decoded, about 57 MB for two and a half minutes, so a phone keeps the last two and anything else the last four. Keep them to a couple of minutes.
 
 ## Voice lines
 
@@ -78,6 +78,8 @@ The music and everything else dip under it, the words come up, and it plays once
 
 To bring one into the game, copy its `file` into that sound's line in `data/sound.json`, which is the owner's call, one sound at a time.
 
+All of it's been made: 11 tracks and 99 takes of the 57 sounds, 19 MB to download. It costs more to hold than the worked-out sounds do. Those come to about 17 MB once worked out. The files come to about 64 MB decoded at a phone's 48 kHz, most of that the stereo loops, and up to another 92 MB for the two longest tracks a phone keeps. It's something to weigh when choosing, and folding the loops to one channel on a phone would save about 20 MB if it matters.
+
 It needs a fal key. Run this in a real terminal, because it has to wait for you to type. It keeps the key in `~/.config/chunky/fal-key`, readable only by you, and out of the shell history, the repo and every other program's environment. `FAL_KEY` wins over that file if it's set:
 
 ```sh
@@ -97,7 +99,7 @@ npm run sound:make -- --go --budget 30             # the limit, in dollars, for 
 
 It won't start if the run could take what's been spent over the budget, and stopping halfway loses nothing. `audio/manifest.json` keeps the running total under `spent`, and making a file over another doesn't take anything off it. On 2026-11-01 fal's pricing API said $0.60 a minute for music and $0.002 a second for sounds, and its music page said $0.80. Nothing settles whether music is rounded up to the whole minute, so the budget's held against that.
 
-A track or a sound that's wrong is a matter of changing its prompt and running it with `--only` and `--again`. After a run, `npm run sound:measure` fails on a file that's silent or hardly there, clipped, cut short, a track that fades out and then has more on the end, a loop with a click where it comes round or that swells partway, or a footstep or a blow that lands late or more than once. `-- --pictures dir` draws a spectrogram of each. In the prompt sheet, `quiet` says a sound is meant to be, and `uneven` that a loop's level is meant to move, as a fire's does. `npm run sound:level` then sets the levels in `data/sound-new.json` to match the old sheet's, sound by sound and part by part of the score, by a weighted loudness, so that comparing the boards is about the sound. The levels there are its, so run it again after making anything over. `npm run sound` and the board at `#sounds` are how to check the rest. Nothing here can hear, so somebody has to listen.
+A track or a sound that's wrong is a matter of changing its prompt and running it with `--only` and `--again`. After a run, `npm run sound:measure` fails on a file that's silent or hardly there, clipped, cut short, a track that fades out and then has more on the end, a loop with a click where it comes round or that swells partway, or a footstep or a blow that lands late or more than once. `-- --pictures dir` draws a spectrogram of each. In the prompt sheet, `quiet` says a sound is meant to be, and `uneven` that a loop's level is meant to move, as a fire's does. `npm run sound:level` then sets the gains in `data/sound-new.json` to match the old sheet's, sound by sound and part by part of the score, by a weighted loudness, so that comparing the boards is about the sound. A part's gain can be well over 1, because the sheet keeps the old `levels` so that the drone standing in for a track is no louder on it. The gains there are its, so run it again after making anything over. `npm run sound` and the board at `#sounds` are how to check the rest. Nothing here can hear, so somebody has to listen.
 
 ### The rights
 
@@ -118,4 +120,4 @@ Check all of this again before the game's sold, or if it outgrows those figures.
 
 ## What hasn't been checked
 
-`npm run sound` proves what's playing and that something's coming out, in Chrome. It can't say whether it sounds good. How an iPhone's silent switch and lock screen behave can only be found out on an iPhone.
+`npm run sound` proves what's playing and that something's coming out, in Chrome, with the real files on a phone-sized page too. It can't say whether it sounds good. Nobody has heard the generated sounds. They've only been measured and looked at as spectrograms, and whether each matches its prompt is for someone with ears. How an iPhone's silent switch and lock screen behave, and whether one copes with the memory above, can only be found out on an iPhone.

@@ -85,6 +85,11 @@ test('the real sheet covers every sound in the game, within the limits of the mo
   assert.ok(all.most < 20, `the whole sheet could come to $${all.most}, over the budget`);
 });
 
+test('the new sheet keeps the old one\'s levels, so the drone that stands in for a track is no louder on it', () => {
+  const made = new URL('../data/sound-new.json', import.meta.url);
+  if (existsSync(made)) assert.deepEqual(JSON.parse(readFileSync(made, 'utf8')).levels, REAL.levels);
+});
+
 test('data/sound.json keeps its one line to a sound', () => {
   const back = formatSound(REAL);
   assert.deepEqual(JSON.parse(back), REAL);

@@ -699,11 +699,11 @@
     },
     "audio/sfx/step.mud.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
-      "seconds": 1.2,
-      "bytes": 20105,
-      "sha256": "eb695094a1852077bb579c0a8ff9b4e8a4bea04b21f46c2210909168c135c440",
-      "request": "01a198c4-ec86-7cb0-8f0d-a06794f97b0d",
-      "date": "2026-11-01T20:20:07.317Z"
+      "seconds": 0.8,
+      "bytes": 13835,
+      "sha256": "89bd2767cfb497e1983b81ab5c86f3796b8b381c7f72ceb0026141dc6400c8c8",
+      "request": "01a198de-3cb7-72c3-abf0-0faf281acc13",
+      "date": "2026-11-01T20:47:48.254Z"
     },
     "audio/sfx/step.mud.2.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
@@ -723,19 +723,19 @@
     },
     "audio/sfx/step.road.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
-      "seconds": 1.2,
-      "bytes": 20105,
-      "sha256": "a0094db3abec4aaedf640de6aa4436fc973d98810858aef880f7a947f1a5de58",
-      "request": "01a198c5-67e0-7703-83b5-903b65a95c48",
-      "date": "2026-11-01T20:20:40.958Z"
+      "seconds": 0.8,
+      "bytes": 13835,
+      "sha256": "a5906856676c2102a0fe8d0cd31b28f8ebdf599c563a8ea433a23e002bace806",
+      "request": "01a198de-080c-79d1-829d-5d26b8e4d5e0",
+      "date": "2026-11-01T20:47:32.774Z"
     },
     "audio/sfx/step.road.2.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
-      "seconds": 1.2,
-      "bytes": 20105,
-      "sha256": "094838b44c1d7e1843a259c4ed5a219778c13ab8a68f4f0d69b9f3c216781f47",
-      "request": "01a198c5-67e0-7df3-9a41-80b7102b6def",
-      "date": "2026-11-01T20:20:41.100Z"
+      "seconds": 0.8,
+      "bytes": 13835,
+      "sha256": "c9ee2706c9d2fdb10e10a26c601edbd001689622520491750c18bdbd5cf25749",
+      "request": "01a198de-5558-7423-84c9-27d637173b56",
+      "date": "2026-11-01T20:47:54.729Z"
     },
     "audio/sfx/step.road.3.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
@@ -755,19 +755,19 @@
     },
     "audio/sfx/step.wood.2.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
-      "seconds": 1.2,
-      "bytes": 20105,
-      "sha256": "5ee87761e86a6162626854429cf78fe5fa32d08c3704c96d0506a525f4cff2b2",
-      "request": "01a198c5-8b6b-7502-b130-cc9cc925aff8",
-      "date": "2026-11-01T20:20:47.749Z"
+      "seconds": 0.8,
+      "bytes": 13835,
+      "sha256": "d58e91d363d08bd417d49bff9c107b857f27b536e612c27ad81e7b443808e53c",
+      "request": "01a198de-0819-7f11-92e1-0e14e89fc1bf",
+      "date": "2026-11-01T20:47:32.715Z"
     },
     "audio/sfx/step.wood.3.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
-      "seconds": 1.2,
-      "bytes": 20105,
-      "sha256": "f620b17eed6ba96e6f93f42002b1df4ae1005f472c07b8b9b6f9e61c43796ec2",
-      "request": "01a198c8-2160-72c2-9b4b-d8a5658500a3",
-      "date": "2026-11-01T20:23:37.505Z"
+      "seconds": 0.8,
+      "bytes": 13835,
+      "sha256": "9258f904e1850bd5698a02d250ad0015c34774c96dd8e66444b345c26d0f8754",
+      "request": "01a198de-11b2-75e3-b0b1-bed038e1153f",
+      "date": "2026-11-01T20:47:37.384Z"
     },
     "audio/sfx/swim.stroke.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
@@ -805,9 +805,9 @@
       "model": "fal-ai/elevenlabs/sound-effects/v2",
       "seconds": 1,
       "bytes": 17179,
-      "sha256": "78885aa79d614e2e251e712b5c17cacd490f240e954f9ebf329cf3d36403da8d",
-      "request": "01a198c4-7f81-7162-a104-7efbd4a7afe0",
-      "date": "2026-11-01T20:19:41.336Z"
+      "sha256": "7c6b1f337a1f0574c15e8f3f05a39e3c6d25f490537deda5cf5ce06864658300",
+      "request": "01a198de-fa0c-74c3-9fd6-3ce48af94242",
+      "date": "2026-11-01T20:48:37.297Z"
     },
     "audio/sfx/tree.fall.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
@@ -837,9 +837,9 @@
       "model": "fal-ai/elevenlabs/sound-effects/v2",
       "seconds": 6,
       "bytes": 97009,
-      "sha256": "d74239eed05e8a7da66f977d95ad13fbc242931684fb471eb56556ee81d36bbc",
-      "request": "01a198c4-ff9c-7aa2-bdbe-34f2a11c8952",
-      "date": "2026-11-01T20:20:14.324Z"
+      "sha256": "d6e1f60283e73b79e61c8012ef170aa9b6adcc583a5e12dbd0c10012d73ee04c",
+      "request": "01a198de-2389-78c0-bd14-66e4fa69533e",
+      "date": "2026-11-01T20:47:41.944Z"
     },
     "audio/sfx/vehicle.door.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
@@ -883,7 +883,7 @@
     }
   },
   "spent": {
-    "likely": 11.2268,
-    "most": 16.4468
+    "likely": 11.2636,
+    "most": 16.4836
   }
 }
