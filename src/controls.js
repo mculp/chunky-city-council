@@ -6,6 +6,7 @@ const ON_FOOT = new Set(['land', 'bridge', 'town']);
 export function keysFor(mode, { act = null, map = false } = {}) {
   const also = map ? [['M', 'Map']] : [], look = ['DRAG', 'Look'];
   if (mode === 'swim') return [['WASD', 'Swim'], ['SPACE', 'Swim faster'], ...also, look];
+  if (mode === 'drive') return [['W', 'Gas'], ['S', 'Brake, reverse'], ['A D', 'Steer'], ['SPACE', 'Handbrake'], ['E', 'Get out'], ...also, look];
   if (ON_FOOT.has(mode)) return [['WASD', 'Move'], ['SHIFT', 'Run'], ['SPACE', 'Jump'], ...(act ? [['E', act]] : []), ...also, look];
   return [];
 }
@@ -16,7 +17,8 @@ export function buttonsFor(mode, { act = null } = {}) {
   if (mode === 'sweep') return { a: 'SWEEP', b: null, run: false };
   if (mode === 'grabbed') return { a: 'FREE', b: null, run: false };
   if (mode === 'swim') return { a: null, b: 'SWIM FAST', run: false };
-  if (ON_FOOT.has(mode)) return { a: act ? 'TALK' : null, b: 'JUMP', run: true };
+  if (mode === 'drive') return { a: 'GET OUT', b: 'BRAKE', run: false };
+  if (ON_FOOT.has(mode)) return { a: !act ? null : act.startsWith('Get in') ? 'GET IN' : 'TALK', b: 'JUMP', run: true };
   return { a: null, b: null, run: false };
 }
 

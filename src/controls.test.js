@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { actWord, buttonsFor, fastWord, keysFor } from './controls.js';
 
-const REAL_KEYS = new Set(['WASD', 'SHIFT', 'SPACE', 'E', 'M', 'DRAG']);
-const MODES = ['title', 'hang', 'fall', 'swim', 'land', 'bridge', 'town', 'grabbed', 'sweep', 'dialog', 'fail', 'end'];
+const REAL_KEYS = new Set(['WASD', 'W', 'S', 'A D', 'SHIFT', 'SPACE', 'E', 'M', 'DRAG']);
+const MODES = ['title', 'hang', 'fall', 'swim', 'land', 'bridge', 'town', 'drive', 'grabbed', 'sweep', 'dialog', 'fail', 'end'];
 
 test('a keyboard is only ever told about keys it has', () => {
   for (const mode of MODES) for (const [key] of keysFor(mode, { act: 'Talk to Coop', map: true })) assert.ok(REAL_KEYS.has(key), `${mode}: ${key}`);
@@ -42,6 +42,13 @@ test('a phone\'s act button says what it does, and it\'s gone when it does nothi
   assert.equal(buttonsFor('sweep').a, 'SWEEP');
   assert.equal(buttonsFor('town').a, null);
   assert.equal(buttonsFor('town', { act: 'Talk to Coop' }).a, 'TALK');
+});
+
+test('near something to drive, the button says so, and driving has its own controls', () => {
+  assert.equal(buttonsFor('town', { act: 'Get in the pickup' }).a, 'GET IN');
+  assert.deepEqual(buttonsFor('drive'), { a: 'GET OUT', b: 'BRAKE', run: false });
+  assert.deepEqual(keysFor('drive').map(([k]) => k), ['W', 'S', 'A D', 'SPACE', 'E', 'DRAG']);
+  assert.ok(keysFor('town', { act: 'Get in the pickup' }).some(([k, what]) => k === 'E' && what === 'Get in the pickup'));
 });
 
 test('prompts on a phone use the word on the button', () => {
