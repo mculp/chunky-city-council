@@ -14,6 +14,7 @@
     "sound": "node tools/play-sound.mjs",
     "sound:make": "node tools/make-sound.mjs",
     "sound:measure": "node tools/measure-sound.mjs",
+    "sound:level": "node tools/level-sound.mjs",
     "wreck": "node tools/play-wreck.mjs",
     "overlay:structures": "node tools/structure-overlay.mjs",
     "overlay": "node tools/map-overlay.mjs"

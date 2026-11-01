@@ -8,11 +8,12 @@ import { chromium } from 'playwright-core';
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css' };
 
-// `overrides` serves its contents at those paths in place of what's in the repo, or as well as it.
+// `overrides` serves its contents at those paths in place of what's in the repo, or as well as it. Null means there's nothing there.
 export async function serveAndOpen({ touch = false, viewport, query = '?test', reducedMotion, overrides = {} } = {}) {
   const server = createServer(async (req, res) => {
     const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
     try {
+      if (overrides[path] === null) throw new Error('not there');
       const body = overrides[path] ?? await readFile(join(ROOT, path === '/' ? 'index.html' : path));
       res.writeHead(200, { 'content-type': MIME[extname(path) || '.html'] || 'application/octet-stream' }); res.end(body);
     } catch { res.writeHead(404); res.end(); }

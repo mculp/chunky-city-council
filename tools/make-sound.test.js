@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { applyTo, costOf, findKey, formatSound, makeAll, makeOne, MUSIC_MODEL, planOf, SOUND_MODEL, toMake } from './make-sound.mjs';
+import { applyTo, costOf, findKey, formatSound, makeAll, makeOne, MUSIC_MODEL, planOf, SOUND_MODEL, spentOf, toMake } from './make-sound.mjs';
 
 const REAL = JSON.parse(readFileSync(new URL('../data/sound.json', import.meta.url), 'utf8'));
 const SHEET = JSON.parse(readFileSync(new URL('./sound_prompts.json', import.meta.url), 'utf8'));
@@ -52,7 +52,7 @@ test('the sheet asks for one file a take, of the right kind and cost', () => {
   assert.deepEqual(items.map((i) => i.path), ['audio/music/hang.1.mp3', 'audio/music/town.1.mp3', 'audio/music/town.2.mp3', 'audio/sfx/step.road.1.mp3', 'audio/sfx/step.road.2.mp3', 'audio/sfx/amb.wind.1.mp3', 'audio/sfx/explosion.1.mp3']);
   const hang = items[0], wind = items[5];
   assert.equal(hang.model, MUSIC_MODEL); assert.equal(hang.seconds, 75);
-  assert.ok(Math.abs(hang.cost - 1) < 1e-9); assert.equal(hang.most, 1.6);
+  assert.ok(Math.abs(hang.cost - .75) < 1e-9); assert.equal(hang.most, 1.2);
   assert.deepEqual(hang.body.composition_plan.positive_global_styles, ['slow']);
   assert.deepEqual(hang.body.composition_plan.sections[0], { section_name: 'A', positive_local_styles: ['drone'], negative_local_styles: [], duration_ms: 40000, lines: [] });
   assert.equal(wind.model, SOUND_MODEL); assert.equal(wind.body.loop, true); assert.equal(wind.body.prompt_influence, .4); assert.equal(wind.body.duration_seconds, 20);
@@ -66,6 +66,7 @@ test('what it makes leaves alone what is there, unless it is named again', () =>
   assert.ok(!toMake(items).some((i) => i.name === 'explosion'));
   assert.deepEqual(toMake(items, { only: ['explosion'] }), []);
   assert.deepEqual(toMake(items, { only: ['explosion'], again: true }).map((i) => i.name), ['explosion']);
+  assert.deepEqual(toMake(items, { only: ['step.road.2'], again: true }).map((i) => i.path), ['audio/sfx/step.road.2.mp3'], 'or one take of a sound');
   assert.ok(costOf(toMake(items)).most < costOf(items).most);
 });
 
@@ -138,6 +139,16 @@ test('a run writes the files, the record and one line each, and a failure keeps 
   assert.ok(!readFileSync(join(root, 'audio/manifest.json'), 'utf8').includes('secret-key'), 'or written down');
 });
 
+test('what has been spent adds up across runs, and stays spent when a file is made over', async () => {
+  const root = freshRoot(), fal = await fakeFal(), [item] = toMake(planOf(sheet, root), { only: ['amb.wind'] });
+  const run = () => makeAll([item], sheet, { key: 'secret-key', root, base: fal.base, poll: 1, log: () => {} });
+  const spent = () => spentOf(JSON.parse(readFileSync(join(root, 'audio/manifest.json'), 'utf8')));
+  assert.deepEqual(spentOf(null), { likely: 0, most: 0 });
+  await run(); assert.ok(Math.abs(spent().likely - item.cost) < 1e-3);
+  await run(); fal.close();
+  assert.ok(Math.abs(spent().likely - 2 * item.cost) < 1e-3); assert.ok(Math.abs(spent().most - 2 * item.most) < 1e-3);
+});
+
 test('applying a name with no file made changes nothing', () => {
   const root = freshRoot(), data = JSON.parse(readFileSync(join(root, 'data/sound.json'), 'utf8')), before = JSON.stringify(data);
   applyTo(data, sheet, 'explosion', root); applyTo(data, sheet, 'hang', root);
@@ -163,11 +174,11 @@ test('the script that saves the key will not save a blank one when there is no t
 test('run by hand it spends nothing without --go, or over the budget, or with no key', () => {
   // its own empty config folder, or a key saved on this machine would make the --go below real
   const tool = new URL('./make-sound.mjs', import.meta.url).pathname, noKeyHere = mkdtempSync(join(tmpdir(), 'make-sound-key-')), run = (...args) => { const env = { ...process.env, XDG_CONFIG_HOME: noKeyHere }; delete env.FAL_KEY; try { return { out: execFileSync('node', [tool, ...args], { env, encoding: 'utf8', stdio: 'pipe' }), code: 0 }; } catch (e) { return { out: e.stdout + e.stderr, code: e.status }; } };
-  const dry = run();
+  const one = ['--only', 'hurt', '--again'], dry = run(...one);
   assert.equal(dry.code, 0); assert.match(dry.out, /Nothing has been spent/);
-  const over = run('--go', '--budget', '0.01');
+  const over = run('--go', '--budget', '0.01', ...one);
   assert.equal(over.code, 1); assert.match(over.out, /over the \$0\.01 budget, so nothing was started/);
-  const noKey = run('--go');
+  const noKey = run('--go', '--budget', '1000', ...one);
   assert.equal(noKey.code, 1); assert.match(noKey.out, /no fal key/);
   assert.equal(run('--only', 'not-a-sound').code, 1);
 });

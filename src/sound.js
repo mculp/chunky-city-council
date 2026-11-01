@@ -102,7 +102,15 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
   function measure(b) {
     const l = b.getChannelData(0), r = b.getChannelData(b.numberOfChannels - 1);
     let sum = 0, m = 0, peak = 0, first = -1, last = 0;
-    for (let i = 0; i < b.length; i += 32) { const a = Math.max(Math.abs(l[i]), Math.abs(r[i])); if (a > peak) peak = a; sum += a * a; m++; if (a > .003) { if (first < 0) first = i; last = i; } }
+    // A generated track can fade out and then have a few seconds of noise on the end. A full second of quiet near the end is where the music stops.
+    const tail = b.length - b.sampleRate * 15;
+    for (let i = 0; i < b.length; i += 32) {
+      const a = Math.max(Math.abs(l[i]), Math.abs(r[i]));
+      if (first >= 0 && i > tail && i - last > b.sampleRate) break;
+      if (a > peak) peak = a;
+      sum += a * a; m++;
+      if (a > .003) { if (first < 0) first = i; last = i; }
+    }
     return { rms: Math.sqrt(sum / Math.max(1, m)) || 1e-4, peak: peak || 1, from: Math.max(0, first) / b.sampleRate, to: Math.max(last + 32, 1) / b.sampleRate };
   }
   // A track by its file, with the most recently wanted last and the oldest forgotten. Anything still playing keeps its own hold on the sound.

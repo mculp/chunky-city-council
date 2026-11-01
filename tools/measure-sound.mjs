@@ -20,7 +20,8 @@ async function walk(dir) {
   }
   return out;
 }
-const nameOf = (file) => file.split('/').pop().replace(/\.\d+\.\w+$/, '').replace(/\.\w+$/, '');
+// step.road.2.mp3 is a take of step.road. A file with no take number is just its name.
+const nameOf = (file) => { const base = file.split('/').pop(); return /\.\d+\.\w+$/.test(base) ? base.replace(/\.\d+\.\w+$/, '') : base.replace(/\.\w+$/, ''); };
 const files = (await walk(join(ROOT, 'audio'))).filter((f) => !only || only.includes(nameOf(f))).sort();
 if (!files.length) { console.log('Nothing in audio/ to measure.'); process.exit(0); }
 const sheet = JSON.parse(await readFile(join(ROOT, 'tools/sound_prompts.json'), 'utf8'));
@@ -55,6 +56,8 @@ const measureInPage = async ({ b64, spectrogram }) => {
       if (picture) { const r = Math.min(rows - 1, Math.floor(Math.log(Math.max(hz, 40) / 40) / Math.log(maxHz / 40) * rows)); picture[c * rows + r] = Math.max(picture[c * rows + r], p); }
     }
   }
+  // the low rows of a log scale fall between bins, so they take the one below rather than showing as stripes
+  if (picture) for (let c = 0; c < cols; c++) for (let r = 1; r < rows; r++) if (picture[c * rows + r] === 0) picture[c * rows + r] = picture[c * rows + r - 1];
   const bandSum = bands[0] + bands[1] + bands[2] || 1;
   let png = null;
   if (picture) {
@@ -65,7 +68,22 @@ const measureInPage = async ({ b64, spectrogram }) => {
     }
     g.putImageData(im, 0, 0); png = cv.toDataURL('image/png').split(',')[1];
   }
-  return { seconds: n / rate, rate, chans: chans.length, peak, rms, clipped, leads: first / rate, trails: (n - 1 - last) / rate, startRms: loudness(0, edge), endRms: loudness(n - edge, n), wrap, lows: bands[0] / bandSum, mids: bands[1] / bandSum, highs: bands[2] / bandSum, png };
+  // The level every quarter second, for a loop that swells or a track whose end isn't its end
+  const beat = Math.floor(rate * .25), levels = [];
+  for (let at = 0; at + beat <= n; at += beat) levels.push(20 * Math.log10(loudness(at, at + beat)));
+  const sorted = [...levels].sort((a, b) => a - b), swells = levels.length > 3 ? sorted[sorted.length - 1] - sorted[sorted.length >> 1] : 0;
+  // Gone quiet in the last 15 s and then back again. The game stops a track at a full second of silence there, so it's only one that doesn't reach that which is wrong.
+  let quietAt = -1, silent = 0, comesBack = 0;
+  for (let i = Math.max(0, levels.length - 60); i < levels.length && silent < 4; i++) {
+    silent = levels[i] < -50 ? silent + 1 : 0;
+    if (levels[i] < -40 && quietAt < 0) quietAt = i; else if (quietAt >= 0 && levels[i] > -35 && !comesBack) comesBack = (levels.length - i) / 4;
+  }
+  // How long the sound takes to arrive once it's started, and how many separate hits are in it. A trim can't take off a faint tick before the real hit.
+  const fold = (i) => { let a = 0; for (const d of chans) a = Math.max(a, Math.abs(d[i])); return a; };
+  let arrive = first; while (arrive < n && fold(arrive) < peak * .3) arrive++;
+  const ms = Math.floor(rate * .01); let hits = 0, under = 99;
+  for (let at = first; at + ms <= n; at += ms) { let top = 0; for (let i = at; i < at + ms; i++) top = Math.max(top, fold(i)); if (top > peak * .5) { if (under >= 8) hits++; under = 0; } else if (top < peak * .15) under++; }
+  return { seconds: n / rate, rate, chans: chans.length, peak, rms, clipped, leads: first / rate, trails: (n - 1 - last) / rate, startRms: loudness(0, edge), endRms: loudness(n - edge, n), wrap, lows: bands[0] / bandSum, mids: bands[1] / bandSum, highs: bands[2] / bandSum, swells, comesBack, late: (arrive - first) / rate, hits, png };
 };
 
 const db = (x) => (20 * Math.log10(Math.max(x, 1e-9))).toFixed(1);
@@ -77,14 +95,22 @@ for (const file of files) {
   const loop = !!(cue?.loop ?? data.cues[name]?.loop), asked = cue?.seconds ?? (track ? (track.takes ?? [track]).map((t) => t.sections.reduce((n, s) => n + s.seconds, 0))[Number(rel.match(/\.(\d+)\.\w+$/)?.[1] ?? 1) - 1] : null);
   const wrong = [];
   if (m.peak < .01) wrong.push('silent');
-  if (m.clipped > m.seconds * m.rate * m.chans * .001) wrong.push(`clipped ${m.clipped} samples`);
+  else if (m.peak < .125 && !cue?.quiet) wrong.push('hardly anything there');
+  // a crash can flatten a few of its peaks and nobody would know. Much more than that and it's distorted.
+  if (m.clipped > m.seconds * m.rate * m.chans * .005) wrong.push(`clipped ${m.clipped} samples`);
   if (asked && m.seconds < asked * .75) wrong.push(`${m.seconds.toFixed(1)} s of the ${asked} s asked for`);
   // a loop's ends have to meet, or there's a click or a jump each time it comes round
   if (loop && (m.wrap > Math.max(.08, m.rms * 1.5))) wrong.push(`jumps ${m.wrap.toFixed(3)} where it comes round`);
   if (loop && Math.abs(20 * Math.log10(m.startRms / m.endRms)) > 8) wrong.push(`starts ${db(m.startRms)} dB and ends ${db(m.endRms)} dB`);
   if (track && m.trails > 6) wrong.push(`${m.trails.toFixed(1)} s of silence on the end`);
+  if (track && m.comesBack) wrong.push(`fades out, then ${m.comesBack.toFixed(1)} s more comes back`);
+  // a loop comes round every few seconds, so anything that stands out in it comes round too
+  if (loop && m.swells > (cue?.uneven ? 24 : 6)) wrong.push(`swells ${m.swells.toFixed(1)} dB`);
+  // a footstep or a blow has to land when it happens, and only once
+  if (/^(step|hit)\./.test(name) && m.late > .2) wrong.push(`arrives ${m.late.toFixed(2)} s after it starts`);
+  if (/^(step|hit)\./.test(name) && m.hits > 1) wrong.push(`${m.hits} hits in it`);
   if (wrong.length) problems.push(`${rel}: ${wrong.join(', ')}`);
-  rows.push([rel.replace(/^audio\//, '').padEnd(28), `${m.seconds.toFixed(1)}s`.padStart(7), `${(size / 1024).toFixed(0)}KB`.padStart(7), `${m.chans}ch`.padStart(4), `pk ${db(m.peak)}`.padStart(9), `rms ${db(m.rms)}`.padStart(10), `in ${m.leads.toFixed(2)}`.padStart(8), `out ${m.trails.toFixed(2)}`.padStart(9), `lo/mid/hi ${Math.round(m.lows * 100)}/${Math.round(m.mids * 100)}/${Math.round(m.highs * 100)}`.padStart(20), wrong.length ? `  <- ${wrong.join(', ')}` : ''].join(' '));
+  rows.push([rel.replace(/^audio\//, '').padEnd(28), `${m.seconds.toFixed(1)}s`.padStart(7), `${(size / 1024).toFixed(0)}KB`.padStart(7), `${m.chans}ch`.padStart(4), `pk ${db(m.peak)}`.padStart(9), `rms ${db(m.rms)}`.padStart(10), `in ${m.leads.toFixed(2)}`.padStart(8), `out ${m.trails.toFixed(2)}`.padStart(9), `lo/mid/hi ${Math.round(m.lows * 100)}/${Math.round(m.mids * 100)}/${Math.round(m.highs * 100)}`.padStart(20), `late ${m.late.toFixed(2)}`.padStart(10), `hits ${m.hits}`.padStart(8), `swell ${m.swells.toFixed(1)}`.padStart(11), wrong.length ? `  <- ${wrong.join(', ')}` : ''].join(' '));
 }
 console.log(rows.join('\n'));
 await close();

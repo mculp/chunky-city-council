@@ -7,7 +7,8 @@
 //   npm run sound:make -- --go                        makes it
 //   npm run sound:make -- --go --only town,step.road  just those
 //   npm run sound:make -- --go --only town --again    those again, over what's there
-//   npm run sound:make -- --go --budget 30            a different limit, in dollars
+//   npm run sound:make -- --go --only step.wood.2 --again  one take of one sound
+//   npm run sound:make -- --go --budget 30            a different limit, in dollars, for all that's ever been spent
 //
 // The key comes from FAL_KEY or from what tools/set-fal-key.sh saved, and goes nowhere but fal.
 import { createHash } from 'node:crypto';
@@ -19,8 +20,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const QUEUE = 'https://queue.fal.run';
 export const MUSIC_MODEL = 'fal-ai/elevenlabs/music', SOUND_MODEL = 'fal-ai/elevenlabs/sound-effects/v2';
-// From fal's pages. Music might be rounded up to the whole minute, which nothing on those pages settles, so the budget's held against that.
-export const MUSIC_PER_MINUTE = .8, SOUND_PER_SECOND = .002;
+// From fal's pricing API on 2026-11-01. Its page said .8 a minute for music. Music might be rounded up to the whole minute, which neither settles, so the budget's held against that.
+export const MUSIC_PER_MINUTE = .6, SOUND_PER_SECOND = .002;
 const BUDGET = 20, AT_ONCE = 3, MOST_WAIT = 10 * 60 * 1000;
 
 // Everything the sheet asks for, one file to an item, with what it'd cost
@@ -31,7 +32,7 @@ export function planOf(sheet, root = ROOT) {
     takes.forEach((take, i) => {
       const seconds = take.sections.reduce((n, s) => n + s.seconds, 0);
       items.push({
-        kind: 'music', name, path: `audio/music/${name}.${i + 1}.mp3`, model: MUSIC_MODEL, seconds, cost: seconds / 60 * MUSIC_PER_MINUTE, most: Math.ceil(seconds / 60) * MUSIC_PER_MINUTE,
+        kind: 'music', name, take: `${name}.${i + 1}`, path: `audio/music/${name}.${i + 1}.mp3`, model: MUSIC_MODEL, seconds, cost: seconds / 60 * MUSIC_PER_MINUTE, most: Math.ceil(seconds / 60) * MUSIC_PER_MINUTE,
         body: {
           composition_plan: {
             positive_global_styles: [...styles, ...(track.styles ?? [])], negative_global_styles: [...avoid, ...(track.avoid ?? [])],
@@ -46,13 +47,15 @@ export function planOf(sheet, root = ROOT) {
     for (let i = 0; i < (cue.takes ?? 1); i++) {
       const body = { text: cue.prompt, duration_seconds: cue.seconds, prompt_influence: cue.influence ?? .6, output_format: 'mp3_44100_128' };
       if (cue.loop) body.loop = true;
-      items.push({ kind: 'sound', name, path: `audio/sfx/${name}.${i + 1}.mp3`, model: SOUND_MODEL, seconds: cue.seconds, cost: cue.seconds * SOUND_PER_SECOND, most: cue.seconds * SOUND_PER_SECOND, body });
+      items.push({ kind: 'sound', name, take: `${name}.${i + 1}`, path: `audio/sfx/${name}.${i + 1}.mp3`, model: SOUND_MODEL, seconds: cue.seconds, cost: cue.seconds * SOUND_PER_SECOND, most: cue.seconds * SOUND_PER_SECOND, body });
     }
   }
   return items.map((it) => ({ ...it, made: existsSync(join(root, it.path)) }));
 }
 
-export const toMake = (items, { only = null, again = false } = {}) => items.filter((it) => (!only || only.includes(it.name)) && (again ? !only || only.includes(it.name) : !it.made));
+// --only takes a whole sound or one take of it
+export const toMake = (items, { only = null, again = false } = {}) => items.filter((it) => (!only || only.includes(it.name) || only.includes(it.take)) && (again || !it.made));
+export const spentOf = (book) => ({ likely: book?.spent?.likely ?? 0, most: book?.spent?.most ?? 0 });
 export const costOf = (items) => ({ likely: items.reduce((n, it) => n + it.cost, 0), most: items.reduce((n, it) => n + it.most, 0), seconds: items.reduce((n, it) => n + it.seconds, 0) });
 
 // data/sound.json, the way it's kept: one line to a sound, so that swapping one is a one-line change
@@ -136,6 +139,9 @@ export async function makeAll(items, sheet, { key, root = ROOT, base, doFetch = 
         writeAtomically(join(root, item.path), bytes);
         book.made[item.path] = { model: item.model, seconds: item.seconds, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), request, date: now() };
         book.made = Object.fromEntries(Object.entries(book.made).sort(([a], [b]) => a.localeCompare(b)));
+        // what's been spent stays spent, whatever gets made over it
+        const spent = spentOf(book), cents = (n) => Math.round(n * 1e4) / 1e4;
+        book.spent = { likely: cents(spent.likely + item.cost), most: cents(spent.most + item.most) };
         writeAtomically(bookPath, `${JSON.stringify(book, null, 2)}\n`);
         // it starts as a copy of the old sheet, and from then on it's its own
         const data = applyTo(JSON.parse(readFileSync(existsSync(newPath) ? newPath : oldPath, 'utf8')), sheet, item.name, root);
@@ -152,15 +158,17 @@ async function main() {
   const args = process.argv.slice(2), value = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : null);
   const only = value('--only')?.split(',') ?? null, again = args.includes('--again'), budget = Number(value('--budget') ?? BUDGET);
   const sheet = JSON.parse(readFileSync(join(ROOT, 'tools/sound_prompts.json'), 'utf8')), items = planOf(sheet), list = toMake(items, { only, again });
-  if (only) for (const name of only) if (!items.some((it) => it.name === name)) throw new Error(`Nothing called ${name} in tools/sound_prompts.json`);
+  if (only) for (const name of only) if (!items.some((it) => it.name === name || it.take === name)) throw new Error(`Nothing called ${name} in tools/sound_prompts.json`);
   const music = list.filter((it) => it.kind === 'music'), sounds = list.filter((it) => it.kind === 'sound'), total = costOf(list);
   const money = (n) => `$${n.toFixed(2)}`;
   console.log(`${music.length} music tracks, ${costOf(music).seconds.toFixed(0)} s: about ${money(costOf(music).likely)}, at most ${money(costOf(music).most)} if fal rounds up to the minute`);
   console.log(`${sounds.length} sounds, ${costOf(sounds).seconds.toFixed(0)} s: about ${money(costOf(sounds).likely)}`);
-  console.log(`together: about ${money(total.likely)}, at most ${money(total.most)}. ${items.length - list.length} already made and left alone.`);
+  console.log(`together: about ${money(total.likely)}, at most ${money(total.most)}. ${items.filter((it) => it.made && !list.includes(it)).length} already made and left alone.`);
+  const bookPath = join(ROOT, 'audio/manifest.json'), spent = spentOf(existsSync(bookPath) ? JSON.parse(readFileSync(bookPath, 'utf8')) : null);
+  console.log(`spent so far: about ${money(spent.likely)}, at most ${money(spent.most)}, of the ${money(budget)} budget.`);
   if (!list.length) return;
   if (!args.includes('--go')) { console.log('Nothing has been spent. --go makes them.'); return; }
-  if (total.most > budget) { console.error(`That could come to ${money(total.most)}, over the ${money(budget)} budget, so nothing was started. --budget changes it.`); process.exitCode = 1; return; }
+  if (spent.most + total.most > budget) { console.error(`That could bring it to ${money(spent.most + total.most)}, over the ${money(budget)} budget, so nothing was started. --budget changes it.`); process.exitCode = 1; return; }
   const key = findKey();
   if (!key) { console.error('There\'s no fal key. Run bash tools/set-fal-key.sh in a real terminal to save one.'); process.exitCode = 1; return; }
   const { failed } = await makeAll(list, sheet, { key });

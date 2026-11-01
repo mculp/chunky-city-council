@@ -167,6 +167,15 @@ test('a track fades into the next of its list when it comes round, skipping the 
   assert.ok(Math.abs(next.started.at - (first.started.at + 9 - 3)) < .01, 'it starts a fade before the end');
 });
 
+test('a track stops at a second of quiet near its end, whatever comes back after it, but one earlier on is just a pause', async () => {
+  const gap = (from, to) => () => { const b = tone({ seconds: 30 }); for (const d of b.data) d.fill(0, from * 1000, to * 1000); return b; };
+  for (const [from, to, plays] of [[24, 28, 24], [5, 8, 30]]) {
+    const w = fakeWorld({ respond: gap(from, to) }), s = createSound(scored(), { win: w.win }); w.touch(); await w.settle();
+    s.music('town'); await w.settle();
+    assert.ok(Math.abs(started(w).at(-1).started.len - plays) < .1, `a gap at ${from} s plays ${started(w).at(-1).started.len} s`);
+  }
+});
+
 test('a track that\'s only meant to play once doesn\'t come round', async () => {
   const w = fakeWorld({ respond: () => tone({ seconds: 3 }) }), s = createSound(scored(), { win: w.win }); w.touch(); await w.settle();
   s.music('dream'); await w.settle();

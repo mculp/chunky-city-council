@@ -336,11 +336,53 @@ const trying = await serveAndOpen({ query: '?test#new', viewport: { width: 390, 
 const newGame = await trying.page.evaluate(() => ({ file: __game.sound.data.cues['step.road'].file, board: !document.getElementById('board').hidden, title: !document.getElementById('title').hidden }));
 check('and #new plays the game with the new ones', newGame.file === 'audio/made-step.wav' && !newGame.board && newGame.title, newGame);
 await trying.close();
-const none = await serveAndOpen({ query: '?test#sounds-new', viewport: { width: 390, height: 844 } });
+const none = await serveAndOpen({ query: '?test#sounds-new', viewport: { width: 390, height: 844 }, overrides: { '/data/sound-new.json': null } });
 const noSheet = await none.page.evaluate(() => ({ cues: __game.sound.cueNames().length, heading: document.querySelector('#board h2').textContent }));
 check('with nothing made yet, #sounds-new falls back on the old sheet', noSheet.cues === Object.keys(newSheet.cues).length, noSheet);
 check('and that\'s the only complaint', none.errors.filter((e) => !/sound-new|404/.test(e)).length === 0, none.errors.slice(0, 4));
 await none.close();
+
+// ---------------- the real ones, on a phone, once they've been made
+const made = JSON.parse(await readFile(new URL('../data/sound-new.json', import.meta.url), 'utf8').catch(() => 'null'));
+if (made) {
+  const real = await serveAndOpen({ touch: true, query: '?test#new' }), r = (fn, arg) => real.page.evaluate(fn, arg), asked = [];
+  real.page.on('request', (q) => { const p = new URL(q.url()).pathname; if (p.startsWith('/audio/')) asked.push(p); });
+  await r(setUp);
+  const began = Date.now(), filed = Object.entries(made.cues).filter(([, c]) => c.file).map(([n]) => n);
+  await real.page.keyboard.press('x');
+  await real.page.waitForFunction((n) => Snd.state().ctx === 'running' && Snd.state().waiting === 0 && Snd.state().files.length >= n, filed.length, { timeout: 30000 });
+  console.log(`     ${asked.length} files fetched and ready ${((Date.now() - began) / 1000).toFixed(1)} s after the first touch`);
+  const tracksAsked = () => asked.filter((p) => p.startsWith('/audio/music/'));
+  check(`every one of the ${filed.length} sounds has its file, and only the title's track came down with them`, tracksAsked().join() === `/${made.music.title.file}`, tracksAsked());
+  const sleep = `(ms) => new Promise((go) => setTimeout(go, ms))`;
+  await r((code) => { window.sleep = eval(code); }, sleep);
+  for (const [state, st] of Object.entries(made.music)) {
+    const first = [st.file ?? []].flat()[0];
+    if (!first) continue;
+    const got = await r(async ([s, f]) => {
+      const t0 = performance.now(); Snd.music(s);
+      while (Snd.state().track !== f && performance.now() - t0 < 15000) await sleep(50);
+      const loaded = performance.now() - t0; await sleep(2500);
+      let sum = 0; for (let i = 0; i < 15; i++) { sum += 10 ** (Snd.meter() / 10); await sleep(100); }
+      const now = Snd.state();
+      return { loaded, db: 10 * Math.log10(sum / 15), track: now.track, tracks: now.tracks.length, most: now.maxTracks, layered: now.layered };
+    }, [state, first]);
+    console.log(`     ${state.padEnd(8)} came in ${(got.loaded / 1000).toFixed(1)} s and comes out at ${got.db.toFixed(1)} dB`);
+    check(`${state} plays its own track instead of the drone, at a sensible level, with no more than ${got.most} tracks held`, got.track === first && !got.layered && got.db > -45 && got.db < -6 && got.tracks <= got.most, got);
+  }
+  const LOOPS = /^(amb|engine|vehicle\.(road|dirt|skid))/.source;
+  const shots = await r(async (loops) => { const out = { played: 0, missed: [] }; for (const name of Snd.cueNames()) { if (new RegExp(loops).test(name)) continue; while (Snd.state().voices > 6) await sleep(50); if (Snd.play(name)) out.played++; else out.missed.push(name); await sleep(60); } return out; }, LOOPS);
+  check(`all ${shots.played} of the sounds that play once do`, shots.missed.length === 0, shots.missed);
+  const round = await r(async (loops) => { const out = {}; for (const name of Snd.cueNames()) { if (!new RegExp(loops).test(name)) continue; Snd.loop(name, 1); await sleep(300); out[name] = Snd.state().loopLevels[name]; Snd.loop(name, 0); } return out; }, LOOPS);
+  check(`all ${Object.keys(round).length} of the loops do`, Object.values(round).every((v) => v > 0), round);
+  const walked = await r(async () => { G.jump('town'); await run(.5); Snd.forget(); G.key('w', true); await run(2); G.key('w', false); const s = Snd.state(); return { heard: s.heard, track: s.track, voices: s.voices, most: s.maxVoices }; });
+  check('in town his feet are heard over the real track', walked.heard.some((n) => n.startsWith('step.')) && walked.track?.startsWith('audio/music/town') && walked.voices <= walked.most, walked);
+  const cost = await r(() => crowdCost());
+  console.log(`     a tick's JS with 48 chasing and the real files: ${cost.each.toFixed(2)} ms`);
+  check('it costs no more than the sounds worked out from code did to play', cost.each < 2, cost);
+  check('and there are no console errors', real.errors.length === 0, real.errors.slice(0, 5));
+  await real.close();
+}
 
 console.log(failed ? `${failed} failed` : 'all ok');
 process.exit(failed ? 1 : 0);

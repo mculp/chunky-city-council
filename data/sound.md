@@ -91,12 +91,13 @@ npm run sound:make                                 # what it would make, and wha
 npm run sound:make -- --go                         # makes whatever hasn't been made yet
 npm run sound:make -- --go --only town,step.road   # just those, if they haven't been
 npm run sound:make -- --go --only town --again     # those again, over what's there
-npm run sound:make -- --go --budget 30             # the limit, in dollars. It's 20
+npm run sound:make -- --go --only step.wood.2 --again  # one take of one sound
+npm run sound:make -- --go --budget 30             # the limit, in dollars, for all that's ever been spent. It's 20
 ```
 
-It won't start if the whole run could go over the budget, and stopping halfway loses nothing. On 2026-11-01 fal charged $0.80 a minute for music and $0.002 a second for sounds. Its pages don't settle whether music is rounded up to the whole minute, so the budget's held against that.
+It won't start if the run could take what's been spent over the budget, and stopping halfway loses nothing. `audio/manifest.json` keeps the running total under `spent`, and making a file over another doesn't take anything off it. On 2026-11-01 fal's pricing API said $0.60 a minute for music and $0.002 a second for sounds, and its music page said $0.80. Nothing settles whether music is rounded up to the whole minute, so the budget's held against that.
 
-A track or a sound that's wrong is a matter of changing its prompt and running it with `--only` and `--again`. After a run, `npm run sound:measure` fails on a file that's silent, clipped, cut short or has a click where it loops, and `-- --pictures dir` draws a spectrogram of each. `npm run sound` and the board at `#sounds` are how to check the rest. Nothing here can hear, so somebody has to listen.
+A track or a sound that's wrong is a matter of changing its prompt and running it with `--only` and `--again`. After a run, `npm run sound:measure` fails on a file that's silent or hardly there, clipped, cut short, a track that fades out and then has more on the end, a loop with a click where it comes round or that swells partway, or a footstep or a blow that lands late or more than once. `-- --pictures dir` draws a spectrogram of each. In the prompt sheet, `quiet` says a sound is meant to be, and `uneven` that a loop's level is meant to move, as a fire's does. `npm run sound:level` then sets the levels in `data/sound-new.json` to match the old sheet's, sound by sound and part by part of the score, by a weighted loudness, so that comparing the boards is about the sound. The levels there are its, so run it again after making anything over. `npm run sound` and the board at `#sounds` are how to check the rest. Nothing here can hear, so somebody has to listen.
 
 ### The rights
 
