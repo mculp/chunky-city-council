@@ -3,30 +3,12 @@
 //   npm i && npm run smoke -- [--shots dir] [--touch]
 //
 // It serves the repo itself and drives the system Chrome with the GPU on, so WebGL runs for real.
-import { createServer } from 'node:http';
-import { readFile, mkdir } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright-core';
-
-const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css' };
-const server = createServer(async (req, res) => {
-  const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
-  try {
-    const body = await readFile(join(ROOT, path === '/' ? 'index.html' : path));
-    res.writeHead(200, { 'content-type': MIME[extname(path) || '.html'] || 'application/octet-stream' }); res.end(body);
-  } catch { res.writeHead(404); res.end(); }
-});
-await new Promise((r) => server.listen(0, r));
-const url = `http://localhost:${server.address().port}/?test`;
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { serveAndOpen } from './browser.mjs';
 
 const args = process.argv.slice(2), shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : null, touch = args.includes('--touch');
-const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader'] });
-const page = await (await browser.newContext({ viewport: touch ? { width: 390, height: 844 } : { width: 513, height: 696 }, deviceScaleFactor: 2, hasTouch: touch, isMobile: touch })).newPage();
-const errors = [];
-page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
-page.on('pageerror', (e) => errors.push(e.message));
+const { page, errors, close } = await serveAndOpen({ touch });
 
 let failed = 0;
 const check = (name, ok, got) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ' -- got ' + JSON.stringify(got)}`); if (!ok) failed++; };
@@ -35,9 +17,6 @@ const step = (s) => g((s) => __game.step(s), s);
 const key = (k, down = true) => g(([k, d]) => __game.key(k, d), [k, down]);
 const snap = async (name) => { if (shots) { await mkdir(shots, { recursive: true }); await page.screenshot({ path: join(shots, name + '.png') }); } };
 
-await page.goto(url, { waitUntil: 'load' });
-await page.waitForFunction(() => window.__game, null, { timeout: 30000 });
-await g(() => __game.pause());
 let st = await step(.5);
 check('title', st.mode === 'title', st.mode); await snap('title');
 
@@ -77,7 +56,7 @@ await key('e'); st = await step(.05); await key('e', false); check('coop talks',
 st = await g(() => __game.choose(0)); check('beans ask', /Beans ain/.test(st.dialog?.say), st.dialog);
 st = await g(() => __game.choose(0)); st = await g(() => __game.choose(0)); check('got the bag', st.flags.bag === true, st.flags);
 st = await g(() => __game.choose(0)); check('dialog closed', st.mode === 'town' && /Tre/.test(st.obj), [st.mode, st.obj]);
-await g(() => { const c = __game.npcs.tre; __game.place(c.x - 1.5, c.z); });
+await g(() => { const c = __game.npcs.tre; __game.place(c.x + .5, c.z - 1.5); });
 st = await step(.1); await key('e'); st = await step(.05); await key('e', false); check('tre talks', st.dialog?.who === 'Tre', st.dialog);
 st = await g(() => __game.choose(0)); check('delivered', st.flags.delivered === true && st.beans === 2, st); st = await g(() => __game.choose(0));
 await g(() => { const c = __game.npcs.coop; __game.place(c.x, c.z - 1.5); });
@@ -95,6 +74,6 @@ check('twelve beans', st.beans >= 12, st.beans);
 st = await step(2); check('chapter ends', st.mode === 'end', st.mode); await snap('end');
 
 check('no console errors', errors.length === 0, errors);
-await browser.close(); server.close();
+await close();
 console.log(failed ? `${failed} failed` : 'all passed');
 process.exit(failed ? 1 : 0);

@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "smoke": "node tools/smoke.mjs"
+    "smoke": "node tools/smoke.mjs",
+    "walk": "node tools/walk-roads.mjs"
   },
   "devDependencies": {
     "playwright-core": "1.56.1"
