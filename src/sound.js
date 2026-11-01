@@ -1,6 +1,6 @@
 // What makes the noise: the levels, the mute, the sounds, the loops, the score and the voice lines. There's no three.js in here and nothing about the game.
 //
-// data/sound.json says what each sound is and how loud, and src/soundbank.js works out any that has no file of its own. data/sound.md has the rest.
+// A sheet like data/sound-new.json says what each sound is and how loud, and src/soundbank.js works out any that has no file of its own. data/sound.md has the rest.
 import { RATE, RECIPES, randomFrom, render, variantsOf } from './soundbank.js';
 
 const BUSES = ['music', 'ambience', 'effects', 'voice'];
@@ -76,7 +76,7 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
   function pump() { while (loading < 4 && loadQueue.length) { loading++; loadQueue.shift()().finally(() => { loading--; pump(); }); } }
   const inTurn = (file) => new Promise((ok, no) => { loadQueue.push(() => load(file).then(ok, no)); pump(); });
   // How a file gets to sit with the rest, so that swapping one in takes only the file and a line: the silence off its ends, its peak where the bank's would be, and one channel
-  // unless it's a loop or it's been asked to keep two
+  // unless it's been asked to keep two, or it's a loop on something with the memory for two
   function shaped(b, name) {
     const c = data.cues[name] ?? {}, loop = c.loop ?? RECIPES[name]?.loop, chans = Array.from({ length: b.numberOfChannels }, (_, i) => b.getChannelData(i)), n = b.length;
     let peak = 0, first = n, end = 0;
@@ -84,7 +84,7 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
     if (peak < 1e-4) return b;
     const floor = peak * .01, k = (c.peak ?? RECIPES[name]?.peak ?? .9) / peak, rate = b.sampleRate;
     for (const d of chans) for (let i = 0; i < n; i++) if (Math.abs(d[i]) > floor) { if (i < first) first = i; if (i > end) end = i; }
-    const from = loop ? 0 : Math.max(0, first - Math.floor(rate * .004)), to = loop ? n : Math.min(n, end + Math.floor(rate * .03)), both = loop || c.stereo, out = ctx.createBuffer(both ? chans.length : 1, to - from, rate);
+    const from = loop ? 0 : Math.max(0, first - Math.floor(rate * .004)), to = loop ? n : Math.min(n, end + Math.floor(rate * .03)), both = (loop && !coarse) || c.stereo, out = ctx.createBuffer(both ? chans.length : 1, to - from, rate);
     for (let ch = 0; ch < out.numberOfChannels; ch++) {
       const o = out.getChannelData(ch), each = both ? [chans[ch]] : chans, tail = loop ? 0 : Math.min(to - from, Math.floor(rate * .012));
       for (let i = 0, m = to - from; i < m; i++) { let s = 0; for (const d of each) s += d[from + i]; o[i] = s / each.length * k * (i > m - tail ? (m - i) / tail : 1); }
@@ -296,7 +296,7 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
     play(name, { x, z, gain = 1, rate = 1 } = {}) {
       if (!live()) return false;
       const c = cueOf(name);
-      if (!c) { complain('warn', `No sound called ${name} in data/sound.json`); return false; }
+      if (!c) { complain('warn', `No sound called ${name} in the sheet`); return false; }
       let g = c.gain * gain, pan = 0;
       if (x !== undefined) {
         const dx = x - L.x, dz = z - L.z, d = Math.hypot(dx, dz);
@@ -333,7 +333,7 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
       if (Math.abs(to - l.level) > .004) { if (to <= 0 && l.level > 0) l.since = ctx.currentTime; else if (to > 0) l.since = Infinity; l.level = to; smooth(l.gain.gain, to, .12); }
       if (Math.abs(rate - l.rate) > .004) { l.rate = rate; smooth(l.src.playbackRate, rate, .06); }
     },
-    // What the score's doing. data/sound.json has what each of these is made of.
+    // What the score's doing. The sheet has what each of these is made of.
     music(state) { wanted = state; if (live()) toScoreState(state); },
     // How loud a whole bus is, as a fraction of its level, so that the night can go quiet for the fever
     fade(bus, k) { fades[bus] = k; if (ctx) smooth(buses[bus].gain, busGain(bus), .5); },

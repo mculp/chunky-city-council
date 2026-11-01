@@ -1,12 +1,22 @@
 # Sound
 
-`data/sound.json` says what every sound and part of the score is and how loud. `src/sound.js` plays it and `src/soundbank.js` works out any sound that has no file, from numbers. Nothing in `src/soundbank.js` is a recording, so all of it is ours.
+There are two sheets, each saying what every sound and part of the score is and how loud, and `src/sound.js` plays whichever it's given.
 
-To hear everything, one button each, open the game at `#sounds`. That's what the game plays, and the owner likes it, so it stays. Nothing made with ElevenLabs goes on it unless the owner says so.
+- `data/sound-new.json` is what the game plays: music and sounds made with ElevenLabs on fal, which the owner chose on 2026-11-01.
+- `data/sound.json` is the sounds `src/soundbank.js` works out from numbers. None of that is a recording, so all of it is ours. The owner wants them kept, so nothing writes over this sheet. They're also what a sound falls back on if its file doesn't come.
+
+| Address | What it is |
+|---|---|
+| The plain address | The game, playing `data/sound-new.json` |
+| `#old` | The game, playing `data/sound.json`, with no audio to download |
+| `#sounds-new` | One button for every sound on the new sheet. A light border means it's playing a file |
+| `#sounds` | One button for every worked-out sound |
+
+To put one sound back, copy its line from `data/sound.json` over its line in `data/sound-new.json`. To put them all back, it's the line in `index.html` that picks the sheet.
 
 ## Swapping a sound
 
-Put the file in `audio/` and add it to that sound's line. That's all, and the code doesn't change:
+Put the file in `audio/` and add it to that sound's line in `data/sound-new.json`. That's all, and the code doesn't change:
 
 ```json
 "rope.snap": { "gain": 0.9, "max": 1, "file": "audio/my-rope-snap.mp3" },
@@ -15,7 +25,7 @@ Put the file in `audio/` and add it to that sound's line. That's all, and the co
 
 A list is takes, and one's picked each time. Use mp3, which every phone can play. If the file doesn't load, the sound keeps its own.
 
-Whatever the file's like, it comes out sitting with the rest. Its silence comes off both ends, its peak goes where the worked-out one's was, and it's folded to one channel. A loop keeps every sample and both channels, and so does a sound with `"stereo": true`. After that `gain` is how loud it is against the others.
+Whatever the file's like, it comes out sitting with the rest. Its silence comes off both ends, its peak goes where the worked-out one's was, and it's folded to one channel. A loop keeps every sample and both channels, except on a phone, which folds it to one to save memory, and a sound with `"stereo": true` keeps both as well. After that `gain` is how loud it is against the others.
 
 | Field | What it does |
 |---|---|
@@ -68,17 +78,9 @@ The music and everything else dip under it, the words come up, and it plays once
 
 `tools/sound_prompts.json` describes every track and every sound. `tools/make-sound.mjs` sends it to ElevenLabs' models on fal, saves the files in `audio/music/` and `audio/sfx/`, writes their lines into `data/sound-new.json`, and records what was made in `audio/manifest.json`. Add a sound there and run it again.
 
-`data/sound-new.json` is a sheet of its own. It starts as a copy of `data/sound.json`, and nothing ever writes back. So the game and the board at `#sounds` stay exactly as they were, and what's been made is somewhere to compare them with:
+`data/sound-new.json` started as a copy of `data/sound.json`, and nothing ever writes back, so the worked-out sounds and their board stay exactly as they were.
 
-| Address | What it is |
-|---|---|
-| `#sounds` | The board the game plays from, with the worked-out sounds |
-| `#sounds-new` | The same board from the new sheet. A button with a light border is playing a file, and one without is still the worked-out sound |
-| `#new` | The whole game playing the new sheet |
-
-To bring one into the game, copy its `file` into that sound's line in `data/sound.json`, which is the owner's call, one sound at a time.
-
-All of it's been made: 11 tracks and 99 takes of the 57 sounds, 19 MB to download. It costs more to hold than the worked-out sounds do. Those come to about 17 MB once worked out. The files come to about 64 MB decoded at a phone's 48 kHz, most of that the stereo loops, and up to another 92 MB for the two longest tracks a phone keeps. It's something to weigh when choosing, and folding the loops to one channel on a phone would save about 20 MB if it matters.
+All of it's been made: 11 tracks and 99 takes of the 57 sounds, 19 MB to download. It costs more to hold than the worked-out sounds do. Those come to about 17 MB once worked out. The files come to about 43 MB decoded at a phone's 48 kHz, with its loops folded to one channel, and up to another 92 MB for the two longest tracks a phone keeps. Elsewhere the sounds come to about 64 MB. Nobody has tried that on a real phone yet.
 
 It needs a fal key. Run this in a real terminal, because it has to wait for you to type. It keeps the key in `~/.config/chunky/fal-key`, readable only by you, and out of the shell history, the repo and every other program's environment. `FAL_KEY` wins over that file if it's set:
 
@@ -99,7 +101,7 @@ npm run sound:make -- --go --budget 30             # the limit, in dollars, for 
 
 It won't start if the run could take what's been spent over the budget, and stopping halfway loses nothing. `audio/manifest.json` keeps the running total under `spent`, and making a file over another doesn't take anything off it. On 2026-11-01 fal's pricing API said $0.60 a minute for music and $0.002 a second for sounds, and its music page said $0.80. Nothing settles whether music is rounded up to the whole minute, so the budget's held against that.
 
-A track or a sound that's wrong is a matter of changing its prompt and running it with `--only` and `--again`. After a run, `npm run sound:measure` fails on a file that's silent or hardly there, clipped, cut short, a track that fades out and then has more on the end, a loop with a click where it comes round or that swells partway, or a footstep or a blow that lands late or more than once. `-- --pictures dir` draws a spectrogram of each. In the prompt sheet, `quiet` says a sound is meant to be, and `uneven` that a loop's level is meant to move, as a fire's does. `npm run sound:level` then sets the gains in `data/sound-new.json` to match the old sheet's, sound by sound and part by part of the score, by a weighted loudness, so that comparing the boards is about the sound. A part's gain can be well over 1, because the sheet keeps the old `levels` so that the drone standing in for a track is no louder on it. The gains there are its, so run it again after making anything over. `npm run sound` and the board at `#sounds` are how to check the rest. Nothing here can hear, so somebody has to listen.
+A track or a sound that's wrong is a matter of changing its prompt and running it with `--only` and `--again`. After a run, `npm run sound:measure` fails on a file that's silent or hardly there, clipped, cut short, a track that fades out and then has more on the end, a loop with a click where it comes round or that swells partway, or a footstep or a blow that lands late or more than once. `-- --pictures dir` draws a spectrogram of each. In the prompt sheet, `quiet` says a sound is meant to be, and `uneven` that a loop's level is meant to move, as a fire's does. `npm run sound:level` then sets the gains in `data/sound-new.json` to match the old sheet's, sound by sound and part by part of the score, by a weighted loudness, so that going from one to the other is about the sound. A part's gain can be well over 1, because the sheet keeps the old `levels` so that the drone standing in for a track is no louder on it. The gains there are its, so run it again after making anything over. `npm run sound` and the boards are how to check the rest. Nothing here can hear, so somebody has to listen.
 
 ### The rights
 
@@ -120,4 +122,4 @@ Check all of this again before the game's sold, or if it outgrows those figures.
 
 ## What hasn't been checked
 
-`npm run sound` proves what's playing and that something's coming out, in Chrome, with the real files on a phone-sized page too. It can't say whether it sounds good. Nobody has heard the generated sounds. They've only been measured and looked at as spectrograms, and whether each matches its prompt is for someone with ears. How an iPhone's silent switch and lock screen behave, and whether one copes with the memory above, can only be found out on an iPhone.
+`npm run sound` proves what's playing and that something's coming out, in Chrome, with the real files on a phone-sized page too. It can't say whether it sounds good. Nothing here can hear, so the generated sounds have only been measured and looked at as spectrograms, and whether each matches its prompt is for someone with ears. How an iPhone's silent switch and lock screen behave, and whether one copes with the memory above, can only be found out on an iPhone. Check that before anyone else is told to play it on one.

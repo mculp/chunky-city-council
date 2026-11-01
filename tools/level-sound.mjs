@@ -63,7 +63,8 @@ const setUpInPage = async () => {
   };
 };
 
-const { page, errors, close } = await serveAndOpen({ viewport: { width: 390, height: 844 } });
+// at #old, because that's what has the drones on it
+const { page, errors, close } = await serveAndOpen({ viewport: { width: 390, height: 844 }, query: '?test#old' });
 await page.evaluate(setUpInPage);
 
 // ---------------- effects and loops

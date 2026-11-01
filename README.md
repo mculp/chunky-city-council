@@ -30,9 +30,9 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `data/structures.md`: where that data comes from, what's left out and why, and how to regenerate it
 - `data/water.json`: the ponds within reach of those roads, generated from USGS's National Hydrography Dataset and corrections made by eye on a public-domain aerial
 - `data/water.md`: where that data comes from, what's left out and why, and how to regenerate it
-- `data/sound.json`: what every sound and part of the score is, and how loud
+- `data/sound-new.json`: what every sound and part of the score is and how loud, for the music and sounds the game plays, made with ElevenLabs on fal
 - `data/sound.md`: how to swap a sound with a file and a line, where voice recordings go, and how to make music and sounds with ElevenLabs on fal
-- `data/sound-new.json`: the same for what's been made with ElevenLabs on fal, heard at `#sounds-new` and `#new`, and never at `#sounds` or in the game unless the owner chooses it
+- `data/sound.json`: the same for the sounds worked out from code, which are kept, with their board at `#sounds` and the game playing them at `#old`
 - `audio/`: the files that sheet plays, with what made each in `audio/manifest.json`
 - `src/sound.js`: the levels, the mute, the sounds, the loops, the score and the voice lines
 - `src/soundbank.js`: every sound worked out from numbers, which is what plays when a sound has no file

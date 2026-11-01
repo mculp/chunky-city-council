@@ -1,7 +1,7 @@
 // Plays the game with the sound on, with real key presses and in real time, and checks what it's playing and that something's coming out. Nobody's ears are in here, so it
-// can't say whether any of it sounds good. It also swaps sounds for test files, with nothing changed but data/sound.json, and tries a voice line.
+// can't say whether any of it sounds good. It also swaps sounds for test files, with nothing changed but the sheet, and tries a voice line.
 //
-//   npm i && npm run sound -- [--shots dir]
+//   npm i && npm run sound -- [--shots dir] [--old]    --old plays it through with the sounds worked out from code
 import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { serveAndOpen } from './browser.mjs';
@@ -27,7 +27,7 @@ const setUp = () => {
   };
 };
 
-const { page, errors, close } = await serveAndOpen({ viewport: { width: 390, height: 844 } });
+const { page, errors, close } = await serveAndOpen({ viewport: { width: 390, height: 844 }, query: args.includes('--old') ? '?test#old' : '?test' });
 const g = (fn, arg) => page.evaluate(fn, arg);
 const wait = (ms) => page.waitForTimeout(ms);
 
@@ -236,7 +236,7 @@ data.music.chase.file = 'audio/test-chase.wav';
 data.music.dream.file = 'audio/test-fever.wav'; data.music.dream.once = true;
 data.music.end.file = 'audio/not-there-either.wav';
 data.voice.town = { file: 'audio/test-line.wav', text: 'Words for this line' };
-const swapped = await serveAndOpen({ touch: true, overrides: { '/data/sound.json': JSON.stringify(data), '/audio/test-step.wav': wav(.1, 400), '/audio/test-title.wav': wav(9, 180, { lead: .5, tail: 1 }), '/audio/test-town.wav': wav(7, 220), '/audio/test-town2.wav': wav(7, 260), '/audio/test-chase.wav': wav(3, 300), '/audio/test-fever.wav': wav(1.5, 150), '/audio/test-line.wav': wav(1.2, 300) } });
+const swapped = await serveAndOpen({ touch: true, overrides: { '/data/sound-new.json': JSON.stringify(data), '/audio/test-step.wav': wav(.1, 400), '/audio/test-title.wav': wav(9, 180, { lead: .5, tail: 1 }), '/audio/test-town.wav': wav(7, 220), '/audio/test-town2.wav': wav(7, 260), '/audio/test-chase.wav': wav(3, 300), '/audio/test-fever.wav': wav(1.5, 150), '/audio/test-line.wav': wav(1.2, 300) } });
 const s = (fn, arg) => swapped.page.evaluate(fn, arg);
 const asked = []; swapped.page.on('request', (r) => { const p = new URL(r.url()).pathname; if (p.startsWith('/audio/')) asked.push(p.slice(7)); });
 const quietFor = (seconds) => swapped.page.waitForTimeout(seconds * 1000);
@@ -312,7 +312,7 @@ check(`the board at #sounds has a button for all ${names} of them`, buttons === 
 await snap(board.page, 'board');
 await board.close();
 
-// ---------------- the old board stays what it is, and anything made with ElevenLabs has its own
+// ---------------- the game plays what's made with ElevenLabs, and the old sounds stay what they are
 const newSheet = JSON.parse(await readFile(new URL('../data/sound.json', import.meta.url), 'utf8'));
 newSheet.cues['step.road'].file = 'audio/made-step.wav';
 const both = { '/data/sound-new.json': JSON.stringify(newSheet), '/audio/made-step.wav': wav(.1, 400) };
@@ -332,11 +332,15 @@ check('the board at #sounds-new has what\'s been made, marked', newBoard.file ==
 await newOne.close();
 const playing = await serveAndOpen({ query: '?test', viewport: { width: 390, height: 844 }, overrides: both });
 const plainGame = await playing.page.evaluate(() => ({ file: __game.sound.data.cues['step.road'].file, board: !document.getElementById('board').hidden }));
-check('the game plays the old sounds, whatever else is there', plainGame.file === undefined && !plainGame.board, plainGame);
+check('the game plays the new sheet', plainGame.file === 'audio/made-step.wav' && !plainGame.board, plainGame);
 await playing.close();
-const trying = await serveAndOpen({ query: '?test#new', viewport: { width: 390, height: 844 }, overrides: both });
-const newGame = await trying.page.evaluate(() => ({ file: __game.sound.data.cues['step.road'].file, board: !document.getElementById('board').hidden, title: !document.getElementById('title').hidden }));
-check('and #new plays the game with the new ones', newGame.file === 'audio/made-step.wav' && !newGame.board && newGame.title, newGame);
+const trying = await serveAndOpen({ query: '?test#old', viewport: { width: 390, height: 844 }, overrides: both });
+const tryAsked = []; trying.page.on('request', (r) => { const p = new URL(r.url()).pathname; if (p.startsWith('/audio/')) tryAsked.push(p); });
+await trying.page.keyboard.press('x');
+await trying.page.waitForFunction(() => __game.sound.state().ctx === 'running', null, { timeout: 5000 });
+await trying.page.waitForTimeout(400);
+const oldGame = await trying.page.evaluate(() => ({ file: __game.sound.data.cues['step.road'].file, board: !document.getElementById('board').hidden, title: !document.getElementById('title').hidden }));
+check('and #old plays the game with the sounds worked out from code, downloading no audio', oldGame.file === undefined && !oldGame.board && oldGame.title && tryAsked.length === 0, [oldGame, tryAsked]);
 await trying.close();
 const none = await serveAndOpen({ query: '?test#sounds-new', viewport: { width: 390, height: 844 }, overrides: { '/data/sound-new.json': null } });
 const noSheet = await none.page.evaluate(() => ({ cues: __game.sound.cueNames().length, heading: document.querySelector('#board h2').textContent }));
@@ -347,7 +351,7 @@ await none.close();
 // ---------------- the real ones, on a phone, once they've been made
 const made = JSON.parse(await readFile(new URL('../data/sound-new.json', import.meta.url), 'utf8').catch(() => 'null'));
 if (made) {
-  const real = await serveAndOpen({ touch: true, query: '?test#new' }), r = (fn, arg) => real.page.evaluate(fn, arg), asked = [];
+  const real = await serveAndOpen({ touch: true }), r = (fn, arg) => real.page.evaluate(fn, arg), asked = [];
   real.page.on('request', (q) => { const p = new URL(q.url()).pathname; if (p.startsWith('/audio/')) asked.push(p); });
   await r(setUp);
   const began = Date.now(), filed = Object.entries(made.cues).filter(([, c]) => c.file).map(([n]) => n);

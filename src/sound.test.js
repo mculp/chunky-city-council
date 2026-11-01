@@ -128,6 +128,15 @@ test('a file loses its silence and is brought to the peak the recipe has, in one
   assert.ok(wind, 'a loop keeps every sample');
 });
 
+test('a loop keeps both its channels, except on a phone, where the memory is better spent', async () => {
+  const d = data(); d.cues['amb.wind'].file = 'c.mp3';
+  for (const [coarse, chans] of [[false, 2], [true, 1]]) {
+    const w = fakeWorld({ coarse, respond: () => tone({ seconds: 2, amp: .2 }) }), s = createSound(d, { win: w.win }); w.touch(); await w.settle();
+    s.loop('amb.wind', 1);
+    assert.equal(w.made.sources.map((x) => x.buffer).find((b) => b?.length === 2000)?.numberOfChannels, chans);
+  }
+});
+
 const scored = (extra) => { const d = data(); Object.assign(d.music.title, { file: 'title.mp3' }); Object.assign(d.music.hang, { file: 'title.mp3' }); Object.assign(d.music.town, { file: ['t1.mp3', 't2.mp3'], next: ['chase'] }); Object.assign(d.music.chase, { file: 'chase.mp3' }); Object.assign(d.music.dream, { file: 'dream.mp3', once: true }); extra?.(d); return d; };
 const started = (w) => w.made.sources.filter((x) => x.started && x.buffer?.length >= 1000);
 

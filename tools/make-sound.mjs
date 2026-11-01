@@ -1,5 +1,5 @@
 // Makes music and sounds with ElevenLabs on fal, from what tools/sound_prompts.json asks for, and puts each file's one line into data/sound-new.json, a sheet of its own.
-// data/sound.json is what the game plays and what's on the board at #sounds. The owner likes those, and nothing here ever writes to it.
+// That's what the game plays. data/sound.json is the sounds worked out from code, which the owner wants kept for #sounds and #old, and nothing here ever writes to it.
 // It spends money, so by itself it only says what it would make and what that comes to, and it won't start anything that could go over the budget.
 // Anything already made stays made, unless it's named with --again. data/sound.md has the rest.
 //

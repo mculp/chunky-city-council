@@ -90,6 +90,14 @@ test('the new sheet keeps the old one\'s levels, so the drone that stands in for
   if (existsSync(made)) assert.deepEqual(JSON.parse(readFileSync(made, 'utf8')).levels, REAL.levels);
 });
 
+test('the sheet the game plays has every sound and part of the score the old one has', () => {
+  const made = new URL('../data/sound-new.json', import.meta.url);
+  if (!existsSync(made)) return;
+  const sheet = JSON.parse(readFileSync(made, 'utf8'));
+  assert.deepEqual(Object.keys(sheet.cues).sort(), Object.keys(REAL.cues).sort());
+  assert.deepEqual(Object.keys(sheet.music).sort(), Object.keys(REAL.music).sort());
+});
+
 test('data/sound.json keeps its one line to a sound', () => {
   const back = formatSound(REAL);
   assert.deepEqual(JSON.parse(back), REAL);
@@ -137,7 +145,7 @@ test('a run writes the files, the record and one line each, and a failure keeps 
   assert.deepEqual(data.cues['step.road'].file, ['audio/sfx/step.road.1.mp3', 'audio/sfx/step.road.2.mp3']);
   assert.equal(data.cues['amb.wind'].file, 'audio/sfx/amb.wind.1.mp3'); assert.equal(data.cues['amb.wind'].gain, .34);
   assert.equal(data.cues.explosion.file, undefined, 'one that failed still has its own');
-  assert.equal(readFileSync(join(root, 'data/sound.json'), 'utf8'), oldSheet, 'and the old sheet, which the game plays, is not touched');
+  assert.equal(readFileSync(join(root, 'data/sound.json'), 'utf8'), oldSheet, 'and the old sheet, which the owner wants kept, is not touched');
   const book = JSON.parse(readFileSync(join(root, 'audio/manifest.json'), 'utf8')).made['audio/sfx/amb.wind.1.mp3'];
   assert.equal(book.model, SOUND_MODEL); assert.equal(book.bytes, MP3.length); assert.equal(book.date, 'then'); assert.match(book.sha256, /^[0-9a-f]{64}$/);
   assert.ok(!lines.join().includes('secret-key'), 'the key is never printed');
