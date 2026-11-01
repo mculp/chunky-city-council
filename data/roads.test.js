@@ -87,11 +87,11 @@ const allVertices = [
   ...crossings.map((crossing, i) => ({ ...crossing, label: `crossing ${i + 1}` })),
 ];
 
-// compression[] as a function of true x: unchanged west of the first band,
-// scaled inside a band, shifted past it. Bands must run west to east, which the
-// compression test checks.
+// compression[] as a function of true x: scaled inside a band, shifted past it,
+// unchanged at town center. Bands must run west to east, which the compression
+// test checks.
 function remapX(x) {
-  let shift = 0;
+  let shift = data.compression.length ? data.compression[0].gameFrom - data.compression[0].trueFrom : 0;
   for (const band of data.compression) {
     if (x <= band.trueFrom) return x + shift;
     if (x < band.trueTo) return band.gameFrom + (x - band.trueFrom) * band.factor;
@@ -525,11 +525,11 @@ describe('reference data and compression', () => {
   // Slope 1 outside the bands, a positive factor inside and no jump at any edge
   // make the map strictly increasing for every x.
   test('compression[] is continuous and strictly increasing', () => {
-    let shift = 0;
+    let shift = data.compression.length ? data.compression[0].gameFrom - data.compression[0].trueFrom : 0;
     let previousTrueTo = -Infinity;
     for (const band of data.compression) {
       assert.equal(band.axis, 'x');
-      assert.ok(band.trueFrom > previousTrueTo, 'bands should run west to east without overlapping');
+      assert.ok(band.trueFrom >= previousTrueTo, 'bands should run west to east without overlapping');
       assert.ok(band.trueTo > band.trueFrom, 'a band should run west to east');
       assert.ok(band.factor > 0 && band.factor < 1, `factor ${band.factor}`);
       assertNear(band.gameFrom, band.trueFrom + shift, 'gameFrom');
@@ -537,6 +537,13 @@ describe('reference data and compression', () => {
       shift = band.gameTo - band.trueTo;
       previousTrueTo = band.trueTo;
     }
+  });
+
+  test('town center stays where it is', () => {
+    for (const band of data.compression) {
+      assert.ok(band.trueFrom >= 0 || band.trueTo <= 0, `band at ${band.trueFrom} holds town center`);
+    }
+    assert.equal(remapX(0), 0);
   });
 
   test('game x strictly increases with true x across every vertex in the file', () => {
@@ -739,7 +746,7 @@ describe('data/roads.md matches the data', () => {
       band.gameFrom,
       band.gameTo,
       band.factor,
-      Math.abs(band.gameTo - band.trueTo),
+      Number(Math.abs(band.gameTo - band.trueTo).toFixed(6)),
     ]);
     for (const value of [...constants, ...bandValues]) {
       assert.ok(mentionsNumber(conversion, value), `the conversion doesn't mention ${value}`);

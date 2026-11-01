@@ -297,7 +297,7 @@ describe('the plot of the real graph', () => {
   });
 
   test('each compression band is shaded across its game x, with its factor and warning', () => {
-    assert.equal(graph.compression.length, 1);
+    assert.ok(graph.compression.length > 0);
     const source = layer('compression');
     const rects = tagsIn(source, 'rect');
     assert.equal(rects.length, graph.compression.length);
@@ -402,7 +402,7 @@ describe('renderRoadPlot on other input', () => {
     };
     const plot = renderRoadPlot({ ...graph, compression: [...graph.compression, second] });
     const source = layerIn(plot, 'compression');
-    assert.equal(tagsIn(source, 'rect').length, 2);
+    assert.equal(tagsIn(source, 'rect').length, graph.compression.length + 1);
     assert.ok(textsIn(source).some((label) => label.includes('0.5')));
   });
 

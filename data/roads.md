@@ -11,7 +11,7 @@ Positions here are metres from town center, with +x east and -z north. They're t
 - **Base URL:** https://www2.census.gov/geo/tiger/TIGER2025/
 - **Downloaded:** 2026-10-31
 
-All geometry comes only from TIGER/Line. Nothing was traced, drawn by hand or taken from any other map or imagery. Inside the clip bounds every TIGER vertex is kept and none is moved. The only vertices that aren't TIGER's are the 10 listed in `synthetic`, each placed on a straight TIGER segment where that segment crosses a compression band edge.
+All geometry comes only from TIGER/Line. Nothing was traced, drawn by hand or taken from any other map or imagery. Inside the clip bounds every TIGER vertex is kept and none is moved. The only vertices that aren't TIGER's are the 44 listed in `synthetic`, each placed on a straight TIGER segment where that segment crosses a compression band edge.
 
 Paths are relative to the base URL. The build hashes each zip as it reads it, so `source.files` records the exact bytes used, and `--check` fails if a zip has changed.
 
@@ -211,26 +211,39 @@ z      = -R * dLat
 - The origin is town center: `lat0` is 32.32583 and `lon0` is -88.92806.
 - 1 unit is 1 m. +x is east, +y is up and -z is north. The file has no y values.
 
-Game x is true x sent through the compression band. z never changes:
+Game x is true x sent through the compression bands. It's unchanged at town center, x 0, and z never changes:
 
 ```text
-true x <= 1223:         game x = true x
-1223 < true x < 5063:   game x = 1223 + (true x - 1223) * 0.25
-true x >= 5063:         game x = true x - 2880
+true x <= -4440:          game x = true x + 3590.24
+-4440 < true x < -4180:   game x = -849.76 + (true x + 4440) * 0.1
+-4180 <= true x <= -4140: game x = true x + 3356.24
+-4140 < true x < -1112:   game x = -783.76 + (true x + 4140) * 0.02
+-1112 <= true x <= -1082: game x = true x + 388.8
+-1082 < true x < -650:    game x = -693.2 + (true x + 1082) * 0.1
+-650 <= true x <= 1223:   game x = true x
+1223 < true x < 5063:     game x = 1223 + (true x - 1223) * 0.25
+true x >= 5063:           game x = true x - 2880
 ```
 
 And back:
 
 ```text
-game x <= 1223:         true x = game x
-1223 < game x < 2183:   true x = 1223 + (game x - 1223) / 0.25
-game x >= 2183:         true x = game x + 2880
+game x <= -849.76:          true x = game x - 3590.24
+-849.76 < game x < -823.76: true x = -4440 + (game x + 849.76) / 0.1
+-823.76 <= game x <= -783.76: true x = game x - 3356.24
+-783.76 < game x < -723.2:  true x = -4140 + (game x + 783.76) / 0.02
+-723.2 <= game x <= -693.2: true x = game x - 388.8
+-693.2 < game x < -650:     true x = -1082 + (game x + 693.2) / 0.1
+-650 <= game x <= 1223:     true x = game x
+1223 < game x < 2183:       true x = 1223 + (game x - 1223) / 0.25
+game x >= 2183:             true x = game x + 2880
 ```
 
-Two examples from the file, rounded to 1 mm as it's written:
+Three examples from the file, rounded to 1 mm as it's written:
 
-- **Past the band:** the Meehan-Savoy Rd junction (`n3`) is at -88.86625, 32.327776. That's true x 5807.793, z -216.385, so game x 2927.793.
-- **Inside the band:** US 80's third river crossing is at -88.90915, 32.326017. That's true x 1776.822, z -20.793, so game x 1361.456.
+- **West of the bands:** US 80's first river crossing is at -88.976008, 32.324402. That's true x -4505.291, z 158.786, so game x -915.051.
+- **Past the east band:** the Meehan-Savoy Rd junction (`n3`) is at -88.86625, 32.327776. That's true x 5807.793, z -216.385, so game x 2927.793.
+- **Inside a band:** US 80's third river crossing is at -88.90915, 32.326017. That's true x 1776.822, z -20.793, so game x 1361.456.
 
 Every vertex keeps its TIGER lon/lat beside its game x/z, so a true position or length is always a re-derivation away.
 
@@ -271,48 +284,77 @@ To add one, key it by road id with `{width, surface, reason}` in the config and 
 
 ## Compressed stretches
 
-There's one band. Everything else is 1:1: x outside the band, with a constant shift past it, and z everywhere.
+There are four bands. Everything else is 1:1: x outside the bands, with a constant shift past them, and z everywhere.
 
 | True x from | True x to | Game x from | Game x to | Factor |
 | --- | --- | --- | --- | --- |
+| -4440 | -4180 | -849.76 | -823.76 | 0.1 |
+| -4140 | -1112 | -783.76 | -723.2 | 0.02 |
+| -1082 | -650 | -693.2 | -650 | 0.1 |
 | 1223 | 5063 | 1223 | 2183 | 0.25 |
 
-**Reason.** US 80 between the far east trestle and Meehan-Savoy Rd: 3.84 km with no junction or trestle, over four times the camera's 900 m far plane. It still holds one river crossing, and the railroad and river run through it. Their order is kept, but bearings inside the band change.
+**Reasons, west to east.**
 
-**Where the edges are.** 150 m east of `trestle-east-far` (x 1072.95) and 150 m west of Meehan-Savoy Rd's minimum x (x 5213.20), to the nearest metre, so that whole road stays 1:1. 3,840 m becomes 960 m, about one far plane. x 1220 was rejected because it's 3 mm from a river vertex. The nearest kept vertices to the edges in use are 0.855 m and 1.647 m away.
+- US 80 from just past Stuckey's Bridge to the west trestle: 260 m with no junction, on the run the game opens with.
+- US 80 from the west trestle towards town: 3.03 km with no junction, the longest empty stretch on the map, and the railroad and river run beside it.
+- US 80 coming into town, and the far end of Church St: 432 m with no junction.
+- US 80 between the far east trestle and Meehan-Savoy Rd: 3.84 km with no junction or trestle, over four times the camera's 900 m far plane. It still holds one river crossing, and the railroad and river run through it. Their order is kept, but bearings inside the band change.
 
-**How it's applied.** One global remap of x, the same for roads, railroad, river, nodes, trestles and crossings, at every z. The band isn't quite empty: it holds US 80's river crossing at true x 1777 (game x 1361) and its county-line seam at true x 1254, and the railroad and river run through it. No node or trestle is inside it, and the build fails if one is.
+**Why the west bands.** The game's bridge is US 80's crossing of the river at true x -4505.3, and the player runs east from it into town. That's 4.2 km, or 16 minutes at the game's 4.4 m/s. The three west bands make it 3.3 km shorter, which puts the edge of town, true x -650, about a minute's run from the bridge.
+
+**Where the edges are.**
+
+- **x -4440** leaves the 65 m past the crossing true, for the bridge's ground.
+- **x -4180 and -4140** are 20 m either side of the west trestle (x -4160.2), which a band can't hold.
+- **x -1112 and -1082** are 15 m either side of Church St's end (x -1097.1), a node, which a band can't hold either.
+- **x -650** is 367 m west of Adams Street. It leaves Church St's first 370 m true, and the town is built east of it.
+- **x 1223 and 5063** are 150 m east of `trestle-east-far` (x 1072.95) and 150 m west of Meehan-Savoy Rd's minimum x (x 5213.20), to the nearest metre, so that whole road stays 1:1. 3,840 m becomes 960 m, about one far plane. x 1220 was rejected because it's 3 mm from a river vertex.
+
+**How it's applied.** One global remap of x, the same for roads, railroad, river, nodes, trestles and crossings, at every z. Bands aren't quite empty: the east one holds US 80's river crossing at true x 1777 (game x 1361) and its county-line seam at true x 1254, and the railroad and river run through it. The west ones hold the railroad and the river's long southern loop, and the last of them holds most of the far end of Church St. No node or trestle is inside a band, and the build fails if one is.
 
 **What it distorts.**
 
-- **x distances inside the band** are a quarter of their true length.
-- **Lengths** measured from `points` come up short across the band: US 80 is 11,333 m in true metres and 8,810 m in game metres. Use `lonlat` for true lengths.
-- **Bearings inside the band** change, because x is squeezed and z isn't, so every line there swings towards north-south. From true x 1223 to its southernmost point, the railroad runs about 30° south of east in truth and about 66° in game space. A smooth curve there looks like a sharp V, and anything built from `points` gets the same V.
-- **Straight segments bend** where they cross a band edge. There are 10 vertices at those edges, listed in `synthetic`: `us_80_e2` 2, railroad line 1 2, river line 3 6. Their lon/lat is interpolated, with 9 decimals, so they stay on the edge.
-- **Everything east of the band** is shifted by -2880 m. Its scale is true, but its game x isn't its distance east of town center. `distanceFromCenterM` is in true metres.
+- **x distances inside a band** are the factor times their true length.
+- **Lengths** measured from `points` come up short across a band: US 80 is 11,333 m in true metres and 5,326 m in game metres. Use `lonlat` for true lengths.
+- **Bearings inside a band** change, because x is squeezed and z isn't, so every line there swings towards north-south. From true x 1223 to its southernmost point, the railroad runs about 30° south of east in truth and about 66° in game space. A smooth curve there looks like a sharp V, and anything built from `points` gets the same V. In the 0.02 band a line 2° off east comes out about 60° off east, which is why the game lays US 80 straight there. See [In the game](#in-the-game).
+- **Church St** bends sharply at x -650, where it runs from about 20° to about 73° north of west, because its last 432 m become 43 m.
+- **Straight segments bend** where they cross a band edge. There are 44 vertices at those edges, listed in `synthetic`: `us_80_e1` 6, `us_80_e2` 2, `church_st_e1` 2, railroad line 1 8, river line 2 20, river line 3 6. Their lon/lat is interpolated, with 9 decimals, so they stay on the edge.
+- **Everything past a band** is shifted: east of the east band by -2880 m, and west of the west bands by up to 3590.24 m. Its scale is true, but its game x isn't its distance from town center. `distanceFromCenterM` is in true metres.
 
-**What it keeps.** Every crossing, the order along each line and the left or right direction of every TIGER turn, because the remap is strictly increasing and z doesn't change. On this data, 9 of the 3,335 turns would flip if segments weren't split at the band edges, and none flip with the split. lon/lat never changes.
+**What it keeps.** Every crossing, the order along each line and the left or right direction of every TIGER turn, because the remap is strictly increasing and z doesn't change. On this data, 29 of the 3,323 turns would flip if segments weren't split at the band edges, and none flip with the split. lon/lat never changes.
+
+## In the game
+
+The game's world isn't game x and z as written here. Its origin is Stuckey's Bridge, US 80's first river crossing, so that the opening scene never moves, and it lays US 80 straight from there to the edge of town. `src/map.js` does this, and everything that needs a world position goes through it:
+
+```text
+world x = game x + 915.051
+world z = z - z of US 80 at that game x     (game x <= -650)
+world z = z + 18.014                        (game x >= -650)
+```
+
+West of game x -650, each column of the map slides north or south by whatever keeps US 80 on z 0. It moves the railroad and river in that column by the same amount, so nothing crosses that didn't and the order along every line is kept, but it's a further distortion on top of the bands. East of game x -650 it's a constant shift, so the town keeps true bearings and true distances. Near the bridge, within 200 m north or south, the river's vertices also bend towards the channel the opening scene was built on, which is the only place the game moves a vertex sideways.
 
 ## Clip bounds
 
 Clips keep whole TIGER vertices. A line stops at its last vertex inside the bound, never at an interpolated point, so every end keeps its real lon/lat and can stop short of the bound itself.
 
-**US 80.** True x -4670 to 6310 (`xMinM` and `xMaxM` in the config), which is 500 m past the west trestle (x -4160.2) and the Meehan-Savoy Rd junction (x 5807.8), rounded out to 10 m. US 80 crosses each bound once and ends at x -4663, z 183 and at x 6258, z -574 (game x 3378). Inside the bounds it's two features joined at the county line.
+**US 80.** True x -4670 to 6310 (`xMinM` and `xMaxM` in the config), which is 500 m past the west trestle (x -4160.2) and the Meehan-Savoy Rd junction (x 5807.8), rounded out to 10 m. US 80 crosses each bound once and ends at x -4663, z 183 (game x -1072) and at x 6258, z -574 (game x 3378). Inside the bounds it's two features joined at the county line.
 
 **Adams Street.** Clipped at the I-20 ramp, as in [Adams St and I-20](#adams-st-and-i-20). Church St and Meehan-Savoy Rd aren't clipped.
 
-**Railroad and river.** Both are clipped to the reference area, the bounding box of every included road plus 500 m: true x -5163 to 15419 (game x -5163 to 12539), z -2166 to 7594. Meehan-Savoy Rd sets the east and south sides, so the box is much bigger than the town. A line that leaves the box and comes back becomes two lines, in running order.
+**Railroad and river.** Both are clipped to the reference area, the bounding box of every included road plus 500 m: true x -5163 to 15419 (game x -1573 to 12539), z -2166 to 7594. Meehan-Savoy Rd sets the east and south sides, so the box is much bigger than the town. A line that leaves the box and comes back becomes two lines, in running order.
 
 | Railroad line | Vertices | From | To | What it is |
 | --- | --- | --- | --- | --- |
-| 1 | 161 (2 synthetic) | x -5043, z 834 | x 8284, z -2159 | The line through town. It leaves the box to the north here. |
+| 1 | 167 (8 synthetic) | x -5043, z 834 | x 8284, z -2159 | The line through town. It leaves the box to the north here. |
 | 2 | 16 | x 11083, z -2162 | x 11906, z -2022 | The same line, back inside the box for about 1 km. |
 | 3 | 22 | x 15404, z 3076 | x 14958, z 7530 | Feature `1103690413981`, a separate rail line across the box's southeast corner. It doesn't touch the line through town inside the box, and no included road crosses it. |
 
 | River line | Vertices | From | To | What it is |
 | --- | --- | --- | --- | --- |
 | 1 | 16 | x -4691, z -2163 | x -4632, z -2164 | A bend just inside the box's north edge. |
-| 2 | 1199 | x -4560, z -2159 | x 661, z -45 | Past the west and near east trestles, to the gap below. |
+| 2 | 1219 (20 synthetic) | x -4560, z -2159 | x 661, z -45 | Past the west and near east trestles, to the gap below. |
 | 3 | 1045 (6 synthetic) | x 666, z -61 | x 6036, z 7591 | From the gap, across US 80 twice and past the far east trestle, then southeast. |
 | 4 | 32 | x 6227, z 7594 | x 6816, z 7549 | A bend just inside the box's south edge. |
 
@@ -391,8 +433,8 @@ It plots game coordinates with north up, east right and one scale on both axes. 
 
 1. **Vertices.** Every TIGER vertex inside the clip bounds is kept, with no simplification, so turns survive. NAD83 lon/lat is used as-is.
 2. **Intersections** come from TIGER's shared vertices, compared exactly, because TIGER is one planar topology. A geometric segment check backs this up. Near-misses are reported and never snapped.
-3. **Compression** is one global, strictly increasing piecewise-linear remap of x, applied alike to roads, railroad and river. z isn't touched.
-4. **One band, factor 0.25.** The plan put it on US 80 between the far east trestle and the start of Meehan Savoy Rd. The edges in use are given in [Compressed stretches](#compressed-stretches).
+3. **Compression** is one global, strictly increasing piecewise-linear remap of x, applied alike to roads, railroad and river. z isn't touched. Town center stays at x 0.
+4. **Four bands.** The plan put the first on US 80 between the far east trestle and the start of Meehan Savoy Rd, and CHUNKY-36 added three west of town for the run from the bridge. The edges in use are given in [Compressed stretches](#compressed-stretches).
 5. **lon/lat is kept beside x/z** on every vertex, so tests can re-derive coordinates and order independently.
 6. **Width and surface** are assumed defaults by MTFCC, with no overrides until there's evidence for one.
 7. **Rail names.** The data and this page use the generic name `Railroad` and identify rail features by LINEARID only.

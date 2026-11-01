@@ -240,30 +240,30 @@ def to_lonlat(x, z):
 
 
 def compress_x(x, bands):
-    """Apply f to true x: the identity west of a band, factor inside it, a shift east of it.
+    """Apply f to true x: scaled inside a band, a constant shift outside, the identity at town center.
 
     bands are compression_rows rows, west to east. No bands means the identity.
     """
-    shift = 0.0
+    last = None
     for band in bands:
         if x < band["trueFrom"]:
-            break
+            return x + band["gameFrom"] - band["trueFrom"]
         if x < band["trueTo"]:
             return band["gameFrom"] + (x - band["trueFrom"]) * band["factor"]
-        shift = band["gameTo"] - band["trueTo"]
-    return x + shift
+        last = band
+    return x + last["gameTo"] - last["trueTo"] if last else x
 
 
 def decompress_x(x, bands):
     """Apply the inverse of f to game x, returning true x."""
-    shift = 0.0
+    last = None
     for band in bands:
         if x < band["gameFrom"]:
-            break
+            return x + band["trueFrom"] - band["gameFrom"]
         if x < band["gameTo"]:
             return band["trueFrom"] + (x - band["gameFrom"]) / band["factor"]
-        shift = band["trueTo"] - band["gameTo"]
-    return x + shift
+        last = band
+    return x + last["trueTo"] - last["gameTo"] if last else x
 
 
 def segments_of(points):
@@ -1224,9 +1224,12 @@ def report_reference_near_misses(road_lines, lines, contacts, report):
 
 
 def compression_rows(bands):
-    """Check the config's bands and return the rows of compression[], west to east."""
+    """Check the config's bands and return the rows of compression[], west to east.
+
+    Town center stays put: x is the identity on the stretch holding x 0, so a band moves
+    everything past it towards town, from whichever side.
+    """
     rows = []
-    shift = 0.0
     previous_to = -math.inf
     for band in bands:
         missing = [key for key in BAND_REQUIRED_KEYS if key not in band or band[key] == ""]
@@ -1242,21 +1245,30 @@ def compression_rows(bands):
             raise BuildError(f"{label}: factor {factor} isn't between 0 and 1")
         if true_from < previous_to:
             raise BuildError(f"{label}: bands must run west to east and not overlap")
-        game_from = true_from + shift
-        game_to = game_from + (true_to - true_from) * factor
+        if true_from < 0 < true_to:
+            raise BuildError(f"{label}: town center can't be inside a band")
         rows.append(
             {
                 "axis": "x",
                 "trueFrom": true_from,
                 "trueTo": true_to,
-                "gameFrom": game_from,
-                "gameTo": game_to,
+                "gameFrom": true_from,
+                "gameTo": true_to,
                 "factor": factor,
                 "reason": band["reason"],
             }
         )
-        shift = game_to - true_to
         previous_to = true_to
+    shift = 0.0
+    for row in (row for row in rows if row["trueFrom"] >= 0):
+        row["gameFrom"] = row["trueFrom"] + shift
+        row["gameTo"] = round(row["gameFrom"] + (row["trueTo"] - row["trueFrom"]) * row["factor"], 6)
+        shift = row["gameTo"] - row["trueTo"]
+    shift = 0.0
+    for row in reversed([row for row in rows if row["trueTo"] <= 0]):
+        row["gameTo"] = round(row["trueTo"] + shift, 6)
+        row["gameFrom"] = round(row["gameTo"] - (row["trueTo"] - row["trueFrom"]) * row["factor"], 6)
+        shift = row["gameFrom"] - row["trueFrom"]
     return rows
 
 
@@ -1348,12 +1360,19 @@ def apply_compression(data, config_bands, report):
     report_compression(data, bands, report)
 
 
+def shift_past(band):
+    """Return how far a band moves what's on the far side of it from town center."""
+    if band["trueFrom"] >= 0:
+        return band["gameTo"] - band["trueTo"]
+    return band["gameFrom"] - band["trueFrom"]
+
+
 def report_compression(data, bands, report):
     for band in bands:
         report.append(
             f"Compression: true x {band['trueFrom']:g} to {band['trueTo']:g} is game x "
             f"{band['gameFrom']:g} to {band['gameTo']:g}, factor {band['factor']:g}. Past it, "
-            f"x shifts by {band['gameTo'] - band['trueTo']:g} m."
+            f"x shifts by {shift_past(band):g} m."
         )
         for crossing in data["reference"]["crossings"]:
             x = to_xz((crossing["lon"], crossing["lat"]))[0]

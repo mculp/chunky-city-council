@@ -18,6 +18,8 @@ const DEFAULT_OUT = fileURLToPath(new URL('../data/raw/roads-debug.svg', import.
 // SVG pixels per metre. Written coordinates keep 4 decimals, which at this scale
 // is the 1 mm the data is rounded to.
 const SCALE = 0.1;
+const BAND_LABEL_WIDTH = 420;
+const BAND_LABEL_HEIGHT = 56;
 
 const MARGIN = 40;
 const HEADER = 120;
@@ -148,12 +150,23 @@ function mapBounds(graph) {
   };
 }
 
+// Which row of labels above the map each band's label takes, so that bands close
+// together don't print over each other.
+function bandLabelRows(graph) {
+  let row = 0;
+  return graph.compression.map((band, i, bands) => {
+    const gap = i && ((band.gameFrom + band.gameTo) - (bands[i - 1].gameFrom + bands[i - 1].gameTo)) / 2;
+    row = i && gap * SCALE < BAND_LABEL_WIDTH ? row + 1 : 0;
+    return row;
+  });
+}
+
 function plotLayout(graph) {
   const bounds = mapBounds(graph);
   const view = {
     scale: SCALE,
     originX: Math.ceil(MARGIN - bounds.minX * SCALE),
-    originY: Math.ceil(HEADER - bounds.minZ * SCALE),
+    originY: Math.ceil(HEADER + Math.max(0, ...bandLabelRows(graph)) * BAND_LABEL_HEIGHT - bounds.minZ * SCALE),
   };
   const mapRight = toPlot(bounds.maxX, 0, view)[0];
   const mapBottom = toPlot(0, bounds.maxZ, view)[1];
@@ -181,9 +194,10 @@ function compressionLayer(graph, { view, bounds }) {
     'x scale and bearings are not true inside this band',
     `true x ${band.trueFrom} to ${band.trueTo} is game x ${band.gameFrom} to ${band.gameTo}`,
   ];
+  const rows = bandLabelRows(graph);
   return group(
     'compression',
-    graph.compression.flatMap((band) => {
+    graph.compression.flatMap((band, index) => {
       const [left, top] = toPlot(band.gameFrom, bounds.minZ, view);
       const [right, bottom] = toPlot(band.gameTo, bounds.maxZ, view);
       const middle = (left + right) / 2;
@@ -191,7 +205,9 @@ function compressionLayer(graph, { view, bounds }) {
         `<rect x="${number(left)}" y="${number(top)}" ` +
           `width="${number(right - left)}" height="${number(bottom - top)}" ` +
           `fill="${COLOURS.band}" fill-opacity="0.22"/>`,
-        ...lines(band).map((line, i) => text(middle, top - 46 + i * 17, line, 'middle')),
+        ...lines(band).map((line, i) =>
+          text(middle, top - 46 - rows[index] * BAND_LABEL_HEIGHT + i * 17, line, 'middle'),
+        ),
       ];
     }),
   );

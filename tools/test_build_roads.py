@@ -145,6 +145,7 @@ class NearestComponentTest(unittest.TestCase):
 class RemapTest(unittest.TestCase):
     ONE = bands((1000, 5000, 0.25))
     TWO = bands((1000, 5000, 0.25), (7000, 8000, 0.5))
+    WEST = bands((-4000, -1000, 0.1), (-1000, -500, 0.5), (1000, 5000, 0.25))
 
     def test_rows_hold_the_game_range(self):
         band = self.ONE[0]
@@ -176,19 +177,34 @@ class RemapTest(unittest.TestCase):
         self.assertEqual(build.compress_x(7500.0, self.TWO), 4250.0)
         self.assertEqual(build.compress_x(9000.0, self.TWO), 5500.0)
 
+    def test_bands_west_of_town_center_move_what_is_past_them_east(self):
+        first, second, third = self.WEST
+        self.assertEqual((first["gameFrom"], first["gameTo"]), (-1050, -750))
+        self.assertEqual((second["gameFrom"], second["gameTo"]), (-750, -500))
+        self.assertEqual((third["gameFrom"], third["gameTo"]), (1000, 2000))
+        for x in (-500.0, 0.0, 999.5):
+            self.assertEqual(build.compress_x(x, self.WEST), x)
+        self.assertEqual(build.compress_x(-750.0, self.WEST), -625.0)
+        self.assertEqual(build.compress_x(-5000.0, self.WEST), -2050.0)
+        self.assertEqual(build.compress_x(6000.0, self.WEST), 3000.0)
+
+    def test_a_band_across_town_center_fails(self):
+        with self.assertRaisesRegex(BuildError, "town center"):
+            bands((-10, 10, 0.5))
+
     def test_no_bands_is_the_identity(self):
         self.assertEqual(build.compress_x(1234.5, []), 1234.5)
         self.assertEqual(build.decompress_x(1234.5, []), 1234.5)
 
     def test_strictly_increasing(self):
-        for rows in (self.ONE, self.TWO):
+        for rows in (self.ONE, self.TWO, self.WEST):
             xs = [-6000 + step * 0.25 for step in range(80000)]
             images = [build.compress_x(x, rows) for x in xs]
             for earlier, later in zip(images, images[1:]):
                 self.assertLess(earlier, later)
 
     def test_continuous_at_each_edge(self):
-        for rows in (self.ONE, self.TWO):
+        for rows in (self.ONE, self.TWO, self.WEST):
             for edge in build.band_edges(rows):
                 below = build.compress_x(edge - 1e-6, rows)
                 at = build.compress_x(edge, rows)
@@ -198,14 +214,14 @@ class RemapTest(unittest.TestCase):
                 self.assertLess(above - below, 3e-6)
 
     def test_invertible(self):
-        for rows in (self.ONE, self.TWO):
+        for rows in (self.ONE, self.TWO, self.WEST):
             for step in range(-600, 2000):
                 x = step * 7.3
                 self.assertAlmostEqual(build.decompress_x(build.compress_x(x, rows), rows), x)
                 self.assertAlmostEqual(build.compress_x(build.decompress_x(x, rows), rows), x)
 
     def test_inverse_of_each_edge_is_exact(self):
-        for rows in (self.ONE, self.TWO):
+        for rows in (self.ONE, self.TWO, self.WEST):
             for row in rows:
                 self.assertEqual(build.decompress_x(row["gameFrom"], rows), row["trueFrom"])
                 self.assertEqual(build.decompress_x(row["gameTo"], rows), row["trueTo"])
