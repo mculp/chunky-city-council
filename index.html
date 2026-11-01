@@ -64,6 +64,8 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .pbox p{margin:0;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dusk);line-height:1.6}
 .pbox .big{font-family:var(--f-display);font-size:18px;letter-spacing:.04em;background:var(--rust);color:var(--ink);border:3px solid var(--ink);box-shadow:0 5px 0 var(--ink);padding:12px 26px}
 .pbox .big:active{transform:translateY(3px);box-shadow:0 2px 0 var(--ink)}
+.pbox .credit{font-size:10px;line-height:1.4;opacity:.65;margin-top:14px}
+.pbox .credit a{color:inherit}
 .pbox .forget{background:none;border:0;padding:8px 12px;color:var(--dusk);font-size:12px;letter-spacing:.06em;text-decoration:underline;text-underline-offset:3px;-webkit-tap-highlight-color:transparent}
 .pbox .forget[hidden]{display:none}
 .keys .t{display:none}
@@ -123,7 +125,7 @@ body.talking .ctl{visibility:hidden}
   <div class="pbox"><h2 id="failH"></h2><p id="failP"></p><button class="big" id="retry">Try again</button></div>
 </div>
 <div class="panel" id="end" hidden>
-  <div class="pbox"><h2>You came down.<br>You crossed over.<br><span>You got beans.</span></h2><p id="endP"></p><p>Chapter 2 · Supply and Demand · soon</p><button class="big" id="again">Keep walking</button></div>
+  <div class="pbox"><h2>You came down.<br>You crossed over.<br><span>You got beans.</span></h2><p id="endP"></p><p>Chapter 2 · Supply and Demand · soon</p><button class="big" id="again">Keep walking</button><p class="credit">Buildings from USA Structures by ORNL and FEMA, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, changed to fit the game. Roads from the US Census. Roof colours from USDA NAIP.</p></div>
 </div>
 
 <script type="importmap">
@@ -144,6 +146,7 @@ import { loadMap } from './src/map.js';
 import { createPeople } from './src/people.js';
 import { drawCloth, drawSkull } from './src/looks.js';
 import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
+import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, Sheet } from './src/structures.js';
 
 const $ = (id) => document.getElementById(id);
 await Promise.race([document.fonts.load('40px Bungee').catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
@@ -153,7 +156,7 @@ const TEST = new URLSearchParams(location.search).has('test');
 // three.js draws on Math.random for every object's id, so it's seeded again before the particles, or adding a mesh would move them
 const seedRandom = () => { if (TEST) { let s = 20261031; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; } };
 seedRandom();
-const G = { uStep: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uBurst: { value: 0 }, uPxScale: { value: 1 }, uMask: { value: 0 } };
+const G = { uStep: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uBurst: { value: 0 }, uPxScale: { value: 1 }, uMask: { value: 0 }, uSee: { value: new THREE.Vector4() }, uSeeY: { value: 0 }, uHideRoof: { value: new THREE.Vector2(-2, -2) } };
 const INK = '#120b14', ORANGE = '#ff7a2c', CHALK_WHITE = '#f6f2ea';
 const UP = new THREE.Vector3(0, 1, 0), XA = new THREE.Vector3(1, 0, 0);
 
@@ -404,18 +407,23 @@ const deckMat = triplanar(deckTex, .2, { roughness: .8 });
 const stoneMat = triplanar(stoneTex, .35, { roughness: .95 });
 const asphaltMat = triplanar(asphaltTex, .12, { roughness: 1 });
 const outlineMats = new Map();
-function outlineMat(color, px, chalk, { spikes = false, tinted = false } = {}) {
-  const key = [color, px, chalk, spikes, tinted].join('|');
+// A wall between the camera and him opens up around him, in the same dither as everything else
+const SEE_THROUGH = `if(uSee.w>0.&&gl_FragCoord.z<uSee.z&&vSeeY>uSeeY){ float seeD=length(gl_FragCoord.xy-uSee.xy)/uSee.w; if(seeD<.68||(seeD<1.&&mod(floor(gl_FragCoord.x/(2.*uPxScale))+floor(gl_FragCoord.y/(2.*uPxScale)),2.)>.5)) discard; }`;
+function outlineMat(color, px, chalk, { spikes = false, tinted = false, cut = false } = {}) {
+  const key = [color, px, chalk, spikes, tinted, cut].join('|');
   if (outlineMats.has(key)) return outlineMats.get(key);
   const uniforms = Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
-    uColor: { value: new THREE.Color(color) }, uPx: { value: px }, uChalk: { value: chalk }, uStep: G.uStep, uRes: G.uRes, uPxScale: G.uPxScale, uMask: G.uMask
+    uColor: { value: new THREE.Color(color) }, uPx: { value: px }, uChalk: { value: chalk }, uStep: G.uStep, uRes: G.uRes, uPxScale: G.uPxScale, uMask: G.uMask, uSee: G.uSee, uSeeY: G.uSeeY, uHideRoof: G.uHideRoof
   });
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, fog: true, uniforms, userData: { outline: true },
-    defines: { ...(spikes && { SPIKES: 1 }), ...(tinted && { TINTED: 1 }) },
+    defines: { ...(spikes && { SPIKES: 1 }), ...(tinted && { TINTED: 1 }), ...(cut && { CUT: 1 }) },
     vertexShader: `uniform float uPx, uStep, uChalk, uPxScale; uniform vec2 uRes;
       #ifdef TINTED
       varying vec3 vTint;
+      #endif
+      #ifdef CUT
+      attribute vec3 aMat; uniform vec2 uHideRoof; varying float vSeeY;
       #endif
       #include <fog_pars_vertex>
       float hn(vec3 p){ return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453); }
@@ -440,16 +448,25 @@ function outlineMat(color, px, chalk, { spikes = false, tinted = false } = {}) {
         #endif
         clip.xy+=nc*uPx*uPxScale*boil*2./uRes*clip.w;
         gl_Position=clip;
+        #ifdef CUT
+          vSeeY=position.y; if(abs(aMat.z-uHideRoof.x)<.5||abs(aMat.z-uHideRoof.y)<.5) gl_Position=vec4(0.,0.,2.,1.);
+        #endif
         #include <fog_vertex>
       }`,
     fragmentShader: `uniform vec3 uColor; uniform float uStep, uChalk, uPxScale, uMask;
       #ifdef TINTED
       varying vec3 vTint;
       #endif
+      #ifdef CUT
+      uniform vec4 uSee; uniform float uSeeY; varying float vSeeY;
+      #endif
       #include <fog_pars_fragment>
       float h2(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
       void main(){
         if(uMask>.5){ gl_FragColor=vec4(1.); return; }
+        #ifdef CUT
+          ${SEE_THROUGH}
+        #endif
         vec3 c=uColor;
         #ifdef TINTED
           c*=vTint;
@@ -519,11 +536,18 @@ function riverDist(x, z) {
   return near + (Math.min(MAP.riverGrid.nearest(x, z), 60) - near) * sstep(100, 160, az);
 }
 // flat ground for a building, with a margin that blends into the land around it
-const PADS = [];
-function pad(x0, x1, z0, z1, m = 8) { PADS.push({ x0: x0 + OX, x1: x1 + OX, z0: z0 + OZ, z1: z1 + OZ, m }); }
+const padCells = new Map();
+function pad(x0, x1, z0, z1, m = 8) {
+  const p = { x0: x0 + OX, x1: x1 + OX, z0: z0 + OZ, z1: z1 + OZ, m };
+  for (let cx = Math.floor((p.x0 - m) / 32); cx <= Math.floor((p.x1 + m) / 32); cx++) for (let cz = Math.floor((p.z0 - m) / 32); cz <= Math.floor((p.z1 + m) / 32); cz++) {
+    const k = (cx + 32768) * 65536 + cz + 32768; if (!padCells.has(k)) padCells.set(k, []); padCells.get(k).push(p);
+  }
+}
 function padWeight(x, z) {
+  const list = padCells.get((Math.floor(x / 32) + 32768) * 65536 + Math.floor(z / 32) + 32768);
+  if (!list) return 0;
   let w = 0;
-  for (const p of PADS) {
+  for (const p of list) {
     if (x < p.x0 - p.m || x > p.x1 + p.m || z < p.z0 - p.m || z > p.z1 + p.m) continue;
     w = Math.max(w, 1 - sstep(0, p.m, Math.hypot(Math.max(p.x0 - x, 0, x - p.x1), Math.max(p.z0 - z, 0, z - p.z1))));
   }
@@ -833,75 +857,166 @@ const kudzuSpots = [];
 function kudzuOn(x0, x1, y, z0, z1, n) { for (let i = 0; i < n; i++) kudzuSpots.push([x0 + OX + rnd() * (x1 - x0), y, z0 + OZ + rnd() * (z1 - z0)]); }
 const lit = (c, i = 1) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(i) });
 const Y0 = TOWN_Y;
+// ---------------- every real building: src/structures.js says what they're made of, and data/structures.md where they're from
+const STRUCTURES = placeStructures(await (await fetch('data/structures.json')).json(), MAP);
+const houseGrid = new Map();
+for (const s of STRUCTURES) {
+  const b = boundsOf(s.pts);
+  pad(b.x0, b.x1, b.z0, b.z1, 6);
+  for (let cx = Math.floor(b.x0 / 32); cx <= Math.floor(b.x1 / 32); cx++) for (let cz = Math.floor(b.z0 / 32); cz <= Math.floor(b.z1 / 32); cz++) {
+    const k = (cx + 32768) * 65536 + cz + 32768; if (!houseGrid.has(k)) houseGrid.set(k, []); houseGrid.get(k).push(s);
+  }
+}
+function houseAt(x, z) {
+  const list = houseGrid.get((Math.floor(x / 32) + 32768) * 65536 + Math.floor(z / 32) + 32768);
+  if (list) for (const s of list) if (insideRing(x, z, s.pts)) return s;
+  return null;
+}
+// One material for every wall and roof, with what a surface is drawn in the vertices, so a block of town is one draw call and an outline.
+const houseMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .93 });
+houseMat.onBeforeCompile = (sh) => {
+  Object.assign(sh.uniforms, { uSee: G.uSee, uSeeY: G.uSeeY, uHideRoof: G.uHideRoof, uPxScale: G.uPxScale, uGrime: { value: stoneTex } });
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
+      attribute vec3 aMat; uniform vec2 uHideRoof; varying vec2 vS; varying vec2 vM; varying float vSeeY;`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+      vS=uv; vM=aMat.xy; vSeeY=position.y;`)
+    .replace('#include <project_vertex>', `#include <project_vertex>
+      if(abs(aMat.z-uHideRoof.x)<.5||abs(aMat.z-uHideRoof.y)<.5) gl_Position=vec4(0.,0.,2.,1.);`);
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+      varying vec2 vS; varying vec2 vM; varying float vSeeY; uniform vec4 uSee; uniform float uSeeY, uPxScale; uniform sampler2D uGrime; vec3 houseGlow=vec3(0.);
+      float hh(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+      // lines a period apart, half-width w of a period, fading to their average once they're too fine to draw
+      float lns(float t,float w){ float f=fwidth(t), d=abs(fract(t+.5)-.5); return mix(1.-smoothstep(w-f,w+f,d),2.*w,clamp(f*1.6-.6,0.,1.)); }
+      vec3 surface(vec3 c,float p,vec2 s){
+        float k=1.;
+        if(p<.5){}
+        else if(p<1.5){ k=1.-.5*lns(s.y/.25,.08); }
+        else if(p<2.5){ float r=s.y/.2, o=mod(floor(r),2.)*.5, x=s.x/.44+o; k=(1.-.42*max(lns(r,.09),lns(x,.05)))*(.84+.32*hh(vec2(floor(r),floor(x)))); }
+        else if(p<3.5){ float r=s.y/.4, o=mod(floor(r),2.)*.5, x=s.x/.8+o; k=(1.-.34*max(lns(r,.05),lns(x,.03)))*(.92+.16*hh(vec2(floor(r),floor(x)))); }
+        else if(p<4.5){ k=1.-.38*lns(s.x/.45,.07); }
+        else if(p<5.5){ float x=s.x/.3; k=(1.-.6*lns(x,.07))*(.82+.36*hh(vec2(floor(x),3.))); }
+        else if(p<6.5){ float r=s.y/.28, o=mod(floor(r),2.)*.5, x=s.x/.5+o; k=(1.-.45*max(lns(r,.11),lns(x,.04)))*(.84+.32*hh(vec2(floor(r),floor(x)))); }
+        else if(p<7.5){ k=1.-.42*lns(s.x/.6,.06); }
+        else if(p<8.5){
+          bool fr=s.x<.07||s.x>.93||s.y<.07||s.y>.93||abs(s.x-.5)<.025||abs(s.y-.5)<.022;
+          if(!fr){ c=vec3(.012,.018,.032)+vec3(.05,.07,.11)*s.y*s.y; if(vM.y>0.) houseGlow=mix(vec3(.85,.3,.06),vec3(.95,.5,.12),s.y)*vM.y*.72; }
+        }
+        else if(p<9.5){ float r=s.y*5.; k=(1.-.65*lns(r,.07))*(.74+.5*hh(vec2(floor(r),7.))); }
+        else if(p<10.5){ k=1.-.5*max(max(lns(s.y*2.4+.5,.05),step(abs(s.x-.5),.42)>.5?0.:1.),0.); if(length((s-vec2(.85,.46))*vec2(1.,2.2))<.05) c=vec3(.6,.5,.3); }
+        else if(p<11.5){ k=.8+.5*hh(floor(s*5.)); }
+        else if(p<12.5){ k=1.-.26*lns(s.x/.3,.06); if(s.y<.62) k*=.42; else if(s.y<.66) k*=1.25; }
+        else { k=.88+.24*hh(floor(s*11.)); }
+        return c*k;
+      }`)
+    .replace('#include <clipping_planes_fragment>', `${SEE_THROUGH}
+      #include <clipping_planes_fragment>`)
+    .replace('#include <color_fragment>', `#include <color_fragment>
+      diffuseColor.rgb=surface(diffuseColor.rgb,vM.x,vS);
+      if(vM.x<7.5||vM.x>11.5){ float gr=dot(texture2D(uGrime,vS*.3).rgb,vec3(.333)); diffuseColor.rgb*=clamp(.62+gr*20.,.55,1.25); }`)
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      totalEmissiveRadiance+=houseGlow;`);
+};
+const HOUSE_CELL = 128, HOUSE_RANGE = matchMedia('(pointer:coarse)').matches ? 200 : 240;
+const houseCells = cellsOf(STRUCTURES, HOUSE_CELL);
+function buildHouses(cell) {
+  const sheet = new Sheet();
+  for (const s of cell.list) writeStructure(sheet, s, TOWN_Y);
+  const a = sheet.arrays(), g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(a.position, 3)); g.setAttribute('normal', new THREE.BufferAttribute(a.normal, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(a.color, 3)); g.setAttribute('uv', new THREE.BufferAttribute(a.uv, 2)); g.setAttribute('aMat', new THREE.BufferAttribute(a.mat, 3));
+  g.setIndex(new THREE.BufferAttribute(a.index, 1));
+  const m = new THREE.Mesh(g, houseMat); outline(m, INK, 1.5, 0, { cut: true }); scene.add(m);
+  cell.mesh = m; cell.pieces = a.pieces;
+}
+function dropHouses(cell) { scene.remove(cell.mesh); cell.mesh.geometry.dispose(); cell.mesh = null; cell.pieces = null; }
+// They only come in once he's off the bridge, so the opening has its forest to itself. One a frame, nearest first.
+function updateHouses(x, z, jumped) {
+  if (!S.flags.town) return;
+  let near = null, nd = Infinity;
+  for (const c of houseCells) {
+    const d = Math.hypot(c.x - x, c.z - z);
+    if (c.mesh) { if (d > HOUSE_RANGE + 150) dropHouses(c); }
+    else if (d < HOUSE_RANGE + 90) { if (jumped) buildHouses(c); else if (d < nd) { nd = d; near = c; } }
+  }
+  if (near) buildHouses(near);
+}
 // Each landmark is built in its own coordinates, around an origin on the map. PLACES is that origin.
 const worldX = (trueX) => atTrue(trueX, 0)[0];
 const onRoadAt = (id, x) => ({ x, z: MAP.zAt(id, x) });
+// so that (localX, localZ) lands on the real spot, in true metres
+const landing = (trueX, trueZ, localX, localZ) => { const [x, z] = atTrue(trueX, trueZ); return { x: x - localX, z: z - localZ }; };
 const PLACES = {
-  // old x 55, on the frontage, the first thing you reach coming in from the bridge
-  gas: (() => { const p = onRoadAt('us_80', 270); return { x: p.x - 55, z: p.z }; })(),
-  store: (() => { const p = onRoadAt('us_80', worldX(-450)); return { x: p.x - 40, z: p.z }; })(),
-  church: (() => { const p = onRoadAt('church_st', worldX(-520)); return { x: p.x - 68.5, z: p.z }; })(),
-  // a siding on the town side of the main line
-  boxcar: (() => { const x = worldX(-500); return { x, z: atTrue(-500, 149.7)[1] - 10 }; })(),
-  trailers: { x: worldX(-540) - 68, z: atTrue(-540, 45)[1] - 23.5 },
-  tower: { x: worldX(-330) - 100, z: atTrue(-330, 15)[1] + 14 },
+  // the canopy out front of the old store at the west end of the strip
+  gas: landing(-87.85, -31.1, 53, 10),
+  // the little block store two doors along
+  store: landing(-64.5, -39.5, 40, -11),
+  // the south door of the brick church, at Adams and Church St
+  church: landing(-311, -211.6, 68.5, -8),
+  // on the gravel by the main line, where the sidings were
+  boxcar: landing(10, 52.4, 0, 0),
+  tower: landing(-330, 15, 100, -14),
 };
 function around(place, fn) { OX = place.x; OZ = place.z; fn(); OX = OZ = 0; }
-const STORE = {};
-// Chunky Mercantile: walk-in general store
+// Chunky Mercantile: what's inside the real store. The walls and roof are the building's own.
 const storeMat = triplanar(woodRed, .5, { roughness: .95 });
 const roofMat = new THREE.MeshStandardMaterial({ color: '#2b2630', roughness: .9 });
 around(PLACES.store, () => {
-  const x0 = 34, x1 = 46, z0 = -16, z1 = -6, H = 4.6, t = .3;
-  pad(x0 - 1, x1 + 1, z0 - 1, z1 + 1);
-  addBox(storeMat, (x0 + 39) / 2, Y0 + H / 2, z1 - t / 2, 39 - x0, H, t); solid(x0, 39, z1 - t, z1, Y0 + H);
-  addBox(storeMat, (41 + x1) / 2, Y0 + H / 2, z1 - t / 2, x1 - 41, H, t); solid(41, x1, z1 - t, z1, Y0 + H);
-  addBox(storeMat, 40, Y0 + H - .6, z1 - t / 2, 2, 1.2, t);
-  addBox(storeMat, (x0 + x1) / 2, Y0 + H / 2, z0 + t / 2, x1 - x0, H, t); solid(x0, x1, z0, z0 + t, Y0 + H);
-  addBox(storeMat, x0 + t / 2, Y0 + H / 2, (z0 + z1) / 2, t, H, z1 - z0); solid(x0, x0 + t, z0, z1, Y0 + H);
-  addBox(storeMat, x1 - t / 2, Y0 + H / 2, (z0 + z1) / 2, t, H, z1 - z0); solid(x1 - t, x1, z0, z1, Y0 + H);
-  addBox(roofMat, 38, Y0 + 2.2, -9.7, 4.5, 1.6, .6); solid(35.8, 40.2, -10, -9.4, Y0 + 1.6);   // counter
+  addBox(roofMat, 38, Y0 + .55, -9.7, 4.5, 1.1, .6); solid(35.8, 40.2, -10, -9.4, Y0 + 1.1);   // counter
   addBox(roofMat, 40, Y0 + .8, -12.7, 9, 1.6, .7); solid(35.5, 44.5, -13.05, -12.35, Y0 + 1.6);  // shelves
   addBox(roofMat, 43, Y0 + .8, -9.7, 4, 1.6, .7); solid(41, 45, -10.05, -9.35, Y0 + 1.6);
-  kudzuOn(x0, x1, Y0 + H + .4, z0, z1, 18); kudzuOn(x0, x0 + .6, Y0 + 1.5, z0, z1, 6);
-  Object.assign(STORE, { x0: x0 + OX, x1: x1 + OX, z0: z0 + OZ, z1: z1 + OZ });
-  addBox(storeMat, 40, Y0 + 5.7, -6.05, 10.4, 2.2, .2, 1.2);
   flushBuckets();
 });
-const storeRoof = new THREE.Mesh(boxGeo, roofMat); storeRoof.scale.set(12.6, .3, 10.6); storeRoof.position.set(40 + PLACES.store.x, Y0 + 4.75, -11 + PLACES.store.z); outline(storeRoof, INK, 1.5); scene.add(storeRoof);
-const storeSign = new THREE.Mesh(new THREE.PlaneGeometry(10, 1.8), new THREE.MeshStandardMaterial({ map: textTex(['CHUNKY MERCANTILE'], 1024, 184, '#e4d6b8', '#7a2318', '76px Bungee, Impact, sans-serif', { grime: true }), roughness: .9 }));
-storeSign.position.set(40 + PLACES.store.x, Y0 + 5.7, -5.92 + PLACES.store.z); scene.add(storeSign);
-// gas station with canopy
+// its sign, on a board in front of the gable, which comes down while he's inside or it'd be all you'd see
+const STORE_HOUSE = houseAt(...atTrue(-64.5, -39.5));
+const storeBoard = new THREE.Mesh(boxGeo, storeMat); storeBoard.scale.set(10.4, 2, .2); storeBoard.position.set(40 + PLACES.store.x, Y0 + 3.75, -4.72 + PLACES.store.z); outline(storeBoard, INK, 1.2); scene.add(storeBoard);
+const storeSign = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ map: textTex(['CHUNKY MERCANTILE'], 1024, 184, '#e4d6b8', '#7a2318', '76px Bungee, Impact, sans-serif', { grime: true }), roughness: .9 }));
+storeSign.scale.set(10 / 10.4, 1.8 / 2, 1); storeSign.position.z = .6; storeBoard.add(storeSign);
+// the gas station's canopy and pumps, in front of the store it belonged to
+const canopyMat = new THREE.MeshStandardMaterial({ color: '#cfc9bb', roughness: .85 }), canopyPost = new THREE.MeshStandardMaterial({ color: '#a8342a', roughness: .7, metalness: .2 });
 around(PLACES.gas, () => {
-  pad(46, 67, 3, 17);
-  addBox(roofMat, 53, Y0 + 4.6, 10, 10, .35, 8, 1.5);
-  for (const [x, z] of [[48.6, 6.6], [57.4, 6.6], [48.6, 13.4], [57.4, 13.4]]) { addBox(railMat, x, Y0 + 2.3, z, .3, 4.6, .3, 1.2); solid(x - .25, x + .25, z - .25, z + .25, Y0 + 4.6); }
+  pad(46, 60, 4, 15, 4);
+  addBox(canopyMat, 53, Y0 + 4.6, 10, 10, .35, 8, 1.5);
+  for (const [x, z] of [[48.6, 6.6], [57.4, 6.6], [48.6, 13.4], [57.4, 13.4]]) { addBox(canopyPost, x, Y0 + 2.3, z, .3, 4.6, .3, 1.2); solid(x - .25, x + .25, z - .25, z + .25, Y0 + 4.6); }
   for (const x of [51, 55]) { addBox(railMat, x, Y0 + .8, 10, .7, 1.6, 1, 1.2); solid(x - .45, x + .45, 9.4, 10.6, Y0 + 1.6); }
-  addBox(storeMat, 61.5, Y0 + 1.7, 11, 5, 3.4, 6, 1.5); solid(59, 64, 8, 14, Y0 + 3.4);
-  kudzuOn(59, 64, Y0 + 3.7, 8, 14, 10); kudzuOn(48, 58, Y0 + 4.9, 6, 14, 8);
-  addBox(railMat, 47, Y0 + 3, 4.1, .2, 6, .2, 1);
+  kudzuOn(48, 58, Y0 + 4.9, 6, 14, 8);
+  addBox(canopyPost, 46.5, Y0 + 3, 13.5, .2, 6, .2, 1);
   flushBuckets();
 });
 const gasAt = (x, z) => [x + PLACES.gas.x, z + PLACES.gas.z];
 const gasLight = new THREE.PointLight('#9fe3ff', 9, 12, 1.6); gasLight.position.set(gasAt(53, 0)[0], Y0 + 4.1, gasAt(0, 10)[1]); scene.add(gasLight);
 const gasStrip = new THREE.Mesh(boxGeo, lit('#bfefff', 2.2)); gasStrip.scale.set(8, .05, .2); gasStrip.position.set(gasAt(53, 0)[0], Y0 + 4.4, gasAt(0, 10)[1]); scene.add(gasStrip);
 const gasSign = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.4), new THREE.MeshBasicMaterial({ map: textTex(['GAS'], 256, 150, '#1b1420', '#ff4a6a', '96px Bungee, Impact, sans-serif'), color: new THREE.Color(1.4, 1.4, 1.4) }));
-gasSign.position.set(gasAt(47, 0)[0], Y0 + 6.2, gasAt(0, 4)[1]); gasSign.rotation.y = Math.PI; scene.add(gasSign);
-// church
+gasSign.position.set(gasAt(46.5, 0)[0], Y0 + 6.2, gasAt(0, 13.5)[1]); gasSign.rotation.y = -Math.PI / 4; scene.add(gasSign);
+// the church's steps and its tall window on the Adams St end. The rest is the building's own.
 const churchMat = triplanar(woodWhite, .5, { roughness: .9 });
 around(PLACES.church, () => {
-  pad(62, 75, -24, -5);
-  addBox(churchMat, 68.5, Y0 + 3, -15, 9, 6, 14, 1.6); solid(64, 73, -22, -8, Y0 + 6);
-  const r1 = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, .62)), r2 = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -.62));
-  addBox(roofMat, 66.2, Y0 + 7.4, -15, 5.6, .3, 14.6, 1.4, r1); addBox(roofMat, 70.8, Y0 + 7.4, -15, 5.6, .3, 14.6, 1.4, r2);
-  addBox(churchMat, 68.5, Y0 + 6.5, -8.6, 2.2, 13, 2.2, 1.4); solid(67.4, 69.6, -9.7, -7.5, Y0 + 13);
-  for (let i = 0; i < 3; i++) addBox(stoneMat, 68.5, Y0 + .15 + i * .3, -6.9 + i * .45, 4, .3, 1.4 - i * .45, 1);
+  for (let i = 0; i < 3; i++) addBox(stoneMat, 68.5, Y0 + .15 + i * .3, -6.2 - i * .45, 4, .3, 1.4 - i * .45, 1);
   flushBuckets();
 });
 const churchAt = (x, z) => [x + PLACES.church.x, z + PLACES.church.z];
-const steepleTop = new THREE.Mesh(new THREE.ConeGeometry(1.4, 4, 4), churchMat); steepleTop.position.set(churchAt(68.5, 0)[0], Y0 + 15, churchAt(0, -8.6)[1]); steepleTop.rotation.y = Math.PI / 4; outline(steepleTop, INK, 1.4); scene.add(steepleTop);
-for (const z of [-11, -15, -19]) for (const x of [63.9, 73.1]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.2), lit('#ffb347', 1.6)); w.position.set(churchAt(x, 0)[0], Y0 + 3.2, churchAt(0, z)[1]); w.rotation.y = x < 68 ? -Math.PI / 2 : Math.PI / 2; scene.add(w); }
+{
+  // leaded glass, lit from inside, under an arch
+  const glass = textTex([''], 128, 320, '#14090a', '#000', '12px sans-serif', { after: (g) => {
+    const tones = ['#e8842a', '#d6452a', '#f0b23c', '#3a7aa8', '#7d3f8c', '#e8c86a'];
+    for (let y = 0; y < 320; y += 40) for (let x = 0; x < 128; x += 32) { g.fillStyle = tones[Math.floor(hash(x, y, 7) * tones.length)]; g.fillRect(x + 2, y + 2, 28, 36); }
+  } });
+  glass.magFilter = THREE.NearestFilter;
+  const arch = new THREE.Shape(); arch.moveTo(-.9, 0); arch.lineTo(.9, 0); arch.lineTo(.9, 3.4); arch.absarc(0, 3.4, .9, 0, Math.PI, false); arch.lineTo(-.9, 0);
+  const geo = new THREE.ShapeGeometry(arch, 12), uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 1.8 + .5, uv.getY(i) / 4.3);
+  const win = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: glass, color: new THREE.Color(1.5, 1.5, 1.5) })), [wx, wz] = atTrue(-286.2, -230.2);
+  win.position.set(wx + .06, Y0 + 1.2, wz); win.rotation.y = Math.PI / 2 + .048; scene.add(win);
+}
 const churchLight = new THREE.PointLight('#ffb347', 10, 13, 1.7); churchLight.position.set(churchAt(68.5, 0)[0], Y0 + 2.6, churchAt(0, -5)[1]); scene.add(churchLight);
+// the white steeple on the red brick church on US 80: the only one in town, on the ridge behind its front gable
+{
+  const [x, z] = atTrue(-315.2, -47), stage = (w, y0, y1) => addBox(churchMat, x, Y0 + (y0 + y1) / 2, z, w, y1 - y0, w, 1.3);
+  stage(3, 4, 11.5); stage(3.5, 11.5, 11.8); stage(2.5, 11.8, 15); stage(3, 15, 15.25);
+  // an arched louvre in each face of the upper stage
+  for (const [dx, dz, wx, wz] of [[1.27, 0, .06, .8], [-1.27, 0, .06, .8], [0, 1.27, .8, .06], [0, -1.27, .8, .06]]) addBox(roofMat, x + dx, Y0 + 13.4, z + dz, wx, 2, wz, 0);
+  pad(x - 6, x + 6, z - 6, z + 6, 2);
+  flushBuckets();
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(1.25, 7, 8), new THREE.MeshStandardMaterial({ color: '#79877c', roughness: .6, metalness: .3 })); spire.position.set(x, Y0 + 18.75, z); outline(spire, INK, 1.4); scene.add(spire);
+}
 // the railroad, on the graph's lines. One tie pool moves with the camera.
 {
   const up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3(), mid = new THREE.Vector3(), rq = new THREE.Quaternion();
@@ -967,17 +1082,7 @@ const towerTank = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 4.6, 32, 1
 towerTank.position.set(towerX, Y0 + 15.3, towerZ); towerTank.rotation.y = -Math.PI / 2 - .5; outline(towerTank, INK, 1.6); scene.add(towerTank);
 const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(3.8, 2, 32), roofMat); towerRoof.position.set(towerX, Y0 + 18.6, towerZ); outline(towerRoof, INK, 1.4); scene.add(towerRoof);
 const beacon = new THREE.Mesh(new THREE.SphereGeometry(.18, 10, 8), lit('#ff2a2a', 4)); beacon.position.set(towerX, Y0 + 19.7, towerZ); scene.add(beacon);
-// trailers, burnt cars, power poles, fire barrels, the town sign
-const trailerMat = triplanar(woodGrey, .5, { roughness: .9 });
-around(PLACES.trailers, () => {
-  pad(53, 83, 19, 29);
-  for (const [x, z] of [[60, 24], [76, 23]]) {
-    addBox(trailerMat, x, Y0 + 1.7, z, 10, 2.8, 3.2, 1.5); solid(x - 5, x + 5, z - 1.6, z + 1.6, Y0 + 3.1);
-    addBox(roofMat, x, Y0 + .25, z - 2.3, 3, .5, 1.4, 1); kudzuOn(x - 5, x + 5, Y0 + 3.3, z - 1.6, z + 1.6, 9);
-    for (const dx of [-3, 0, 3]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(1.1, .7), lit(dx === 0 && x === 76 ? '#ffcf7a' : '#1a1522', dx === 0 && x === 76 ? 1.4 : 1)); w.position.set(x + dx + OX, Y0 + 2.1, z - 1.62 + OZ); w.rotation.y = Math.PI; scene.add(w); }
-  }
-  flushBuckets();
-});
+// burnt cars, power poles, fire barrels, the town sign
 const burnt = new THREE.MeshStandardMaterial({ color: '#2a2024', roughness: 1, metalness: .3 });
 {
   const roadside = (x, side) => { const p = onRoadAt('us_80', x); return [p.x, p.z + side * 5.4]; };
@@ -991,11 +1096,12 @@ const burnt = new THREE.MeshStandardMaterial({ color: '#2a2024', roughness: 1, m
 const poleMat = new THREE.MeshStandardMaterial({ color: '#2d2026', roughness: 1 });
 const wireMat = new THREE.MeshBasicMaterial({ color: '#0c080e' });
 {
-  const adamsX = MAP.nodes.find((n) => n.id === 'n2').x, doorX = 40 + PLACES.store.x;
+  const adamsX = MAP.nodes.find((n) => n.id === 'n2').x, canopy0 = gasAt(44, 0)[0], canopy1 = gasAt(60, 0)[0];
   const poles = [];
-  for (let x = 26, end = adamsX + 60; x <= end; x += x < 300 ? 12 : 24) {
-    if (Math.abs(x - adamsX) < 8 || Math.abs(x - doorX) < 2.5) continue;
+  for (let x = 26, end = worldX(420); x <= end; x += x < 300 ? 12 : 24) {
+    if (Math.abs(x - adamsX) < 8 || (x > canopy0 && x < canopy1)) continue;
     const z = MAP.zAt('us_80', x) - 4.3;
+    if (houseAt(x, z)) continue;
     addBox(poleMat, x, Y0 + 4, z, .25, 8, .25, 1.1); addBox(poleMat, x, Y0 + 7.6, z, .12, .12, 2.2, 1); solid(x - .2, x + .2, z - .2, z + .2, Y0 + 8);
     poles.push([x, z]);
   }
@@ -1186,6 +1292,8 @@ const SIGNS = [];
   scene.add(kz);
   const ko = new THREE.InstancedMesh(kz.geometry, outlineMat(INK, 1.2, 0), kz.count); ko.instanceMatrix = kz.instanceMatrix; scene.add(ko);
 }
+// Where the town's props leave the random sequence, however many there are, so the lantern and the snakes stay as they were in the opening
+rs = 426193737;
 
 // ================================================================ characters: the hooded build from the drawing
 const cr = (p0, p1, p2, p3, t) => { const t2 = t * t, t3 = t2 * t; return .5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3); };
@@ -1686,7 +1794,7 @@ const canLabel = textTex(['BEANS'], 256, 128, '#c8452a', '#f6e8c8', '52px Bungee
 const canMat = [new THREE.MeshStandardMaterial({ map: canLabel, roughness: .6, metalness: .2, emissive: '#3a1006' }), new THREE.MeshStandardMaterial({ color: '#c9ccd2', metalness: .9, roughness: .3 })];
 const PICKUPS = [
   [38.2 + PLACES.store.x, Y0 + 1.75, -12.7 + PLACES.store.z], [43 + PLACES.store.x, Y0 + 1.75, -9.7 + PLACES.store.z],
-  [76.6 + PLACES.trailers.x, Y0 + .3, 20.6 + PLACES.trailers.z], [towerX, Y0 + .3, towerZ], [BOX.x + 1.5, Y0 + .9, BOX.z - 2]
+  (() => { const [x, z] = atTrue(-18.8, -54.5); return [x, Y0 + .3, z]; })(), [towerX, Y0 + .3, towerZ], [BOX.x + 1.5, Y0 + .9, BOX.z - 2]
 ].map(([x, y, z]) => {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(.11, .11, .26, 18), [canMat[0], canMat[1], canMat[1]]);
   m.position.set(x, y + .2, z); outline(m, INK, 1.5); scene.add(m);
@@ -2272,10 +2380,31 @@ for (const b of SOLIDS) {
     const k = (cx + 32768) * 65536 + cz + 32768; if (!solidCells.has(k)) solidCells.set(k, []); solidCells.get(k).push(b);
   }
 }
+// walls by cell too, as lines with a thickness, because the real ones don't run square to the map
+const wallCells = new Map();
+for (const s of STRUCTURES) for (const w of collidersOf(s, TOWN_Y)) {
+  const [ax, az, bx, bz, , r] = w, reach = r + .4;
+  for (let cx = Math.floor((Math.min(ax, bx) - reach) / 16); cx <= Math.floor((Math.max(ax, bx) + reach) / 16); cx++) for (let cz = Math.floor((Math.min(az, bz) - reach) / 16); cz <= Math.floor((Math.max(az, bz) + reach) / 16); cz++) {
+    const k = (cx + 32768) * 65536 + cz + 32768; if (!wallCells.has(k)) wallCells.set(k, []); wallCells.get(k).push(w);
+  }
+}
+function hitsWall(x, z, y, list) {
+  for (let i = 0; i < list.length; i++) {
+    const w = list[i];
+    if (y >= w[4] - .25) continue;
+    const dx = w[2] - w[0], dz = w[3] - w[1], l2 = dx * dx + dz * dz || 1e-9, px = x - w[0], pz = z - w[1];
+    let t = (px * dx + pz * dz) / l2; t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const ex = px - dx * t, ez = pz - dz * t, r = w[5] + .3;
+    if (ex * ex + ez * ez < r * r) return true;
+  }
+  return false;
+}
 function blocked(x, z, y) {
   if (!MAP.inBounds(x, z)) return true;
-  const list = solidCells.get((Math.floor(x / 16) + 32768) * 65536 + Math.floor(z / 16) + 32768);
+  const cell = (Math.floor(x / 16) + 32768) * 65536 + Math.floor(z / 16) + 32768, list = solidCells.get(cell);
   if (list) for (const [x0, x1, z0, z1, top] of list) if (x > x0 - .3 && x < x1 + .3 && z > z0 - .3 && z < z1 + .3 && y < top - .25) return true;
+  const walls = wallCells.get(cell);
+  if (walls && hitsWall(x, z, y, walls)) return true;
   // the rails on a road bridge
   if (SPANS.length && y > ROAD_TOP - 1) { const s = spanAt(x, z); if (s && MAP.roadGrid.nearest(x, z) > s.road.width / 2 && MAP.roadGrid.d < s.road.width / 2 + 1) return true; }
   return false;
@@ -2308,19 +2437,19 @@ const horde = createHorde({
   },
 });
 // where they start: along the streets of town, thickest on US 80
-const CROWD_STREETS = [['us_80', [120, 0], [900, 18], 56], ['church_st', [206, -397], [634, -181], 20], ['adams_st', [632, -5], [630, -320], 20]];
+const CROWD_STREETS = [['us_80', [300, 0], [1100, 18], 56], ['church_st', [206, -397], [634, -181], 20], ['adams_st', [632, -5], [630, -320], 20]];
 let crowdOut = false;
 function bringOutCrowd() {
   if (crowdOut) return; crowdOut = true; crowdGroup.visible = true; S.hp = 3;
-  const [cx, cz] = churchAt(68.5, -12);
-  horde.zones.push({ x: cx, z: cz, r: 15 });
+  const [cx, cz] = atTrue(-309, -228);
+  horde.zones.push({ x: cx, z: cz, r: 28 });
   for (const f of fires) horde.lights.push({ x: f.pl.position.x, z: f.pl.position.z, r: 30 });
   horde.lights.push({ x: gasLight.position.x, z: gasLight.position.z, r: 40 });
   for (const [id, a, b, n] of CROWD_STREETS) {
     const s0 = MAP.sOn(id, ...a), s1 = MAP.sOn(id, ...b);
     for (let i = 0, tries = 0; i < n && tries < n * 30; tries++) {
       const p = MAP.along(id, s0 + (s1 - s0) * crowdRand()), x = p.x + (crowdRand() - .5) * 10, z = p.z + (crowdRand() - .5) * 10;
-      if (Math.hypot(x - player.pos.x, z - player.pos.z) < 35 || horde.inSanctuary(x, z) || floorOnce(x, z) < -.1 || blocked(x, z, floorOnce(x, z))) continue;
+      if (Math.hypot(x - player.pos.x, z - player.pos.z) < 35 || horde.inSanctuary(x, z) || floorOnce(x, z) < -.1 || blocked(x, z, floorOnce(x, z)) || houseAt(x, z)) continue;
       horde.add(x, z);
       i++;
     }
@@ -2457,7 +2586,6 @@ function tick(dt, draw = true) {
       for (const [id, n] of Object.entries(NPCS)) { const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z); if (d < nd) { nd = d; near = id; } }
       if (near) { prompt(`${KA} · Talk to ${NPCS[near].name}`); if (input.aEdge) openDialog(near); }
       else prompt(null);
-      storeRoof.visible = !(player.pos.x > STORE.x0 && player.pos.x < STORE.x1 && player.pos.z > STORE.z0 && player.pos.z < STORE.z1);
     }
   }
   // ---------------- sweeping Odessa's steps
@@ -2527,6 +2655,15 @@ function tick(dt, draw = true) {
     if (cam.snap) { camera.position.copy(V); cam.snap = false; } else camera.position.lerp(V, 1 - Math.exp(-dt * (M === 'fall' ? 3 : 7)));
     if (cam.shake > 0) { cam.shake -= dt; camera.position.x += (Math.random() - .5) * cam.shake * .3; camera.position.y += (Math.random() - .5) * cam.shake * .3; }
     camera.lookAt(tgt); if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
+    if (S.flags.town) {
+      // Indoors the roof's out of the way, and so is the roof of whatever the camera's backed into, or that'd be all you'd see.
+      // Anything else between the camera and him opens up around him, down to his knees.
+      const home = houseAt(heroRoot.position.x, heroRoot.position.z), behind = houseAt(camera.position.x, camera.position.z);
+      G.uHideRoof.value.set(home ? home.index : -2, behind ? behind.index : -2);
+      if (storeBoard.visible === (home === STORE_HOUSE)) storeBoard.visible = home !== STORE_HOUSE;
+      camera.updateMatrixWorld(); _v.copy(heroRoot.position); _v.y += 1; _v.project(camera);
+      G.uSee.value.set((_v.x * .5 + .5) * G.uRes.value.x, (_v.y * .5 + .5) * G.uRes.value.y, _v.z * .5 + .5, G.uRes.value.y * .18); G.uSeeY.value = heroRoot.position.y + .4;
+    }
   }
   // ---------------- HUD timers
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').classList.remove('show'); }
@@ -2551,7 +2688,7 @@ function updateWorld() {
   const x = camera.position.x, z = camera.position.z, jumped = Math.hypot(x - worldX0, z - worldZ0) > 40;
   worldX0 = x; worldZ0 = z; worldTick++;
   updateGround(x, z, jumped ? Infinity : worldTick % 3 === 0 ? 1 : 0);
-  fillTrees(x, z); fillTies(x, z);
+  fillTrees(x, z); fillTies(x, z); updateHouses(x, z, jumped);
   const away = Math.hypot(x, z), k = away > 60 ? 1 - 60 / away : 0;
   if (k) water.position.set(x, 0, z); else water.position.set(0, 0, 0);
   moon.position.copy(MOON_DIR).multiplyScalar(440); moon.position.x += x * k; moon.position.z += z * k; moon.position.y += camera.position.y * k;
@@ -2572,12 +2709,13 @@ requestAnimationFrame(loop);
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, pointer, people, chunks: () => chunks.size,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdHoods.count }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
-    topDown({ x0, z0, x1, z1, scale, everywhere }) {
+    topDown({ x0, z0, x1, z1, scale, everywhere, houses }) {
       const w = Math.round((x1 - x0) * scale), h = Math.round((z1 - z0) * scale), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      if (houses) for (const c of houseCells) if (!c.mesh && c.x > x0 - HOUSE_CELL && c.x < x1 + HOUSE_CELL && c.z > z0 - HOUSE_CELL && c.z < z1 + HOUSE_CELL) buildHouses(c);
       const view = new THREE.OrthographicCamera((x0 - x1) / 2, (x1 - x0) / 2, (z1 - z0) / 2, (z0 - z1) / 2, 1, 3000);
       view.position.set(cx, 1000, cz); view.up.set(0, 0, -1); view.lookAt(cx, 0, cz);
       for (const [k, m] of chunks) { m.visible = false; chunkPool.push(m); chunks.delete(k); }

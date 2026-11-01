@@ -17,6 +17,7 @@ Everything is procedural three.js. The game has no image, model or texture files
 | `clothMat`, `skullMat` | Putting those on a body, one at a time or a whole crowd at once |
 | `outlineMat`, `outline` | Screen-space outlines. A `chalk` value above 0 adds the boil and the broken chalk texture |
 | `pixelTex`, `triplanar`, `textTex` | Surface textures and painted signage |
+| `writeStructure`, `houseMat` | Every real building: `src/structures.js` writes its pieces, and one material draws the siding, brick, block, ribs, shingle, windows and doors from what's in the vertices |
 | `swayMat` | Foliage that moves |
 | `gifMat`, `renderFrame` | The final look: dither, grain, vignette and glitches |
 | `triggerBurst`, `glitch` | Glitch bursts: `glitch` for hits, `triggerBurst` for the timed ones |
@@ -78,12 +79,14 @@ Night in an abandoned Mississippi town.
 - **Sky:** horizon `#e0662a`, clouds `#1d1230`, moonlight `#c9d4ff`, purple fog `#2a1838`.
 - **Surfaces:** flat-shaded terrain and foliage, ink outlines on buildings and steel, kudzu `#3f7a35` over everything left standing.
 - **The bridge:** a rusted truss with an orange rail (`#d76a2c`).
-- **The town:** the Mercantile, gas station, church, water tower, and a rusted boxcar on a railroad with dark ties (`#2a1d18`).
+- **The town:** the real one. Every building is at its real position, with its real footprint, in siding, brick, block or ribbed metal, and with kudzu on it. See `data/structures.md`. The Mercantile is the little block store, the gas station's canopy stands in front of the old store it belonged to, and Miss Odessa's church is the brick one at Adams and Church St. Real businesses go under invented names.
+- **Props that aren't real:** the water tower, and the rusted boxcar on a railroad with dark ties (`#2a1d18`).
+- **Doors stand open.** Any building can be walked into, and its roof comes off while he's inside. Anything between the camera and him opens up around him in a dither, and the roof of whatever the camera backs into comes off too.
 - **Street signs:** green blades with cream Bungee, the colours of the town sign, reading the names in the road graph. Each corner blade runs along the road it names, as real ones do, and the roadside ones face whoever's walking that way. A phone in portrait sees a narrow slice of the road, so they're big enough to read before they slide off screen.
 - **The river:** it takes glowing rings where things hit it. Cottonmouths open white mouths before striking.
 - **The lantern:** the one from the local legend, a guide light with nobody holding it that leads him across the river.
 
-The brief is a "perfectly 3d modeled city": the real layout and landmarks of Chunky on real street geometry, rendered in this hand-drawn style. Accuracy applies to where things are and what they are. It doesn't mean photorealism. The roads, the railroad and the river come from the road graph. The buildings are still the prototype's, placed along those roads, until their own tickets rebuild them.
+The brief is a "perfectly 3d modeled city": the real layout and landmarks of Chunky on real street geometry, rendered in this hand-drawn style. Accuracy applies to where things are and what they are. It doesn't mean photorealism. The roads, the railroad and the river come from the road graph, and the buildings from `data/structures.json`.
 
 ## What only the reference has
 
@@ -113,5 +116,5 @@ Touch comes first, because the game is played on a phone. Left thumb moves, A ac
 
 - **Real trademarks.** Bottle labels and signs use invented brands or the warning triangle alone. In-world brands can come from the same family as DEL MUERTO, VOODOO HEAT, BLACK SUN, GRAVEYARD SHIFT and DEEP END. Check that a name isn't a real brand before using it.
 - **Music without rights.** The existing video captures of the bridge scene are cut to a commercial track with no licence, so neither they nor the track belong here.
-- **Google map imagery or geometry.** Roads come from Census TIGER/Line data. Google Maps is for comparing by eye only.
+- **Google map imagery or geometry.** Roads come from Census TIGER/Line data and buildings from USA Structures. Google Maps is for comparing by eye and for writing down, in words, what a building looks like.
 - **Reference images,** until the owner decides they can be public.

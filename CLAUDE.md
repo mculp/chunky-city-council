@@ -11,6 +11,7 @@ Read `docs/art-direction.md` before changing anything visible. `reference/stucke
 - No real trademarks on labels, signs, filenames or docs. Use invented brands or the orange warning triangle.
 - No Gen Z or Gen Alpha slang in game text.
 - Roads come from Census TIGER/Line data. Never derive geometry from Google imagery or commit any. Comparing by eye is fine, and differences get filed as corrections.
+- Buildings come from FEMA and ORNL's USA Structures, which is CC BY 4.0, so its credit stays with it. Street View is for writing down what a building looks like, in words, in `tools/structure_notes.json`. No business names, people's names or street addresses go in there, because most of these are someone's home. Real businesses go under invented names.
 - No music without rights.
 - Keep it working on a phone with touch controls. The target is 30+ zombies on screen at 30 fps.
 - Keep `prefers-reduced-motion` working.

@@ -8,6 +8,7 @@
     "walk": "node tools/walk-roads.mjs",
     "play": "node tools/play-chapter1.mjs",
     "horde": "node tools/play-horde.mjs",
+    "overlay:structures": "node tools/structure-overlay.mjs",
     "overlay": "node tools/map-overlay.mjs"
   },
   "devDependencies": {
