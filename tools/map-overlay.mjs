@@ -20,6 +20,14 @@ const tiger = JSON.parse(py.stdout);
 
 // Runs in the page. Measures the game against TIGER. Nothing here draws.
 function measure({ tiger, tolerance }) {
+  const ponds = (g, M) => {
+    const W = g.water; let n = 0, hit = 0;
+    for (const p of W.ponds) for (let x = p.x0; x <= p.x1; x += 5) for (let z = p.z0; z <= p.z1; z += 5) {
+      if (W.look(x, z) !== p || W.d > -3 || !W.in(x, z) || M.roadGrid.nearest(x, z) < 8 || M.railGrid.nearest(x, z) < 6) continue;
+      n++; if (g.groundH(x, z) < p.level) hit++;
+    }
+    return { n, hit };
+  };
   const g = __game, M = g.map, [tcx, tcz] = M.fromTrue(0, 0);
   const toWorld = ([lon, lat]) => M.fromLonLat(lon, lat);
   const roadName = (id) => M.roadById.get(id).name;
@@ -79,6 +87,8 @@ function measure({ tiger, tolerance }) {
   const surface = [
     ...M.roads.map((r) => { const inside = extent(r.id); return { what: `${r.name} is road`, ...sample(tiger.roads[r.id], 5, (t, w) => inside(t) && !(r.id === OPENING && bentRoad(w)), (x, z) => g.onRoad(x, z)) }; }),
     { what: 'River is water', ...sample(tiger.river, 5, (t, w) => inArea(t) && !bentRiver(w), (x, z) => g.groundH(x, z) < 0) },
+    // Ponds aren't TIGER's, so these only say the game has them where data/water.json does. A road's or the railroad's bed wins over one.
+    { what: 'Ponds are water', ...ponds(g, M) },
   ];
   const failures = [
     ...nodes.filter((n) => n.missing).map((n) => `${n.id} (${n.what}): TIGER has no matching point`),
@@ -107,6 +117,9 @@ function drawView({ tiger, view, result, tolerance }) {
   };
   const lw = view.trueScale ? 2 : 1.25;
   stroke(tiger.river, '#4fe3ff', lw); stroke(tiger.railroad, '#ffffff', lw, [lw * 6, lw * 4]);
+  g.strokeStyle = '#4fe3ff'; g.lineWidth = lw; g.setLineDash([lw * 3, lw * 3]);
+  for (const p of G.water.ponds) { g.beginPath(); p.ring.forEach(([x, z], i) => { const [u, v] = px(x, z); if (i) g.lineTo(u, v); else g.moveTo(u, v); }); g.closePath(); g.stroke(); }
+  g.setLineDash([]);
   for (const r of M.roads) stroke(tiger.roads[r.id], '#ffe14d', lw);
 
   for (const r of M.roads) for (const f of view.labels[r.id] || [.5]) { const p = M.along(r.id, r.length * f), [u, v] = px(p.x, p.z); if (u > 0 && u < W && v > 0 && v < H) label(r.name, u + font * .7, v - font * .6, '#ffe14d', font * 1.15); }
@@ -120,7 +133,7 @@ function drawView({ tiger, view, result, tolerance }) {
   label('town center', cu + font * .7, cv2 - font * .5, '#fff', font * .8);
 
   // legend, north arrow and scale bar
-  const rows = [[view.title, '#fff'], ['Game ground, roads and tracks, top-down. TIGER/Line 2025 drawn over it.', '#ddd'], [view.frame, '#ddd'], ['TIGER roads, which run on past where the map stops', '#ffe14d'], ['TIGER railroad (dashed)', '#fff'], ['TIGER river', '#4fe3ff'], [`Graph nodes, with distance to TIGER (tolerance ${tolerance} m)`, '#ff9fb2']];
+  const rows = [[view.title, '#fff'], ['Game ground, roads and tracks, top-down. TIGER/Line 2025 drawn over it.', '#ddd'], [view.frame, '#ddd'], ['TIGER roads, which run on past where the map stops', '#ffe14d'], ['TIGER railroad (dashed)', '#fff'], ['TIGER river', '#4fe3ff'], ['Ponds, from data/water.json (dotted)', '#4fe3ff'], [`Graph nodes, with distance to TIGER (tolerance ${tolerance} m)`, '#ff9fb2']];
   g.font = `600 ${font}px "IBM Plex Mono", monospace`;
   const panelW = Math.max(...rows.map(([t]) => g.measureText(t).width)) + font * 2, panelH = rows.length * font * 1.4 + font * 4.6;
   const left = view.legendAt[0] * W, top = view.legendAt[1] * H;

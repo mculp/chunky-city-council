@@ -62,9 +62,9 @@ export function settle(v, floorAt) {
 // It moves the vehicle and says what happened: { hit: how hard, smash: joules spent breaking things, damage, wrecked: just now, landed: how hard }.
 export function stepVehicle(v, ctl, dt, world) {
   const K = v.K, out = { hit: 0, smash: 0, damage: 0, wrecked: false, landed: 0, wet: false };
-  const onRoad = world.road(v.x, v.z), floor0 = world.floorAt(v.x, v.z), wet = floor0 < -.1;
+  const onRoad = world.road(v.x, v.z), floor0 = world.floorAt(v.x, v.z), level = world.level?.(v.x, v.z) ?? 0, wet = floor0 < level - .1;
   out.wet = wet;
-  if (floor0 < -.8) v.drowned = true;
+  if (floor0 < level - .8) v.drowned = true;
   const dead = v.wrecked || v.drowned, gas = dead || ctl.brake ? 0 : Math.max(-1, Math.min(1, ctl.gas)), top = K.top * (onRoad ? 1 : K.rough);
   let grip = K.grip * (onRoad ? 1 : .55 + .45 * K.rough), f = v.f, s = v.s;
   // the engine, and the brakes when it's going the other way

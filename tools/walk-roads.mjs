@@ -90,7 +90,7 @@ for (const s of signs) {
 }
 // an objective naming a street reads the graph's name and points at the street until you're on it
 const obj = await page.evaluate(() => {
-  const g = __game, m = g.map, c = m.roadById.get('church_st'), [x0, z0] = m.fromTrue(-615, -18); g.place(x0, z0); g.look(0, .2); g.objective('Meet David on {street}', 'church_st'); const a = g.step(.2);
+  const g = __game, m = g.map, c = m.roadById.get('church_st'), [x0, z0] = m.fromTrue(-283, -22); g.place(x0, z0); g.look(0, .2); g.objective('Meet David on {street}', 'church_st'); const a = g.step(.2);
   const start = { text: a.obj, on: g.pointer.on, dist: g.pointer.dist, deg: g.pointer.deg, arrow: document.getElementById('objArrow').style.transform };
   // walk the way the arrow says, however the camera's turned
   let t = 0; g.key('w', true);

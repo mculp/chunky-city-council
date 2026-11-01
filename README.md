@@ -28,6 +28,8 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `data/roads.md`: where that data comes from, its schema and how to regenerate it
 - `data/structures.json`: every real building within reach of those roads, generated from FEMA and ORNL footprints, USDA aerials and our own notes
 - `data/structures.md`: where that data comes from, what's left out and why, and how to regenerate it
+- `data/water.json`: the ponds within reach of those roads, generated from USGS's National Hydrography Dataset and corrections made by eye on a public-domain aerial
+- `data/water.md`: where that data comes from, what's left out and why, and how to regenerate it
 - `tools/`: the scripts that fetch the source data, build the road graph and plot it
 - `tools/smoke.mjs`: plays Chapter 1 in Chrome (`npm i`, then `npm run smoke`)
 - `tools/walk-roads.mjs`: walks every road end to end in Chrome (`npm run walk`)
@@ -35,6 +37,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/play-horde.mjs`: plays against the crowd in Chrome and reports what it costs (`npm run horde`)
 - `tools/play-drive.mjs`: drives every kind of vehicle in Chrome, on the roads and off them, into walls and through the crowd (`npm run drive`)
 - `tools/play-field.mjs`: walks onto the ball field and tries its fence and gates, on foot and in a pickup (`npm run field`)
+- `tools/play-water.mjs`: swims across a pond, floods a pickup in another and checks what's under them (`npm run water`)
 - `tools/play-wreck.mjs`: crashes, burns and blows up the town in Chrome and reports what the worst of it costs (`npm run wreck`)
 - `tools/map-overlay.mjs`: draws TIGER's lines over a top-down capture of the game and measures the difference (`npm run overlay`)
 - `tools/structure-overlay.mjs`: draws the game's buildings over a public-domain aerial of the same ground (`npm run overlay:structures`)
@@ -43,4 +46,5 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 
 - Roads, the railroad and the river: US Census Bureau TIGER/Line.
 - Building footprints: [USA Structures](https://www.arcgis.com/home/item.html?id=0ec8512ad21e4bb987d7e848d14e7e24) by Oak Ridge National Laboratory (ORNL) and the Federal Emergency Management Agency (FEMA) Geospatial Response Office, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). We've clipped a few, moved them along compressed road and added what they look like.
-- Roof colours: USDA National Agriculture Imagery Program, public domain.
+- Roof colours, and the ponds' corrections: USDA National Agriculture Imagery Program, public domain.
+- Ponds: US Geological Survey National Hydrography Dataset, public domain.
