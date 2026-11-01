@@ -21,6 +21,13 @@
       "line": { "color": "#fc4cbb" },
       "skull": {},
       "tassels": { "color": "#f8fdfb" }
+    },
+    "robby": {
+      "id": "pale-ghost",
+      "hood": { "pattern": "plain", "colors": ["#cfe6ee"] },
+      "line": { "color": "#dff6ff", "style": "glow" },
+      "skull": {},
+      "tassels": { "color": "#f8fdfb" }
     }
   },
   "crowd": [

@@ -54,6 +54,7 @@
     "amb.river": { "bus": "ambience", "gain": 1.245, "file": "audio/sfx/amb.river.1.mp3" },
     "amb.crickets": { "bus": "ambience", "gain": 0.098, "file": "audio/sfx/amb.crickets.1.mp3" },
     "amb.fire": { "bus": "ambience", "gain": 0.707, "file": "audio/sfx/amb.fire.1.mp3" },
+    "amb.flies": { "bus": "ambience", "gain": 0.45, "loop": 0.3, "file": "audio/sfx/amb.flies.1.mp3" },
     "engine.car": { "gain": 0.639, "file": "audio/sfx/engine.car.1.mp3" },
     "engine.pickup": { "gain": 0.425, "file": "audio/sfx/engine.pickup.1.mp3" },
     "engine.quad": { "gain": 0.344, "file": "audio/sfx/engine.quad.1.mp3" },

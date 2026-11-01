@@ -1,5 +1,5 @@
-// Goes and looks at what's come from the owner's lore, in docs/lore.md, with the game's own movement and real key presses: every church's sign,
-// what it says today and tomorrow, and what happens when it's hit. It can't say whether the jokes are any good.
+// Goes and looks at what's come from the owner's lore, in docs/lore.md, with the game's own movement and real key presses and taps: every church's sign,
+// what it says today and tomorrow, and what happens when it's hit, then Robby's lot and the flies. It can't say whether the jokes are any good.
 //
 //   npm i && npm run lore [-- --shots dir]
 import { mkdirSync } from 'node:fs';
@@ -80,7 +80,136 @@ await snap('sign-rammed');
 const cost = await g(() => { const G = __game; G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); faceSign(2, 10); G.step(.2); const full = G.calls(); G.churchSigns.list[2].faces.forEach((f) => { f.visible = false; }); return { full, ...G.calls() }; });
 console.log(`     looking at a sign: ${cost.full.calls} draw calls and ${cost.full.triangles} triangles`);
 
+// ---- Robby's: the first house on the right coming off the bridge, which burned down. He said these words the once.
+const LINE = 'hey man, help me get these flies out of here so we can cook some deer meat';
+const tap = async (id = '#bA') => { await page.tap(id); await g(() => __game.step(.05)); };
+const word = () => page.textContent('#bA'), said = () => g(() => __game.state().dialog);
+const setRobby = () => g(() => {
+  const G = __game; if (G.driving()) G.getOut(true); G.jump('town'); G.S.flags.town = true; G.step(.1); window.R = G.robby;
+  // walks to a spot with his own legs, and says how far he got
+  window.walkTo = (x, z, within = 1.2, secs = 90) => { const P = G.player.pos; let t = 0; G.key('w', true); while (t < secs && Math.hypot(P.x - x, P.z - z) > within) { G.look(Math.atan2(P.x - x, P.z - z)); G.sim(1 / 15, 1 / 30); t += 1 / 15; } G.key('w', false); G.sim(.3, 1 / 30); G.step(.1); return { t: Math.round(t), d: Math.hypot(P.x - x, P.z - z), mode: G.S.mode }; };
+});
+await setRobby();
+
+// off the bridge and onto the lot on foot, from where he wakes
+const walk = await g(() => { const G = __game, P = G.player.pos, from = [P.x, P.z], [rx, rz] = G.map.fromTrue(-301, 385), a = walkTo(rx, rz, 3), b = walkTo(R.lot.x - 15, R.lot.z, 1.5); return { from, a, b, side: (R.lot.x - rx) > 0 }; });
+check('he can walk from where he wakes to the lot', walk.a.d < 3.5 && walk.b.d < 2 && walk.a.mode === 'town', walk);
+check('and it\'s on his right, going into town', walk.side, walk);
+await snap('robby-from-road');
+const home = await g(() => { const G = __game, s = G.structures.find((o) => o.id === 74582285); return { there: G.houseAt(s.wx, s.wz) === s, hurt: G.wreck.damage.has(s), floor: G.floorAt(s.wx, s.wz) }; });
+check('the real home behind it is still standing', home.there && !home.hurt && Math.abs(home.floor - 6.15) < 1, home);
+
+// the memorial says what the owner said
+await g(() => { const G = __game; walkTo(R.lot.x - 15, R.lot.z, .8); G.look(Math.atan2(G.player.pos.x - R.lot.x, 0)); G.step(.3); });
+await snap('robby-memorial');
+
+// he isn't asked yet: a swing just scatters them, and there's as many after
+const early = await g(async () => { walkTo(R.lot.x - 14.5, R.lot.z + 3, .6); walkTo(R.lot.x - 8, R.lot.z + 2.4, .5); const w = walkTo(R.at.x - 2.6, R.at.z + 1.6, .4); return { w, flies: R.flies(), shown: R.shown() }; });
+check('there are flies round him', early.flies === 1 && early.shown > 30 && early.w.d < 1, early);
+const moved = await g(() => { const a = R.where(); __game.step(.2); return a !== R.where(); });
+check('and they move', moved, moved);
+check('the button swings until you\'re up to him', await word() === 'SWING', await word());
+await tap(); await g(() => __game.step(.5));
+const scattered = await g(() => ({ stir: R.stir(), flies: R.flies() }));
+check('a swing before he\'s asked only scatters them', scattered.flies === 1 && scattered.stir > 0, scattered);
+await g(() => __game.step(.9));
+const buzzing = await page.waitForFunction(() => { __game.step(.05); return __game.robby.loop() > .1; }, null, { timeout: 15000, polling: 200 }).then(() => true, () => false);
+check('you can hear them, close to', buzzing, await g(() => R.loop()));
+
+// he asks
+const up = await g(() => walkTo(R.at.x - 1.4, R.at.z + .6, .4));
+check('he can get up to him, past the steps', up.d < 1, up);
+await g(() => __game.step(.1));
+check('the button says TALK', await word() === 'TALK', await word());
+await snap('robby-up-to-him');
+await tap();
+const asked = await said();
+check('it\'s Robby', asked?.who === 'Robby', asked);
+check('and it\'s the owner\'s words, exactly', asked?.say === LINE, asked);
+check('and it\'s what\'s on the screen', await page.textContent('#dSay') === LINE, await page.textContent('#dSay'));
+await snap('robby-says-it');
+check('there\'s one reply, and it isn\'t words', asked?.opts?.length === 1 && asked.opts[0] === '...', asked);
+await page.tap('#dOpts button'); await g(() => __game.step(.1));
+const out = await g(() => ({ mode: __game.S.mode, flag: __game.S.flags.robbySaid }));
+check('and then you\'re back in the game', out.mode === 'town' && out.flag, out);
+
+// the button's for the flies now, however close he is, because it's the only button a phone has
+check('standing next to him, the button swings', await word() === 'SWING', await word());
+check('and the prompt says at what', /SWING at the flies/.test(await page.textContent('#prompt')), await page.textContent('#prompt'));
+const left = [];
+for (let k = 0; k < 4; k++) { await tap(); await g(() => __game.step(.9)); left.push(await g(() => R.flies())); }
+check('four swings and the flies are out', left.join() === '0.75,0.5,0.25,0', left);
+const cooking = await g(() => { __game.step(.3); return { cooking: R.cooking(), shown: R.shown(), toast: document.getElementById('toast').textContent, sound: R.loop() }; });
+check('the fire\'s lit and the deer meat\'s on', cooking.cooking && cooking.shown === 0, cooking);
+check('and they\'ve gone quiet', cooking.sound < .02, cooking);
+await g(() => { const G = __game; G.place(R.hearth.x - 3, R.hearth.z - 3); G.look(Math.atan2(-3, -3)); G.step(.6); });
+await snap('robby-cooking');
+
+// he's said all he's ever going to
+const again = await g(() => { const G = __game; G.place(R.at.x - 1.6, R.at.z + 1.8); G.step(.1); return walkTo(R.at.x - 1.4, R.at.z + .6, .4); });
+await g(() => __game.step(.1));
+check('he can be talked to again', again.d < 1 && await word() === 'TALK', [again, await word()]);
+await tap();
+check('and he doesn\'t say it twice', (await said())?.say === '...', await said());
+await page.tap('#dOpts button'); await g(() => __game.step(.1));
+
+// the deer meat
+await g(() => { const G = __game; G.S.hp = 1; walkTo(R.hearth.x - 1.6, R.hearth.z + .4, .4); G.step(.1); });
+check('at the skillet the button eats', await word() === 'EAT', await word());
+await tap();
+const fed = await g(() => { const G = __game; G.step(.2); return { hp: G.S.hp, cooking: R.cooking(), ate: G.S.flags.ateDeerMeat, toast: document.getElementById('toast').textContent }; });
+check('and it fills his hearts', fed.hp === 3 && !fed.cooking && fed.ate && /hearts full/.test(fed.toast), fed);
+
+// what's solid and what isn't
+const solid = await g(() => { const G = __game; return { robby: G.blocked(R.at.x, R.at.z, 6.15), chimney: G.blocked(R.lot.x + 4.3, R.lot.z - 1, 7), steps: G.blocked(R.lot.x - 6.3, R.lot.z, 6.15) }; });
+check('he isn\'t solid, and the chimney and the steps are', !solid.robby && solid.chimney && solid.steps, solid);
+const through = await g(() => { const G = __game; G.place(R.at.x - .9, R.at.z); return walkTo(R.at.x + .5, R.at.z, .3, 3); });
+check('and you can walk straight through him', through.d < .6, through);
+const stops = await g(() => { const G = __game; G.place(R.lot.x + 1, R.lot.z - 1); const w = walkTo(R.lot.x + 7, R.lot.z - 1, .5, 4); return { w, x: G.player.pos.x - R.lot.x }; });
+check('and the chimney stops him', stops.w.d > 2 && stops.x < 3.9, stops);
+
+// a swing near a pier takes that pier, not the whole floor
+const piers = await g(() => { const G = __game, list = G.wreck.props.filter((p) => p.kind === 'pier' && Math.hypot(p.cx - R.lot.x, p.cz - R.lot.z) < 10); return list.length; });
+check('the piers are one at a time', piers >= 12, piers);
+const hit = await g(() => { const G = __game, list = G.wreck.props.filter((p) => p.kind === 'pier' && Math.hypot(p.cx - R.lot.x, p.cz - R.lot.z) < 10), p = list.find((o) => !o.down && o.hp === o.max && o.cz > R.lot.z + 3), standing = () => list.filter((o) => !o.down).length, had = standing(); G.place(p.cx - 1.2, p.cz); G.look(Math.atan2(-1.2, 0)); for (let k = 0; k < 3 && !p.down; k++) { G.key('f', true); G.sim(1 / 30, 1 / 30); G.key('f', false); G.sim(.9, 1 / 30); } return { down: p.down, had, left: standing() }; });
+check('and a hammer takes one down and leaves the rest', hit.down && hit.left === hit.had - 1, hit);
+
+// and a pickup goes through the memorial
+const memorial = await g(() => {
+  const G = __game, m = R.lot.memorial, v = G.vehicles.find((o) => o.kind === 'pickup' && !o.wrecked && !o.drowned), a = v.yaw + Math.PI / 2, off = v.K.width / 2 + 1;
+  G.place(v.x + Math.sin(a) * off, v.z + Math.cos(a) * off); G.step(.6); G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); G.sim(1 / 30, 1 / 30);
+  const d = G.driving(); if (!d) return { boarded: false };
+  d.x = m.cx - 30; d.z = m.cz; d.y = G.floorAt(d.x, d.z); d.yaw = Math.PI / 2; d.f = 0; d.s = 0; d.steer = 0; d.grounded = true; G.look(d.yaw + Math.PI);
+  const steps = G.wreck.props.find((p) => p.kind === 'steps' && Math.hypot(p.cx - R.lot.x, p.cz - R.lot.z) < 12);
+  G.key('w', true); for (let t = 0; t < 8 && !m.down; t += 1 / 30) G.sim(1 / 30, 1 / 30);
+  for (let t = 0; t < 3 && !steps.down; t += 1 / 30) G.sim(1 / 30, 1 / 30); G.key('w', false); G.step(.6);
+  return { boarded: true, down: m.down, steps: steps.down, hp: steps.hp, x: d.x - R.lot.x };
+});
+check('a pickup goes through the memorial', memorial.boarded && memorial.down, memorial);
+check('and the steps behind it', memorial.steps, memorial);
+await snap('robby-memorial-down');
+await g(() => { const G = __game; if (G.driving()) G.getOut(true); G.step(.1); });
+
+// and it's remembered that he's said it, for good
+check('nothing on the church signs says what he said', !(await g(() => __game.churchSigns.list.some((s) => /DEER MEAT|FLIES OUT/.test(__game.churchSigns.says(s.c.id).join(' '))))), null);
+await page.reload({ waitUntil: 'load' });
+await page.waitForFunction(() => window.__game, null, { timeout: 30000 });
+await setRobby();
+const kept = await g(() => { const G = __game; G.place(R.at.x - 1.4, R.at.z + .6); G.step(.1); for (let k = 0; k < 4; k++) { G.key('f', true); G.sim(1 / 30, 1 / 30); G.key('f', false); G.sim(.9, 1 / 30); } return { flag: G.S.flags.robbySaid, flies: R.flies() }; });
+check('after a reload it\'s remembered he\'s said it', kept.flag === true && kept.flies === 0, kept);
+await g(() => __game.step(.1)); await tap();
+check('and it\'s still only "..."', (await said())?.say === '...', await said());
+
 check('and there are no console errors', errors.length === 0, errors);
 await close();
+
+// ---- the old sheet hasn't got the flies' sound, and it doesn't say so
+{
+  const old = await serveAndOpen({ touch: true, viewport: { width: 390, height: 844 }, query: '?test#old' });
+  const noise = []; old.page.on('console', (m) => { if (/flies/.test(m.text())) noise.push(m.text()); });
+  await old.page.evaluate(async () => { const G = __game; G.pause(); G.jump('town'); G.S.flags.town = true; G.step(.1); G.place(G.robby.at.x - 3, G.robby.at.z); await G.sound.unlock?.(); G.step(1); });
+  check('the old sheet is quiet about it', noise.length === 0 && old.errors.length === 0, [noise, old.errors]);
+  await old.close();
+}
 console.log(failed ? `${failed} failed` : 'all ok');
 process.exit(failed ? 1 : 0);

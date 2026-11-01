@@ -16,7 +16,12 @@ Real places are by structure id, never an address. Most of these are someone's h
 
 > I think the house burned down so it could just be a memorial ghost in that spot (he didn't die, he moved back to Louisiana)
 
-**In the game:** see CHUNKY-61.
+**In the game:** his lot is the first thing on the right coming north off the Griffis Fountain bridge, on the big mown lawn in front of structure 74582285, which is left as it is. What's there is brick piers with the charred joists off them, a chimney, a stove and the front steps going up to nothing, with a memorial out front saying IN MEMORY OF ROBBY / HE DIDN'T DIE / HE MOVED BACK / TO LOUISIANA. He stands where the front room's floor used to be, as a ghost, in a cloud of flies. Decided around it:
+
+- "The bridge" is read as the Griffis Fountain bridge, because that's where you wake and how you first come into town. If it's the US 80 bridge, the first house on the right heading west is structure 75204065.
+- He says the line once, ever, and that's saved. After that he says "...", and so does the only reply, because nobody's written anything for the hero to say back.
+- The quest is a guess at "could probably be a quest", and it's small enough to take out. Swinging at the flies before he's asked just scatters them. After he's asked, four swings clear them, a fire lights in the hearth with deer meat on it, and eating it fills your hearts.
+- What he looks like is invented: `pale-ghost` in `data/looks.json`, a plain pale hood and a skull, going in and out like static. It's nothing of the hero's.
 
 ## The church signs
 

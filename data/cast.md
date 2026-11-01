@@ -4,6 +4,8 @@
 
 To add someone: give them a `cast` entry, a dialogue node with the same id, a look in `data/looks.json`, and a rig in `NPCS` in `index.html`.
 
+Robby's line is the owner's, word for word, and the whole point of it is that those words were only ever said the once. He says it one time, on `robbySaid`, which is remembered, and it isn't anywhere else in the data. A test holds that. Don't give him more, and see `docs/lore.md`.
+
 Who these people are, and what they say, is the owner's. The words here came from the prototype unchanged, except Coop's directions to the tracks, which the new map made wrong. The meter changes that weren't in the prototype, and the ties, are starting values to tune.
 
 ## Top level
