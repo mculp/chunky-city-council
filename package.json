@@ -9,6 +9,7 @@
     "play": "node tools/play-chapter1.mjs",
     "horde": "node tools/play-horde.mjs",
     "drive": "node tools/play-drive.mjs",
+    "field": "node tools/play-field.mjs",
     "overlay:structures": "node tools/structure-overlay.mjs",
     "overlay": "node tools/map-overlay.mjs"
   },

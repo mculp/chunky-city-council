@@ -1,6 +1,6 @@
 // The map: the world's own roads, railroad, river and buildings, drawn flat on a canvas. No image files, and nothing here knows about the game.
 
-export const COLORS = { ground: '#0d0812', river: 'rgba(111,214,200,.42)', rail: '#ec803a', house: '#5f5570', houseEdge: '#120b14', road: '#f1e6cf', ink: '#120b14', cream: '#f1e6cf', rust: '#ec803a', cyan: '#6fd6c8', hot: '#e3285c', dusk: '#a99bc0' };
+export const COLORS = { grass: '#2a3a2c', dirt: '#b0602c', ground: '#0d0812', river: 'rgba(111,214,200,.42)', rail: '#ec803a', house: '#5f5570', houseEdge: '#120b14', road: '#f1e6cf', ink: '#120b14', cream: '#f1e6cf', rust: '#ec803a', cyan: '#6fd6c8', hot: '#e3285c', dusk: '#a99bc0' };
 
 // Long lines cut into short pieces with boxes round them, so a small view only draws what it can see
 const PIECE = 12;
@@ -13,20 +13,21 @@ function cut(line, out) {
   }
 }
 
-export function buildMapData({ roads, rail, river, structures }) {
-  const major = [], minor = [], tracks = [], water = [], houses = [];
+export function buildMapData({ roads, rail, river, structures, fields = [] }) {
+  const major = [], minor = [], tracks = [], water = [], houses = [], grass = [], dirt = [];
   for (const r of roads) cut(r.pts, r.width > 7 ? major : minor);
   for (const l of rail) cut(l, tracks);
   for (const l of river) cut(l, water);
-  for (const s of structures) {
-    const pts = new Float32Array(s.pts.flat());
+  const shape = (list) => {
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
-    for (const [x, z] of s.pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-    houses.push({ pts, x0, x1, z0, z1 });
-  }
+    for (const [x, z] of list) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    return { pts: new Float32Array(list.flat()), x0, x1, z0, z1 };
+  };
+  for (const s of structures) houses.push(shape(s.pts));
+  for (const f of fields) { grass.push(shape(f.grass)); dirt.push(shape(f.dirt)); }
   const bounds = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
   for (const p of [...major, ...minor, ...tracks]) { bounds.x0 = Math.min(bounds.x0, p.x0); bounds.x1 = Math.max(bounds.x1, p.x1); bounds.z0 = Math.min(bounds.z0, p.z0); bounds.z1 = Math.max(bounds.z1, p.z1); }
-  return { major, minor, tracks, water, houses, bounds, roads };
+  return { major, minor, tracks, water, houses, grass, dirt, bounds, roads };
 }
 
 // World to screen. A yaw of 0 is north up. Any other yaw turns the map with a camera at that yaw, so what's ahead of the camera is up.
@@ -76,6 +77,7 @@ export function drawWorld(g, data, v, dpr, box, { road, houses = true, edges = f
   g.setTransform(dpr * v.a, dpr * v.b, dpr * v.c, dpr * v.d, dpr * v.e, dpr * v.f);
   g.lineCap = g.lineJoin = 'round';
   trace(g, data.water, box); g.strokeStyle = COLORS.river; g.lineWidth = Math.max(3 / s, 24); g.stroke();
+  if (data.grass.length) { trace(g, data.grass, box, true); g.fillStyle = COLORS.grass; g.fill(); trace(g, data.dirt, box, true); g.fillStyle = COLORS.dirt; g.fill(); }
   if (houses) { trace(g, data.houses, box, true); g.fillStyle = COLORS.house; g.fill(); if (edges) { g.strokeStyle = COLORS.houseEdge; g.lineWidth = 1 / s; g.stroke(); } }
   trace(g, data.tracks, box); g.lineCap = 'butt'; g.strokeStyle = COLORS.rail; g.lineWidth = 1.6 / s; g.stroke();
   g.setLineDash([1.4 / s, 6 / s]); g.lineWidth = 5 / s; g.stroke(); g.setLineDash([]); g.lineCap = 'round';
