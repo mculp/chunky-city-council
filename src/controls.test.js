@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { actWord, buttonsFor, fastWord, keysFor } from './controls.js';
 
-const REAL_KEYS = new Set(['WASD', 'W', 'S', 'A D', 'SHIFT', 'SPACE', 'E', 'M', 'DRAG']);
+const REAL_KEYS = new Set(['WASD', 'W', 'S', 'A D', 'SHIFT', 'SPACE', 'E', 'F', 'Q', 'M', 'DRAG']);
 const MODES = ['title', 'hang', 'fall', 'swim', 'land', 'bridge', 'town', 'drive', 'grabbed', 'sweep', 'dialog', 'fail', 'end'];
 
 test('a keyboard is only ever told about keys it has', () => {
@@ -40,7 +40,9 @@ test('a phone\'s act button says what it does, and it\'s gone when it does nothi
   assert.equal(buttonsFor('hang').a, 'CUT');
   assert.equal(buttonsFor('grabbed').a, 'FREE');
   assert.equal(buttonsFor('sweep').a, 'SWEEP');
-  assert.equal(buttonsFor('town').a, null);
+  assert.equal(buttonsFor('town').a, 'SWING');
+  assert.equal(buttonsFor('land').a, null);
+  assert.equal(buttonsFor('bridge').a, null);
   assert.equal(buttonsFor('town', { act: 'Talk to Coop' }).a, 'TALK');
 });
 
@@ -54,4 +56,14 @@ test('near something to drive, the button says so, and driving has its own contr
 test('prompts on a phone use the word on the button', () => {
   for (const mode of MODES) { const label = buttonsFor(mode).a; if (label) assert.equal(actWord(label, true), label); }
   assert.equal(fastWord(true), buttonsFor('swim').b);
+});
+
+test('he swings in town, and only has something to throw once he\'s carrying it', () => {
+  assert.ok(keysFor('town').some(([k, what]) => k === 'F' && what === 'Swing'));
+  assert.ok(!keysFor('bridge').some(([k]) => k === 'F'));
+  assert.ok(!keysFor('town').some(([k]) => k === 'Q'));
+  assert.ok(keysFor('town', { gas: 2 }).some(([k, what]) => k === 'Q' && what.includes('2')));
+  assert.equal(buttonsFor('town').c, null);
+  assert.equal(buttonsFor('town', { gas: 2 }).c, 'THROW 2');
+  assert.equal(buttonsFor('bridge', { gas: 2 }).c, null);
 });

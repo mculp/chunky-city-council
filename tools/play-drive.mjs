@@ -34,7 +34,8 @@ await g(() => {
         const px = x + t, pz = z + c, f = G.floorAt(px, pz);
         if (!G.map.inBounds(px, pz) || G.onRoad(px, pz) || G.blocked(px, pz, f + .6) || Math.abs(f - y0) > 1.2 || f < .5) { ok = false; break; }
       }
-      if (ok) return { x, z };
+      // and with any trees on it down, or it isn't a clear run for a golf cart
+      if (ok) { for (let t = -3; t <= len; t += 4) for (const tree of G.wreck.trees(x + t, z, 7)) if (Math.abs(tree.z - z) < 5 && !tree.down) G.wreck.fellTree(tree, 1, 0); return { x, z }; }
     }
     throw new Error(`no clear run of ${len} m`);
   };

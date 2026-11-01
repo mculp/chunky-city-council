@@ -12,6 +12,8 @@ export const KINDS = {
 };
 
 export const GRAVITY = 15;
+// What one swing of a hammer's worth of damage takes out of something moving, in joules. A car at 15 m/s has about five of them.
+export const SMASH_J = 30000;
 
 // Points round each one's edge, close enough together that a post can't get between them: [along, across], from the middle
 for (const K of Object.values(KINDS)) {
@@ -36,6 +38,13 @@ export function toLocal(v, x, z) {
 }
 export const inVehicle = (v, x, z, margin = 0) => { const [a, c] = toLocal(v, x, z); return Math.abs(a) < v.K.length / 2 + margin && Math.abs(c) < v.K.width / 2 + margin; };
 
+// The first point around its edge that's blocked, if it were at x, z
+export function rimHit(v, x, z, y, blocked) {
+  const [fx, fz] = forward(v.yaw), [rx, rz] = rightOf(v.yaw);
+  for (const [along, across] of v.K.rim) { const cx = x + fx * along + rx * across, cz = z + fz * along + rz * across; if (blocked(cx, cz, y)) return [cx, cz]; }
+  return null;
+}
+
 // What a hit does to it. Heavier takes it better, and anything under a jog's a bump.
 export const damageFrom = (K, impact) => Math.max(0, impact - 5) * 3.2 * Math.sqrt(1500 / K.mass);
 
@@ -48,10 +57,11 @@ export function settle(v, floorAt) {
   v.roll = clampTilt(Math.atan2(l - r, c * 2));
 }
 
-// One step. ctl is { gas -1..1, steer -1..1 where + is right, brake }. world is { blocked(x, z, y), floorAt(x, z), road(x, z) }.
-// It moves the vehicle and says what happened: { hit: how hard, damage, wrecked: just now, landed: how hard }.
+// One step. ctl is { gas -1..1, steer -1..1 where + is right, brake }. world is { blocked(x, z, y), floorAt(x, z), road(x, z) }, and if anything
+// can break, ram(x, z, y, speed, dirx, dirz, mass), which says what it cost as { energy in joules, gone } or null if there's nothing there to break.
+// It moves the vehicle and says what happened: { hit: how hard, smash: joules spent breaking things, damage, wrecked: just now, landed: how hard }.
 export function stepVehicle(v, ctl, dt, world) {
-  const K = v.K, out = { hit: 0, damage: 0, wrecked: false, landed: 0, wet: false };
+  const K = v.K, out = { hit: 0, smash: 0, damage: 0, wrecked: false, landed: 0, wet: false };
   const onRoad = world.road(v.x, v.z), floor0 = world.floorAt(v.x, v.z), wet = floor0 < -.1;
   out.wet = wet;
   if (floor0 < -.8) v.drowned = true;
@@ -82,20 +92,35 @@ export function stepVehicle(v, ctl, dt, world) {
   let vx = fx * f + rx * s, vz = fz * f + rz * s;
   const hops = Math.max(1, Math.ceil(Math.hypot(vx, vz) * dt / .28));
   // `edge` is where the map stops: it holds you back without hurting anything
-  let soft = false;
+  let soft = false, struck = false, hitX = 0, hitZ = 0;
   const clear = (x, z) => {
+    struck = false;
     for (const [along, across] of K.rim) {
       const cx = x + fx * along + rx * across, cz = z + fz * along + rz * across;
       if (world.edge?.(cx, cz)) { soft = true; return false; }
-      if (world.blocked(cx, cz, v.y + .6)) return false;
+      if (world.blocked(cx, cz, v.y + .6)) { struck = true; hitX = cx; hitZ = cz; return false; }
       if (world.floorAt(cx, cz) - v.y > 1) return false;
     }
     return true;
   };
   let x = v.x, z = v.z;
   for (let i = 0; i < hops; i++) {
-    const nx = x + vx * dt / hops, nz = z + vz * dt / hops;
+    let nx = x + vx * dt / hops, nz = z + vz * dt / hops;
     if (clear(nx, nz)) { x = nx; z = nz; continue; }
+    // Whatever's in the way may not stand up to it. Breaking it takes some of the speed, and it carries on through what's gone.
+    if (world.ram) {
+      let through = false;
+      for (let tries = 0; tries < 4 && struck && !through; tries++) {
+        const speed = Math.hypot(vx, vz), r = speed > 0 ? world.ram(hitX, hitZ, v.y + .6, speed, vx / speed, vz / speed, K.mass) : null;
+        if (!r) break;
+        const left = Math.sqrt(Math.max(0, speed * speed - 2 * r.energy / K.mass)) / speed;
+        vx *= left; vz *= left; out.smash += r.energy;
+        nx = x + vx * dt / hops; nz = z + vz * dt / hops;
+        if (!r.gone) break;
+        through = clear(nx, nz);
+      }
+      if (through) { x = nx; z = nz; continue; }
+    }
     // slide along whatever it hit if it can, losing the speed going into it, and bounce off if it can't
     if (clear(nx, z)) { x = nx; out.hit = Math.max(out.hit, Math.abs(vz)); vz *= -.2; }
     else if (clear(x, nz)) { z = nz; out.hit = Math.max(out.hit, Math.abs(vx)); vx *= -.2; }
@@ -113,7 +138,7 @@ export function stepVehicle(v, ctl, dt, world) {
   // what it cost
   out.edge = soft;
   if (!v.wrecked) {
-    const damage = damageFrom(K, Math.max(soft ? 0 : out.hit, out.landed * .6));
+    const damage = damageFrom(K, Math.max(soft ? 0 : out.hit, out.landed * .6)) + out.smash / SMASH_J * 2 * Math.sqrt(1500 / K.mass);
     if (damage > 0) { v.hp -= damage; out.damage = damage; if (v.hp <= 0) { v.hp = 0; v.wrecked = true; out.wrecked = true; } }
   }
   return out;

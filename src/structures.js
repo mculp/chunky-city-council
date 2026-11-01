@@ -3,7 +3,7 @@
 // data/structures.json holds every building's footprint and what it looks like, and data/structures.md explains
 // it. A building here is a list of pieces, every one a closed solid of its own: a wall panel no wider than PANEL,
 // a section of roof, a window, a door. They're written into arrays one cell at a time, and each piece remembers
-// its range of vertices.
+// its range of vertices and its place in its building, which stays the same however often the cell is written again.
 
 export const PATTERN = { PAINT: 0, SIDING: 1, BRICK: 2, BLOCK: 3, METAL: 4, PLANK: 5, SHINGLE: 6, RIB: 7, WINDOW: 8, BOARDS: 9, DOOR: 10, LEAF: 11, MOBILE: 12, STUCCO: 13 };
 const WALLS = { siding: PATTERN.SIDING, brick: PATTERN.BRICK, block: PATTERN.BLOCK, metal: PATTERN.METAL, plank: PATTERN.PLANK, mobile: PATTERN.MOBILE, stucco: PATTERN.STUCCO };
@@ -151,11 +151,12 @@ export function wallsOf(s, base = 0) {
   return { panels, doors };
 }
 
-// What stops him: every solid panel and post still standing, as [ax, az, bx, bz, top, radius]
+// What stops him: every solid panel and post still standing, as [ax, az, bx, bz, top, radius, which].
+// `which` is the panel's place among the walls, or for the kth post -1 - k.
 export function collidersOf(s, base = 0) {
   const out = [];
-  wallsOf(s, base).panels.forEach((p, i) => { if (p.solid && !fellIn(s, p, i)) out.push([p.ax, p.az, p.bx, p.bz, p.y1, WALL_THICK / 2]); });
-  for (const [x, z, top] of postsOf(s, base)) out.push([x, z, x + .001, z, top, .12]);
+  wallsOf(s, base).panels.forEach((p, i) => { if (p.solid && !fellIn(s, p, i)) out.push([p.ax, p.az, p.bx, p.bz, p.y1, WALL_THICK / 2, i]); });
+  postsOf(s, base).forEach(([x, z, top], k) => out.push([x, z, x + .001, z, top, .12, -1 - k]));
   return out;
 }
 
@@ -211,8 +212,10 @@ export class Sheet {
     this.cap = 4096; this.n = 0; this.iN = 0;
     this.position = new Float32Array(this.cap * 3); this.normal = new Float32Array(this.cap * 3); this.color = new Float32Array(this.cap * 3);
     this.uv = new Float32Array(this.cap * 2); this.mat = new Float32Array(this.cap * 3); this.index = new Uint32Array(this.cap * 2);
-    this.pieces = [];
+    this.pieces = []; this.partN = 0;
   }
+  // to use it again, keeping what it's grown to
+  reset() { this.n = 0; this.iN = 0; this.pieces = []; this.partN = 0; }
   grow() {
     this.cap *= 2;
     for (const [k, w] of [['position', 3], ['normal', 3], ['color', 3], ['uv', 2], ['mat', 3]]) { const a = new Float32Array(this.cap * w); a.set(this[k]); this[k] = a; }
@@ -279,7 +282,7 @@ export class Sheet {
     if (!o.noBottom) this.quad(a, b, c, d, o.under || side, o, m);
     this.quad(e, f, g, h, top, o, m);
     this.quad(a, b, f, e, side, o, m); this.quad(b, c, g, f, side, o, m); this.quad(c, d, h, g, side, o, m); this.quad(d, a, e, h, side, o, m);
-    if (o.kind) this.pieces.push({ kind: o.kind, s: o.s, first: start, count: this.n - start, x: m[0], y: m[1], z: m[2] });
+    if (o.kind) this.pieces.push({ kind: o.kind, s: o.s, part: this.partN++, panel: o.panel, on: o.on, first: start, count: this.n - start, x: m[0], y: m[1], z: m[2] });
   }
   // a square-cornered upright block around a wall line, reaching in by `inward` and out by `outward`
   upright(ax, az, bx, bz, nx, nz, y0, y1, inward, outward, o) {
@@ -301,7 +304,7 @@ export class Sheet {
       const p00 = at(i, j), p10 = at(i + 1, j), p11 = at(i + 1, j + 1), p01 = at(i, j + 1), tint = (k) => shade(c, .72 + hash2(seed, 300 + i * 11 + j * 3 + k) * .56);
       this.tri(p00, p10, p11, tint(0), o, m); this.tri(p00, p11, p01, tint(1), o, m);
     }
-    if (o.kind) this.pieces.push({ kind: o.kind, s: o.s, first: start, count: this.n - start, x, y: y + h / 2, z });
+    if (o.kind) this.pieces.push({ kind: o.kind, s: o.s, part: this.partN++, on: o.on, first: start, count: this.n - start, x, y: y + h / 2, z });
   }
   arrays() {
     return { position: this.position.subarray(0, this.n * 3), normal: this.normal.subarray(0, this.n * 3), color: this.color.subarray(0, this.n * 3), uv: this.uv.subarray(0, this.n * 2), mat: this.mat.subarray(0, this.n * 3), index: this.index.subarray(0, this.iN), pieces: this.pieces };
@@ -310,6 +313,7 @@ export class Sheet {
 
 // Writes one building on a sheet. `base` is the height of its floor.
 export function writeStructure(sheet, s, base = 0) {
+  sheet.partN = 0;
   const seed = s.id | 0, wall = srgb(s.wallColor), roof = srgb(s.roofColor), axis = axisOf(s.pts), origin = [s.wx, base, s.wz], H = eavesOf(s), hurt = s.condition === 'ruin' ? .55 : s.condition === 'worn' ? .22 : s.condition === 'sound' ? 0 : .07;
   const tone = .92 + hash2(seed, 1) * .16, pattern = WALLS[s.walls] ?? PATTERN.SIDING, trim = s.trimColor ? srgb(s.trimColor) : shade([.62, .58, .52], tone), lit = s.lit ? 1 : 0;
   const base0 = { s: s.index, axis, origin };
@@ -319,7 +323,7 @@ export function writeStructure(sheet, s, base = 0) {
   panels.forEach((p, i) => {
     const k = hash2(seed, 40 + i);
     if (fellIn(s, p, i)) { missing.add(i); return; }
-    sheet.upright(p.ax, p.az, p.bx, p.bz, p.nx, p.nz, p.y0, p.y1, WALL_THICK, 0, { ...base0, kind: p.kind, color: shade(wall, tone * (.94 + k * .12)), lowDark: .72, noBottom: true, pattern, edge: p.edge });
+    sheet.upright(p.ax, p.az, p.bx, p.bz, p.nx, p.nz, p.y0, p.y1, WALL_THICK, 0, { ...base0, kind: p.kind, panel: i, color: shade(wall, tone * (.94 + k * .12)), lowDark: .72, noBottom: true, pattern, edge: p.edge });
   });
   // windows
   const smallWindows = s.use === 'shed' || s.use === 'farm';
@@ -332,19 +336,20 @@ export function writeStructure(sheet, s, base = 0) {
       const mobile = s.walls === 'mobile', wide = Math.min(len - .5, plate && p.edge === s.door ? 2.2 : mobile ? 1 : 1.05), high = plate && p.edge === s.door ? 1.75 : mobile ? .85 : 1.25, sill = base + floor * 2.75 + (plate && p.edge === s.door ? .55 : mobile ? 1.25 : .9);
       const ex = (p.bx - p.ax) / len, ez = (p.bz - p.az) / len, mx = (p.ax + p.bx) / 2, mz = (p.az + p.bz) / 2;
       const boarded = !lit && hash2(seed, 300 + i) < hurt * 2.4;
-      sheet.upright(mx - ex * wide / 2, mz - ez * wide / 2, mx + ex * wide / 2, mz + ez * wide / 2, p.nx, p.nz, sill, sill + high, WALL_THICK + .03, .03, { ...base0, kind: 'window', color: boarded ? shade([.3, .22, .14], .8 + k * .5) : trim, pattern: boarded ? PATTERN.BOARDS : PATTERN.WINDOW, glow: lit, unit: true });
+      sheet.upright(mx - ex * wide / 2, mz - ez * wide / 2, mx + ex * wide / 2, mz + ez * wide / 2, p.nx, p.nz, sill, sill + high, WALL_THICK + .03, .03, { ...base0, kind: 'window', on: i, color: boarded ? shade([.3, .22, .14], .8 + k * .5) : trim, pattern: boarded ? PATTERN.BOARDS : PATTERN.WINDOW, glow: lit, unit: true });
       if (s.shutters && !boarded) for (const side of [-1, 1]) {
         const t0 = wide / 2 + .02, t1 = wide / 2 + .42;
-        sheet.upright(mx + ex * side * t0, mz + ez * side * t0, mx + ex * side * t1, mz + ez * side * t1, p.nx, p.nz, sill, sill + high, 0, .05, { ...base0, kind: 'shutter', color: shade([.05, .05, .06], tone * 1.4), pattern: PATTERN.PLANK });
+        sheet.upright(mx + ex * side * t0, mz + ez * side * t0, mx + ex * side * t1, mz + ez * side * t1, p.nx, p.nz, sill, sill + high, 0, .05, { ...base0, kind: 'shutter', on: i, color: shade([.05, .05, .06], tone * 1.4), pattern: PATTERN.PLANK });
       }
     }
   });
   // doors stand open, in the way they were left
   const doorColor = s.doorColor ? srgb(s.doorColor) : shade([[.3, .08, .06], [.55, .52, .47], [.08, .2, .22], [.16, .1, .07]][Math.floor(hash2(seed, 5) * 4)], 1);
+  const lintels = []; panels.forEach((p, i) => { if (p.kind === 'lintel') lintels.push(i); });
   doors.forEach((d, i) => {
     const swing = .9 + hash2(seed, 500 + i) * .7, wide = d.wide / 2, hx = d.x - d.ex * d.wide / 2, hz = d.z - d.ez * d.wide / 2;
     const dirx = d.ex * Math.cos(swing) - d.nx * Math.sin(swing), dirz = d.ez * Math.cos(swing) - d.nz * Math.sin(swing);
-    sheet.upright(hx, hz, hx + dirx * wide, hz + dirz * wide, -dirz, dirx, base, base + DOOR_HIGH - .05, .03, .03, { ...base0, kind: 'door', color: doorColor, pattern: PATTERN.DOOR, unit: true, noBottom: true });
+    sheet.upright(hx, hz, hx + dirx * wide, hz + dirz * wide, -dirz, dirx, base, base + DOOR_HIGH - .05, .03, .03, { ...base0, kind: 'door', on: lintels[i], color: doorColor, pattern: PATTERN.DOOR, unit: true, noBottom: true });
   });
   // roll-up doors, shut, down the wall the door's on
   if (s.bays) {
@@ -353,7 +358,9 @@ export function writeStructure(sheet, s, base = 0) {
       // clear of the door in the middle, spaced along what's left
       const t = len * (i + .5) / s.bays + (i < s.bays / 2 ? -1 : 1) * Math.min(.8, len * .03), mx = ax + ex * t, mz = az + ez * t;
       if (Math.abs(t - len / 2) < wide / 2 + DOOR_WIDE / 2) continue;
-      sheet.upright(mx - ex * wide / 2, mz - ez * wide / 2, mx + ex * wide / 2, mz + ez * wide / 2, nx, nz, base, base + high, 0, .06, { ...base0, kind: 'bay', color: shade(wall, .62), pattern: PATTERN.SIDING, noBottom: true });
+      let on = -1, od = Infinity;
+      panels.forEach((p, q) => { if (p.kind === 'wall' && !missing.has(q)) { const d = Math.hypot((p.ax + p.bx) / 2 - mx, (p.az + p.bz) / 2 - mz); if (d < od) { od = d; on = q; } } });
+      sheet.upright(mx - ex * wide / 2, mz - ez * wide / 2, mx + ex * wide / 2, mz + ez * wide / 2, nx, nz, base, base + high, 0, .06, { ...base0, kind: 'bay', on, color: shade(wall, .62), pattern: PATTERN.SIDING, noBottom: true });
     }
   }
   // the top of the door wall painted in with the gable, and a louvre up under the ridge
@@ -459,7 +466,10 @@ export function writeStructure(sheet, s, base = 0) {
       const [ax, az] = s.pts[e], [bx, bz] = s.pts[(e + 1) % n], len = Math.hypot(bx - ax, bz - az);
       if (len < 1.4) continue;
       const ex = (bx - ax) / len, ez = (bz - az) / len, wide = Math.min(len - .1, 1.8 + hash2(seed, 1100 + i) * 2.6), t = wide / 2 + .05 + hash2(seed, 1200 + i) * (len - wide - .1), down = hash2(seed, 1300 + i) < .55, reach = Math.min(H - .8, 1 + hash2(seed, 1400 + i) * 1.5);
-      sheet.drape(ax + ex * t, down ? base + H : base + .02, az + ez * t, ex, ez, ez, -ex, wide, down ? -reach : reach, [.05 + hash2(seed, 1500 + i) * .05, .16 + hash2(seed, 1600 + i) * .13, .035], seed + i, { ...base0, kind: 'kudzu', pattern: PATTERN.LEAF });
+      // it goes with the panel it's on
+      const x = ax + ex * t, z = az + ez * t; let on = -1, od = Infinity;
+      panels.forEach((p, q) => { if (p.edge === e && !missing.has(q)) { const d = Math.hypot((p.ax + p.bx) / 2 - x, (p.az + p.bz) / 2 - z); if (d < od) { od = d; on = q; } } });
+      sheet.drape(x, down ? base + H : base + .02, z, ex, ez, ez, -ex, wide, down ? -reach : reach, [.05 + hash2(seed, 1500 + i) * .05, .16 + hash2(seed, 1600 + i) * .13, .035], seed + i, { ...base0, kind: 'kudzu', on, pattern: PATTERN.LEAF });
     }
   }
 }

@@ -19,6 +19,10 @@ Everything is procedural three.js. The game has no image, model or texture files
 | `pixelTex`, `triplanar`, `textTex` | Surface textures and painted signage |
 | `vehicleGeometries`, `vehMat` | Everything with an engine: low-poly boxes in `src/vehiclemodels.js`, with paint that takes each one's colour and rusts through in patches |
 | `writeStructure`, `houseMat` | Every real building: `src/structures.js` writes its pieces, and one material draws the siding, brick, block, ribs, shingle, windows and doors from what's in the vertices |
+| `breakable` | Anything that isn't a building and can be knocked down. While its function runs it collects the boxes, solids and kudzu it adds, and how it goes over comes from its options |
+| `spray`, `dust`, `puff` | Bits off what's breaking, in a fixed pool, and the dust where it lands |
+| `burnAt`, `drawFire` | Everything on fire is one list. The nearest of it is drawn on the twelve frames: low-poly flames with an ink line, a glow on the ground, smoke and sparks. None of it adds a light |
+| `blast`, `thud` | Something going up, with its fireball and the fire it starts, and something heavy landing, which breaks what it lands on and stays dark |
 | `swayMat` | Foliage that moves |
 | `gifMat`, `renderFrame` | The final look: dither, grain, vignette and glitches |
 | `triggerBurst`, `glitch` | Glitch bursts: `glitch` for hits, `triggerBurst` for the rare timed one |
@@ -86,6 +90,7 @@ Night in an abandoned Mississippi town.
 - **The map:** drawn from the same data as the world, on a dark scratched page: cream roads, a rust railroad, a teal river, dusk buildings, cyan people, rust arrows. The small one turns with the camera and only appears once he's in town.
 - **Vehicles:** old and rusting, in faded paint, with no real makes or badges. Cars and pickups by the houses and shops, four-wheelers by the trailers, a golf cart at every church. Their windows are open, so he's always in view at the wheel. Only the one he's driving has its lights on.
 - **Props that aren't real:** the water tower, and the rusted boxcar on a railroad with dark ties (`#2a1d18`).
+- **Everything breaks.** Each building comes apart in the pieces it's drawn in, and when too many walls have gone the roof comes down and the rest follows. Wood burns all the way down, and brick, block, stucco and tin keep their walls and lose the roof. Fire is comic-book fire: orange and red tongues with an ink line, black smoke in lumps, no realism. An explosion is a few big hand-drawn frames on the twelve-frame clock. Dust is many small puffs, because one big one reads as a boulder. Only Stuckey's Bridge stands up to all of it, since the first scene has to stay as it is.
 - **Doors stand open.** Any building can be walked into, and its roof comes off while he's inside. Anything between the camera and him opens up around him in a dither, and the roof of whatever the camera backs into comes off too.
 - **Street signs:** green blades with cream Bungee, the colours of the town sign, reading the names in the road graph. Each corner blade runs along the road it names, as real ones do, and the roadside ones face whoever's walking that way. A phone in portrait sees a narrow slice of the road, so they're big enough to read before they slide off screen.
 - **The river:** it takes glowing rings where things hit it. Cottonmouths open white mouths before striking.
@@ -115,7 +120,7 @@ The game has the reference's clean character, holds, timed bursts, full bottle, 
 
 ## Controls
 
-Touch comes first, because the game is played on a phone. The left thumb moves and dragging looks around. The buttons say what they do right now, like CUT, TALK, GET IN, JUMP, RUN, BRAKE and SWIM FAST, and a button with nothing to do isn't there. Driving takes one thumb: forward on the stick is the gas, off to the side steers and keeps the gas on, and back brakes and reverses. On a keyboard, WASD or arrows move, Shift runs, Space jumps, swims faster or is the handbrake, E uses and M is the map, and a strip at the bottom shows the keys that work right now. `src/controls.js` has the lists.
+Touch comes first, because the game is played on a phone. The left thumb moves and dragging looks around. The buttons say what they do right now, like CUT, TALK, GET IN, SWING, THROW, JUMP, RUN, BRAKE and SWIM FAST, and a button with nothing to do isn't there. Driving takes one thumb: forward on the stick is the gas, off to the side steers and keeps the gas on, and back brakes and reverses. On a keyboard, WASD or arrows move, Shift runs, Space jumps, swims faster or is the handbrake, E uses, F swings, Q throws a gas can and M is the map, and a strip at the bottom shows the keys that work right now. `src/controls.js` has the lists.
 
 ## What stays out of this repo
 

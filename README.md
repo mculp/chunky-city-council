@@ -11,7 +11,9 @@ python3 -m http.server
 Then open http://localhost:8000. It needs a network connection for three.js and the fonts.
 
 - **Touch:** left thumb moves, drag to look, and the buttons say what they do.
-- **Keyboard:** WASD or arrows move, hold Shift to run, Space jumps or swims faster, E uses, M is the map, drag to look. A strip at the bottom shows the keys that work right now.
+- **Keyboard:** WASD or arrows move, hold Shift to run, Space jumps or swims faster, E uses, F swings, Q throws a gas can, M is the map, drag to look. A strip at the bottom shows the keys that work right now.
+
+Skip to town on the title card, or `index.html#free`, goes straight to free play: the whole map, the crowd out, three gas cans, and everything in town can be broken.
 
 ## What's here
 
@@ -19,6 +21,7 @@ Then open http://localhost:8000. It needs a network connection for three.js and 
 - `src/map.js`: the road graph as the game walks on it
 - `src/looks.js`: draws what everyone but the hero wears, from `data/looks.json`
 - `src/structures.js`: turns every real building's footprint into walls, windows, doors and a roof, in pieces that can break
+- `src/damage.js`: what breaks, what burns and what comes down with it
 - `reference/stuckeys-bridge.html`: the scene the game grew out of
 - `docs/art-direction.md`: how it should look
 - `data/roads.json`: the road graph of real Chunky, MS, generated from Census TIGER/Line data
@@ -32,6 +35,7 @@ Then open http://localhost:8000. It needs a network connection for three.js and 
 - `tools/play-horde.mjs`: plays against the crowd in Chrome and reports what it costs (`npm run horde`)
 - `tools/play-drive.mjs`: drives every kind of vehicle in Chrome, on the roads and off them, into walls and through the crowd (`npm run drive`)
 - `tools/play-field.mjs`: walks onto the ball field and tries its fence and gates, on foot and in a pickup (`npm run field`)
+- `tools/play-wreck.mjs`: crashes, burns and blows up the town in Chrome and reports what the worst of it costs (`npm run wreck`)
 - `tools/map-overlay.mjs`: draws TIGER's lines over a top-down capture of the game and measures the difference (`npm run overlay`)
 - `tools/structure-overlay.mjs`: draws the game's buildings over a public-domain aerial of the same ground (`npm run overlay:structures`)
 

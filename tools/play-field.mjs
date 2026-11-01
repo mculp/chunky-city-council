@@ -51,7 +51,7 @@ check('out through the gate by the first base dugout', first.every((w) => w.off 
 await g(() => at([-375, -482]));
 const dug = await g(() => walk([-390, -484.5], 6));
 check('the third base dugout has a back wall', dug.off > 3 && dug.at[0] > -384.8, dug);
-// a pickup goes in through the wide gate and the fence stops it anywhere else
+// a pickup goes in through the wide gate, and anywhere else it goes through the fence
 const drove = await g(() => {
   const G = __game, v = G.vehicles.find((o) => o.kind === 'pickup' && !o.wrecked && !o.drowned), a = v.yaw + Math.PI / 2, off = v.K.width / 2 + 1;
   G.place(v.x + Math.sin(a) * off, v.z + Math.cos(a) * off); G.step(.6); G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); G.sim(1 / 30, 1 / 30);
@@ -63,7 +63,7 @@ const drove = await g(() => {
   return { boarded: true, a1, a2, x: d.x - ox, hurt: hp0 - d.hp };
 });
 check('a pickup gets in through the wide gate', drove.boarded && drove.a1.off < 3.5 && drove.a2.off < 3.5, drove);
-check('and the fence stops one anywhere else', drove.boarded && drove.x > -300, drove);
+check('and anywhere else it takes the fence down with it', drove.boarded && drove.x < -303 && drove.hurt < 30, drove);
 check('no console errors', errors.length === 0, errors.slice(0, 5));
 await close();
 console.log(failed ? `${failed} failed` : 'all ok');
