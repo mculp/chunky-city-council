@@ -185,6 +185,19 @@ The ticket's figures are closer to the east-west distance than to the straight l
 - Crossings and trestles are found on the unclipped geometry. Crossings don't split road edges, so `nodes`, `roads` and `edges` are unchanged by adding `reference`.
 - **Near-misses.** A gap within 30 m of a contact counts as that contact, because lines crossing at a shallow angle are close for a few metres either side: one pair is 4.6 m apart, 5.7 m from the US 80 railroad crossing. Nothing else comes under 5 m.
 
+## Debug plot check
+
+`node tools/plot-roads.js [out.svg]` draws `data/roads.json` in game coordinates with north up. Its default output, `data/raw/roads-debug.svg`, is gitignored, so no rendered plot is committed.
+
+Checked by eye against the ticket's wording, not against another map. The west, near east and far east trestles plot at x -4160, 579 and 1073, each where the railroad meets the river, which matches the ticket's 4.16 km west and 0.58 km and 1.07 km east.
+
+Two of the ticket's descriptions only partly hold. These are corrections to the descriptions, not to the data, and no geometry changed because of them:
+
+- **"US 80 runs alongside the Chunky River".** From US 80's west end to true x 3000 the river stays within 1,240 m of the road and crosses it three times. East of that it falls away to the south, up to 3.4 km from the road's east end.
+- **"The railroad runs east-west through town".** It does in town: 0.7° south of east from true x -1000 to 1223, and 8.7° north of east from the west end to town center. East of the far trestle it curves away, running about 32° south of east to its southernmost point at true x 4601, z 2150. It then swings north-east, crosses US 80 at true x 6121 and leaves the reference area to the north at true x 8284.
+
+**Reading the band.** Compression draws that 32° stretch at about 68°, so the curve looks like a sharp V on the plot, and anything built from `points` gets the same V. The same renderer fed true metres from lon/lat with no compression shows a smooth curve.
+
 ## Inspector output
 
 ```text
