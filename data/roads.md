@@ -429,6 +429,31 @@ It plots game coordinates with north up, east right and one scale on both axes. 
 
 **Reading the band.** The compression band is shaded and labelled with its true and game ranges. The scale bar and bearings only hold outside it, so the railroad's smooth curve looks like a sharp V inside it.
 
+## Checking it against TIGER
+
+```sh
+npm run overlay
+```
+
+This compares the running game with TIGER and exits non-zero if anything's out. It needs the venv and zips from [Regenerating](#regenerating), and `npm i` for Chrome. It takes about 10 seconds and writes three files to `data/raw/`, which is gitignored:
+
+- **`map-overlay-town.png`** is the game's ground, roads and tracks from straight above, north up, at 1.5 px per metre. TIGER's centerlines are drawn over them at true scale, aligned on town center. This is the picture to hold up against a map.
+- **`map-overlay-whole.png`** is the whole map at 0.5 px per metre, with TIGER's lines through the same conversion the game uses. It names all four roads and shades the compressed stretches.
+- **`map-overlay-report.md`** is the measurements.
+
+`tools/tiger_lines.py` reads TIGER's lines and shared vertices straight from the zips, so the comparison doesn't lean on the lon/lat the build wrote. The JSON only says which LINEARIDs to read. In the picture the game's tracks are drawn at tie width, because rails alone are thinner than a pixel.
+
+**The tolerance is 1 m.** The narrowest road is 6 m wide, so 1 m keeps a junction well inside both of its roads, and at 1.5 px per metre it's about the smallest error you could see on the town picture. The worst measured is 4 mm, from rounding. Each node and line is measured two ways:
+
+- **Through the map** puts TIGER's lon/lat through the conversion, the compression bands and the world frame, and compares that with where the game has it. Every node and line must be within the tolerance, all the way out.
+- **At true scale** compares both as metres from town center. Between true x -650 and 1223 the world is the true map moved over, so nodes and lines there must be within the tolerance too. Past those edges a node may be further off, as long as a [compressed stretch](#compressed-stretches) lies between it and town center. The report names the stretch. n7, the far end of Church St, is 388.8 m out, which is the band from -1082 to -650 taken in by 0.9.
+
+It also asks the running game, sampling TIGER every 5 m in town: US 80, Adams Street and Church St must be road you can stand on, and the river must be water.
+
+River vertices within 200 m north or south of the bridge aren't measured through the map, because the river is bent onto the opening scene's channel there. See [In the game](#in-the-game).
+
+Comparing the town picture with Google Maps is done by eye. Don't save its imagery or change road data from it. File any difference as a correction.
+
 ## Decisions and assumptions
 
 1. **Vertices.** Every TIGER vertex inside the clip bounds is kept, with no simplification, so turns survive. NAD83 lon/lat is used as-is.

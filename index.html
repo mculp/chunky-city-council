@@ -2221,6 +2221,37 @@ if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, pointer, chunks: () => chunks.size,
     objective(t, id) { streetObjective(t, id); },
+    // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
+    topDown({ x0, z0, x1, z1, scale, everywhere }) {
+      const w = Math.round((x1 - x0) * scale), h = Math.round((z1 - z0) * scale), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      const view = new THREE.OrthographicCamera((x0 - x1) / 2, (x1 - x0) / 2, (z1 - z0) / 2, (z0 - z1) / 2, 1, 3000);
+      view.position.set(cx, 1000, cz); view.up.set(0, 0, -1); view.lookAt(cx, 0, cz);
+      for (const [k, m] of chunks) { m.visible = false; chunkPool.push(m); chunks.delete(k); }
+      for (let ci = Math.floor((x0 + 120) / CH_SIZE); -120 + ci * CH_SIZE < x1; ci++) for (let cj = Math.floor((z0 + 150) / CH_SIZE); -150 + cj * CH_SIZE < z1; cj++) {
+        const ax = -120 + ci * CH_SIZE, az = -150 + cj * CH_SIZE;
+        if (everywhere || [0, 1].some((a) => [0, 1].some((b) => MAP.inBounds(ax + a * CH_SIZE, az + b * CH_SIZE)))) chunks.set((ci + 4096) * 8192 + cj + 4096, buildChunk(ci, cj));
+      }
+      for (const d of DISTANT) d.obj.visible = true;
+      // the ground's leaf litter would hide the roads, so it's dimmed and they're drawn flat
+      const flat = new THREE.MeshBasicMaterial({ color: '#77778a' }); groundMat.color.setScalar(.45);
+      scene.traverse((o) => { if ((o.isInstancedMesh && o !== plankMesh) || o.isPoints || o.isSprite) o.visible = false; if (Object.values(SURFACES).includes(o.material)) o.material = flat; });
+      sky.visible = moon.visible = heroRoot.visible = false; scene.fog.density = 0;
+      // the tracks at the width of their ties, because rails alone are thinner than a pixel and the ties only exist near the camera
+      const beds = new THREE.InstancedMesh(boxGeo, new THREE.MeshBasicMaterial({ color: '#b5703c' }), MAP.rail.reduce((n, line) => n + line.length - 1, 0)); let bed = 0;
+      for (const line of MAP.rail) for (let i = 1; i < line.length; i++) {
+        const [ax, az] = line[i - 1], [bx, bz] = line[i];
+        _m.compose(_v.set((ax + bx) / 2, Y0 + .06, (az + bz) / 2), _q.setFromAxisAngle(UP, -Math.atan2(bz - az, bx - ax)), _s.set(Math.hypot(bx - ax, bz - az), .12, 2.6)); beds.setMatrixAt(bed++, _m);
+      }
+      beds.frustumCulled = false; scene.add(beds);
+      // water under the ground that was built, not across the empty part of the picture
+      water.visible = false;
+      const pools = new THREE.InstancedMesh(new THREE.PlaneGeometry(CH_SIZE, CH_SIZE).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#2b6f94' }), chunks.size);
+      pools.frustumCulled = false; [...chunks.values()].forEach((m, i) => { _m.makeTranslation(-120 + (m.ci + .5) * CH_SIZE, 0, -150 + (m.cj + .5) * CH_SIZE); pools.setMatrixAt(i, _m); }); scene.add(pools);
+      if (!scene.getObjectByName('topDownLight')) { const l = new THREE.HemisphereLight('#ffffff', '#ffffff', 4); l.name = 'topDownLight'; scene.add(l); }
+      renderer.setPixelRatio(1); renderer.setSize(w, h, false); renderer.setRenderTarget(null); renderer.setClearColor('#0c0a10', 1); renderer.clear(); renderer.render(scene, view);
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(renderer.domElement, 0, 0);
+      return cv;
+    },
     npcs: Object.fromEntries(Object.entries(NPCS).map(([k, n]) => [k, { x: n.root.position.x, z: n.root.position.z }])), pickups: PICKUPS,
     pause() { paused = true; },
     resume() { if (paused) { paused = false; clock.getDelta(); requestAnimationFrame(loop); } },

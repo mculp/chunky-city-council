@@ -89,7 +89,8 @@ export function buildMap(data, { riverAtBridge = null } = {}) {
   const toGame = (wx, wz) => { const x = wx + bridge.x; return [x, wz + leanAt(x)]; };
   // a position in true metres from town center, which is how landmarks are placed
   const fromTrue = (x, z) => toWorld(compressX(x, data.compression), z);
-  const fromLonLat = (lon, lat) => fromTrue(R * (lon * Math.PI / 180 - lon0) * Math.cos(lat0), -R * (lat * Math.PI / 180 - lat0));
+  const trueOf = (lon, lat) => [R * (lon * Math.PI / 180 - lon0) * Math.cos(lat0), -R * (lat * Math.PI / 180 - lat0)];
+  const fromLonLat = (lon, lat) => fromTrue(...trueOf(lon, lat));
 
   const line = (pts) => pts.map(([x, z]) => toWorld(x, z));
   const measure = (pts) => { const s = [0]; for (let i = 1; i < pts.length; i++) s.push(s[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])); return s; };
@@ -160,7 +161,7 @@ export function buildMap(data, { riverAtBridge = null } = {}) {
   }
   const inBounds = (x, z) => inside.has((Math.floor(x / BC) + 32768) * 65536 + (Math.floor(z / BC) + 32768));
 
-  return { bridge, leanEnd, leanEndZ, toWorld, toGame, fromTrue, fromLonLat, roads, roadById, nodes, rail, river, trestles, crossings, roadGrid, riverGrid, railGrid, along, zAt, sOn, inBounds };
+  return { bridge, leanEnd, leanEndZ, compression: data.compression, toWorld, toGame, fromTrue, trueOf, fromLonLat, roads, roadById, nodes, rail, river, trestles, crossings, roadGrid, riverGrid, railGrid, along, zAt, sOn, inBounds };
 }
 
 export async function loadMap(url, opts) {
