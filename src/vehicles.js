@@ -24,11 +24,12 @@ for (const K of Object.values(KINDS)) {
   // and inside it, for telling that something's got in there
   K.inner = [];
   for (let i = 1; i < na; i++) for (const k of [-.5, 0, .5]) K.inner.push([-a + a * 2 * i / na, c * k]);
+  K.whole = [...K.rim, ...K.inner];
 }
 
 export function makeVehicle(kind, x, z, yaw, y = 0) {
   const K = KINDS[kind];
-  return { kind, K, x, y, z, yaw, f: 0, s: 0, vy: 0, steer: 0, spin: 0, hp: K.hp, wrecked: false, drowned: false, grounded: true, pitch: 0, roll: 0, getOut: 0, heldF: 0, heldB: 0 };
+  return { kind, K, x, y, z, yaw, f: 0, s: 0, vy: 0, steer: 0, spin: 0, hp: K.hp, wrecked: false, drowned: false, grounded: true, pitch: 0, roll: 0, getOut: 0, freed: 0, heldF: 0, heldB: 0 };
 }
 export const speedOf = (v) => Math.hypot(v.f, v.s);
 const forward = (yaw) => [Math.sin(yaw), Math.cos(yaw)];
@@ -76,10 +77,11 @@ export function stepVehicle(v, ctl, dt, world) {
     for (const [along, across] of points) { const cx = x + ax * along + bx * across, cz = z + az * along + bz * across; if (world.blocked(cx, cz, v.y + .6) || world.floorAt(cx, cz) - v.y > 1) return true; }
     return false;
   };
-  // Already touching something, nowhere it could go would count as clear, not even backing away, and it could never leave. So nothing holds it until it's out,
-  // and a little past that, since something inside it can be between the points it's checked at.
+  // Already touching something, nowhere it could go would count as clear, not even backing away, and it could never leave. So while it's caught only what's ahead of it
+  // counts, whichever way it's going, and what's behind it is what it's leaving. That lasts a little past the touching, since something inside it can be between the points
+  // it's checked at. It can't go on through what it's touching, because that's ahead of it.
   if (inTheWay(v.x, v.z, v.yaw, K.rim) || inTheWay(v.x, v.z, v.yaw, K.inner)) v.getOut = K.length / 2 + 1;
-  const caught = v.getOut > 0;
+  const caught = v.getOut > 0, freed = v.freed > 0;
   // the engine, and the brakes when it's going the other way
   if (v.grounded) {
     if (gas > 0) { if (f < -.3) f += K.brake * gas * dt; else if (f < top) f += K.accel * gas * (1 - Math.max(0, f) / top) * dt; }
@@ -106,12 +108,13 @@ export function stepVehicle(v, ctl, dt, world) {
   const hops = Math.max(1, Math.ceil(Math.hypot(vx, vz) * dt / .28));
   // `edge` is where the map stops: it holds you back without hurting anything
   let soft = false, struck = false, hitX = 0, hitZ = 0;
-  const clear = (x, z) => {
+  const clear = (px, pz) => {
     struck = false;
-    for (const [along, across] of K.rim) {
-      const cx = x + fx * along + rx * across, cz = z + fz * along + rz * across;
+    const goX = px - x, goZ = pz - z;
+    for (const [along, across] of caught ? K.whole : K.rim) {
+      const ox = fx * along + rx * across, oz = fz * along + rz * across, cx = px + ox, cz = pz + oz;
       if (world.edge?.(cx, cz)) { soft = true; return false; }
-      if (caught) continue;
+      if (freed || (caught && ox * goX + oz * goZ <= 0)) continue;
       if (world.blocked(cx, cz, v.y + .6)) { struck = true; hitX = cx; hitZ = cz; return false; }
       if (world.floorAt(cx, cz) - v.y > 1) return false;
     }
@@ -142,10 +145,11 @@ export function stepVehicle(v, ctl, dt, world) {
   }
   const moved = Math.hypot(x - v.x, z - v.z);
   if (caught) v.getOut -= moved;
+  if (freed) v.freed -= moved;
   // Wedged, with something in front and something behind and no room to turn: if it won't go forward and it won't go back, it comes free the way you're pushing it
   v.heldF = Math.max(0, v.heldF - dt); v.heldB = Math.max(0, v.heldB - dt);
   if (moved < .002 && !dead) { if (gas > 0) v.heldF = 3; else if (gas < 0) v.heldB = 3; }
-  if (v.heldF > 0 && v.heldB > 0) { v.getOut = K.length / 2 + 1; v.heldF = v.heldB = 0; }
+  if (v.heldF > 0 && v.heldB > 0) { v.freed = K.length / 2 + 1; v.heldF = v.heldB = 0; }
   v.x = x; v.z = z;
   v.f = vx * fx + vz * fz; v.s = vx * rx + vz * rz;
   v.spin += v.f / K.wheel * dt;

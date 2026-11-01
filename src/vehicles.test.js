@@ -156,6 +156,16 @@ test('backing into something and then driving off is not being wedged', () => {
   assert.ok(v.z > -5, `it went through at ${v.z}`);
 });
 
+test('with its nose already in a wall it can back out, and it can\'t carry on through', () => {
+  for (const kind of Object.keys(KINDS)) {
+    const v = makeVehicle(kind, 0, 0, 0, 6), nose = v.K.length / 2, world = { ...open, blocked: (x, z) => z > nose - .4 && z < nose + 8 };
+    drive(v, { gas: 1, steer: 0 }, 6, world);
+    assert.ok(v.z < 1, `${kind} went on through, to ${v.z}`);
+    drive(v, { gas: -1, steer: 0 }, 2, world);
+    assert.ok(v.z < -.5, `${kind} couldn't back out, it's at ${v.z}`);
+  }
+});
+
 test('holding it against a wall doesn\'t get it through the wall', () => {
   const v = makeVehicle('pickup', 0, 0, 0, 6), world = { ...open, blocked: (x, z) => z > 10 };
   drive(v, { gas: 1, steer: 0 }, 12, world);
