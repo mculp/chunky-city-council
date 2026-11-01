@@ -1066,6 +1066,23 @@ const SPANS = [];
   }
 }
 const spanAt = (x, z) => { for (const s of SPANS) if (Math.hypot(x - s.x, z - s.z) < s.r) return s; return null; };
+// Where the graph stops but the real road carries on, it's closed, facing the way you'd come from.
+{
+  const stripes = textTex([''], 128, 32, '#f1e6cf', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#d76a2c'; for (let x = -32; x < 128; x += 32) { g.beginPath(); g.moveTo(x, 32); g.lineTo(x + 16, 32); g.lineTo(x + 48, 0); g.lineTo(x + 32, 0); g.fill(); } } });
+  const plank = new THREE.MeshStandardMaterial({ map: stripes, roughness: .9 });
+  for (const n of MAP.nodes) if (n.kind === 'clip') {
+    const road = MAP.roadById.get(n.roads[0]), s = MAP.sOn(road.id, n.x, n.z), p = MAP.along(road.id, s), out = s < road.length / 2 ? -1 : 1;
+    const ox = p.tx * out, oz = p.tz * out, cx = n.x + ox * 1.2, cz = n.z + oz * 1.2, w = road.width + 1;
+    const yaw = Math.atan2(ox, oz), group = new THREE.Group(); group.position.set(cx, Y0, cz); group.rotation.y = yaw; scene.add(group);
+    for (const y of [.7, 1.25]) { const m = new THREE.Mesh(boxGeo, plank); m.scale.set(w, .28, .08); m.position.set(0, y, 0); group.add(outline(m, INK, 1.2)); }
+    for (const d of [-w / 2 + .3, w / 2 - .3]) { const m = new THREE.Mesh(boxGeo, poleMat); m.scale.set(.1, 1.5, .5); m.position.set(d, .75, 0); group.add(outline(m, INK, 1)); }
+    const label = n.connectsTo ? [n.connectsTo, 'CLOSED'] : ['ROAD', 'CLOSED'];
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.5, .75), new THREE.MeshStandardMaterial({ map: textTex(label, 256, 128, '#1b1420', '#f1e6cf', '36px Bungee, Impact, sans-serif'), roughness: .8 }));
+    sign.position.set(0, 1.95, -.05); sign.rotation.y = Math.PI; group.add(sign);
+    const c = Math.abs(ox) > Math.abs(oz) ? [.3, w / 2] : [w / 2, .3];
+    solid(cx - c[0], cx + c[0], cz - c[1], cz + c[1], Y0 + 2);
+  }
+}
 // kudzu: Mississippi's green blanket over everything left standing
 {
   const kz = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: '#3f7a35', roughness: .9, flatShading: true }), kudzuSpots.length);
@@ -1976,6 +1993,7 @@ function tick(dt, draw = true) {
     if (want > .1) player.yaw += angDiff(player.yaw, Math.atan2(dir.x, dir.z)) * Math.min(1, dt * 10);
     let nx = player.pos.x + (Math.sin(player.yaw) * sp + player.kb.x) * dt, nz = player.pos.z + (Math.cos(player.yaw) * sp + player.kb.y) * dt;
     player.kb.multiplyScalar(Math.exp(-dt * 5));
+    if (!S.flags.toldEdge && !MAP.inBounds(nx, nz)) { S.flags.toldEdge = true; toast('Nothing that way.'); after(12, () => { S.flags.toldEdge = false; }); }
     if (player.pos.y > DECK_TOP - .4 && Math.abs(nx) < 20.6) nz = clamp(nz, -2.25, 2.25);
     const fl = floorAt(nx, nz);
     if (fl - player.pos.y > .6 || blocked(nx, nz, player.pos.y)) {
