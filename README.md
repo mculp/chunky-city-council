@@ -11,7 +11,7 @@ python3 -m http.server
 Then open http://localhost:8000. It needs a network connection for three.js and the fonts.
 
 - **Touch:** left thumb moves, A acts, B boosts or jumps, drag to look.
-- **Keyboard:** WASD or arrows move, E acts, Space boosts and jumps, drag to look.
+- **Keyboard:** WASD or arrows move, hold Shift to run, E acts, Space boosts and jumps, drag to look.
 
 ## What's here
 

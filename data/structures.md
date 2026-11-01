@@ -52,7 +52,7 @@ A footprint never changes shape or size. Where the map compresses a stretch of r
 | `source` | object | Where each part came from, with the hash and date of the footprints that were fetched. |
 | `outsideTheMap` | number | How many in the source are out of reach. |
 | `structures` | object[] | The buildings. See below. |
-| `extras` | object[] | Anything real that isn't in the source. Empty for now: the old gas station's canopy, the steeple on the US 80 church and the Mercantile's sign are built by hand in `index.html`, around the real spot. |
+| `extras` | object[] | Anything real that isn't in the source. Empty for now: the old gas station's canopy, the steeple on the US 80 church and the store's sign are built by hand in `index.html`, around the real spot. |
 | `dropped` | object[] | `id`, true `x` and `z`, and `why`. |
 
 ### A structure
