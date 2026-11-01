@@ -2789,7 +2789,7 @@ function getOut(force = false) {
   const [x, z] = spot ?? [v.x, v.z], y = floorAt(x, z);
   driving = null; v.f = v.s = v.steer = 0; markVehicle(v, true); vehPicked = -1;
   heroRoot.rotation.set(0, v.yaw, 0); heroRoot.rotation.order = 'XYZ'; hero.body.scale.setScalar(HERO_SCALE);
-  ghost.add(gLight); gLight.color.set('#ff9a46'); gLight.distance = 12; gLight.decay = 1.8; headlights.visible = false;
+  ghost.add(gLight); gLight.position.set(0, 0, 0); gLight.color.set('#ff9a46'); gLight.distance = 12; gLight.decay = 1.8; headlights.visible = false;
   player.pos.set(x, y, z); player.yaw = v.yaw; player.grounded = true; player.vy = 0; player.kb.set(0, 0);
   if (y < -.3) { player.pos.y = 0; S.mode = 'swim'; HP.kind = 'swim'; objective('Swim to the bank.'); }
   else { S.mode = 'town'; HP.kind = 'run'; }
