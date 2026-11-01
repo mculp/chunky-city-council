@@ -33,6 +33,8 @@ No. It changes name on the way, and TIGER leaves no gap.
 
 - Meehan Savoy Rd spans x 5213 to x 14919. It runs west of its junction as it heads south, so a band ending at x 5600 would compress part of it. To leave the road 1:1, end the band at x 5213 or lower.
 - The far east trestle is at x 1073.
+- That stretch isn't quite empty. US 80 crosses the river at x 1777, inside it, and the river and railroad both run through it. The remap preserves the order of all of this, and the docs should say so.
+- `game_position` is the one place the build gets `x` for roads, reference lines, trestles and crossings. `distanceFromCenterM`, the reference area and the crossing order all come from true lon/lat, so compression doesn't change them.
 
 ## US 80 clip
 
@@ -67,12 +69,36 @@ Nodes:
   n6 clip x -292, z -1666: adams_st, connects to I-20
   n7 end x -1097, z -410: church_st
   n8 end x 14919, z 6058: meehan_savoy_rd
+Reference lines, clipped to the reference area:
+  Railroad: features 110168393895 1103690413981 110470585569 110470586701
+    159 vertices, x -5043, z 834 to x 8284, z -2159
+    16 vertices, x 11083, z -2162 to x 11906, z -2022
+    22 vertices, x 15404, z 3076 to x 14958, z 7530
+  Chunky River: features 110168391381 1102216410607 1102216410608 110470583324 110470583325
+    16 vertices, x -4691, z -2163 to x -4632, z -2164
+    1199 vertices, x -4560, z -2159 to x 661, z -45
+    1039 vertices, x 666, z -61 to x 6036, z 7591
+    32 vertices, x 6227, z 7594 to x 6816, z 7549
+Trestles:
+  trestle-east-near x 579, z 79: 584.3 m east of center
+  trestle-east-far x 1073, z 191: 1089.8 m east of center
+  trestle-west x -4160, z 734: 4224.4 m west of center, break down
+Crossings, in order along each road:
+  us_80 x -4505, z 159: river
+  us_80 x 669, z -88: river
+  us_80 x 1777, z -21: river
+  us_80 x 6121, z -451: railroad
+  meehan_savoy_rd x 5939, z 558: railroad
 Report:
   US 80 joins at the county line at -88.914715, 32.327867 (x 1254, z -227)
   Adams Street reaches I-20 at -88.931164, 32.340809 (x -292, z -1666)
   Geometric check: no crossing away from a shared vertex
   Geometric check: no near-miss under 5 m
   All selected roads connect by shared vertices
+  Reference area, the roads plus 500 m: x -5163 to 15419, z -2166 to 7594
+  Chunky River has a 16.2 m gap in TIGER from -88.921026, 32.326236 (x 661, z -45) to -88.920975, 32.326375 (x 666, z -61). Not bridged.
+  Geometric check: the railroad and river have no near-miss under 5 m
+  Railroad feature 1106087712080 has no segment inside the area
 Wrote data/roads.json
 ```
 
@@ -83,7 +109,54 @@ For the docs:
 - **`connectsTo`.** The build sets it from the data, not from the config: the terminal has to lie on I-20 or on a ramp connected to I-20 through other ramps. The build fails if the road touches one before `clipAt`.
 - **Walk direction.** US 80 runs west to east. Each other road runs away from where it joins the graph, so Adams Street runs from US 80 towards I-20, Church St from Adams Street heading west, and Meehan-Savoy Rd from US 80.
 - **Near-misses.** A gap within 5 m of a vertex the two roads share counts as that junction and isn't reported. On this data that hides nothing: no non-touching pair of segments from different roads is under 5 m, even without the exclusion.
-- **`source.files`.** It lists only the zips the build reads, so for now just the two road files.
+- **`source.files`.** It lists every zip the build reads: the two road files, the rails file and the two water files.
+
+## Reference lines
+
+What `reference` in `data/roads.json` holds, and what TIGER says about it. Positions are true metres. Rail features are identified by LINEARID only, and the build doesn't read the rail `FULLNAME` field.
+
+**Reference area.** The bounding box of every included road plus 500 m: x -5163 to 15419, z -2166 to 7594. Meehan-Savoy Rd sets the east and south sides, so the box is much bigger than the town.
+
+**Clipping.** Whole TIGER vertices only, as on the roads: a line stops at its last vertex inside the box, never an interpolated one, so every vertex keeps its real lon/lat. Rail segments are long, so a line can stop well short of the edge. The railroad's west end is at x -5043, 120 m short of it. A line that leaves the box and comes back becomes two lines, in running order.
+
+**Railroad.** Three lines:
+
+| Vertices | From | To | What it is |
+| --- | --- | --- | --- |
+| 159 | x -5043, z 834 | x 8284, z -2159 | The line through town. It leaves the box to the north here. |
+| 16 | x 11083, z -2162 | x 11906, z -2022 | The same line, back inside the box for about 1 km. |
+| 22 | x 15404, z 3076 | x 14958, z 7530 | Feature 1103690413981, a separate rail line across the box's southeast corner. It doesn't touch the line through town inside the box, and no included road crosses it. |
+
+The ticket's "railroad" is the first two. The third is in `lines` because it's R1011 inside the box, so plots and later work shouldn't read `lines` as one track. Feature 1106087712080 overlaps the box only by bounding box and has no segment inside, so it isn't in `linearIds`.
+
+**River.** Four lines, walked from the westernmost end. TIGER records no flow direction, so this isn't a claim about which way the water runs.
+
+| Vertices | From | To | What it is |
+| --- | --- | --- | --- |
+| 16 | x -4691, z -2163 | x -4632, z -2164 | A bend just inside the box's north edge. |
+| 1199 | x -4560, z -2159 | x 661, z -45 | Past the west and near east trestles, to the gap. |
+| 1039 | x 666, z -61 | x 6036, z 7591 | From the gap, across US 80 twice and the far east trestle, then southeast. |
+| 32 | x 6227, z 7594 | x 6816, z 7549 | A bend just inside the box's south edge. |
+
+- **The gap.** TIGER's `Chunky Riv` has a 16.2 m gap from x 661, z -45 (end of 1102216410608) to x 666, z -61 (start of 1102216410607). No other water feature in either county file has a vertex nearby, named or not. It stays open: nothing bridges it. It's about 27 m south of where US 80 crosses the river, so it doesn't hide a crossing.
+- **The loop.** From the gap the river runs north to x 1256, z -1581 and back south, which is why US 80 crosses it at x 669 and again at x 1777.
+- **Duplicates.** The build merges segments shared between county files, but the five real features share none.
+
+**Trestles.** Each is one vertex shared by the rail and the river, so every cluster has one hit. Both lines' written geometry includes all three.
+
+| id | Position | Straight line from center | Ticket |
+| --- | --- | --- | --- |
+| `trestle-east-near` | x 579, z 79 | 584.3 m | 580 m east |
+| `trestle-east-far` | x 1073, z 191 | 1089.8 m | 1070 m east |
+| `trestle-west` (`break down`) | x -4160, z 734 | 4224.4 m | 4160 m west |
+
+The ticket's figures are closer to the east-west distance than to the straight line. The west trestle is 64 m over 4160 m in a straight line, which is inside the build's 100 m tolerance.
+
+**Crossings.** Five, in order along each road: US 80 meets the river at x -4505, x 669 and x 1777, then the railroad at x 6121, which is past the Meehan-Savoy Rd junction at x 5808. Meehan-Savoy Rd meets the railroad at x 5939. Adams Street and Church St cross neither.
+
+- All five are vertices shared by the road and the line, and a one-off check confirmed the road passes through the line at each. The build itself lists every contact without testing that, and adds a report line for any contact that isn't a shared vertex. There are none on this data.
+- Crossings and trestles are found on the unclipped geometry. Crossings don't split road edges, so `nodes`, `roads` and `edges` are unchanged by adding `reference`.
+- **Near-misses.** A gap within 30 m of a contact counts as that contact, because lines crossing at a shallow angle are close for a few metres either side: one pair is 4.6 m apart, 5.7 m from the US 80 railroad crossing. Nothing else comes under 5 m.
 
 ## Inspector output
 

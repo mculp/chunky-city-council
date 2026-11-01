@@ -8,15 +8,20 @@ tools/road_config.json says which roads to take and how to clip and style them. 
 zips are read in place and never extracted. The same zips and config give the same
 bytes. Any failure exits non-zero and leaves roads.json as it was. The report on
 stdout lists what the docs need to record: the seam, crossings added, near-misses,
-branches, extra components and unconnected roads.
+branches, extra components, unconnected roads, the area the railroad and river are
+clipped to, gaps in those lines and the rail features left out.
 
 Connections mean shared vertices compared exactly, because TIGER is one planar
 topology. Every TIGER vertex is kept and none is moved, so a near-miss is reported
 and never snapped. The only vertex that isn't TIGER's is one added where two lines
 cross with no shared vertex, and the report lists each of those.
 
-Only read_road_records needs pyshp, and it imports it itself. Everything else works
-on plain records, so it can be imported and run without the venv.
+The railroad, river and trestles go in `reference`, beside the graph and not part of
+it. Rail features are identified by LINEARID only: TIGER's rail names can be real
+operator brands, so that field isn't even read.
+
+Only read_features needs pyshp, and it imports it itself. Everything else works on
+plain records, so it can be imported and run without the venv.
 """
 
 import hashlib
@@ -26,6 +31,7 @@ import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
+from itertools import groupby
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -40,6 +46,12 @@ ROAD_FILES = {
     "ROADS/tl_2025_28101_roads.zip": NEWTON,
     "ROADS/tl_2025_28075_roads.zip": LAUDERDALE,
 }
+RAIL_FILE = "RAILS/tl_2025_us_rails.zip"
+WATER_FILES = {
+    "LINEARWATER/tl_2025_28101_linearwater.zip": NEWTON,
+    "LINEARWATER/tl_2025_28075_linearwater.zip": LAUDERDALE,
+}
+SOURCE_FILES = (*ROAD_FILES, RAIL_FILE, *WATER_FILES)
 
 ORIGIN_LAT, ORIGIN_LON = 32.32583, -88.92806  # Town center, per CLAUDE.md.
 EARTH_RADIUS_M = 6_371_000
@@ -50,6 +62,23 @@ RAMP_MTFCC = "S1630"
 I20 = "I-20"
 NEAR_MISS_M = 5
 TABLES = ("nodes", "roads", "edges")  # Written with one row per line, to keep diffs readable.
+
+REFERENCE_MARGIN_M = 500  # How far past the roads the railroad and river are kept.
+RAILROAD_NAME = "Railroad"  # Never TIGER's rail name, which can be a real operator brand.
+RAIL_MTFCC = "R1011"
+RIVER_NAME = "Chunky River"
+RIVER_TIGER_NAME = "Chunky Riv"
+RAILROAD, RIVER = "railroad", "river"  # The values of `with` on a crossing.
+
+# Where the railroad meets the river, per the ticket. distanceM is the straight line from
+# town center. The build fails unless TIGER has exactly these, within the tolerance.
+TRESTLES = (
+    {"id": "trestle-east-near", "side": "east", "distanceM": 580},
+    {"id": "trestle-east-far", "side": "east", "distanceM": 1070},
+    {"id": "trestle-west", "side": "west", "distanceM": 4160, "label": "break down"},
+)
+TRESTLE_TOLERANCE_M = 100
+TRESTLE_CLUSTER_M = 30  # Hits this close are one trestle. It also clears a gap at a contact.
 
 
 class BuildError(Exception):
@@ -89,27 +118,68 @@ class RoadLines:
         return adjacency_of(self.carriers)
 
 
-def read_road_records():
-    """Return every record in both county road files. This is the only use of pyshp."""
+def read_features(rel_path, fields, bbox=None):
+    """Yield (attributes, points) for a zip's records. This is the only use of pyshp.
+
+    bbox is (west, south, east, north) and keeps the records whose bounding box overlaps it.
+    """
     import shapefile  # Imported here so the geometry below works without the venv.
 
+    with shapefile.Reader(str(RAW_DIR / Path(rel_path).name)) as reader:
+        for item in reader.iterShapeRecords(fields=fields, bbox=bbox):
+            attributes = item.record.as_dict()
+            if len(item.shape.parts) != 1:
+                # Joining parts end to end would invent a connection.
+                raise BuildError(f"{rel_path}: multipart record {attributes['LINEARID']}")
+            yield attributes, tuple(tuple(point) for point in item.shape.points)
+
+
+def read_road_records():
+    """Return every record in both county road files."""
     records = []
     fields = ["LINEARID", "FULLNAME", "RTTYP", "MTFCC"]
     for rel_path, county in ROAD_FILES.items():
-        with shapefile.Reader(str(RAW_DIR / Path(rel_path).name)) as reader:
-            for item in reader.iterShapeRecords(fields=fields):
-                attributes = item.record.as_dict()
-                if len(item.shape.parts) != 1:
-                    # Joining parts end to end would invent a connection.
-                    raise BuildError(f"{rel_path}: multipart record {attributes['LINEARID']}")
+        for attributes, points in read_features(rel_path, fields):
+            records.append(
+                Record(
+                    county,
+                    attributes["LINEARID"],
+                    attributes["FULLNAME"],
+                    attributes["MTFCC"],
+                    attributes["RTTYP"],
+                    points,
+                )
+            )
+    return records
+
+
+def read_rail_records(area):
+    """Return the R1011 features whose bounding box overlaps the area, whole."""
+    west, north = to_lonlat(area["xMinM"], area["zMinM"])
+    east, south = to_lonlat(area["xMaxM"], area["zMaxM"])
+    bbox = (west, south, east, north)
+    return [
+        Record("", attributes["LINEARID"], RAILROAD_NAME, attributes["MTFCC"], "", points)
+        for attributes, points in read_features(RAIL_FILE, ["LINEARID", "MTFCC"], bbox)
+        if attributes["MTFCC"] == RAIL_MTFCC
+    ]
+
+
+def read_river_records():
+    """Return every record of the river in both county water files, whole."""
+    records = []
+    fields = ["LINEARID", "FULLNAME", "MTFCC"]
+    for rel_path, county in WATER_FILES.items():
+        for attributes, points in read_features(rel_path, fields):
+            if attributes["FULLNAME"] == RIVER_TIGER_NAME:
                 records.append(
                     Record(
                         county,
                         attributes["LINEARID"],
                         attributes["FULLNAME"],
                         attributes["MTFCC"],
-                        attributes["RTTYP"],
-                        tuple(tuple(point) for point in item.shape.points),
+                        "",
+                        points,
                     )
                 )
     return records
@@ -139,6 +209,13 @@ def to_xz(point):
     x = EARTH_RADIUS_M * math.radians(lon - ORIGIN_LON) * math.cos(math.radians(ORIGIN_LAT))
     z = -EARTH_RADIUS_M * math.radians(lat - ORIGIN_LAT)
     return x, z
+
+
+def to_lonlat(x, z):
+    """Return the (lon, lat) that to_xz projects to true metres x, z."""
+    lon = ORIGIN_LON + math.degrees(x / (EARTH_RADIUS_M * math.cos(math.radians(ORIGIN_LAT))))
+    lat = ORIGIN_LAT - math.degrees(z / EARTH_RADIUS_M)
+    return lon, lat
 
 
 def segments_of(points):
@@ -499,10 +576,11 @@ def add_crossings(roads, report):
         report.append("Geometric check: no crossing away from a shared vertex")
 
 
-def find_near_misses(roads):
+def find_near_misses(roads, contacts=(), clear_m=NEAR_MISS_M):
     """Return (metres, road names, position) where two roads almost touch.
 
-    A gap beside a vertex the two roads share is just that junction, so it doesn't count.
+    A gap within clear_m of a vertex the two roads share, or of one of the given contacts,
+    is just that junction, so it doesn't count.
     """
     found = {}
     for (road_a, seg_a), (road_b, seg_b) in close_segment_pairs(roads, NEAR_MISS_M):
@@ -514,7 +592,7 @@ def find_near_misses(roads):
         if gap >= NEAR_MISS_M:
             continue
         shared = road_a.adjacency().keys() & road_b.adjacency().keys()
-        if any(math.dist(near_a, to_xz(vertex)) < NEAR_MISS_M for vertex in shared):
+        if any(math.dist(near_a, to_xz(vertex)) < clear_m for vertex in (*shared, *contacts)):
             continue
         names = (road_a.name, road_b.name)
         position = (round(near_a[0], 3), round(near_a[1], 3))
@@ -771,13 +849,354 @@ def build_road_graph(records, config, source_files):
     return data, report
 
 
+# Reference lines: the railroad and river. Same projection as the roads, but not in the graph.
+
+
+@dataclass(eq=False)
+class LineSet:
+    """Named segments, which is all the geometric checks need from a road."""
+
+    name: str
+    carriers: dict  # {segment: what's known about it}. Records, for the railroad and river.
+
+    def adjacency(self):
+        return adjacency_of(self.carriers)
+
+
+def reference_area(data):
+    """Return the bounding box of every included road plus the margin, in true metres."""
+    xs, zs = zip(*(to_xz(vertex) for edge in data["edges"] for vertex in edge["lonlat"]))
+    return {
+        "xMinM": min(xs) - REFERENCE_MARGIN_M,
+        "xMaxM": max(xs) + REFERENCE_MARGIN_M,
+        "zMinM": min(zs) - REFERENCE_MARGIN_M,
+        "zMaxM": max(zs) + REFERENCE_MARGIN_M,
+    }
+
+
+def inside_area(vertex, area):
+    x, z = to_xz(vertex)
+    return area["xMinM"] <= x <= area["xMaxM"] and area["zMinM"] <= z <= area["zMaxM"]
+
+
+def chain_segments(segments):
+    """Join segments into polylines that break at every end and branch, keeping every vertex.
+
+    A closed loop has neither, so it starts and stops at its lowest vertex.
+    """
+    adjacency = adjacency_of(segments)
+    breaks = {vertex for vertex, near in adjacency.items() if len(near) != 2}
+    chains = []
+    walked = set()
+    for start in (*sorted(breaks), *sorted(adjacency)):
+        for neighbour in sorted(adjacency[start]):
+            if ((start, neighbour) if start < neighbour else (neighbour, start)) in walked:
+                continue
+            chain = [start, neighbour]
+            while chain[-1] not in breaks and chain[-1] != start:
+                chain.extend(adjacency[chain[-1]] - {chain[-2]})
+            walked.update(segments_of(chain))
+            chains.append(chain)
+    return chains
+
+
+def order_chains(chains):
+    """Return the chains, each pointing onward, in running order, and the gaps between them.
+
+    The first starts at the westernmost end. Each next one starts where an earlier one
+    stopped if it can. Otherwise it starts at the end nearest where the last one stopped,
+    which leaves a gap, returned as (metres, from, to). Nothing bridges a gap.
+    """
+    remaining = list(chains)
+    ends = [end for chain in remaining for end in (chain[0], chain[-1])]
+    tail = min(ends, key=lambda vertex: (to_xz(vertex)[0], vertex))
+    joined = {tail}
+    ordered = []
+    gaps = []
+    while remaining:
+        gap, line, index = min(
+            (0.0 if line[0] in joined else math.dist(to_xz(tail), to_xz(line[0])), line, index)
+            for index, chain in enumerate(remaining)
+            for line in (chain, chain[::-1])
+        )
+        if gap:
+            gaps.append((gap, tail, line[0]))
+        del remaining[index]
+        ordered.append(line)
+        joined.update((line[0], line[-1]))
+        tail = line[-1]
+    return ordered, gaps
+
+
+def clip_to_area(chain, area):
+    """Return the runs of a chain inside the area.
+
+    Whole TIGER vertices only, like the roads: a run stops at its last vertex inside, so
+    nothing is interpolated and every vertex keeps its real lon/lat.
+    """
+    runs = (list(run) for inside, run in groupby(chain, lambda v: inside_area(v, area)) if inside)
+    return [run for run in runs if len(run) > 1]
+
+
+def clipped_lines(line_set, area, report):
+    """Return a line set's polylines inside the area, in running order. Report what's odd."""
+    chains, gaps = order_chains(chain_segments(line_set.carriers))
+    for gap, start, end in gaps:
+        if inside_area(start, area) or inside_area(end, area):
+            report.append(
+                f"{line_set.name} has a {gap:.1f} m gap in TIGER from {where(start)} to "
+                f"{where(end)}. Not bridged."
+            )
+    for vertex, near in sorted(line_set.adjacency().items()):
+        if len(near) > 2 and inside_area(vertex, area):
+            report.append(f"{line_set.name} branches at {where(vertex)}, kept as separate lines")
+    lines = [run for chain in chains for run in clip_to_area(chain, area)]
+    if not lines:
+        raise BuildError(f"{line_set.name}: nothing inside the reference area")
+    return lines
+
+
+def kept_linear_ids(line_set, lines, report):
+    """Return the features carrying the kept lines, sorted. Report any read but left out."""
+    kept = {
+        record.linear_id
+        for line in lines
+        for segment in segments_of(line)
+        for record in line_set.carriers[segment]
+    }
+    read = {record.linear_id for records in line_set.carriers.values() for record in records}
+    for linear_id in sorted(read - kept):
+        report.append(f"{line_set.name} feature {linear_id} has no segment inside the area")
+    return sorted(kept)
+
+
+def line_rows(lines):
+    return [
+        {
+            "points": [list(game_position(vertex)) for vertex in line],
+            "lonlat": [list(lonlat_position(vertex)) for vertex in line],
+        }
+        for line in lines
+    ]
+
+
+def line_contacts(first, second):
+    """Yield (segment of first, point) for everywhere two line sets touch.
+
+    That means every endpoint their segments share and every other point they touch.
+    """
+    for row_a, row_b in close_segment_pairs([first, second], 0):
+        if row_a[0] is row_b[0]:
+            continue
+        if row_a[0] is second:
+            row_a, row_b = row_b, row_a
+        for vertex in sorted(set(row_a[1]) & set(row_b[1])):
+            yield row_a[1], vertex
+        for vertex in segment_contacts(*row_a[1], *row_b[1]):
+            yield row_a[1], vertex
+
+
+def report_unshared(first, second, contacts, report):
+    """Report contacts that aren't a vertex of both lines. Such a point is computed."""
+    shared = first.adjacency().keys() & second.adjacency().keys()
+    for vertex in sorted(set(contacts) - shared):
+        report.append(f"{first.name} meets {second.name} with no shared vertex: {where(vertex)}")
+
+
+def cluster_points(vertices, within_m):
+    """Group vertices that link up at within_m or less, one vertex to the next."""
+    clusters = []
+    for vertex in sorted(vertices):
+        near = [
+            cluster
+            for cluster in clusters
+            if any(math.dist(to_xz(vertex), to_xz(other)) <= within_m for other in cluster)
+        ]
+        clusters = [cluster for cluster in clusters if cluster not in near]
+        clusters.append([vertex, *(other for cluster in near for other in cluster)])
+    return clusters
+
+
+def cluster_center(cluster):
+    """Return the member nearest the cluster's middle, so it lies on both lines."""
+    xs, zs = zip(*(to_xz(vertex) for vertex in cluster))
+    middle = (sum(xs) / len(xs), sum(zs) / len(zs))
+    return min(cluster, key=lambda vertex: (math.dist(to_xz(vertex), middle), vertex))
+
+
+def find_trestles(hits):
+    """Return reference.trestles from where the rail meets the river, on true geometry.
+
+    Fails unless the hits cluster into exactly the trestles the ticket lists.
+    """
+    centers = [cluster_center(cluster) for cluster in cluster_points(hits, TRESTLE_CLUSTER_M)]
+    found = "; ".join(
+        f"{where(center)}, {math.hypot(*to_xz(center)):.0f} m from center"
+        for center in sorted(centers)
+    )
+    if len(centers) != len(TRESTLES):
+        raise BuildError(
+            f"The railroad meets {RIVER_TIGER_NAME} in {len(centers)} place(s), not "
+            f"{len(TRESTLES)}: {found or 'none'}"
+        )
+    rows = []
+    for expected in TRESTLES:
+        matches = [
+            center
+            for center in centers
+            if ("east" if to_xz(center)[0] > 0 else "west") == expected["side"]
+            and abs(math.hypot(*to_xz(center)) - expected["distanceM"]) <= TRESTLE_TOLERANCE_M
+        ]
+        if len(matches) != 1:
+            raise BuildError(
+                f"{expected['id']}: {len(matches)} crossing(s) within {TRESTLE_TOLERANCE_M} m "
+                f"of {expected['distanceM']} m {expected['side']}, not 1. Found {found}"
+            )
+        x, z = game_position(matches[0])
+        lon, lat = lonlat_position(matches[0])
+        rows.append(
+            {
+                "id": expected["id"],
+                "side": expected["side"],
+                "x": x,
+                "z": z,
+                "lon": lon,
+                "lat": lat,
+                "distanceFromCenterM": round(math.hypot(*to_xz(matches[0])), 3),
+                **({"label": expected["label"]} if "label" in expected else {}),
+            }
+        )
+    return rows
+
+
+def road_walk(road, edges):
+    """Return {segment: (edge number, segment number, start vertex)} in walk order."""
+    walk = {}
+    for edge_number, edge_id in enumerate(road["edges"]):
+        chain = [tuple(vertex) for vertex in edges[edge_id]["lonlat"]]
+        for segment_number, (a, b) in enumerate(zip(chain, chain[1:])):
+            walk[(a, b) if a < b else (b, a)] = (edge_number, segment_number, a)
+    return walk
+
+
+def find_crossings(road_id, road_line, lines):
+    """Return (road id, label, point) for each contact with a line, in order along the road.
+
+    lines is {label: LineSet}. road_line carries road_walk's places. The geometry is
+    unclipped, so a long segment that runs out of the area can't hide a crossing.
+    """
+    places = {}
+    for label, line in lines.items():
+        for segment, vertex in line_contacts(road_line, line):
+            edge_number, segment_number, start = road_line.carriers[segment]
+            place = (edge_number, segment_number, math.dist(to_xz(start), to_xz(vertex)))
+            places[(label, vertex)] = min(place, places.get((label, vertex), place))
+    ordered = sorted(places, key=lambda key: (places[key], key))
+    return [(road_id, label, vertex) for label, vertex in ordered]
+
+
+def build_reference(data, rail_records, river_records, area, report):
+    """Return the reference block for the finished road graph, from plain records."""
+    x_range = f"x {area['xMinM']:.0f} to {area['xMaxM']:.0f}"
+    z_range = f"z {area['zMinM']:.0f} to {area['zMaxM']:.0f}"
+    report.append(f"Reference area, the roads plus {REFERENCE_MARGIN_M} m: {x_range}, {z_range}")
+    rail = LineSet(RAILROAD_NAME, carriers_of(rail_records))
+    river = LineSet(RIVER_NAME, carriers_of(river_records))
+
+    hits = {vertex for _, vertex in line_contacts(rail, river)}
+    report_unshared(rail, river, hits, report)
+    trestles = find_trestles(hits)
+
+    rail_lines = clipped_lines(rail, area, report)
+    river_lines = clipped_lines(river, area, report)
+
+    edges = {edge["id"]: edge for edge in data["edges"]}
+    lines = {RAILROAD: rail, RIVER: river}
+    road_lines = {}
+    crossings = []
+    for road in data["roads"]:
+        road_lines[road["id"]] = LineSet(road["name"], road_walk(road, edges))
+        crossings += find_crossings(road["id"], road_lines[road["id"]], lines)
+    for road_id, label, vertex in crossings:
+        report_unshared(road_lines[road_id], lines[label], [vertex], report)
+
+    contacts = {*hits, *(vertex for _, _, vertex in crossings)}
+    report_reference_near_misses(list(road_lines.values()), [rail, river], contacts, report)
+
+    return {
+        RAILROAD: {
+            "name": RAILROAD_NAME,
+            "linearIds": kept_linear_ids(rail, rail_lines, report),
+            "mtfcc": RAIL_MTFCC,
+            "lines": line_rows(rail_lines),
+        },
+        RIVER: {
+            "name": RIVER_NAME,
+            "tigerName": RIVER_TIGER_NAME,
+            "linearIds": kept_linear_ids(river, river_lines, report),
+            "lines": line_rows(river_lines),
+        },
+        "trestles": trestles,
+        "crossings": [
+            dict(zip(("road", "with", "x", "z"), (road_id, label, *game_position(vertex))))
+            for road_id, label, vertex in crossings
+        ],
+    }
+
+
+def report_reference_near_misses(road_lines, lines, contacts, report):
+    """Report where a line passes a road or the other line closely with no contact there.
+
+    That's how a missing crossing would show up, and nothing is snapped to close one.
+    """
+    names = {line.name for line in lines}
+    misses = [
+        miss
+        for miss in find_near_misses([*road_lines, *lines], contacts, TRESTLE_CLUSTER_M)
+        if names & set(miss[1])
+    ]
+    for gap, pair, (x, z) in misses:
+        report.append(
+            f"Near-miss, no crossing recorded: {' and '.join(pair)} pass {gap:.2f} m apart at "
+            f"x {x:.0f}, z {z:.0f}"
+        )
+    if not misses:
+        report.append(
+            f"Geometric check: the railroad and river have no near-miss under {NEAR_MISS_M} m"
+        )
+
+
+def render_rows(rows, indent):
+    """Return a JSON array with one row per line, for a key at the given indent."""
+    pad = " " * indent
+    body = ",\n".join(f"{pad}  {json.dumps(row)}" for row in rows)
+    return f"[\n{body}\n{pad}]"
+
+
+def render_reference(reference):
+    """Return the reference block, with one trestle, crossing or line per line."""
+    parts = []
+    for key, value in reference.items():
+        if isinstance(value, list):
+            parts.append(f"    {json.dumps(key)}: {render_rows(value, 4)}")
+            continue
+        fields = ",\n".join(
+            f"      {json.dumps(name)}: "
+            f"{render_rows(item, 6) if name == 'lines' else json.dumps(item)}"
+            for name, item in value.items()
+        )
+        parts.append(f"    {json.dumps(key)}: {{\n{fields}\n    }}")
+    return "{\n" + ",\n".join(parts) + "\n  }"
+
+
 def render_json(data):
-    """Return JSON text with one node, road or edge per line."""
+    """Return JSON text with one node, road, edge, trestle, crossing or line per line."""
     parts = []
     for key, value in data.items():
         if key in TABLES:
-            rows = ",\n".join(f"    {json.dumps(row)}" for row in value)
-            parts.append(f"  {json.dumps(key)}: [\n{rows}\n  ]")
+            parts.append(f"  {json.dumps(key)}: {render_rows(value, 2)}")
+        elif key == "reference":
+            parts.append(f"  {json.dumps(key)}: {render_reference(value)}")
         else:
             text = json.dumps(value, indent=2).replace("\n", "\n  ")
             parts.append(f"  {json.dumps(key)}: {text}")
@@ -801,6 +1220,26 @@ def print_summary(data, report):
             f"  {node['id']} {node['kind']} x {node['x']:.0f}, z {node['z']:.0f}: "
             f"{' '.join(node['roads'])}{connection}"
         )
+    reference = data["reference"]
+    print("Reference lines, clipped to the reference area:")
+    for row in (reference[RAILROAD], reference[RIVER]):
+        print(f"  {row['name']}: features {' '.join(row['linearIds'])}")
+        for line in row["lines"]:
+            (start_x, start_z), (end_x, end_z) = line["points"][0], line["points"][-1]
+            print(
+                f"    {len(line['points'])} vertices, "
+                f"x {start_x:.0f}, z {start_z:.0f} to x {end_x:.0f}, z {end_z:.0f}"
+            )
+    print("Trestles:")
+    for row in reference["trestles"]:
+        label = f", {row['label']}" if "label" in row else ""
+        print(
+            f"  {row['id']} x {row['x']:.0f}, z {row['z']:.0f}: "
+            f"{row['distanceFromCenterM']:.1f} m {row['side']} of center{label}"
+        )
+    print("Crossings, in order along each road:")
+    for row in reference["crossings"]:
+        print(f"  {row['road']} x {row['x']:.0f}, z {row['z']:.0f}: {row['with']}")
     print("Report:")
     for line in report:
         print(f"  {line}")
@@ -808,14 +1247,18 @@ def print_summary(data, report):
 
 def main():
     sys.stdout.reconfigure(line_buffering=True)  # Keep order with stderr when piped.
-    missing = [p for p in ROAD_FILES if not (RAW_DIR / Path(p).name).exists()]
+    missing = [p for p in SOURCE_FILES if not (RAW_DIR / Path(p).name).exists()]
     if missing:
         print(f"Missing {', '.join(missing)}. Run tools/fetch_tiger.py first.", file=sys.stderr)
         return 1
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     try:
         records = read_road_records()
-        data, report = build_road_graph(records, config, describe_files(ROAD_FILES))
+        data, report = build_road_graph(records, config, describe_files(SOURCE_FILES))
+        area = reference_area(data)
+        data["reference"] = build_reference(
+            data, read_rail_records(area), read_river_records(), area, report
+        )
     except BuildError as error:
         print(f"FAILED: {error}", file=sys.stderr)
         return 1
