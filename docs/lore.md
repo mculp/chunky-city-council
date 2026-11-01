@@ -4,11 +4,17 @@ What the owner has said about Chunky, in their words. It's the story's source, a
 
 Real places are by structure id, never an address. Most of these are someone's home.
 
+## Who everyone is
+
+> npcs should not be rektguys. I may put an nft gate on this and allow people to play as their own rektguys or other PFP. npcs should be radiating zombies of varying degrees
+
+**In the game:** not yet.
+
 ## Charlie Flake
 
 > Charlie Flake: A local resident known for catching a record 56-pound catfish from the Chunky River in 1924
 
-**In the game:** nothing yet beyond one church's sign bragging about it. See CHUNKY-62.
+**In the game:** a marker on the left as you come off the Griffis Fountain bridge, across the road from the town sign, on the bank of the river he caught it in. It says his name and then the owner's sentence, word for word, and it has a catfish on top, 1.2 m long, which is about what 56 pounds comes to. One of the church signs brags about him too. Decided around it: where it stands, and that there's a marker at all. Nothing here says what sort of man he was, because nobody's said.
 
 ## Robby
 
