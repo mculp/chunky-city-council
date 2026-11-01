@@ -310,5 +310,37 @@ check(`the board at #sounds has a button for all ${names} of them`, buttons === 
 await snap(board.page, 'board');
 await board.close();
 
+// ---------------- the old board stays what it is, and anything made with ElevenLabs has its own
+const newSheet = JSON.parse(await readFile(new URL('../data/sound.json', import.meta.url), 'utf8'));
+newSheet.cues['step.road'].file = 'audio/made-step.wav';
+const both = { '/data/sound-new.json': JSON.stringify(newSheet), '/audio/made-step.wav': wav(.1, 400) };
+const oldOne = await serveAndOpen({ query: '?test#sounds', viewport: { width: 390, height: 844 }, overrides: both });
+const oldAsked = []; oldOne.page.on('request', (r) => { const p = new URL(r.url()).pathname; if (p.startsWith('/audio/')) oldAsked.push(p); });
+await oldOne.page.click('#board button:last-of-type');
+await oldOne.page.waitForFunction(() => __game.sound.state().ctx === 'running', null, { timeout: 5000 });
+await oldOne.page.waitForTimeout(400);
+const oldBoard = await oldOne.page.evaluate(() => ({ file: __game.sound.data.cues['step.road'].file, heading: document.querySelector('#board h2').textContent, marked: document.querySelectorAll('#board button.file').length, played: __game.sound.play('step.road'), track: __game.sound.state().track }));
+check('with a new sheet there, the board at #sounds is still the old one, playing the old sounds', oldBoard.file === undefined && oldBoard.heading === 'The score' && oldBoard.marked === 0 && oldBoard.played && oldAsked.length === 0, [oldBoard, oldAsked]);
+await oldOne.close();
+const newOne = await serveAndOpen({ query: '?test#sounds-new', viewport: { width: 390, height: 844 }, overrides: both });
+await newOne.page.click('#board button:last-of-type');
+await newOne.page.waitForFunction(() => __game.sound.state().ctx === 'running' && __game.sound.state().waiting === 0, null, { timeout: 5000 });
+const newBoard = await newOne.page.evaluate(() => ({ file: __game.sound.data.cues['step.road'].file, heading: document.querySelector('#board h2').textContent, marked: document.querySelectorAll('#board button.file').length, played: __game.sound.play('step.road'), files: __game.sound.state().files }));
+check('the board at #sounds-new has what\'s been made, marked', newBoard.file === 'audio/made-step.wav' && newBoard.heading === 'Made with ElevenLabs' && newBoard.marked === 1 && newBoard.played && newBoard.files.includes('step.road'), newBoard);
+await newOne.close();
+const playing = await serveAndOpen({ query: '?test', viewport: { width: 390, height: 844 }, overrides: both });
+const plainGame = await playing.page.evaluate(() => ({ file: __game.sound.data.cues['step.road'].file, board: !document.getElementById('board').hidden }));
+check('the game plays the old sounds, whatever else is there', plainGame.file === undefined && !plainGame.board, plainGame);
+await playing.close();
+const trying = await serveAndOpen({ query: '?test#new', viewport: { width: 390, height: 844 }, overrides: both });
+const newGame = await trying.page.evaluate(() => ({ file: __game.sound.data.cues['step.road'].file, board: !document.getElementById('board').hidden, title: !document.getElementById('title').hidden }));
+check('and #new plays the game with the new ones', newGame.file === 'audio/made-step.wav' && !newGame.board && newGame.title, newGame);
+await trying.close();
+const none = await serveAndOpen({ query: '?test#sounds-new', viewport: { width: 390, height: 844 } });
+const noSheet = await none.page.evaluate(() => ({ cues: __game.sound.cueNames().length, heading: document.querySelector('#board h2').textContent }));
+check('with nothing made yet, #sounds-new falls back on the old sheet', noSheet.cues === Object.keys(newSheet.cues).length, noSheet);
+check('and that\'s the only complaint', none.errors.filter((e) => !/sound-new|404/.test(e)).length === 0, none.errors.slice(0, 4));
+await none.close();
+
 console.log(failed ? `${failed} failed` : 'all ok');
 process.exit(failed ? 1 : 0);

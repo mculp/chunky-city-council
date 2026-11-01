@@ -1,4 +1,5 @@
-// Makes the game's music and sounds with ElevenLabs on fal, from what tools/sound_prompts.json asks for, and puts each file's one line into data/sound.json.
+// Makes music and sounds with ElevenLabs on fal, from what tools/sound_prompts.json asks for, and puts each file's one line into data/sound-new.json, a sheet of its own.
+// data/sound.json is what the game plays and what's on the board at #sounds. The owner likes those, and nothing here ever writes to it.
 // It spends money, so by itself it only says what it would make and what that comes to, and it won't start anything that could go over the budget.
 // Anything already made stays made, unless it's named with --again. data/sound.md has the rest.
 //
@@ -62,7 +63,7 @@ export function formatSound(d) {
   return `{\n  "version": ${d.version},\n  "levels": ${line(d.levels)},\n  "duck": ${line(d.duck)},\n  "defaults": ${line(d.defaults)},\n${part('cues', d.cues)},\n${part('music', d.music)},\n${part('voice', d.voice ?? {})}\n}\n`;
 }
 
-// Points data/sound.json at whatever's been made for one name. Only the file lines change, and the level lines that are the sheet's to say.
+// Points a sheet at whatever's been made for one name. Only the file lines change, and the level lines that are the prompt sheet's to say.
 export function applyTo(data, sheet, name, root = ROOT) {
   const made = (dir, n) => { const out = []; for (let i = 1; i <= n; i++) { const p = `audio/${dir}/${name}.${i}.mp3`; if (existsSync(join(root, p))) out.push(p); } return out; };
   const one = (list) => (list.length === 1 ? list[0] : list);
@@ -125,7 +126,7 @@ function writeAtomically(path, data) { mkdirSync(dirname(path), { recursive: tru
 
 // Makes them, a few at a time, keeping everything that worked whatever else fails. Each one is written down as it lands, so that stopping halfway loses nothing.
 export async function makeAll(items, sheet, { key, root = ROOT, base, doFetch = fetch, poll, log = console.log, now = () => new Date().toISOString() } = {}) {
-  const soundPath = join(root, 'data/sound.json'), bookPath = join(root, 'audio/manifest.json');
+  const oldPath = join(root, 'data/sound.json'), newPath = join(root, 'data/sound-new.json'), bookPath = join(root, 'audio/manifest.json');
   const book = existsSync(bookPath) ? JSON.parse(readFileSync(bookPath, 'utf8')) : { note: 'Made with tools/make-sound.mjs. The prompts are in tools/sound_prompts.json.', made: {} };
   const waiting = [...items], failed = [];
   const worker = async () => {
@@ -136,8 +137,9 @@ export async function makeAll(items, sheet, { key, root = ROOT, base, doFetch = 
         book.made[item.path] = { model: item.model, seconds: item.seconds, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), request, date: now() };
         book.made = Object.fromEntries(Object.entries(book.made).sort(([a], [b]) => a.localeCompare(b)));
         writeAtomically(bookPath, `${JSON.stringify(book, null, 2)}\n`);
-        const data = applyTo(JSON.parse(readFileSync(soundPath, 'utf8')), sheet, item.name, root);
-        writeAtomically(soundPath, formatSound(data));
+        // it starts as a copy of the old sheet, and from then on it's its own
+        const data = applyTo(JSON.parse(readFileSync(existsSync(newPath) ? newPath : oldPath, 'utf8')), sheet, item.name, root);
+        writeAtomically(newPath, formatSound(data));
         log(`made ${item.path} (${(bytes.length / 1024).toFixed(0)} KB)`);
       } catch (e) { failed.push(item); log(`FAILED ${item.path}: ${e.message}`); }
     }

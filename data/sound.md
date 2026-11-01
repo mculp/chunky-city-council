@@ -2,7 +2,7 @@
 
 `data/sound.json` says what every sound and part of the score is and how loud. `src/sound.js` plays it and `src/soundbank.js` works out any sound that has no file, from numbers. Nothing in `src/soundbank.js` is a recording, so all of it is ours.
 
-To hear everything, one button each, open the game at `#sounds`. A button with a light border is playing a file.
+To hear everything, one button each, open the game at `#sounds`. That's what the game plays, and the owner likes it, so it stays. Nothing made with ElevenLabs goes on it unless the owner says so.
 
 ## Swapping a sound
 
@@ -66,7 +66,17 @@ The music and everything else dip under it, the words come up, and it plays once
 
 ## Making them with ElevenLabs on fal
 
-`tools/sound_prompts.json` describes every track and every sound. `tools/make-sound.mjs` sends it to ElevenLabs' models on fal, saves the files in `audio/music/` and `audio/sfx/`, writes their lines into `data/sound.json`, and records what was made in `audio/manifest.json`. Add a sound there and run it again.
+`tools/sound_prompts.json` describes every track and every sound. `tools/make-sound.mjs` sends it to ElevenLabs' models on fal, saves the files in `audio/music/` and `audio/sfx/`, writes their lines into `data/sound-new.json`, and records what was made in `audio/manifest.json`. Add a sound there and run it again.
+
+`data/sound-new.json` is a sheet of its own. It starts as a copy of `data/sound.json`, and nothing ever writes back. So the game and the board at `#sounds` stay exactly as they were, and what's been made is somewhere to compare them with:
+
+| Address | What it is |
+|---|---|
+| `#sounds` | The board the game plays from, with the worked-out sounds |
+| `#sounds-new` | The same board from the new sheet. A button with a light border is playing a file, and one without is still the worked-out sound |
+| `#new` | The whole game playing the new sheet |
+
+To bring one into the game, copy its `file` into that sound's line in `data/sound.json`, which is the owner's call, one sound at a time.
 
 It needs a fal key. Run this in a real terminal, because it has to wait for you to type. It keeps the key in `~/.config/chunky/fal-key`, readable only by you, and out of the shell history, the repo and every other program's environment. `FAL_KEY` wins over that file if it's set:
 

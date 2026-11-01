@@ -30,7 +30,7 @@ Read `docs/art-direction.md` before changing anything visible. `reference/stucke
 
 - Game data is JSON under `data/`, such as `data/roads.json`, with its schema documented alongside it.
 - Dialogue and the relationship meters are in `data/cast.json`, documented in `data/cast.md`.
-- What every sound and part of the score is, and how loud, is in `data/sound.json`, documented in `data/sound.md`. A file in `audio/` and one line there take a sound's place, without touching the code.
+- What every sound and part of the score is, and how loud, is in `data/sound.json`, documented in `data/sound.md`. A file in `audio/` and one line there take a sound's place, without touching the code. Those worked-out sounds are the owner's choice and what the board at `#sounds` plays, so anything generated goes in `data/sound-new.json`, heard at `#sounds-new` and `#new`, and only comes across if the owner says so.
 - Scripts that generate it go in `tools/`. Commit the generated JSON. Raw downloads such as TIGER zips go in `data/raw/`, which is gitignored.
 - Python tools run from a `.venv/` at the repo root, also gitignored, with dependencies pinned in `tools/requirements.txt`. Don't install anything globally.
 

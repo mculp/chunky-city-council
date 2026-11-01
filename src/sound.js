@@ -361,14 +361,14 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
   return api;
 }
 
-// With no sheet the game still runs. It's just silent.
-export async function loadSound(url, opts) {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`${res.status}`);
-    return createSound(await res.json(), opts);
-  } catch (e) {
-    console.error(`Couldn't load ${url}, so there's no sound: ${e.message}`);
-    return createSound({ cues: {}, music: {} }, opts);
+// The first sheet of a list that loads. With none the game still runs. It's just silent.
+export async function loadSound(urls, opts) {
+  for (const url of [urls].flat()) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${res.status}`);
+      return createSound(await res.json(), opts);
+    } catch (e) { console.error(`Couldn't load ${url}: ${e.message}`); }
   }
+  return createSound({ cues: {}, music: {} }, opts);
 }

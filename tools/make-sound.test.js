@@ -117,13 +117,13 @@ test('whatever comes back has to be an mp3 to go in the repo', async () => {
 
 test('a run writes the files, the record and one line each, and a failure keeps the rest', async () => {
   const root = freshRoot();
-  const fal = await fakeFal({ refuse: (b) => (b.text === 'boom' ? 400 : null) }), lines = [];
+  const fal = await fakeFal({ refuse: (b) => (b.text === 'boom' ? 400 : null) }), lines = [], oldSheet = readFileSync(join(root, 'data/sound.json'), 'utf8');
   const items = toMake(planOf(sheet, root));
   const { failed } = await makeAll(items, sheet, { key: 'secret-key', root, base: fal.base, poll: 1, log: (s) => lines.push(s), now: () => 'then' });
   fal.close();
   assert.deepEqual(failed.map((i) => i.name), ['explosion']);
   assert.ok(existsSync(join(root, 'audio/music/town.2.mp3')));
-  const data = JSON.parse(readFileSync(join(root, 'data/sound.json'), 'utf8'));
+  const data = JSON.parse(readFileSync(join(root, 'data/sound-new.json'), 'utf8'));
   assert.deepEqual(data.music.town.file, ['audio/music/town.1.mp3', 'audio/music/town.2.mp3']);
   assert.deepEqual(data.music.town.next, ['chase']);
   assert.equal(data.music.title.file, 'audio/music/hang.1.mp3'); assert.equal(data.music.hang.file, 'audio/music/hang.1.mp3');
@@ -131,6 +131,7 @@ test('a run writes the files, the record and one line each, and a failure keeps 
   assert.deepEqual(data.cues['step.road'].file, ['audio/sfx/step.road.1.mp3', 'audio/sfx/step.road.2.mp3']);
   assert.equal(data.cues['amb.wind'].file, 'audio/sfx/amb.wind.1.mp3'); assert.equal(data.cues['amb.wind'].gain, .34);
   assert.equal(data.cues.explosion.file, undefined, 'one that failed still has its own');
+  assert.equal(readFileSync(join(root, 'data/sound.json'), 'utf8'), oldSheet, 'and the old sheet, which the game plays, is not touched');
   const book = JSON.parse(readFileSync(join(root, 'audio/manifest.json'), 'utf8')).made['audio/sfx/amb.wind.1.mp3'];
   assert.equal(book.model, SOUND_MODEL); assert.equal(book.bytes, MP3.length); assert.equal(book.date, 'then'); assert.match(book.sha256, /^[0-9a-f]{64}$/);
   assert.ok(!lines.join().includes('secret-key'), 'the key is never printed');

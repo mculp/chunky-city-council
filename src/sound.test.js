@@ -230,6 +230,17 @@ test('with no sheet the game still runs, in silence', async () => {
   } finally { globalThis.fetch = real; console.error = oldError; }
 });
 
+test('it takes the first sheet that loads', async () => {
+  const real = globalThis.fetch, oldError = console.error, asked = [];
+  globalThis.fetch = async (url) => { asked.push(url); return url === 'old.json' ? { ok: true, json: async () => data() } : { ok: false, status: 404 }; }; console.error = () => {};
+  try {
+    const w = fakeWorld(), s = await loadSound(['new.json', 'old.json'], { win: w.win });
+    assert.deepEqual(asked, ['new.json', 'old.json']); assert.ok(s.cueNames().length > 0);
+    asked.length = 0; await loadSound('old.json', { win: fakeWorld().win });
+    assert.deepEqual(asked, ['old.json'], 'and the old sheet alone never looks for the new one');
+  } finally { globalThis.fetch = real; console.error = oldError; }
+});
+
 test('no recording, no line: the game has none written for him', () => {
   assert.deepEqual(DATA.voice, {});
 });

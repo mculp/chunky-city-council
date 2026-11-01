@@ -589,7 +589,9 @@ const DY = 6.0, TY = 11.6, ZS = 2.8, XE = 20, XP = 15, DECK_TOP = 6.36, ROAD_TOP
 const channel = (z) => 3.5 * Math.sin(z * .035);
 const MAP = await loadMap('data/roads.json', { riverAtBridge: channel });
 const WATER = await loadWater('data/water.json', MAP);
-const SFX = await loadSound('data/sound.json', { onLine: (words) => { const el = $('sub'); el.textContent = words ?? ''; el.hidden = words === null; } });
+// The worked-out sounds in data/sound.json are what the game plays and what's on the board at #sounds. Anything made with ElevenLabs is on a sheet of its own, and it's only heard at #sounds-new, or playing at #new.
+const NEW_SOUND = location.hash === '#sounds-new' || location.hash === '#new';
+const SFX = await loadSound(NEW_SOUND ? ['data/sound-new.json', 'data/sound.json'] : 'data/sound.json', { onLine: (words) => { const el = $('sub'); el.textContent = words ?? ''; el.hidden = words === null; } });
 let swimY = 0;   // how high the water he's swimming in is
 // Stuckey Bridge Rd, which is laid along z 0 through the first scene
 const OPENING_ROAD = MAP.opening.road;
@@ -4438,6 +4440,7 @@ $('soundWord').addEventListener('click', () => { if (SFX.muted || performance.no
 // Every sound and every part of the score, one button each, at #sounds. Nothing else in the game runs while it's up.
 function openBoard() {
   boardOpen = true; const box = $('board'); box.hidden = false; $('title').hidden = true; $('mute').hidden = true;
+  if (NEW_SOUND) { const h = document.createElement('h2'); h.textContent = 'Made with ElevenLabs'; box.append(h); }
   const group = (title, items, act) => {
     const h = document.createElement('h2'); h.textContent = title; box.append(h);
     for (const name of items) { const b = document.createElement('button'); b.textContent = name; b.classList.toggle('file', !!(SFX.data.cues[name] ?? SFX.data.music[name])?.file); b.addEventListener('click', () => act(name, b)); box.append(b); }
@@ -4734,7 +4737,7 @@ for (const s of SNAKES) s.update(.016); deckSnake.update(.016);
 ghost.position.set(-17.5, 1.3, 7.5);
 requestAnimationFrame(loop);
 if (location.hash === '#free') startFree();
-if (location.hash === '#sounds') openBoard();
+if (location.hash === '#sounds' || location.hash === '#sounds-new') openBoard();
 
 // ================================================================ test hook: index.html?test
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
