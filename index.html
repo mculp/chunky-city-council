@@ -29,6 +29,9 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .stam i{display:block;height:100%;width:100%;background:var(--cyan);transform-origin:left center}
 .beans{font-family:var(--f-display);font-size:18px;color:var(--rust);text-shadow:0 2px 0 var(--ink);white-space:nowrap}
 .right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:0}
+.objpoint{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em;background:var(--panel);border:1px solid var(--line);padding:4px 10px}
+.objpoint[hidden]{display:none}
+.objpoint i{display:block;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid var(--rust)}
 .obj{font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);padding:6px 10px;max-width:min(58vw,360px);text-align:right;line-height:1.4}
 .rep{display:grid;grid-template-columns:auto auto;gap:3px 10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);padding:6px 9px}
 .rep span:nth-child(odd){color:var(--dusk)}
@@ -89,6 +92,7 @@ body.talking .ctl{visibility:hidden}
   </div>
   <div class="right">
     <div class="obj" id="obj" hidden></div>
+    <div class="objpoint" id="objPoint" hidden><i id="objArrow"></i><span id="objDist"></span></div>
     <div class="rep" id="rep" hidden></div>
   </div>
 </div>
@@ -1066,6 +1070,70 @@ const SPANS = [];
   }
 }
 const spanAt = (x, z) => { for (const s of SPANS) if (Math.hypot(x - s.x, z - s.z) < s.r) return s; return null; };
+// ================================================================ street signs, with the graph's names on them
+const SIGNS = [];
+{
+  // A blade as long as its name, in the green of the town sign. Bungee runs wide, so it's set a little narrower.
+  const FONT = '96px Bungee, Impact, sans-serif', BLADE_PX = 128, ROADSIDE = .62, CORNER = .5, blades = new Map();
+  const ruler = document.createElement('canvas').getContext('2d'); ruler.font = FONT;
+  const bladeFor = (name) => {
+    if (!blades.has(name)) {
+      const text = name.toUpperCase(), px = Math.ceil(ruler.measureText(text).width) + 64;
+      blades.set(name, { long: px / BLADE_PX * .82, map: textTex([text], px, BLADE_PX, '#1f5a3a', '#f1e6cf', FONT), faces: [] });
+    }
+    return blades.get(name);
+  };
+  // the blade's dark backing, and its face on the side that yaw looks out of
+  const mount = (b, x, y, z, yaw, h, sides = [0]) => {
+    addBox(poleMat, x, y, z, b.long * h + .08, h + .08, .05, 1, new THREE.Quaternion().setFromAxisAngle(UP, yaw));
+    for (const side of sides) b.faces.push({ x: x + Math.sin(yaw + side) * .05, y, z: z + Math.cos(yaw + side) * .05, yaw: yaw + side, h });
+  };
+  // Beside the road on the right of whoever's walking that way, facing them
+  const roadSign = (road, s, dir) => {
+    const b = bladeFor(road.name), w = b.long * ROADSIDE, p = MAP.along(road.id, s), off = road.width / 2 + .5 + w / 2;
+    const x = p.x + p.nx * dir * off, z = p.z + p.nz * dir * off, yaw = Math.atan2(-p.tx * dir, -p.tz * dir), y = Y0 + 2.9;
+    // the posts stand behind the blade, so they don't cross the letters
+    for (const k of w > 2 ? [-.3, .3] : [0]) addBox(poleMat, x + Math.cos(yaw) * w * k - Math.sin(yaw) * .09, (y + Y0) / 2, z - Math.sin(yaw) * w * k - Math.cos(yaw) * .09, .12, y - Y0, .12, 1);
+    mount(b, x, y, z, yaw, ROADSIDE);
+    SIGNS.push({ road: road.id, name: road.name, x, z, yaw, kind: 'road' });
+  };
+  // On one corner of a junction, the south-east if it's clear. Each blade runs along the road it names, as they do.
+  const junctionSign = (n) => {
+    const a = MAP.roadById.get(n.roads[0]), b = MAP.roadById.get(n.roads[1]);
+    const pa = MAP.along(a.id, MAP.sOn(a.id, n.x, n.z)), pb = MAP.along(b.id, MAP.sOn(b.id, n.x, n.z));
+    let best = null;
+    for (const sa of [-1, 1]) for (const sb of [-1, 1]) {
+      const x = n.x + pa.nx * sa * (a.width / 2 + 1.4) + pb.nx * sb * (b.width / 2 + 1.4), z = n.z + pa.nz * sa * (a.width / 2 + 1.4) + pb.nz * sb * (b.width / 2 + 1.4);
+      const score = Math.min(MAP.roadGrid.nearest(x, z), MAP.roadGrid.reach) + (x - n.x + z - n.z) * .01;
+      if (!best || score > best.score) best = { x, z, score };
+    }
+    const { x, z } = best;
+    // the post stops under the blades, which sit one on the other
+    addBox(poleMat, x, Y0 + 1.46, z, .12, 2.92, .12, 1);
+    [[a, pa, 3.2], [b, pb, 3.78]].forEach(([road, p, y]) => {
+      const yaw = Math.atan2(p.nx, p.nz);
+      mount(bladeFor(road.name), x, Y0 + y, z, yaw, CORNER, [0, Math.PI]);
+      SIGNS.push({ road: road.id, name: road.name, x, z, yaw, kind: 'junction' });
+    });
+  };
+  for (const n of MAP.nodes) if (n.kind === 'junction') junctionSign(n);
+  const nearJunction = (road, s) => MAP.nodes.some((n) => n.kind === 'junction' && n.roads.includes(road.id) && Math.abs(MAP.sOn(road.id, n.x, n.z) - s) < 30);
+  const onBridge = (road, s) => { const p = MAP.along(road.id, s); return Math.abs(p.x) < 30 && Math.abs(p.z) < 8 || spanAt(p.x, p.z); };
+  for (const road of MAP.roads) {
+    // from each end of the road, and repeated down the long ones
+    const first = road.id === 'us_80' ? MAP.sOn('us_80', 34, 0) : 45;
+    for (const [dir, from] of [[1, first], [-1, road.length - 45]]) {
+      for (let s = from; s > 5 && s < road.length - 5; s += dir * 1200) if (!nearJunction(road, s) && !onBridge(road, s)) roadSign(road, s, dir);
+    }
+  }
+  for (const { long, map, faces } of blades.values()) {
+    const mat = new THREE.MeshStandardMaterial({ map, roughness: .8, emissive: '#ffffff', emissiveMap: map, emissiveIntensity: .4 });
+    const im = new THREE.InstancedMesh(new THREE.PlaneGeometry(long, 1), mat, faces.length);
+    faces.forEach(({ x, y, z, yaw, h }, i) => { _m.compose(_v.set(x, y, z), _q.setFromAxisAngle(UP, yaw), _s.setScalar(h)); im.setMatrixAt(i, _m); });
+    scene.add(im);
+  }
+  flushBuckets(1e6);
+}
 // Where the graph stops but the real road carries on, it's closed, facing the way you'd come from.
 {
   const stripes = textTex([''], 128, 32, '#f1e6cf', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#d76a2c'; for (let x = -32; x < 128; x += 32) { g.beginPath(); g.moveTo(x, 32); g.lineTo(x + 16, 32); g.lineTo(x + 48, 0); g.lineTo(x + 32, 0); g.fill(); } } });
@@ -1720,7 +1788,30 @@ const timers = [];
 function after(sec, fn) { timers.push({ at: time + sec, fn }); }
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); toastT = 2.2; }
 function card(h, p, dur = 3.2) { $('cardH').innerHTML = h; $('cardP').textContent = p || ''; $('card').classList.add('show'); cardT = dur; }
-function objective(t) { const o = $('obj'); o.hidden = !t; o.textContent = t || ''; }
+const hudCache = {};
+// What the objective points at, if anything: { road: id } for the nearest part of a street, or { x, z }.
+let objTarget = null;
+function objective(t, target = null) { const o = $('obj'); o.hidden = !t; o.textContent = t || ''; objTarget = t ? target : null; pointAtObjective(); }
+// "{street}" in an objective is filled in from the graph, so it always reads what the signs read
+function streetObjective(t, id) { objective(t.replace('{street}', MAP.roadById.get(id).name), { road: id }); }
+const pointer = { deg: 0, dist: 0, on: false };
+function pointAtObjective() {
+  let x, z, near = 3;
+  if (objTarget && objTarget.road) { const road = MAP.roadById.get(objTarget.road), p = MAP.along(objTarget.road, MAP.sOn(objTarget.road, player.pos.x, player.pos.z)); x = p.x; z = p.z; near = road.width / 2 + 1; }
+  else if (objTarget) { x = objTarget.x; z = objTarget.z; }
+  const onFoot = S.mode === 'town' || S.mode === 'swim';
+  const dx = x - player.pos.x, dz = z - player.pos.z, dist = objTarget ? Math.hypot(dx, dz) : 0, on = !!objTarget && onFoot && dist > near;
+  if (hudCache.point !== on) { hudCache.point = on; $('objPoint').hidden = !on; }
+  pointer.on = on;
+  if (!on) return;
+  // up the screen is the way the camera faces
+  const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
+  pointer.deg = Math.atan2(rx * dx + rz * dz, fx * dx + fz * dz) * 180 / Math.PI; pointer.dist = dist;
+  const turn = Math.round(pointer.deg / 4) * 4;
+  if (hudCache.turn !== turn) { hudCache.turn = turn; $('objArrow').style.transform = `rotate(${turn}deg)`; }
+  const shown = dist < 100 ? Math.round(dist / 5) * 5 : Math.round(dist / 10) * 10;
+  if (hudCache.dist !== shown) { hudCache.dist = shown; $('objDist').textContent = `${shown} m`; }
+}
 let lastPrompt = '';
 function prompt(html, prog = null) {
   const key = html ? html + '|' + (prog === null ? '' : Math.round(prog * 100)) : '';
@@ -1730,7 +1821,6 @@ function prompt(html, prog = null) {
 }
 const touchUI = matchMedia('(pointer:coarse)').matches;
 const KA = touchUI ? 'A' : 'E', KB = touchUI ? 'B' : 'SPACE';
-const hudCache = {};
 function setHTML(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; $(id).innerHTML = v; } }
 function setHidden(id, v) { if (hudCache['h' + id] !== v) { hudCache['h' + id] = v; $(id).hidden = v; } }
 function hudVitals() {
@@ -1932,7 +2022,7 @@ function tick(dt, draw = true) {
   for (let i = timers.length - 1; i >= 0; i--) if (time >= timers[i].at) timers.splice(i, 1)[0].fn();
   readInput();
   const step = Math.floor(time * 12);
-  if (step !== lastStepIdx) { lastStepIdx = step; G.uStep.value = step % 4; gifMat.uniforms.uFrame.value = step % 997; const k = step % 3; heroHoodM.map = heroHoodM.emissiveMap = hatch[k]; heroSleeveM.map = heroSleeveM.emissiveMap = hatch[(k + 1) % 3]; heroPantsM.map = heroPantsM.emissiveMap = pantsHatch[k]; poseHero(step / 12); stepBurst(); }
+  if (step !== lastStepIdx) { lastStepIdx = step; G.uStep.value = step % 4; gifMat.uniforms.uFrame.value = step % 997; const k = step % 3; heroHoodM.map = heroHoodM.emissiveMap = hatch[k]; heroSleeveM.map = heroSleeveM.emissiveMap = hatch[(k + 1) % 3]; heroPantsM.map = heroPantsM.emissiveMap = pantsHatch[k]; poseHero(step / 12); stepBurst(); pointAtObjective(); }
   if (player.inv > 0) player.inv -= dt;
   gifMat.uniforms.uHurt.value = Math.max(0, player.inv - .9) * .8;
 
@@ -2129,7 +2219,8 @@ requestAnimationFrame(loop);
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, floorAt, groundH, onRoad, blocked, places: PLACES, chunks: () => chunks.size,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, pointer, chunks: () => chunks.size,
+    objective(t, id) { streetObjective(t, id); },
     npcs: Object.fromEntries(Object.entries(NPCS).map(([k, n]) => [k, { x: n.root.position.x, z: n.root.position.z }])), pickups: PICKUPS,
     pause() { paused = true; },
     resume() { if (paused) { paused = false; clock.getDelta(); requestAnimationFrame(loop); } },

@@ -73,6 +73,32 @@ const entry = await page.evaluate(() => {
   console.log(`${ok ? 'ok  ' : 'FAIL'} bridge to Adams Street on US 80: ${entry.metres.toFixed(0)} m in ${entry.t.toFixed(0)} s, ${entry.off} samples off the road`);
   if (!ok) failed++;
 }
+// every road has signs with its real name, close beside it
+const signs = await page.evaluate(() => __game.map.roads.map((r) => {
+  const m = __game.map, own = __game.signs.filter((s) => s.road === r.id), far = own.filter((s) => { m.roadGrid.nearest(s.x, s.z); return m.roadGrid.d > 8; });
+  return { name: r.name, count: own.length, junctions: own.filter((s) => s.kind === 'junction').length, names: [...new Set(own.map((s) => s.name))], far: far.length };
+}));
+for (const s of signs) {
+  const ok = s.count >= 2 && s.junctions >= 1 && s.names.length === 1 && s.names[0] === s.name && !s.far;
+  console.log(`${ok ? 'ok  ' : 'FAIL'} ${s.name} has ${s.count} signs, ${s.junctions} at junctions, reading ${JSON.stringify(s.names)}`);
+  if (!ok) failed++;
+}
+// an objective naming a street reads the graph's name and points at the street until you're on it
+const obj = await page.evaluate(() => {
+  const g = __game, m = g.map, c = m.roadById.get('church_st'); g.place(300, 0); g.look(0, .2); g.objective('Meet David on {street}', 'church_st'); const a = g.step(.2);
+  const start = { text: a.obj, on: g.pointer.on, dist: g.pointer.dist, deg: g.pointer.deg, arrow: document.getElementById('objArrow').style.transform };
+  // walk the way the arrow says, however the camera's turned
+  let t = 0; g.key('w', true);
+  while (g.pointer.on && t < 240) { const yaw = g.cam.yaw + (-g.pointer.deg * Math.PI / 180); g.look(yaw); g.sim(.25, 1 / 30); t += .25; g.step(1 / 12, 1 / 60); }
+  g.key('w', false);
+  const P = g.player.pos, end = { on: g.pointer.on, onChurch: (m.roadGrid.nearest(P.x, P.z), m.roadGrid.seg && m.roadGrid.seg.owner.id), t };
+  g.place(300, 0); return { start, end };
+});
+{
+  const ok = obj.start.text === 'Meet David on Church St' && obj.start.on && obj.start.dist > 50 && /rotate/.test(obj.start.arrow) && !obj.end.on && obj.end.onChurch === 'church_st';
+  console.log(`${ok ? 'ok  ' : 'FAIL'} "${obj.start.text}" points ${obj.start.dist.toFixed(0)} m to the street and following it arrives in ${obj.end.t.toFixed(0)} s`);
+  if (!ok) { console.log(JSON.stringify(obj)); failed++; }
+}
 if (errors.length) { console.log('console errors', errors.slice(0, 5)); failed++; }
 await close();
 console.log(failed ? `${failed} failed` : 'all passed');
