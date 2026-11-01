@@ -1,0 +1,50 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { actWord, buttonsFor, fastWord, keysFor } from './controls.js';
+
+const REAL_KEYS = new Set(['WASD', 'SHIFT', 'SPACE', 'E', 'M', 'DRAG']);
+const MODES = ['title', 'hang', 'fall', 'swim', 'land', 'bridge', 'town', 'grabbed', 'sweep', 'dialog', 'fail', 'end'];
+
+test('a keyboard is only ever told about keys it has', () => {
+  for (const mode of MODES) for (const [key] of keysFor(mode, { act: 'Talk to Coop', map: true })) assert.ok(REAL_KEYS.has(key), `${mode}: ${key}`);
+});
+
+test('a prompt never asks a keyboard for a button', () => {
+  assert.equal(actWord('CUT', false), 'E');
+  assert.equal(fastWord(false), 'SPACE');
+});
+
+test('on foot, the keys say move, run and jump', () => {
+  for (const mode of ['land', 'bridge', 'town']) assert.deepEqual(keysFor(mode).slice(0, 3), [['WASD', 'Move'], ['SHIFT', 'Run'], ['SPACE', 'Jump']]);
+});
+
+test('E only shows when there\'s something to use it on', () => {
+  assert.ok(!keysFor('town').some(([k]) => k === 'E'));
+  assert.ok(keysFor('town', { act: 'Talk to Coop' }).some(([k, what]) => k === 'E' && what === 'Talk to Coop'));
+});
+
+test('the map key is only there once there\'s a map', () => {
+  assert.ok(!keysFor('land').some(([k]) => k === 'M'));
+  assert.ok(keysFor('town', { map: true }).some(([k]) => k === 'M'));
+});
+
+test('the opening has no strip, just the prompt', () => {
+  for (const mode of ['title', 'hang', 'fall']) assert.deepEqual(keysFor(mode), []);
+});
+
+test('in the water the phone\'s one button swims faster, and nothing else is on screen', () => {
+  assert.deepEqual(buttonsFor('swim'), { a: null, b: 'SWIM FAST', run: false });
+});
+
+test('a phone\'s act button says what it does, and it\'s gone when it does nothing', () => {
+  assert.equal(buttonsFor('hang').a, 'CUT');
+  assert.equal(buttonsFor('grabbed').a, 'FREE');
+  assert.equal(buttonsFor('sweep').a, 'SWEEP');
+  assert.equal(buttonsFor('town').a, null);
+  assert.equal(buttonsFor('town', { act: 'Talk to Coop' }).a, 'TALK');
+});
+
+test('prompts on a phone use the word on the button', () => {
+  for (const mode of MODES) { const label = buttonsFor(mode).a; if (label) assert.equal(actWord(label, true), label); }
+  assert.equal(fastWord(true), buttonsFor('swim').b);
+});

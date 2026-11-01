@@ -112,7 +112,7 @@ The game has the reference's clean character, holds, timed bursts, full bottle, 
 
 ## Controls
 
-Touch comes first, because the game is played on a phone. Left thumb moves, A acts, B boosts or jumps, holding RUN runs, and dragging looks around. WASD or arrows, E, Space and Shift cover desktop.
+Touch comes first, because the game is played on a phone. The left thumb moves and dragging looks around. The buttons say what they do right now, like CUT, TALK, JUMP, RUN and SWIM FAST, and a button with nothing to do isn't there. On a keyboard, WASD or arrows move, Shift runs, Space jumps or swims faster, E uses and M is the map, and a strip at the bottom shows the keys that work right now. `src/controls.js` has the lists.
 
 ## What stays out of this repo
 
