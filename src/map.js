@@ -1,8 +1,8 @@
 // The road graph as the game walks on it. There's no three.js in here, so tools and node tests load it too.
 //
 // data/roads.json holds game x and z, with town center at 0. The world is the same map with two changes:
-// its origin is Stuckey's Bridge, so the opening scene never moves, and US 80 is laid straight from the
-// bridge to the edge of town. data/roads.md has the formulas.
+// its origin is Stuckey's Bridge, so the opening scene never moves, and the road through it is laid straight
+// for as far as the opening can see. data/roads.md has the formulas.
 
 export const R = 6371000;
 
