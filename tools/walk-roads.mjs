@@ -17,7 +17,7 @@ const widths = await page.evaluate(() => __game.map.roads.map((r) => {
     // a junction or a bend widens what counts as on the road, so only look where nothing else is near
     for (const side of [-1, 1]) {
       const w = r.width / 2, ix = p.x + p.nx * side * (w - .1), iz = p.z + p.nz * side * (w - .1), ox = p.x + p.nx * side * (w + .4), oz = p.z + p.nz * side * (w + .4);
-      m.roadGrid.nearest(ox, oz); const clear = m.roadGrid.d > w + .2 && m.roadGrid.seg.owner === r;
+      m.roadGrid.nearest(ox, oz); const clear = m.roadGrid.d > w + .2 && m.roadGrid.seg.owner === r && !m.roadGrid.within(ox, oz, (o) => o === r ? 0 : o.width / 2 + .2);
       n++; if (!__game.onRoad(ix, iz) || (clear && __game.onRoad(ox, oz))) bad++;
     }
   }
@@ -59,7 +59,7 @@ for (const road of roads) {
 }
 // from the end of the bridge into town: the road the whole way, no stops, to Adams Street
 const entry = await page.evaluate(() => {
-  const m = __game.map, g = __game, adams = m.nodes.find((n) => n.id === 'n2'); g.place(24, 0);
+  const m = __game.map, g = __game, adams = m.nodes.find((n) => n.roads.includes('us_80') && n.roads.includes('adams_st')); g.place(24, 0);
   const start = m.sOn('us_80', 24, 0), goal = m.sOn('us_80', adams.x, adams.z); let s = start, t = 0, off = 0; g.key('w', true);
   while (s < goal - 2 && t < 300) {
     const q = m.along('us_80', s + 6), P = g.player.pos; g.look(Math.atan2(-(q.x - P.x), -(q.z - P.z))); g.sim(.1, 1 / 30); t += .1;

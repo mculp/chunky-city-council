@@ -15,7 +15,6 @@ so that field isn't even read.
 import json
 import sys
 from collections import defaultdict
-from itertools import combinations
 
 from build_roads import (
     OUTPUT_PATH,
@@ -38,11 +37,15 @@ def main():
     roads = {road["id"]: [r for i in road["linearIds"] for r in by_id[i]] for road in data["roads"]}
 
     # TIGER is one planar topology, so roads that meet share a vertex, compared exactly
-    vertices = {id_: {point for r in records for point in r.points} for id_, records in roads.items()}
+    on_vertex = defaultdict(set)
+    for id_, records in roads.items():
+        for r in records:
+            for point in r.points:
+                on_vertex[point].add(id_)
     intersections = [
-        {"roads": [a, b], "lon": lon, "lat": lat}
-        for a, b in combinations(roads, 2)
-        for lon, lat in sorted(vertices[a] & vertices[b])
+        {"roads": sorted(ids), "lon": lon, "lat": lat}
+        for (lon, lat), ids in sorted(on_vertex.items())
+        if len(ids) > 1
     ]
 
     rail_ids = set(data["reference"]["railroad"]["linearIds"])

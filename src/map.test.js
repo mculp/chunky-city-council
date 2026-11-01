@@ -22,10 +22,11 @@ describe('the world frame', () => {
   });
 
   test('east of the edge of town it keeps true distances', () => {
-    const adams = map.nodes.find((n) => n.id === 'n2'), church = map.nodes.find((n) => n.id === 'n5');
-    const a = data.nodes.find((n) => n.id === 'n2'), c = data.nodes.find((n) => n.id === 'n5');
+    const meet = (list, a, b) => list.find((n) => n.roads.includes(a) && n.roads.includes(b));
+    const adams = meet(map.nodes, 'us_80', 'adams_st'), church = meet(map.nodes, 'adams_st', 'church_st');
+    const a = meet(data.nodes, 'us_80', 'adams_st'), c = meet(data.nodes, 'adams_st', 'church_st');
     near(Math.hypot(adams.x - church.x, adams.z - church.z), Math.hypot(a.x - c.x, a.z - c.z), .002);
-    near(adams.x - a.x, map.nodes.find((n) => n.id === 'n3').x - data.nodes.find((n) => n.id === 'n3').x, .002, 'one shift');
+    near(adams.x - a.x, meet(map.nodes, 'us_80', 'meehan_savoy_rd').x - meet(data.nodes, 'us_80', 'meehan_savoy_rd').x, .002, 'one shift');
   });
 
   test('world x keeps the map\'s order, so nothing crosses that didn\'t', () => {
@@ -76,6 +77,15 @@ describe('lookups', () => {
     near(g.nearest(50, 5), 5, 1e-9); near(g.t, .5, 1e-9);
     near(g.nearest(-3, 4), 5, 1e-9); assert.equal(g.t, 0);
     assert.equal(g.nearest(50, 200), Infinity);
+  });
+  test('within goes by each road\'s own width, not just the nearest road\'s', () => {
+    const wide = { half: 6 }, narrow = { half: 2 }, half = (o) => o.half, g = new SegGrid(10, 12);
+    g.add(-50, 0, 50, 0, wide); g.add(3, 4, 3, 50, narrow);
+    // nearer the narrow road's end, and too far out for its width, but it's on the wide one
+    assert.ok(g.nearest(3, 5) < 5 && g.seg.owner === narrow); near(g.nearest(5.5, 5), 2.5, 1e-9); assert.equal(g.seg.owner, narrow);
+    assert.equal(g.within(5.5, 5, half).owner, wide);
+    assert.equal(g.within(3, 20, half).owner, narrow);
+    assert.equal(g.within(20, 20, half), null);
   });
   test('a long diagonal is only listed near itself', () => {
     const g = new SegGrid(10, 5); g.add(0, 0, 1000, 1000);

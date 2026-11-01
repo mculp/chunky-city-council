@@ -1,6 +1,6 @@
 # Road graph data
 
-`data/roads.json` is the road graph for real Chunky, MS: US 80, Adams Street, Church St and Meehan-Savoy Rd, with the railroad, the Chunky River and three trestles beside it as reference lines. `tools/build_roads.py` generates it, so change the config or the tool and rebuild instead of editing the file. `npm test` fails if this page and the JSON disagree.
+`data/roads.json` is the road graph for real Chunky, MS: US 80, Adams Street, Church St, Meehan-Savoy Rd and the town's streets, 21 roads in all, with the railroad, the Chunky River and three trestles beside it as reference lines. `tools/build_roads.py` generates it, so change the config or the tool and rebuild instead of editing the file. `npm test` fails if this page and the JSON disagree.
 
 Positions here are metres from town center, with +x east and -z north. They're true metres, before compression, unless they say game. "The ticket" is CHUNKY-35. `data/tiger-inspection.md` has the working notes and the full inspector output behind this page.
 
@@ -17,7 +17,7 @@ Paths are relative to the base URL. The build hashes each zip as it reads it, so
 
 | File | Used for | sha256 |
 | --- | --- | --- |
-| `ROADS/tl_2025_28101_roads.zip` | Newton County roads: Adams Street, Church St and US 80 west of the county line | `67dfd767eaccf5350881c14be67268d8ed53f32a2482d8edc41f59764b02b5b8` |
+| `ROADS/tl_2025_28101_roads.zip` | Newton County roads: Adams Street, Church St, the town's streets and US 80 west of the county line | `67dfd767eaccf5350881c14be67268d8ed53f32a2482d8edc41f59764b02b5b8` |
 | `ROADS/tl_2025_28075_roads.zip` | Lauderdale County roads: Meehan-Savoy Rd and US 80 east of the county line | `ab1b3504895245712ca001abe37acd88288b6bf748cf266964eb520b64c2bfbe` |
 | `RAILS/tl_2025_us_rails.zip` | The railroad, from the national file | `e969ffd49f119655ac478035b7f206fb861b70c4dddb926f8cac911182e7a113` |
 | `LINEARWATER/tl_2025_28101_linearwater.zip` | Newton County water: `Chunky Riv` | `0ef5f330b733561bacf62fc88ee7d56a447e04fad84f37004da71ee9d969cc7a` |
@@ -109,7 +109,7 @@ The places where the graph's roads meet or stop.
 | `roads[].nodes` | string[] | Node ids in walk order. |
 | `roads[].edges` | string[] | Edge ids in walk order: `edges[i]` runs from `nodes[i]` to `nodes[i + 1]`. |
 
-US 80 walks west to east. Each other road walks away from where it joins the graph, so Adams Street runs from US 80 towards I-20, Church St west from Adams Street, and Meehan-Savoy Rd from US 80. To walk a road as one line, join its edges in order and drop the first vertex of each later edge, which repeats the node the previous edge ended on.
+US 80 walks west to east. Each other road walks away from where it joins the graph, so Adams Street runs from US 80 towards I-20, Church St west from Adams Street, Meehan-Savoy Rd and Commerce St from US 80, and so on. To walk a road as one line, join its edges in order and drop the first vertex of each later edge, which repeats the node the previous edge ended on.
 
 ### `edges[]`
 
@@ -164,10 +164,27 @@ Beside the graph, not part of it. Crossings don't split road edges or add nodes.
 | Adams Street | `adams_st` | `Adams St`, `Chunkey Duffee Rd`, `Chunky Duffee Rd`, `State Hwy 889` | `1104259409674`, `1104259460560`, `1106087296718`, `1106087438880` |
 | Church St | `church_st` | `Church St` | `110168391385` |
 | Meehan-Savoy Rd | `meehan_savoy_rd` | `Meehan Savoy Rd S`, `Meehan Savoy Rd W` | `1104259508037`, `110470585272` |
+| Commerce St | `commerce_st` | `Commerce St` | `110168392101` |
+| Gallatin St | `gallatin_st` | `Gallatin St` | `110168392120` |
+| Clay St | `clay_st` | `Clay St` | `110168391028` |
+| Poplar St | `poplar_st` | `Poplar St` | `110168391592` |
+| Railroad St | `railroad_st` | `Railroad St` | `110168392216` |
+| Mullberry St | `mullberry_st` | `Mullberry St` | `110168392187` |
+| Front St | `front_st` | `Front St` | `110168391156` |
+| Oak St | `oak_st` | `Oak St` | `110168390997` |
+| Chestnut St | `chestnut_st` | `Chestnut St` | `110168392096` |
+| Reynolds | `reynolds` | `Reynolds` | `110168392225` |
+| Jones St | `jones_st` | `Jones St` | `110168391192` |
+| School St | `school_st` | `School St` | `110168391623` |
+| Wood St | `wood_st` | `Wood St` | `110168391105` |
+| Alexander Rd | `alexander_rd` | `Alexander Rd` | `110168392259` |
+| Grifis-Fountain Rd | `grifis_fountain_rd` | `Grifis-Fountain Rd` | `110168392932` |
+| Pine Forest Rd | `pine_forest_rd` | `Pine Forest Rd` | `110168392645` |
+| Clarence Culpepper Rd | `clarence_culpepper_rd` | `Clarence Culpepper Rd` | `110168393026` |
 
 The railroad is called `Railroad` and is identified by LINEARID only. The river is TIGER's `Chunky Riv`.
 
-TIGER reuses road names, so every road goes through the same rule, `nearest_component`. It groups the features carrying the road's TIGER names into components by shared vertices and takes the one nearest town center. The build fails unless that component is within `maxDistanceM` (1000 m, or 6000 m for Meehan-Savoy Rd) and contains every name.
+TIGER reuses road names, so every road goes through the same rule, `nearest_component`. It groups the features carrying the road's TIGER names into components by shared vertices and takes the one nearest town center. The build fails unless that component is within `maxDistanceM` (1000 m for the first three, 6000 m for Meehan-Savoy Rd and 1600 m for the streets) and contains every name.
 
 | TIGER name | Components | Nearest point of the one kept | Nearest point of the others |
 | --- | --- | --- | --- |
@@ -175,6 +192,23 @@ TIGER reuses road names, so every road goes through the same rule, `nearest_comp
 | `Adams St` | 2 | 284 m | 21,904 m |
 | `Church St` | 2 | 344 m | 7,955 m |
 | `Meehan Savoy Rd S` and `Meehan Savoy Rd W` | 1 | 5,596 m | None |
+| `Commerce St` | 1 | 43 m | None |
+| `Gallatin St` | 1 | 306 m | None |
+| `Clay St` | 1 | 351 m | None |
+| `Poplar St` | 1 | 42 m | None |
+| `Railroad St` | 3 | 44 m | 19,559 m and 20,496 m |
+| `Mullberry St` | 1 | 85 m | None |
+| `Front St` | 5 | 86 m | 8,991 m, 21,589 m, 32,444 m and 42,521 m |
+| `Oak St` | 3 | 193 m | 19,171 m and 23,001 m |
+| `Chestnut St` | 2 | 283 m | 32,703 m |
+| `Reynolds` | 1 | 342 m | None |
+| `Jones St` | 2 | 515 m | 32,969 m |
+| `School St` | 4 | 583 m | 22,308 m, 22,334 m and 32,145 m |
+| `Wood St` | 4 | 746 m | 935 m, 21,262 m and 32,436 m |
+| `Alexander Rd` | 2 | 983 m | 25,667 m |
+| `Grifis-Fountain Rd` | 1 | 432 m | None |
+| `Pine Forest Rd` | 2 | 825 m | 3,676 m |
+| `Clarence Culpepper Rd` | 1 | 1,082 m | None |
 
 **Which Church St.** The one the ticket asks for, about 0.3 km from town center, not the one about 8 km away. The graph uses `110168391385`, 855 m long and 344 m from town center at its nearest. Its east end meets Adams Street at x -281, z -199, and it runs west to x -1097, z -410. The other is `110168391384`, 590 m long, 7,955 m away at x -8451 to -7922. TIGER's road files have no address ranges, so the choice rests on distance and can't be confirmed by the street address in the ticket.
 
@@ -275,6 +309,23 @@ A road with a class missing from this table fails the build. S1750 (748 features
 | Adams Street | S1200 | 7.3 | asphalt | class |
 | Church St | S1400 | 6.0 | asphalt | class |
 | Meehan-Savoy Rd | S1400 | 6.0 | asphalt | class |
+| Commerce St | S1400 | 6.0 | asphalt | class |
+| Gallatin St | S1400 | 6.0 | asphalt | class |
+| Clay St | S1400 | 6.0 | asphalt | class |
+| Poplar St | S1400 | 6.0 | asphalt | class |
+| Railroad St | S1400 | 6.0 | asphalt | class |
+| Mullberry St | S1400 | 6.0 | asphalt | class |
+| Front St | S1400 | 6.0 | asphalt | class |
+| Oak St | S1400 | 6.0 | asphalt | class |
+| Chestnut St | S1400 | 6.0 | asphalt | class |
+| Reynolds | S1400 | 6.0 | asphalt | class |
+| Jones St | S1400 | 6.0 | asphalt | class |
+| School St | S1400 | 6.0 | asphalt | class |
+| Wood St | S1400 | 6.0 | asphalt | class |
+| Alexander Rd | S1400 | 6.0 | asphalt | class |
+| Grifis-Fountain Rd | S1400 | 6.0 | asphalt | class |
+| Pine Forest Rd | S1400 | 6.0 | asphalt | class |
+| Clarence Culpepper Rd | S1400 | 6.0 | asphalt | class |
 
 ### Overrides
 
@@ -318,7 +369,7 @@ There are four bands. Everything else is 1:1: x outside the bands, with a consta
 - **Lengths** measured from `points` come up short across a band: US 80 is 11,333 m in true metres and 5,326 m in game metres. Use `lonlat` for true lengths.
 - **Bearings inside a band** change, because x is squeezed and z isn't, so every line there swings towards north-south. From true x 1223 to its southernmost point, the railroad runs about 30° south of east in truth and about 66° in game space. A smooth curve there looks like a sharp V, and anything built from `points` gets the same V. In the 0.02 band a line 2° off east comes out about 60° off east, which is why the game lays US 80 straight there. See [In the game](#in-the-game).
 - **Church St** bends sharply at x -650, where it runs from about 20° to about 73° north of west, because its last 432 m become 43 m.
-- **Straight segments bend** where they cross a band edge. There are 44 vertices at those edges, listed in `synthetic`: `us_80_e1` 6, `us_80_e2` 2, `church_st_e1` 2, railroad line 1 8, river line 2 20, river line 3 6. Their lon/lat is interpolated, with 9 decimals, so they stay on the edge.
+- **Straight segments bend** where they cross a band edge. There are 44 vertices at those edges, listed in `synthetic`: `us_80_e1` 6, `us_80_e7` 2, `church_st_e1` 2, railroad line 1 8, river line 2 20, river line 3 6. Their lon/lat is interpolated, with 9 decimals, so they stay on the edge.
 - **Everything past a band** is shifted: east of the east band by -2880 m, and west of the west bands by up to 3590.24 m. Its scale is true, but its game x isn't its distance from town center. `distanceFromCenterM` is in true metres.
 
 **What it keeps.** Every crossing, the order along each line and the left or right direction of every TIGER turn, because the remap is strictly increasing and z doesn't change. On this data, 29 of the 3,323 turns would flip if segments weren't split at the band edges, and none flip with the split. lon/lat never changes.
@@ -341,7 +392,11 @@ Clips keep whole TIGER vertices. A line stops at its last vertex inside the boun
 
 **US 80.** True x -4670 to 6310 (`xMinM` and `xMaxM` in the config), which is 500 m past the west trestle (x -4160.2) and the Meehan-Savoy Rd junction (x 5807.8), rounded out to 10 m. US 80 crosses each bound once and ends at x -4663, z 183 (game x -1072) and at x 6258, z -574 (game x 3378). Inside the bounds it's two features joined at the county line.
 
-**Adams Street.** Clipped at the I-20 ramp, as in [Adams St and I-20](#adams-st-and-i-20). Church St and Meehan-Savoy Rd aren't clipped.
+**Adams Street.** Clipped at the I-20 ramp, as in [Adams St and I-20](#adams-st-and-i-20).
+
+**Grifis-Fountain Rd and Pine Forest Rd.** Each is clipped where it would run into a compressed stretch, because a node can't sit in a band. Grifis-Fountain Rd stops at x -636, z 585, the last whole vertex east of true x -650, and Pine Forest Rd at x 1217, z 2193, the last whole vertex west of true x 1223. Both carry on in TIGER.
+
+No other road is clipped.
 
 **Railroad and river.** Both are clipped to the reference area, the bounding box of every included road plus 500 m: true x -5163 to 15419 (game x -1573 to 12539), z -2166 to 7594. Meehan-Savoy Rd sets the east and south sides, so the box is much bigger than the town. A line that leaves the box and comes back becomes two lines, in running order.
 
@@ -362,9 +417,11 @@ River lines are walked from the westernmost end. TIGER records no flow direction
 
 ## Known gaps
 
-**Disconnected roads.** None. All four roads connect by shared vertices, so the graph is one component. Church St doesn't touch US 80 (176 m away at its closest) and reaches it through Adams Street. I-20 isn't in the graph, so nothing connects to it: Adams Street's last node only marks it.
+**Disconnected roads.** None. All 21 roads connect by shared vertices, so the graph is one component. Church St doesn't touch US 80 (176 m away at its closest) and reaches it through Adams Street. I-20 isn't in the graph, so nothing connects to it: Adams Street's last node only marks it.
 
 **Branches.** None. No kept road branches or has a second component, so each walks as one line. Left out on purpose: the other components with the same names, US 80's divided stretch near x -20000, and every ramp of the I-20 interchange.
+
+**Roads still left out.** Further out or a long way into a compressed stretch, and not in the graph: `Truelight Rd`, `True Light Rd`, `Johnson Rd`, `Griffis Fountain Rd`, `Ridge Rd`, `Beason Rd`, `Mount Pleasant Church Rd`. TIGER's unnamed roads aren't in either: 30 S1400 features within 2.6 km of town, which have no name to go on a sign, and its S1740 private drives.
 
 **Near-misses.** No two roads come within 5 m of each other without touching, and no two cross away from a shared vertex, so no crossing vertex was added and nothing was snapped. The build counts a gap within 5 m of a vertex two roads share as that junction, but no pair of road segments comes under 5 m even without that exclusion.
 
@@ -374,7 +431,7 @@ Across the roads, railroad and river, the build counts a gap within 30 m of a co
 
 **Rail feature left out.** `1106087712080` overlaps the reference area only by bounding box and has no segment inside, so it isn't in `linearIds`.
 
-**Reference lines aren't in the graph.** US 80 meets the river at true x -4505, 669 and 1777 and the railroad at 6121, and Meehan-Savoy Rd meets the railroad at 5939. Adams Street and Church St cross neither. These are listed in `reference.crossings` and aren't nodes.
+**Reference lines aren't in the graph.** US 80 meets the river at true x -4505, 669 and 1777 and the railroad at 6121. Meehan-Savoy Rd meets the railroad at 5939, Poplar St at 47, Chestnut St at -282 and Pine Forest Rd at 818, and Grifis-Fountain Rd meets the river at -337. No other road crosses either. These are listed in `reference.crossings` and aren't nodes.
 
 **Raw TIGER check.** Every build checks each road edge against the raw road features. Rail and river aren't in that check: they had a one-off run of the same matcher, which passed on all seven lines.
 
@@ -425,7 +482,7 @@ node tools/plot-roads.js [out.svg]
 
 This draws `data/roads.json` as an SVG with no other dependencies, by default to `data/raw/roads-debug.svg`, which is gitignored. Don't commit a rendered plot: CLAUDE.md bars image files.
 
-It plots game coordinates with north up, east right and one scale on both axes. It shows the four roads, the railroad, the river, the trestles, the nodes and town center, with a north arrow, a 1 km scale bar and a legend. Line widths aren't to scale.
+It plots game coordinates with north up, east right and one scale on both axes. It shows the roads, the railroad, the river, the trestles, the nodes and town center, with a north arrow, a 1 km scale bar and a legend. Line widths aren't to scale.
 
 **Reading the band.** The compression band is shaded and labelled with its true and game ranges. The scale bar and bearings only hold outside it, so the railroad's smooth curve looks like a sharp V inside it.
 
@@ -438,7 +495,7 @@ npm run overlay
 This compares the running game with TIGER and exits non-zero if anything's out. It needs the venv and zips from [Regenerating](#regenerating), and `npm i` for Chrome. It takes about 10 seconds and writes three files to `data/raw/`, which is gitignored:
 
 - **`map-overlay-town.png`** is the game's ground, roads and tracks from straight above, north up, at 1.5 px per metre. TIGER's centerlines are drawn over them at true scale, aligned on town center. This is the picture to hold up against a map.
-- **`map-overlay-whole.png`** is the whole map at 0.5 px per metre, with TIGER's lines through the same conversion the game uses. It names all four roads and shades the compressed stretches.
+- **`map-overlay-whole.png`** is the whole map at 0.5 px per metre, with TIGER's lines through the same conversion the game uses. It names the roads and shades the compressed stretches.
 - **`map-overlay-report.md`** is the measurements.
 
 `tools/tiger_lines.py` reads TIGER's lines and shared vertices straight from the zips, so the comparison doesn't lean on the lon/lat the build wrote. The JSON only says which LINEARIDs to read. In the picture the game's tracks are drawn at tie width, because rails alone are thinner than a pixel.
@@ -448,7 +505,7 @@ This compares the running game with TIGER and exits non-zero if anything's out. 
 - **Through the map** puts TIGER's lon/lat through the conversion, the compression bands and the world frame, and compares that with where the game has it. Every node and line must be within the tolerance, all the way out.
 - **At true scale** compares both as metres from town center. Between true x -650 and 1223 the world is the true map moved over, so nodes and lines there must be within the tolerance too. Past those edges a node may be further off, as long as a [compressed stretch](#compressed-stretches) lies between it and town center. The report names the stretch. n7, the far end of Church St, is 388.8 m out, which is the band from -1082 to -650 taken in by 0.9.
 
-It also asks the running game, sampling TIGER every 5 m in town: US 80, Adams Street and Church St must be road you can stand on, and the river must be water.
+It also asks the running game, sampling TIGER every 5 m in town: every road must be road you can stand on, and the river must be water.
 
 River vertices within 200 m north or south of the bridge aren't measured through the map, because the river is bent onto the opening scene's channel there. See [In the game](#in-the-game).
 

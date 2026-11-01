@@ -117,6 +117,7 @@ body.talking #keyStrip{visibility:hidden}
 @media (pointer:coarse){#stick{display:block}#btns{display:flex}}
 body.talking .ctl{visibility:hidden}
 #flash{position:fixed;inset:0;z-index:3;background:var(--hot);opacity:0;pointer-events:none;transition:opacity .35s}
+@media (max-width:600px){#toast.low{top:calc(env(safe-area-inset-top, 0px) + 150px)}}
 @media (prefers-reduced-motion: reduce){.card,#flash,#toast{transition:none}}
 </style>
 
@@ -361,7 +362,7 @@ const mistTex = (() => {
 function textTex(lines, w, h, bg, fg, font, opts = {}) {
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const g = cv.getContext('2d');
   g.fillStyle = bg; g.fillRect(0, 0, w, h);
-  if (opts.grime) { for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(0,0,0,${rnd() * .35})`; g.fillRect(rnd() * w, rnd() * h, 3 + rnd() * 8, 2 + rnd() * 5); } }
+  if (opts.grime) { const r = opts.rand || rnd; for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(0,0,0,${r() * .35})`; g.fillRect(r() * w, r() * h, 3 + r() * 8, 2 + r() * 5); } }
   g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = font;
   lines.forEach((l, i) => g.fillText(l, w / 2, h * (i + 1) / (lines.length + 1)));
   if (opts.after) opts.after(g);
@@ -988,8 +989,8 @@ const landing = (trueX, trueZ, localX, localZ) => { const [x, z] = atTrue(trueX,
 const PLACES = {
   // the canopy out front of the old store at the west end of the strip
   gas: landing(-87.85, -31.1, 53, 10),
-  // the little block store two doors along
-  store: landing(-64.5, -39.5, 40, -11),
+  // the little block town hall two doors along, on the corner of Commerce St
+  hall: landing(-64.5, -39.5, 40, -11),
   // the south door of the brick church, at Adams and Church St
   church: landing(-311, -211.6, 68.5, -8),
   // on the gravel by the main line, where the sidings were
@@ -997,21 +998,31 @@ const PLACES = {
   tower: landing(-330, 15, 100, -14),
 };
 function around(place, fn) { OX = place.x; OZ = place.z; fn(); OX = OZ = 0; }
-// What's inside the real store. The walls and roof are the building's own.
-const storeMat = triplanar(woodRed, .5, { roughness: .95 });
+// What's inside the real town hall. The walls and roof are the building's own.
+const hallMat = triplanar(woodRed, .5, { roughness: .95 });
 const roofMat = new THREE.MeshStandardMaterial({ color: '#2b2630', roughness: .9 });
-around(PLACES.store, () => {
+around(PLACES.hall, () => {
   addBox(roofMat, 38, Y0 + .55, -9.7, 4.5, 1.1, .6); solid(35.8, 40.2, -10, -9.4, Y0 + 1.1);   // counter
   addBox(roofMat, 40, Y0 + .8, -12.7, 9, 1.6, .7); solid(35.5, 44.5, -13.05, -12.35, Y0 + 1.6);  // shelves
   addBox(roofMat, 43, Y0 + .8, -9.7, 4, 1.6, .7); solid(41, 45, -10.05, -9.35, Y0 + 1.6);
   flushBuckets();
 });
 // its sign, on a board in front of the gable, which comes down while he's inside or it'd be all you'd see
-const STORE_HOUSE = houseAt(...atTrue(-64.5, -39.5));
-const storeBoard = new THREE.Mesh(boxGeo, storeMat); storeBoard.scale.set(10.4, 2, .2); storeBoard.position.set(40 + PLACES.store.x, Y0 + 3.75, -4.72 + PLACES.store.z); outline(storeBoard, INK, 1.2); scene.add(storeBoard);
-const storeSign = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ map: textTex(['GROCERY'], 1024, 184, '#e4d6b8', '#7a2318', '110px Bungee, Impact, sans-serif', { grime: true }), roughness: .9 }));
-storeSign.scale.set(10 / 10.4, 1.8 / 2, 1); storeSign.position.z = .6; storeBoard.add(storeSign);
-// the gas station's canopy and pumps, in front of the store it belonged to
+const HALL_HOUSE = houseAt(...atTrue(-64.5, -39.5));
+const hallBoard = new THREE.Mesh(boxGeo, hallMat); hallBoard.scale.set(10.4, 2, .2); hallBoard.position.set(40 + PLACES.hall.x, Y0 + 3.75, -4.72 + PLACES.hall.z); outline(hallBoard, INK, 1.2); scene.add(hallBoard);
+const hallSign = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ map: textTex(['TOWN HALL'], 1024, 184, '#e4d6b8', '#7a2318', '110px Bungee, Impact, sans-serif', { grime: true }), roughness: .9 }));
+hallSign.scale.set(10 / 10.4, 1.8 / 2, 1); hallSign.position.z = .6; hallBoard.add(hallSign);
+// the post office's, across Commerce St, is flat on the wall over its door
+const POST_OFFICE = STRUCTURES.find((s) => s.id === 75023296);
+const postBoard = new THREE.Mesh(boxGeo, hallMat);
+{
+  const [ax, az] = POST_OFFICE.pts[POST_OFFICE.door], [bx, bz] = POST_OFFICE.pts[(POST_OFFICE.door + 1) % POST_OFFICE.pts.length], x = (ax + bx) / 2, z = (az + bz) / 2;
+  const away = Math.hypot(x - POST_OFFICE.wx, z - POST_OFFICE.wz), nx = (x - POST_OFFICE.wx) / away, nz = (z - POST_OFFICE.wz) / away;
+  let k = 0; const map = textTex(['POST OFFICE'], 1024, 170, '#d9d2c0', '#1f3a5c', '104px Bungee, Impact, sans-serif', { grime: true, rand: () => hash(k++, 60, 61) });
+  postBoard.scale.set(6.4, 1, .16); postBoard.position.set(x + nx * .14, Y0 + 2.85, z + nz * .14); postBoard.rotation.y = Math.atan2(nx, nz); outline(postBoard, INK, 1.2); scene.add(postBoard);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ map, roughness: .9 })); sign.scale.set(6.1 / 6.4, .86, 1); sign.position.z = .6; postBoard.add(sign);
+}
+// the gas station's canopy and pumps, in front of the old store they belonged to
 const canopyMat = new THREE.MeshStandardMaterial({ color: '#cfc9bb', roughness: .85 }), canopyPost = new THREE.MeshStandardMaterial({ color: '#a8342a', roughness: .7, metalness: .2 });
 around(PLACES.gas, () => {
   pad(46, 60, 4, 15, 4);
@@ -1136,12 +1147,12 @@ const burnt = new THREE.MeshStandardMaterial({ color: '#2a2024', roughness: 1, m
 const poleMat = new THREE.MeshStandardMaterial({ color: '#2d2026', roughness: 1 });
 const wireMat = new THREE.MeshBasicMaterial({ color: '#0c080e' });
 {
-  const adamsX = MAP.nodes.find((n) => n.id === 'n2').x, canopy0 = gasAt(44, 0)[0], canopy1 = gasAt(60, 0)[0];
+  const adamsX = MAP.nodes.find((n) => n.roads.includes('us_80') && n.roads.includes('adams_st')).x, canopy0 = gasAt(44, 0)[0], canopy1 = gasAt(60, 0)[0];
   const poles = [];
   for (let x = 26, end = worldX(420); x <= end; x += x < 300 ? 12 : 24) {
     if (Math.abs(x - adamsX) < 8 || (x > canopy0 && x < canopy1)) continue;
     const z = MAP.zAt('us_80', x) - 4.3;
-    if (houseAt(x, z)) continue;
+    if (houseAt(x, z) || MAP.roadGrid.within(x, z, (road) => road.id === 'us_80' ? 0 : road.width / 2 + 1.5)) continue;
     addBox(poleMat, x, Y0 + 4, z, .25, 8, .25, 1.1); addBox(poleMat, x, Y0 + 7.6, z, .12, .12, 2.2, 1); solid(x - .2, x + .2, z - .2, z + .2, Y0 + 8);
     poles.push([x, z]);
   }
@@ -1360,20 +1371,26 @@ const SIGNS = [];
   };
   // On one corner of a junction, the south-east if it's clear. Each blade runs along the road it names, as they do.
   const junctionSign = (n) => {
-    const a = MAP.roadById.get(n.roads[0]), b = MAP.roadById.get(n.roads[1]);
-    const pa = MAP.along(a.id, MAP.sOn(a.id, n.x, n.z)), pb = MAP.along(b.id, MAP.sOn(b.id, n.x, n.z));
+    const on = n.roads.map((id) => [MAP.roadById.get(id), MAP.along(id, MAP.sOn(id, n.x, n.z))]);
+    // the corner is worked out from the two roads that cross the most squarely
+    const cross = (p, q) => p.nx * q.nz - p.nz * q.nx;
+    let a = on[0], b = on[1];
+    for (const c of on) for (const d of on) if (Math.abs(cross(c[1], d[1])) > Math.abs(cross(a[1], b[1]))) { a = c; b = d; }
+    const pa = a[1], pb = b[1], ra = a[0].width / 2 + 1.4, rb = b[0].width / 2 + 1.4, det = cross(pa, pb);
     let best = null;
     for (const sa of [-1, 1]) for (const sb of [-1, 1]) {
-      const x = n.x + pa.nx * sa * (a.width / 2 + 1.4) + pb.nx * sb * (b.width / 2 + 1.4), z = n.z + pa.nz * sa * (a.width / 2 + 1.4) + pb.nz * sb * (b.width / 2 + 1.4);
-      const score = Math.min(MAP.roadGrid.nearest(x, z), MAP.roadGrid.reach) + (x - n.x + z - n.z) * .01;
+      // where the lines that far off each road meet, so it stays beside both however sharp the angle
+      const x = n.x + (Math.abs(det) > .05 ? (sa * ra * pb.nz - sb * rb * pa.nz) / det : pa.nx * sa * ra), z = n.z + (Math.abs(det) > .05 ? (sb * rb * pa.nx - sa * ra * pb.nx) / det : pa.nz * sa * ra);
+      const clear = MAP.roadGrid.nearest(x, z) - MAP.roadGrid.seg.owner.width / 2;
+      const score = Math.min(clear, 1.2) * 10 - Math.hypot(x - n.x, z - n.z) * .2 + (x - n.x + z - n.z) * .01 - (houseAt(x, z) ? 5 : 0);
       if (!best || score > best.score) best = { x, z, score };
     }
     const { x, z } = best;
     // the post stops under the blades, which sit one on the other
     addBox(poleMat, x, Y0 + 1.46, z, .12, 2.92, .12, 1);
-    [[a, pa, 3.2], [b, pb, 3.78]].forEach(([road, p, y]) => {
+    on.forEach(([road, p], i) => {
       const yaw = Math.atan2(p.nx, p.nz);
-      mount(bladeFor(road.name), x, Y0 + y, z, yaw, CORNER, [0, Math.PI]);
+      mount(bladeFor(road.name), x, Y0 + 3.2 + i * .58, z, yaw, CORNER, [0, Math.PI]);
       SIGNS.push({ road: road.id, name: road.name, x, z, yaw, kind: 'junction' });
     });
   };
@@ -1927,7 +1944,7 @@ for (const n of Object.values(NPCS)) solid(n.root.position.x - .4, n.root.positi
 const canLabel = textTex(['BEANS'], 256, 128, '#c8452a', '#f6e8c8', '52px Bungee, Impact, sans-serif');
 const canMat = [new THREE.MeshStandardMaterial({ map: canLabel, roughness: .6, metalness: .2, emissive: '#3a1006' }), new THREE.MeshStandardMaterial({ color: '#c9ccd2', metalness: .9, roughness: .3 })];
 const PICKUPS = [
-  [38.2 + PLACES.store.x, Y0 + 1.75, -12.7 + PLACES.store.z], [43 + PLACES.store.x, Y0 + 1.75, -9.7 + PLACES.store.z],
+  [38.2 + PLACES.hall.x, Y0 + 1.75, -12.7 + PLACES.hall.z], [43 + PLACES.hall.x, Y0 + 1.75, -9.7 + PLACES.hall.z],
   (() => { const [x, z] = atTrue(-18.8, -54.5); return [x, Y0 + .3, z]; })(), [towerX, Y0 + .3, towerZ], [BOX.x + 1.5, Y0 + .9, BOX.z - 2]
 ].map(([x, y, z]) => {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(.11, .11, .26, 18), [canMat[0], canMat[1], canMat[1]]);
@@ -2304,7 +2321,7 @@ let toastT = 0, cardT = 0;
 // game-clock timers, so story beats wait for the game when the tab sleeps or a test holds the clock
 const timers = [];
 function after(sec, fn) { timers.push({ at: time + sec, fn }); }
-function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); toastT = 2.2; }
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); t.classList.toggle('low', !!S.flags.town); toastT = 2.2; }
 function card(h, p, dur = 3.2) { $('cardH').innerHTML = h; $('cardP').textContent = p || ''; $('card').classList.add('show'); cardT = dur; }
 const hudCache = {};
 // What the objective points at, if anything: { road: id } for the nearest part of a street, or { x, z }.
@@ -2527,10 +2544,8 @@ function startTown() {
 
 // ---------------- movement helpers
 function onRoad(x, z) {
-  const rd = MAP.roadGrid.nearest(x, z);
-  if (rd > 6) return false;
-  const road = MAP.roadGrid.seg.owner;
-  return rd < roadHalf(road, x, z) && !(road.id === 'us_80' && Math.abs(x) < ROAD_GAP && Math.abs(z) < 8);
+  const g = MAP.roadGrid.within(x, z, roadHalf);
+  return !!g && !(g.owner.id === 'us_80' && Math.abs(x) < ROAD_GAP && Math.abs(z) < 8);
 }
 function floorAt(x, z) {
   let f = groundH(x, z);
@@ -2682,8 +2697,8 @@ function vehicleFits(kind, x, z, yaw) {
 const VEH_SET = [
   // the first one you come to, on the shoulder just past the bridge, and pointing into town
   ['quad', onRoadAt('us_80', 128).x, onRoadAt('us_80', 128).z + 5.6, Math.PI / 2, .12],
-  // a truck by the pumps, pointing at the road, and a car outside the store
-  ['pickup', ...gasAt(60.8, 9.2), 0, .3], ['car', PLACES.store.x + 41, PLACES.store.z - .9, -Math.PI / 2, .2],
+  // a truck by the pumps, pointing at the road, and a car outside the town hall
+  ['pickup', ...gasAt(60.8, 9.2), 0, .3], ['car', PLACES.hall.x + 41, PLACES.hall.z - .9, -Math.PI / 2, .2],
 ].filter(([kind, x, z, yaw]) => vehicleFits(kind, x, z, yaw));
 const VEHICLES = [
   ...VEH_SET.map(([kind, x, z, yaw, tone]) => ({ kind, x, z, yaw, tone })),
@@ -2907,7 +2922,7 @@ function updateDrive(dt) {
 const mapData = buildMapData({ roads: MAP.roads, rail: MAP.rail, river: MAP.river, structures: STRUCTURES });
 const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d') };
 const MAP_PLACES = [
-  ["Stuckey's Bridge", 0, 0, 3], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Grocery', ...atTrue(-64.5, -39.5), 2], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
+  ["Stuckey's Bridge", 0, 0, 3], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-64.5, -39.5), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
   ...STRUCTURES.filter((s) => s.use === 'church').map((s) => ['Church', s.wx, s.wz, 2]),
 ].sort((a, b) => b[3] - a[3]);
 let mapOpen = false, mapDirty = false, mapCam = { x: 0, z: 0, scale: .4 };
@@ -2979,10 +2994,10 @@ function drawFullMap() {
   for (const [name, wx, wz, rank] of MAP_PLACES) {
     if (mapCam.scale < [0, .3, .16, .03][rank]) continue;
     const [x, y] = toScreen(v, wx, wz); if (!on(x, y)) continue;
-    const tw = name.length * 6.8 + 6;
-    if (!free(x, y + 17, tw, 14)) continue;
+    const tw = name.length * 6.8 + 6, ly = free(x, y + 17, tw, 14) ? y + 17 : free(x, y - 17, tw, 14) ? y - 17 : null;
+    if (ly === null) continue;
     g.fillStyle = MAPC.rust; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.beginPath(); g.rect(x - 3, y - 3, 6, 6); g.stroke(); g.fill();
-    drawLabel(g, name, x, y + 17, SMALL, MAPC.cream);
+    drawLabel(g, name, x, ly, SMALL, MAPC.cream);
   }
   for (const road of MAP.roads) for (const l of roadLabels(road, v, w, h)) { const tw = l.text.length * 10 + 6; if (free(l.x, l.y, Math.max(tw * Math.abs(Math.cos(l.angle)), 16), Math.max(tw * Math.abs(Math.sin(l.angle)), 16))) drawLabel(g, l.text, l.x, l.y, BIG, MAPC.cream, l.angle); }
   drawArrow(g, hx, hy, Math.sin(player.yaw), Math.cos(player.yaw), 11);
@@ -3227,7 +3242,8 @@ function tick(dt, draw = true) {
       // Anything else between the camera and him opens up around him, down to his knees.
       const home = houseAt(heroRoot.position.x, heroRoot.position.z), behind = houseAt(camera.position.x, camera.position.z);
       G.uHideRoof.value.set(home ? home.index : -2, behind ? behind.index : -2);
-      if (storeBoard.visible === (home === STORE_HOUSE)) storeBoard.visible = home !== STORE_HOUSE;
+      if (hallBoard.visible === (home === HALL_HOUSE)) hallBoard.visible = home !== HALL_HOUSE;
+      if (postBoard.visible === (home === POST_OFFICE)) postBoard.visible = home !== POST_OFFICE;
       camera.updateMatrixWorld(); _v.copy(heroRoot.position); _v.y += 1; _v.project(camera);
       G.uSee.value.set((_v.x * .5 + .5) * G.uRes.value.x, (_v.y * .5 + .5) * G.uRes.value.y, _v.z * .5 + .5, G.uRes.value.y * .18); G.uSeeY.value = heroRoot.position.y + .4;
     }

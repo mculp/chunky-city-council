@@ -41,6 +41,110 @@
       "name": "Meehan-Savoy Rd",
       "tigerNames": ["Meehan Savoy Rd S", "Meehan Savoy Rd W"],
       "selection": { "rule": "nearest_component", "maxDistanceM": 6000 }
+    },
+    {
+      "id": "commerce_st",
+      "name": "Commerce St",
+      "tigerNames": ["Commerce St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "gallatin_st",
+      "name": "Gallatin St",
+      "tigerNames": ["Gallatin St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "clay_st",
+      "name": "Clay St",
+      "tigerNames": ["Clay St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "poplar_st",
+      "name": "Poplar St",
+      "tigerNames": ["Poplar St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "railroad_st",
+      "name": "Railroad St",
+      "tigerNames": ["Railroad St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "mullberry_st",
+      "name": "Mullberry St",
+      "tigerNames": ["Mullberry St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "front_st",
+      "name": "Front St",
+      "tigerNames": ["Front St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "oak_st",
+      "name": "Oak St",
+      "tigerNames": ["Oak St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "chestnut_st",
+      "name": "Chestnut St",
+      "tigerNames": ["Chestnut St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "reynolds",
+      "name": "Reynolds",
+      "tigerNames": ["Reynolds"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "jones_st",
+      "name": "Jones St",
+      "tigerNames": ["Jones St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "school_st",
+      "name": "School St",
+      "tigerNames": ["School St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "wood_st",
+      "name": "Wood St",
+      "tigerNames": ["Wood St"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "alexander_rd",
+      "name": "Alexander Rd",
+      "tigerNames": ["Alexander Rd"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
+    },
+    {
+      "id": "grifis_fountain_rd",
+      "name": "Grifis-Fountain Rd",
+      "tigerNames": ["Grifis-Fountain Rd"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 },
+      "clip": { "xMinM": -650, "xMaxM": 0, "basis": "Stops at the last whole vertex east of x -650, the edge of the compressed stretch west of town. A node can't sit in a band." }
+    },
+    {
+      "id": "pine_forest_rd",
+      "name": "Pine Forest Rd",
+      "tigerNames": ["Pine Forest Rd"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 },
+      "clip": { "xMinM": 0, "xMaxM": 1223, "basis": "Stops at the last whole vertex west of x 1223, the edge of the compressed stretch east of town. A node can't sit in a band." }
+    },
+    {
+      "id": "clarence_culpepper_rd",
+      "name": "Clarence Culpepper Rd",
+      "tigerNames": ["Clarence Culpepper Rd"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
     }
   ],
   "mtfcc": {

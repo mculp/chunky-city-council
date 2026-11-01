@@ -134,11 +134,11 @@ check('picked up the can by the boxcar', (await can(4)).got, await can(4));
 r = await g(() => followArrow()); blockedCheck('follow the arrow back to Coop', r);
 d = await talk('coop', 'Coop'); s = await st(); check('paid', s.flags.paid === true, s.flags); s = await choose(0);
 
-// the rest of the cans, in through the store's door
-const store = await g(() => { const P = __game.places.store; return [P.x, P.z]; });
-const at = ([x, z]) => [x + store[0], z + store[1]];
-for (const [name, x, z, reach] of [['the store door', ...at([42.4, -3.8]), .6], ['inside', ...at([42.4, -7.6]), .5], ['the shelf can', ...at([43, -8.95]), .25]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
-await snap('06-store');
+// the rest of the cans, in through the town hall's door
+const hall = await g(() => { const P = __game.places.hall; return [P.x, P.z]; });
+const at = ([x, z]) => [x + hall[0], z + hall[1]];
+for (const [name, x, z, reach] of [['the town hall door', ...at([42.4, -3.8]), .6], ['inside', ...at([42.4, -7.6]), .5], ['the shelf can', ...at([43, -8.95]), .25]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
+await snap('06-hall');
 check('picked up the can on the near shelf', (await can(1)).got, await can(1));
 for (const [name, x, z, reach] of [['round to the gap', ...at([40.6, -8.2]), .4], ['past the counter', ...at([40.6, -11.3]), .4], ['the back shelf can', ...at([38.2, -11.7]), .3]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
 check('picked up the can on the back shelf', (await can(0)).got, await can(0));

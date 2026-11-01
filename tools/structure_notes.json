@@ -1,7 +1,7 @@
 {
   "structures": {
     "75177617": { "seen": true, "walls": "plank", "wallColor": "brown", "roof": "gable", "roofMat": "metal", "floors": 1, "condition": "worn", "what": "old gas station store", "trimColor": "#a8342a", "doorColor": "#a8342a", "clip": {"axis": "z", "max": -35.6} },
-    "75204375": { "seen": true, "walls": "block", "wallColor": "white", "roof": "gable", "roofMat": "shingle", "floors": 1, "condition": "worn", "doors": 2, "doorFaces": "south", "what": "small block store with two doors", "doorColor": "#c9c1b4" },
+    "75204375": { "seen": true, "walls": "block", "wallColor": "white", "roof": "gable", "roofMat": "shingle", "floors": 1, "condition": "worn", "doors": 2, "doorFaces": "south", "what": "little block town hall with two doors", "doorColor": "#c9c1b4" },
     "75023296": { "seen": true, "walls": "brick", "wallColor": "red", "roof": "flat", "roofMat": "metal", "floors": 1, "what": "small post office", "trimColor": "#c9c1b4" },
     "74864524": { "seen": true, "walls": "siding", "wallColor": "white", "roof": "flat", "roofMat": "metal", "floors": 1, "porch": "front", "what": "long office with steps up to the middle door", "trimColor": "#a78f6c" },
     "76043591": { "seen": true, "walls": "metal", "wallColor": "tan", "roof": "gable", "roofMat": "metal", "floors": 1, "bays": 3, "what": "metal shop with three roll-up doors" },
