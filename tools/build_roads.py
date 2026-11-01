@@ -3,33 +3,48 @@
 Run from the repo root, using the project venv, after tools/fetch_tiger.py:
 
     .venv/bin/python tools/build_roads.py
+    .venv/bin/python tools/build_roads.py --check
 
-tools/road_config.json says which roads to take and how to clip and style them. The
-zips are read in place and never extracted. The same zips and config give the same
-bytes. Any failure exits non-zero and leaves roads.json as it was. The report on
-stdout lists what the docs need to record: the seam, crossings added, near-misses,
-branches, extra components, unconnected roads, the area the railroad and river are
-clipped to, gaps in those lines and the rail features left out.
+--check regenerates the JSON in memory, writes nothing and exits non-zero if it differs
+from data/roads.json on disk.
+
+tools/road_config.json says which roads to take and how to clip and style them, and
+which stretches to compress. The zips are read in place and never extracted. The same
+zips and config give the same bytes. Any failure exits non-zero and leaves roads.json
+as it was. The report on stdout lists what the docs need to record: the seam, crossings
+added, near-misses, branches, extra components, unconnected roads, the area the railroad
+and river are clipped to, gaps in those lines, the rail features left out, the bands and
+the vertices added at their edges.
 
 Connections mean shared vertices compared exactly, because TIGER is one planar
 topology. Every TIGER vertex is kept and none is moved, so a near-miss is reported
-and never snapped. The only vertex that isn't TIGER's is one added where two lines
-cross with no shared vertex, and the report lists each of those.
+and never snapped. Two kinds of vertex aren't TIGER's. One is added where two lines
+cross with no shared vertex, and the report lists each of those. On a road that also
+fails the TIGER check below. The other is added where a segment crosses a compression
+band edge, and its index is listed in that edge's or line's `synthetic`.
 
 The railroad, river and trestles go in `reference`, beside the graph and not part of
 it. Rail features are identified by LINEARID only: TIGER's rail names can be real
 operator brands, so that field isn't even read.
 
+Everything is worked out in true metres. Compression is the last step: one global,
+strictly increasing remap of x, applied alike to roads, railroad, river, nodes, trestles
+and crossings. z and lon/lat never change, so true positions can always be re-derived.
+
+Every build then re-reads the road zips and fails unless each edge's non-synthetic
+vertices are an unbroken run of its road's raw TIGER features.
+
 Only read_features needs pyshp, and it imports it itself. Everything else works on
 plain records, so it can be imported and run without the venv.
 """
 
+import argparse
 import hashlib
 import json
 import math
 import re
 import sys
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from itertools import groupby
 from pathlib import Path
@@ -79,6 +94,12 @@ TRESTLES = (
 )
 TRESTLE_TOLERANCE_M = 100
 TRESTLE_CLUSTER_M = 30  # Hits this close are one trestle. It also clears a gap at a contact.
+
+BAND_REQUIRED_KEYS = ("axis", "trueFrom", "trueTo", "factor", "reason")
+# Written x has 3 decimals, so nearer than this a vertex is on the band edge as far as the
+# data can tell. It's also how far a band-edge vertex may be from where it should be.
+BAND_EDGE_TOLERANCE_M = 0.001
+SYNTHETIC_LONLAT_DECIMALS = 9  # About 0.1 mm, finer than the 3 decimals of written x.
 
 
 class BuildError(Exception):
@@ -216,6 +237,33 @@ def to_lonlat(x, z):
     lon = ORIGIN_LON + math.degrees(x / (EARTH_RADIUS_M * math.cos(math.radians(ORIGIN_LAT))))
     lat = ORIGIN_LAT - math.degrees(z / EARTH_RADIUS_M)
     return lon, lat
+
+
+def compress_x(x, bands):
+    """Apply f to true x: the identity west of a band, factor inside it, a shift east of it.
+
+    bands are compression_rows rows, west to east. No bands means the identity.
+    """
+    shift = 0.0
+    for band in bands:
+        if x < band["trueFrom"]:
+            break
+        if x < band["trueTo"]:
+            return band["gameFrom"] + (x - band["trueFrom"]) * band["factor"]
+        shift = band["gameTo"] - band["trueTo"]
+    return x + shift
+
+
+def decompress_x(x, bands):
+    """Apply the inverse of f to game x, returning true x."""
+    shift = 0.0
+    for band in bands:
+        if x < band["gameFrom"]:
+            break
+        if x < band["gameTo"]:
+            return band["trueFrom"] + (x - band["gameFrom"]) / band["factor"]
+        shift = band["trueTo"] - band["gameTo"]
+    return x + shift
 
 
 def segments_of(points):
@@ -729,10 +777,10 @@ def report_road_shape(road, components, report):
 # Output.
 
 
-def game_position(vertex):
-    """Return rounded x, z. Adding 0.0 turns a rounded -0.0 into 0.0."""
+def game_position(vertex, bands=()):
+    """Return rounded x, z, with x through f. Adding 0.0 turns a rounded -0.0 into 0.0."""
     x, z = to_xz(vertex)
-    return round(x, 3) + 0.0, round(z, 3) + 0.0
+    return round(compress_x(x, bands), 3) + 0.0, round(z, 3) + 0.0
 
 
 def lonlat_position(vertex):
@@ -840,6 +888,7 @@ def build_road_graph(records, config, source_files):
             "angles": "radians",
             "datum": "NAD83, used as-is with no datum shift",
         },
+        "compression": [],  # apply_compression fills this in, last of all.
         "source": {"vintage": VINTAGE, "baseUrl": BASE_URL, "files": source_files},
         "roadClasses": config["mtfcc"],
         "nodes": list(node_rows.values()),
@@ -1138,7 +1187,12 @@ def build_reference(data, rail_records, river_records, area, report):
         },
         "trestles": trestles,
         "crossings": [
-            dict(zip(("road", "with", "x", "z"), (road_id, label, *game_position(vertex))))
+            dict(
+                zip(
+                    ("road", "with", "x", "z", "lon", "lat"),
+                    (road_id, label, *game_position(vertex), *lonlat_position(vertex)),
+                )
+            )
             for road_id, label, vertex in crossings
         ],
     }
@@ -1163,6 +1217,281 @@ def report_reference_near_misses(road_lines, lines, contacts, report):
     if not misses:
         report.append(
             f"Geometric check: the railroad and river have no near-miss under {NEAR_MISS_M} m"
+        )
+
+
+# Compression. Everything above is in true metres. This rewrites x once, at the very end.
+
+
+def compression_rows(bands):
+    """Check the config's bands and return the rows of compression[], west to east."""
+    rows = []
+    shift = 0.0
+    previous_to = -math.inf
+    for band in bands:
+        missing = [key for key in BAND_REQUIRED_KEYS if key not in band or band[key] == ""]
+        if missing:
+            raise BuildError(f"Compression band {band}: missing {missing}")
+        true_from, true_to, factor = float(band["trueFrom"]), float(band["trueTo"]), band["factor"]
+        label = f"Compression band x {true_from:g} to {true_to:g}"
+        if band["axis"] != "x":
+            raise BuildError(f"{label}: axis {band['axis']!r} isn't x, the only axis remapped")
+        if true_from >= true_to:
+            raise BuildError(f"{label}: trueFrom must be west of trueTo")
+        if not 0 < factor < 1:
+            raise BuildError(f"{label}: factor {factor} isn't between 0 and 1")
+        if true_from < previous_to:
+            raise BuildError(f"{label}: bands must run west to east and not overlap")
+        game_from = true_from + shift
+        game_to = game_from + (true_to - true_from) * factor
+        rows.append(
+            {
+                "axis": "x",
+                "trueFrom": true_from,
+                "trueTo": true_to,
+                "gameFrom": game_from,
+                "gameTo": game_to,
+                "factor": factor,
+                "reason": band["reason"],
+            }
+        )
+        shift = game_to - true_to
+        previous_to = true_to
+    return rows
+
+
+def band_edges(bands):
+    """Return every band edge, in true metres."""
+    return sorted({edge for band in bands for edge in (band["trueFrom"], band["trueTo"])})
+
+
+def all_lines(data):
+    """Yield (label, row) for everything with a vertex list: road edges, railroad and river."""
+    for edge in data["edges"]:
+        yield edge["id"], edge
+    for key in (RAILROAD, RIVER):
+        for number, line in enumerate(data["reference"][key]["lines"], start=1):
+            yield f"{key} line {number}", line
+
+
+def check_bands_clear(data, bands):
+    """Fail if a graph node or trestle is inside a band, or a band edge is on a TIGER vertex.
+
+    A vertex on an edge would have its two segments scaled differently, which can flip the
+    turn there. Keeping clear of them means every TIGER turn lies wholly on one side.
+    """
+    reference = data["reference"]
+    for kind, items in (("Graph node", data["nodes"]), ("Trestle", reference["trestles"])):
+        for item in items:
+            x = to_xz((item["lon"], item["lat"]))[0]
+            for band in bands:
+                if band["trueFrom"] <= x <= band["trueTo"]:
+                    raise BuildError(
+                        f"{kind} {item['id']} at true x {x:.3f} is inside the compression "
+                        f"band x {band['trueFrom']:g} to {band['trueTo']:g}"
+                    )
+    for edge in band_edges(bands):
+        for label, line in all_lines(data):
+            for vertex in line["lonlat"]:
+                if abs(to_xz(vertex)[0] - edge) < BAND_EDGE_TOLERANCE_M:
+                    raise BuildError(
+                        f"Compression band edge x {edge:g} lands on a TIGER vertex of {label}: "
+                        f"{where(tuple(vertex))}"
+                    )
+
+
+def split_at_band_edges(chain, bands):
+    """Return the chain with a vertex added wherever a segment crosses a band edge.
+
+    Also returns the added vertices' indices. f bends at a band edge, so a segment across
+    one has to be split there for its image to be true. The projection is linear in each
+    axis, so interpolating lon/lat gives the point on the straight segment. It keeps more
+    decimals than TIGER's so that its x stays on the edge.
+    """
+    edges = band_edges(bands)
+    result = list(chain[:1])
+    synthetic = []
+    for a, b in zip(chain, chain[1:]):
+        a_x, b_x = to_xz(a)[0], to_xz(b)[0]
+        crossed = [edge for edge in edges if min(a_x, b_x) < edge < max(a_x, b_x)]
+        for edge in sorted(crossed, reverse=b_x < a_x):
+            t = (edge - a_x) / (b_x - a_x)
+            synthetic.append(len(result))
+            result.append(
+                (
+                    round(a[0] + t * (b[0] - a[0]), SYNTHETIC_LONLAT_DECIMALS),
+                    round(a[1] + t * (b[1] - a[1]), SYNTHETIC_LONLAT_DECIMALS),
+                )
+            )
+        result.append(b)
+    return result, synthetic
+
+
+def compress_line(line, bands):
+    """Split an edge or line at the band edges and rewrite its positions through f."""
+    chain, synthetic = split_at_band_edges([tuple(v) for v in line["lonlat"]], bands)
+    line["points"] = [list(game_position(vertex, bands)) for vertex in chain]
+    line["lonlat"] = [list(vertex) for vertex in chain]
+    line["synthetic"] = synthetic
+
+
+def apply_compression(data, config_bands, report):
+    """Rewrite x across the finished data through f and record the bands in compression[]."""
+    bands = compression_rows(config_bands)
+    check_bands_clear(data, bands)
+    for _, line in all_lines(data):
+        compress_line(line, bands)
+    reference = data["reference"]
+    for item in (*data["nodes"], *reference["trestles"], *reference["crossings"]):
+        item["x"] = game_position((item["lon"], item["lat"]), bands)[0]
+    data["compression"] = bands
+    report_compression(data, bands, report)
+
+
+def report_compression(data, bands, report):
+    for band in bands:
+        report.append(
+            f"Compression: true x {band['trueFrom']:g} to {band['trueTo']:g} is game x "
+            f"{band['gameFrom']:g} to {band['gameTo']:g}, factor {band['factor']:g}. Past it, "
+            f"x shifts by {band['gameTo'] - band['trueTo']:g} m."
+        )
+        for crossing in data["reference"]["crossings"]:
+            x = to_xz((crossing["lon"], crossing["lat"]))[0]
+            if band["trueFrom"] < x < band["trueTo"]:
+                report.append(
+                    f"Inside that band: {crossing['road']} meets the {crossing['with']} at "
+                    f"true x {x:.0f}, game x {crossing['x']:.0f}"
+                )
+    added = [
+        f"{label} {len(line['synthetic'])}" for label, line in all_lines(data) if line["synthetic"]
+    ]
+    if added:
+        report.append(f"Vertices added at band edges: {', '.join(added)}")
+
+
+# Checking the finished edges against the raw TIGER features.
+
+
+def match_run(run, lines):
+    """Return (features, furthest): how a run of vertices lies along raw features.
+
+    lines is [(linear id, vertices)] with each feature in both directions, so a line's
+    position 0 is always one of its feature's ends. features is the fewest features whose
+    stretches make up the run, or None if nothing does. furthest is the last run index
+    reached. The first stretch can start anywhere and the last can stop anywhere, because
+    an edge starts and stops at nodes. Between them, the run can move to another feature
+    only where both features end, at a vertex they share, and it can't double back there.
+    """
+    positions = defaultdict(list)
+    for linear_id, line in lines:
+        for index, vertex in enumerate(line):
+            positions[vertex].append((linear_id, line, index))
+    furthest = -1
+    pending = deque([(0, [])])
+    seen = {0}
+    while pending:
+        start, features = pending.popleft()
+        for linear_id, line, index in positions[run[start]]:
+            if start and (index or run[start + 1] == run[start - 1]):
+                continue
+            length = 1
+            while (
+                start + length < len(run)
+                and index + length < len(line)
+                and line[index + length] == run[start + length]
+            ):
+                length += 1
+            stop = start + length - 1
+            furthest = max(furthest, stop)
+            if stop == len(run) - 1:
+                return [*features, linear_id], furthest
+            if length > 1 and index + length == len(line) and stop not in seen:
+                seen.add(stop)
+                pending.append((stop, [*features, linear_id]))
+    return None, furthest
+
+
+def check_synthetic(edge, bands):
+    """Fail unless each synthetic vertex is what the list says: on a band edge, on its segment.
+
+    The TIGER check skips these vertices, so otherwise any vertex could hide in the list.
+    """
+    lonlat, synthetic = edge["lonlat"], edge["synthetic"]
+    if synthetic != sorted(set(synthetic)) or not all(0 < i < len(lonlat) - 1 for i in synthetic):
+        raise BuildError(f"{edge['id']}: bad synthetic list {synthetic}")
+    edges = band_edges(bands)
+    for index in synthetic:
+        position = to_xz(lonlat[index])
+        before = max(i for i in range(index) if i not in synthetic)
+        after = min(i for i in range(index + 1, len(lonlat)) if i not in synthetic)
+        on_segment = closest_on_segment(position, to_xz(lonlat[before]), to_xz(lonlat[after]))
+        if (
+            not any(abs(position[0] - edge_x) <= BAND_EDGE_TOLERANCE_M for edge_x in edges)
+            or math.dist(position, on_segment) > BAND_EDGE_TOLERANCE_M
+        ):
+            raise BuildError(
+                f"{edge['id']}: synthetic vertex {index} isn't where its segment crosses a "
+                f"band edge: {lonlat[index]}"
+            )
+
+
+def check_edges_against_tiger(data, records, report):
+    """Fail unless each edge's non-synthetic vertices are an unbroken run of raw features.
+
+    data is the parsed output and records come from a separate read of the zips, so this
+    shares nothing with how the edges were built. The run goes forwards or backwards along
+    features with one of the road's LINEARIDs, moving between them as match_run allows. A
+    clip endpoint is the only vertex that may be missing from those features.
+    """
+    nodes = {node["id"]: node for node in data["nodes"]}
+    roads = {road["id"]: road for road in data["roads"]}
+    raw = defaultdict(list)
+    for record in records:
+        raw[record.linear_id].append(record.points)
+    vertices = 0
+    off_feature = 0
+    joined = []
+    for edge in data["edges"]:
+        road = roads[edge["road"]]
+        absent = [linear_id for linear_id in road["linearIds"] if linear_id not in raw]
+        if absent:
+            raise BuildError(f"{edge['id']}: {absent} aren't in the zips")
+        lines = [
+            (linear_id, line)
+            for linear_id in road["linearIds"]
+            for points in raw[linear_id]
+            for line in (points, points[::-1])
+        ]
+        check_synthetic(edge, data["compression"])
+        synthetic = set(edge["synthetic"])
+        run = [tuple(v) for i, v in enumerate(edge["lonlat"]) if i not in synthetic]
+        known = {vertex for _, line in lines for vertex in line}
+        if nodes[edge["from"]]["kind"] == "clip" and run[0] not in known:
+            run = run[1:]
+            off_feature += 1
+        if nodes[edge["to"]]["kind"] == "clip" and run[-1] not in known:
+            run = run[:-1]
+            off_feature += 1
+        if not run:
+            raise BuildError(f"TIGER check: {edge['id']} has no TIGER vertices")
+        features, furthest = match_run(run, lines)
+        if features is None:
+            raise BuildError(
+                f"TIGER check: {edge['id']} doesn't follow the features of {road['id']}. Its "
+                f"non-synthetic vertex {furthest + 1} of {len(run)}, {run[furthest + 1]}, isn't "
+                f"the next vertex on any of them."
+            )
+        vertices += len(run)
+        if len(features) > 1:
+            joined.append(f"{edge['id']} ({' then '.join(features)})")
+    report.append(
+        f"TIGER check: {len(data['edges'])} edges, {vertices} vertices, all unbroken runs of "
+        f"raw features. Clip endpoints off their features: {off_feature}."
+    )
+    if joined:
+        report.append(
+            f"TIGER check: runs through more than one feature, joined where they end: "
+            f"{', '.join(joined)}"
         )
 
 
@@ -1203,13 +1532,21 @@ def render_json(data):
     return "{\n" + ",\n".join(parts) + "\n}\n"
 
 
+def x_text(row):
+    """Return a node's, trestle's or crossing's game x, and its true x if that's different."""
+    true_x = to_xz((row["lon"], row["lat"]))[0]
+    moved = f" (true x {true_x:.0f})" if abs(true_x - row["x"]) >= 0.5 else ""
+    return f"x {row['x']:.0f}{moved}"
+
+
 def print_summary(data, report):
-    print(f"{VINTAGE}, read from data/raw/")
+    print(f"{VINTAGE}, read from data/raw/. Positions are game metres unless they say true.")
     for row in data["roads"]:
         edges = [edge for edge in data["edges"] if edge["road"] == row["id"]]
         vertices = 1 + sum(len(edge["points"]) - 1 for edge in edges)
+        added = sum(len(edge["synthetic"]) for edge in edges)
         print(
-            f"  {row['name']}: {len(edges)} edge(s), {vertices} vertices, "
+            f"  {row['name']}: {len(edges)} edge(s), {vertices} vertices ({added} synthetic), "
             f"{row['mtfcc']} {row['width']} m {row['surface']} ({row['specSource']}), "
             f"walk {' '.join(row['nodes'])}, features {' '.join(row['linearIds'])}"
         )
@@ -1217,7 +1554,7 @@ def print_summary(data, report):
     for node in data["nodes"]:
         connection = f", connects to {node['connectsTo']}" if "connectsTo" in node else ""
         print(
-            f"  {node['id']} {node['kind']} x {node['x']:.0f}, z {node['z']:.0f}: "
+            f"  {node['id']} {node['kind']} {x_text(node)}, z {node['z']:.0f}: "
             f"{' '.join(node['roads'])}{connection}"
         )
     reference = data["reference"]
@@ -1227,25 +1564,59 @@ def print_summary(data, report):
         for line in row["lines"]:
             (start_x, start_z), (end_x, end_z) = line["points"][0], line["points"][-1]
             print(
-                f"    {len(line['points'])} vertices, "
+                f"    {len(line['points'])} vertices ({len(line['synthetic'])} synthetic), "
                 f"x {start_x:.0f}, z {start_z:.0f} to x {end_x:.0f}, z {end_z:.0f}"
             )
     print("Trestles:")
     for row in reference["trestles"]:
         label = f", {row['label']}" if "label" in row else ""
         print(
-            f"  {row['id']} x {row['x']:.0f}, z {row['z']:.0f}: "
+            f"  {row['id']} {x_text(row)}, z {row['z']:.0f}: "
             f"{row['distanceFromCenterM']:.1f} m {row['side']} of center{label}"
         )
     print("Crossings, in order along each road:")
     for row in reference["crossings"]:
-        print(f"  {row['road']} x {row['x']:.0f}, z {row['z']:.0f}: {row['with']}")
-    print("Report:")
+        print(f"  {row['road']} {x_text(row)}, z {row['z']:.0f}: {row['with']}")
+    print("Report, with positions in true metres:")
     for line in report:
         print(f"  {line}")
 
 
-def main():
+def generate(config):
+    """Return (data, report, roads.json text) from the zips. Writes nothing."""
+    records = read_road_records()
+    data, report = build_road_graph(records, config, describe_files(SOURCE_FILES))
+    area = reference_area(data)
+    data["reference"] = build_reference(
+        data, read_rail_records(area), read_river_records(), area, report
+    )
+    apply_compression(data, config["compressionBands"], report)
+    text = render_json(data)
+    check_edges_against_tiger(json.loads(text), read_road_records(), report)
+    return data, report, text
+
+
+def difference_from_disk(text, path):
+    """Return what's different between text and the file, or None if the bytes are the same."""
+    if not path.exists():
+        return f"{path.name} doesn't exist."
+    on_disk, fresh = path.read_bytes(), text.encode("utf-8")
+    if on_disk == fresh:
+        return None
+    for number, (old, new) in enumerate(zip(on_disk.split(b"\n"), fresh.split(b"\n")), start=1):
+        if old != new:
+            return f"{path.name} differs from a fresh build at line {number}."
+    return f"{path.name} differs from a fresh build in length."
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Build data/roads.json from TIGER/Line 2025.")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="regenerate in memory, write nothing, exit non-zero if data/roads.json differs",
+    )
+    args = parser.parse_args(argv)
     sys.stdout.reconfigure(line_buffering=True)  # Keep order with stderr when piped.
     missing = [p for p in SOURCE_FILES if not (RAW_DIR / Path(p).name).exists()]
     if missing:
@@ -1253,16 +1624,18 @@ def main():
         return 1
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     try:
-        records = read_road_records()
-        data, report = build_road_graph(records, config, describe_files(SOURCE_FILES))
-        area = reference_area(data)
-        data["reference"] = build_reference(
-            data, read_rail_records(area), read_river_records(), area, report
-        )
+        data, report, text = generate(config)
     except BuildError as error:
         print(f"FAILED: {error}", file=sys.stderr)
         return 1
-    OUTPUT_PATH.write_text(render_json(data), encoding="utf-8")
+    if args.check:
+        difference = difference_from_disk(text, OUTPUT_PATH)
+        if difference:
+            print(f"FAILED: {difference} Run tools/build_roads.py.", file=sys.stderr)
+            return 1
+        print(f"{OUTPUT_PATH.name} matches a fresh build")
+        return 0
+    OUTPUT_PATH.write_text(text, encoding="utf-8")
     print_summary(data, report)
     print(f"Wrote {OUTPUT_PATH.relative_to(REPO_ROOT)}")
     return 0

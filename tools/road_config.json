@@ -4,7 +4,7 @@
     "clip": "Bounds are true metres, before any compression. Keep the whole TIGER vertices with xMinM <= x <= xMaxM. Never interpolate an end vertex, so every vertex keeps its TIGER lon/lat.",
     "mtfcc": "width is paved width in metres. Widths and surfaces are assumed defaults by road class, not surveyed: TIGER records neither.",
     "overrides": "Road id to {width, surface, reason}. Empty because there is no evidence for any override yet.",
-    "compressionBands": "Set in step 5."
+    "compressionBands": "One global remap of x, f: the identity west of a band, scaled by factor inside it, a constant shift east of it. trueFrom and trueTo are true metres, west to east, with no overlap. z and lon/lat never change. The build fails if a graph node or trestle is inside a band or a band edge is within 1 mm of a kept TIGER vertex, and adds a vertex wherever a kept segment crosses a band edge."
   },
   "roads": [
     {
@@ -55,5 +55,14 @@
     "S1780": { "label": "Parking lot road", "width": 6.0, "surface": "asphalt" }
   },
   "overrides": {},
-  "compressionBands": []
+  "compressionBands": [
+    {
+      "axis": "x",
+      "trueFrom": 1223,
+      "trueTo": 5063,
+      "factor": 0.25,
+      "reason": "US 80 between the far east trestle and Meehan-Savoy Rd: 3.84 km with no junction or trestle, over four times the camera's 900 m far plane. It still holds one river crossing, and the railroad and river run through it. Their order is kept, but bearings inside the band change.",
+      "basis": "150 m east of trestle-east-far (x 1072.95) and 150 m west of Meehan-Savoy Rd's minimum x (x 5213.20), to the nearest metre. The band becomes 960 m long, about one far plane. x 1220 was rejected because it's 3 mm from a river vertex: the nearest kept vertices to these edges are 0.855 m and 1.647 m away."
+    }
+  ]
 }

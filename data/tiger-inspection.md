@@ -1,8 +1,8 @@
 # TIGER inspection findings
 
-Working notes for the road graph docs (CHUNKY-35, step 8). They record what TIGER/Line 2025 says about the ticket's roads and why `tools/road_config.json` holds what it does. The last section is the output of `.venv/bin/python tools/inspect_tiger.py`.
+Working notes for the road graph docs (CHUNKY-35, step 8). They record what TIGER/Line 2025 says about the ticket's roads, why `tools/road_config.json` holds what it does, and how compression and the TIGER check work. The last section is the output of `.venv/bin/python tools/inspect_tiger.py`.
 
-Positions are metres from town center: +x is east, -z is north.
+Positions are metres from town center: +x is east, -z is north. They're true metres, before compression, unless they say game.
 
 ## Does TIGER's Adams St reach I-20?
 
@@ -29,12 +29,34 @@ No. It changes name on the way, and TIGER leaves no gap.
 - **Meehan Savoy Rd "starts about 5.6 km from town center".** 5,596 m is its nearest vertex, a bend at x 5226, z 2002. Its junction with US 80 is 5,812 m away, at x 5808.
 - **"Two roads are named Church St".** Adams St has a second feature too, 21.9 km away (110168391111). `US Hwy 80` has four components. So every road in the config uses the nearest-component rule, not only Church St.
 
-## For step 5 (compression band)
+## Compression
 
-- Meehan Savoy Rd spans x 5213 to x 14919. It runs west of its junction as it heads south, so a band ending at x 5600 would compress part of it. To leave the road 1:1, end the band at x 5213 or lower.
-- The far east trestle is at x 1073.
-- That stretch isn't quite empty. US 80 crosses the river at x 1777, inside it, and the river and railroad both run through it. The remap preserves the order of all of this, and the docs should say so.
-- `game_position` is the one place the build gets `x` for roads, reference lines, trestles and crossings. `distanceFromCenterM`, the reference area and the crossing order all come from true lon/lat, so compression doesn't change them.
+One band in `tools/road_config.json`, written to `compression[]`:
+
+| | From | To |
+| --- | --- | --- |
+| True x | 1223 | 5063 |
+| Game x | 1223 | 2183 |
+
+- **The remap.** `f(x)` is the identity west of the band, scales by 0.25 inside it, and shifts by -2880 m east of it. It's strictly increasing, and `decompress_x` is its inverse. z and TIGER's lon/lat never change.
+- **Where the edges are.** 150 m east of `trestle-east-far` (x 1072.95) and 150 m west of Meehan-Savoy Rd's minimum x (x 5213.20), to the nearest metre. 3,840 m becomes 960 m, about one 900 m far plane (`index.html:294`). Meehan-Savoy Rd's junction is at true x 5808, game x 2928. x 1220 looked tidier but is 3 mm from a river vertex. The nearest kept vertices to the edges in use are 0.855 m and 1.647 m away.
+- **What's in the band.** No graph node or trestle. It isn't quite empty, though: US 80 crosses the river at true x 1777, game x 1361, and the river and railroad run through it.
+- **What's kept and what isn't.** Every crossing, the order along each line and the direction of every TIGER turn are kept. On this data, 9 of the 3,335 turns would flip if segments weren't split at the band edges, and none flip with the split. Bearings inside the band do change, because x is squeezed to a quarter and z isn't. A straight segment also bends where it crosses a band edge. The docs and the debug plot must say so.
+- **Band-edge vertices.** There are 10, listed by index in each edge's or line's `synthetic`, which is present and empty everywhere else: `us_80_e2` 2, railroad line 1 2, river line 3 6. Their lon/lat is interpolated and has 9 decimals, not TIGER's 6, so that they stay on the edge and re-deriving x from lon/lat works for every vertex. Each lands exactly on game x 1223 or 2183.
+- **"Exactly on a TIGER vertex"** means within 1 mm, the resolution of written x. Float equality would miss an edge copied from a printed x.
+- **Schema addition.** Crossing rows now have `lon` and `lat`, like nodes and trestles, so their x can go through `f` and be re-derived.
+
+## TIGER check
+
+Every build re-reads the road zips and checks the parsed JSON text, so it shares nothing with how the edges were built. Each edge's non-synthetic vertices have to be an unbroken run of features with one of its road's LINEARIDs, forwards or backwards.
+
+- **Assumption on features.** Two edges can't fit inside one feature, so the check can't be literally "one raw feature": `us_80_e2` crosses the county line (1104259460504 then 1105084070834) and `meehan_savoy_rd_e1` goes from `S` to `W` (110470585272 then 1104259508037). A run may move to another feature only where both features end, at a vertex they share, and it can't double back there. The other five edges each fit inside one feature.
+- **Clip endpoints.** A clip endpoint is the only vertex that may be missing from the features. The exception is never used on this data, because clip endpoints are whole TIGER vertices: the report says `Clip endpoints off their features: 0`.
+- **Synthetic vertices.** The check skips these, so it first confirms each one is on a band edge and on the straight line between its TIGER neighbours. Otherwise any vertex could hide in the list.
+- **Added crossings.** A vertex computed where two roads cross with no shared vertex would now fail this check. There are none on this data.
+- **Rail and river** are outside this check, which covers road edges. A one-off run of the same matcher passed on all seven lines.
+
+`.venv/bin/python tools/build_roads.py --check` regenerates the JSON in memory and exits non-zero if it differs from the file on disk. `python3 -m unittest tools/test_build_roads.py` runs the Python tests, which read no zips.
 
 ## US 80 clip
 
@@ -52,33 +74,33 @@ No. It changes name on the way, and TIGER leaves no gap.
 
 ## Road graph build
 
-Output of `.venv/bin/python tools/build_roads.py`, which writes `data/roads.json`:
+Output of `.venv/bin/python tools/build_roads.py`, which writes `data/roads.json`. Its positions are game metres unless they say true, and its report is in true metres:
 
 ```text
-TIGER/Line 2025, read from data/raw/
-  US 80: 3 edge(s), 265 vertices, S1200 7.3 m asphalt (class), walk n1 n2 n3 n4, features 1104259460504 1105084070834
-  Adams Street: 2 edge(s), 74 vertices, S1200 7.3 m asphalt (class), walk n2 n5 n6, features 1104259409674 1104259460560 1106087296718 1106087438880
-  Church St: 1 edge(s), 18 vertices, S1400 6.0 m asphalt (class), walk n5 n7, features 110168391385
-  Meehan-Savoy Rd: 1 edge(s), 520 vertices, S1400 6.0 m asphalt (class), walk n3 n8, features 1104259508037 110470585272
+TIGER/Line 2025, read from data/raw/. Positions are game metres unless they say true.
+  US 80: 3 edge(s), 267 vertices (2 synthetic), S1200 7.3 m asphalt (class), walk n1 n2 n3 n4, features 1104259460504 1105084070834
+  Adams Street: 2 edge(s), 74 vertices (0 synthetic), S1200 7.3 m asphalt (class), walk n2 n5 n6, features 1104259409674 1104259460560 1106087296718 1106087438880
+  Church St: 1 edge(s), 18 vertices (0 synthetic), S1400 6.0 m asphalt (class), walk n5 n7, features 110168391385
+  Meehan-Savoy Rd: 1 edge(s), 520 vertices (0 synthetic), S1400 6.0 m asphalt (class), walk n3 n8, features 1104259508037 110470585272
 Nodes:
   n1 clip x -4663, z 183: us_80
   n2 junction x -283, z -23: us_80 adams_st
-  n3 junction x 5808, z -216: us_80 meehan_savoy_rd
-  n4 clip x 6258, z -574: us_80
+  n3 junction x 2928 (true x 5808), z -216: us_80 meehan_savoy_rd
+  n4 clip x 3378 (true x 6258), z -574: us_80
   n5 junction x -281, z -199: adams_st church_st
   n6 clip x -292, z -1666: adams_st, connects to I-20
   n7 end x -1097, z -410: church_st
-  n8 end x 14919, z 6058: meehan_savoy_rd
+  n8 end x 12039 (true x 14919), z 6058: meehan_savoy_rd
 Reference lines, clipped to the reference area:
   Railroad: features 110168393895 1103690413981 110470585569 110470586701
-    159 vertices, x -5043, z 834 to x 8284, z -2159
-    16 vertices, x 11083, z -2162 to x 11906, z -2022
-    22 vertices, x 15404, z 3076 to x 14958, z 7530
+    161 vertices (2 synthetic), x -5043, z 834 to x 5404, z -2159
+    16 vertices (0 synthetic), x 8203, z -2162 to x 9026, z -2022
+    22 vertices (0 synthetic), x 12524, z 3076 to x 12078, z 7530
   Chunky River: features 110168391381 1102216410607 1102216410608 110470583324 110470583325
-    16 vertices, x -4691, z -2163 to x -4632, z -2164
-    1199 vertices, x -4560, z -2159 to x 661, z -45
-    1039 vertices, x 666, z -61 to x 6036, z 7591
-    32 vertices, x 6227, z 7594 to x 6816, z 7549
+    16 vertices (0 synthetic), x -4691, z -2163 to x -4632, z -2164
+    1199 vertices (0 synthetic), x -4560, z -2159 to x 661, z -45
+    1045 vertices (6 synthetic), x 666, z -61 to x 3156, z 7591
+    32 vertices (0 synthetic), x 3347, z 7594 to x 3936, z 7549
 Trestles:
   trestle-east-near x 579, z 79: 584.3 m east of center
   trestle-east-far x 1073, z 191: 1089.8 m east of center
@@ -86,10 +108,10 @@ Trestles:
 Crossings, in order along each road:
   us_80 x -4505, z 159: river
   us_80 x 669, z -88: river
-  us_80 x 1777, z -21: river
-  us_80 x 6121, z -451: railroad
-  meehan_savoy_rd x 5939, z 558: railroad
-Report:
+  us_80 x 1361 (true x 1777), z -21: river
+  us_80 x 3241 (true x 6121), z -451: railroad
+  meehan_savoy_rd x 3059 (true x 5939), z 558: railroad
+Report, with positions in true metres:
   US 80 joins at the county line at -88.914715, 32.327867 (x 1254, z -227)
   Adams Street reaches I-20 at -88.931164, 32.340809 (x -292, z -1666)
   Geometric check: no crossing away from a shared vertex
@@ -99,12 +121,17 @@ Report:
   Chunky River has a 16.2 m gap in TIGER from -88.921026, 32.326236 (x 661, z -45) to -88.920975, 32.326375 (x 666, z -61). Not bridged.
   Geometric check: the railroad and river have no near-miss under 5 m
   Railroad feature 1106087712080 has no segment inside the area
+  Compression: true x 1223 to 5063 is game x 1223 to 2183, factor 0.25. Past it, x shifts by -2880 m.
+  Inside that band: us_80 meets the river at true x 1777, game x 1361
+  Vertices added at band edges: us_80_e2 2, railroad line 1 2, river line 3 6
+  TIGER check: 7 edges, 880 vertices, all unbroken runs of raw features. Clip endpoints off their features: 0.
+  TIGER check: runs through more than one feature, joined where they end: us_80_e2 (1104259460504 then 1105084070834), meehan_savoy_rd_e1 (110470585272 then 1104259508037)
 Wrote data/roads.json
 ```
 
 For the docs:
 
-- **Shape.** No road branches or has a second component, so each walks as one line. Every vertex in `roads.json` is a TIGER vertex.
+- **Shape.** No road branches or has a second component, so each walks as one line. Every vertex in `roads.json` is a TIGER vertex, except the ones listed in `synthetic`.
 - **Clip nodes.** `kind: clip` means TIGER's line carries on past that node and the graph cuts it there. The node is the last whole TIGER vertex inside the bound, never an interpolated one, as the config requires. So Adams Street's terminal node is `clip`, with `connectsTo: I-20`.
 - **`connectsTo`.** The build sets it from the data, not from the config: the terminal has to lie on I-20 or on a ramp connected to I-20 through other ramps. The build fails if the road touches one before `clipAt`.
 - **Walk direction.** US 80 runs west to east. Each other road runs away from where it joins the graph, so Adams Street runs from US 80 towards I-20, Church St from Adams Street heading west, and Meehan-Savoy Rd from US 80.
@@ -113,7 +140,7 @@ For the docs:
 
 ## Reference lines
 
-What `reference` in `data/roads.json` holds, and what TIGER says about it. Positions are true metres. Rail features are identified by LINEARID only, and the build doesn't read the rail `FULLNAME` field.
+What `reference` in `data/roads.json` holds, and what TIGER says about it. Positions are true metres, so anything past the compression band has a different x in the file. Rail features are identified by LINEARID only, and the build doesn't read the rail `FULLNAME` field.
 
 **Reference area.** The bounding box of every included road plus 500 m: x -5163 to 15419, z -2166 to 7594. Meehan-Savoy Rd sets the east and south sides, so the box is much bigger than the town.
 
