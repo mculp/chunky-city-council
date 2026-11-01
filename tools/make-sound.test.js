@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { applyTo, costOf, formatSound, makeAll, makeOne, MUSIC_MODEL, planOf, SOUND_MODEL, toMake } from './make-sound.mjs';
+import { applyTo, costOf, findKey, formatSound, makeAll, makeOne, MUSIC_MODEL, planOf, SOUND_MODEL, toMake } from './make-sound.mjs';
 
 const REAL = JSON.parse(readFileSync(new URL('../data/sound.json', import.meta.url), 'utf8'));
 const SHEET = JSON.parse(readFileSync(new URL('./sound_prompts.json', import.meta.url), 'utf8'));
@@ -143,13 +143,30 @@ test('applying a name with no file made changes nothing', () => {
   assert.equal(JSON.stringify(data), before);
 });
 
+test('the key comes from FAL_KEY, or else from the file that keeps it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'make-sound-key-'));
+  assert.equal(findKey({ FAL_KEY: 'from-env', XDG_CONFIG_HOME: dir }), 'from-env');
+  assert.equal(findKey({ XDG_CONFIG_HOME: dir }), '');
+  mkdirSync(join(dir, 'chunky')); writeFileSync(join(dir, 'chunky/fal-key'), 'from-file\n');
+  assert.equal(findKey({ XDG_CONFIG_HOME: dir }), 'from-file');
+  assert.equal(findKey({ FAL_KEY: '', XDG_CONFIG_HOME: dir }), 'from-file', 'a blank one counts as none');
+});
+
+test('the script that saves the key will not save a blank one when there is no terminal', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'make-sound-key-')), script = new URL('./set-fal-key.sh', import.meta.url).pathname;
+  let code = 0; try { execFileSync('bash', [script], { env: { ...process.env, XDG_CONFIG_HOME: dir }, input: '\n', stdio: 'pipe' }); } catch (e) { code = e.status; }
+  assert.equal(code, 1);
+  assert.ok(!existsSync(join(dir, 'chunky/fal-key')));
+});
+
 test('run by hand it spends nothing without --go, or over the budget, or with no key', () => {
-  const tool = new URL('./make-sound.mjs', import.meta.url).pathname, run = (...args) => { const env = { ...process.env }; delete env.FAL_KEY; try { return { out: execFileSync('node', [tool, ...args], { env, encoding: 'utf8', stdio: 'pipe' }), code: 0 }; } catch (e) { return { out: e.stdout + e.stderr, code: e.status }; } };
+  // its own empty config folder, or a key saved on this machine would make the --go below real
+  const tool = new URL('./make-sound.mjs', import.meta.url).pathname, noKeyHere = mkdtempSync(join(tmpdir(), 'make-sound-key-')), run = (...args) => { const env = { ...process.env, XDG_CONFIG_HOME: noKeyHere }; delete env.FAL_KEY; try { return { out: execFileSync('node', [tool, ...args], { env, encoding: 'utf8', stdio: 'pipe' }), code: 0 }; } catch (e) { return { out: e.stdout + e.stderr, code: e.status }; } };
   const dry = run();
   assert.equal(dry.code, 0); assert.match(dry.out, /Nothing has been spent/);
   const over = run('--go', '--budget', '0.01');
   assert.equal(over.code, 1); assert.match(over.out, /over the \$0\.01 budget, so nothing was started/);
   const noKey = run('--go');
-  assert.equal(noKey.code, 1); assert.match(noKey.out, /no FAL_KEY/);
+  assert.equal(noKey.code, 1); assert.match(noKey.out, /no fal key/);
   assert.equal(run('--only', 'not-a-sound').code, 1);
 });

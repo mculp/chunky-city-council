@@ -8,9 +8,10 @@
 //   npm run sound:make -- --go --only town --again    those again, over what's there
 //   npm run sound:make -- --go --budget 30            a different limit, in dollars
 //
-// The key comes from FAL_KEY and goes nowhere but fal.
+// The key comes from FAL_KEY or from what tools/set-fal-key.sh saved, and goes nowhere but fal.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -74,6 +75,13 @@ export function applyTo(data, sheet, name, root = ROOT) {
     if (files.length) { data.cues[name] = { ...data.cues[name], file: one(files) }; if (cue.stereo) data.cues[name].stereo = true; }
   }
   return data;
+}
+
+// FAL_KEY if it's set, or else the file tools/set-fal-key.sh keeps it in
+export function findKey(env = process.env) {
+  if (env.FAL_KEY) return env.FAL_KEY;
+  const file = join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'chunky/fal-key');
+  return existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
 }
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -151,8 +159,8 @@ async function main() {
   if (!list.length) return;
   if (!args.includes('--go')) { console.log('Nothing has been spent. --go makes them.'); return; }
   if (total.most > budget) { console.error(`That could come to ${money(total.most)}, over the ${money(budget)} budget, so nothing was started. --budget changes it.`); process.exitCode = 1; return; }
-  const key = process.env.FAL_KEY;
-  if (!key) { console.error('There\'s no FAL_KEY set. data/sound.md says how to set one without it landing in the shell history or the repo.'); process.exitCode = 1; return; }
+  const key = findKey();
+  if (!key) { console.error('There\'s no fal key. Run bash tools/set-fal-key.sh in a real terminal to save one.'); process.exitCode = 1; return; }
   const { failed } = await makeAll(list, sheet, { key });
   console.log(failed.length ? `${failed.length} failed, and running this again picks up where it stopped: ${failed.map((it) => it.path).join(', ')}` : 'all made');
   if (failed.length) process.exitCode = 1;

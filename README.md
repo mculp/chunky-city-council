@@ -45,6 +45,8 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/play-water.mjs`: swims across a pond, floods a pickup in another and checks what's under them (`npm run water`)
 - `tools/play-sound.mjs`: plays the game with the sound on and checks what it's playing (`npm run sound`)
 - `tools/make-sound.mjs`: makes the music and sounds in `tools/sound_prompts.json` with ElevenLabs on fal, and says what it'd cost first (`npm run sound:make`)
+- `tools/set-fal-key.sh`: saves a fal key for that, readable only by you
+- `tools/measure-sound.mjs`: measures every file in `audio/` in Chrome and draws their spectrograms, since nothing here can hear (`npm run sound:measure`)
 - `tools/play-wreck.mjs`: crashes, burns and blows up the town in Chrome and reports what the worst of it costs (`npm run wreck`)
 - `tools/map-overlay.mjs`: draws TIGER's lines over a top-down capture of the game and measures the difference (`npm run overlay`)
 - `tools/structure-overlay.mjs`: draws the game's buildings over a public-domain aerial of the same ground (`npm run overlay:structures`)

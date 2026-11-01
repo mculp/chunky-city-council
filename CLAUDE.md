@@ -70,7 +70,7 @@ Then open http://localhost:8000.
 
 `npm run sound` plays the game with the sound on, in real time: nothing until a touch, the mute, a hidden tab, the score through the opening, his feet on each surface, driving, the crowd, and a track and a voice line swapped in with nothing changed but `data/sound.json`. It can't say whether any of it sounds good.
 
-`npm run sound:make` says what making the music and sounds with ElevenLabs on fal would cost, and `-- --go` makes them. `data/sound.md` has the rest.
+`npm run sound:make` says what making the music and sounds with ElevenLabs on fal would cost, and `-- --go` makes them. `npm run sound:measure` then measures every file in `audio/` and fails on one that's silent, clipped, cut short or has a click where it loops, and `-- --pictures dir` draws their spectrograms. `data/sound.md` has the rest.
 
 `npm run water` walks into a pond and swims across it, floods a pickup in another, and checks that the crowd keeps out, that nothing real ended up under water, and that the ponds are on the map. The ponds are in `data/water.json`, documented in `data/water.md`.
 

@@ -68,10 +68,10 @@ The music and everything else dip under it, the words come up, and it plays once
 
 `tools/sound_prompts.json` describes every track and every sound. `tools/make-sound.mjs` sends it to ElevenLabs' models on fal, saves the files in `audio/music/` and `audio/sfx/`, writes their lines into `data/sound.json`, and records what was made in `audio/manifest.json`. Add a sound there and run it again.
 
-It needs a fal key in `FAL_KEY`. This takes one without it landing in the shell history or the repo. Start a new terminal afterwards:
+It needs a fal key. Run this in a real terminal, because it has to wait for you to type. It keeps the key in `~/.config/chunky/fal-key`, readable only by you, and out of the shell history, the repo and every other program's environment. `FAL_KEY` wins over that file if it's set:
 
 ```sh
-read -rs "k?fal key: " && printf 'export FAL_KEY=%s\n' "$k" >> ~/.zshenv && unset k
+bash tools/set-fal-key.sh
 ```
 
 Then:
@@ -86,7 +86,7 @@ npm run sound:make -- --go --budget 30             # the limit, in dollars. It's
 
 It won't start if the whole run could go over the budget, and stopping halfway loses nothing. On 2026-11-01 fal charged $0.80 a minute for music and $0.002 a second for sounds. Its pages don't settle whether music is rounded up to the whole minute, so the budget's held against that.
 
-A track or a sound that's wrong is a matter of changing its prompt and running it with `--only` and `--again`. After a run, `npm run sound` and the board at `#sounds` are how to check it. Nothing here can hear, so somebody has to listen.
+A track or a sound that's wrong is a matter of changing its prompt and running it with `--only` and `--again`. After a run, `npm run sound:measure` fails on a file that's silent, clipped, cut short or has a click where it loops, and `-- --pictures dir` draws a spectrogram of each. `npm run sound` and the board at `#sounds` are how to check the rest. Nothing here can hear, so somebody has to listen.
 
 ### The rights
 
