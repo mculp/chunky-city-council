@@ -142,6 +142,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { loadMap } from './src/map.js';
 import { createPeople } from './src/people.js';
+import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
 
 const $ = (id) => document.getElementById(id);
 await Promise.race([document.fonts.load('40px Bungee').catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
@@ -1176,14 +1177,14 @@ const HOOD_RINGS = [
   [0.38, .282, .278, -.025, 2], [0.46, .243, .246, -.04, 2], [0.52, .172, .182, -.058, 2], [0.556, .082, .096, -.072, 2], [0.568, .012, .015, -.078, 2]
 ];
 const cr = (p0, p1, p2, p3, t) => { const t2 = t * t, t3 = t2 * t; return .5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3); };
-function buildHoodie(pitch, yaw, roll) {
-  const C = HOOD_RINGS, SUB = 4, rings = [];
+function buildHoodie(pitch, yaw, roll, SUB = 4, M = 48) {
+  const C = HOOD_RINGS, rings = [];
   for (let i = 0; i < C.length - 1; i++) {
     const p0 = C[Math.max(i - 1, 0)], p1 = C[i], p2 = C[i + 1], p3 = C[Math.min(i + 2, C.length - 1)];
     for (let s = 0; s < SUB; s++) rings.push(p1.map((_, k) => cr(p0[k], p1[k], p2[k], p3[k], s / SUB)));
   }
   rings.push(C[C.length - 1].slice());
-  const M = 48, R = rings.length, pos = [], uv = [], surf = [], face = [];
+  const R = rings.length, pos = [], uv = [], surf = [], face = [];
   const PV = new THREE.Vector3(0, .07, -.03), e = new THREE.Euler(), q = new THREE.Quaternion(), v = new THREE.Vector3();
   for (let r = 0; r < R; r++) {
     const [y, a, b, cz, n] = rings[r];
@@ -1233,12 +1234,27 @@ function hoodMat(hatchTex, emiss) {
   };
   return m;
 }
-function faceMat(pat, ca, cb) {
+// `hot` is for a crowd: instanced, each face going from ca to hot by its own aHot
+function faceMat(pat, ca, cb, hot) {
   return new THREE.ShaderMaterial({
-    uniforms: { uStep: G.uStep, uBurst: G.uBurst, uPxScale: G.uPxScale, uA: { value: new THREE.Color(...ca) }, uB: { value: new THREE.Color(...cb) }, uPat: { value: pat } },
+    defines: hot ? { HOT: 1 } : {},
+    uniforms: { uStep: G.uStep, uBurst: G.uBurst, uPxScale: G.uPxScale, uA: { value: new THREE.Color(...ca) }, uB: { value: new THREE.Color(...cb) }, uHot: { value: new THREE.Color(...(hot || ca)) }, uPat: { value: pat } },
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-    vertexShader: `attribute vec2 aFace; varying vec2 vF; void main(){ vF=aFace; vec3 p=position+normal*.0025; gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.); }`,
-    fragmentShader: `uniform float uStep, uBurst, uPxScale, uPat; uniform vec3 uA, uB; varying vec2 vF;
+    vertexShader: `attribute vec2 aFace; varying vec2 vF;
+      #ifdef HOT
+      attribute float aHot; varying float vHot;
+      #endif
+      void main(){ vF=aFace; vec3 p=position+normal*.0025;
+        #ifdef HOT
+        vHot=aHot; gl_Position=projectionMatrix*modelViewMatrix*instanceMatrix*vec4(p,1.);
+        #else
+        gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);
+        #endif
+      }`,
+    fragmentShader: `uniform float uStep, uBurst, uPxScale, uPat; uniform vec3 uA, uB, uHot; varying vec2 vF;
+      #ifdef HOT
+      varying float vHot;
+      #endif
       float hh(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
       float vn(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); return mix(mix(hh(i),hh(i+vec2(1,0)),f.x),mix(hh(i+vec2(0,1)),hh(i+vec2(1,1)),f.x),f.y); }
       void main(){
@@ -1249,9 +1265,14 @@ function faceMat(pat, ca, cb) {
         if(uPat<.5){ float s=fract((f.x+f.y*.18)*3.25+.5+wob); m=smoothstep(.06,.1,s)*smoothstep(.56,.52,s); }
         else if(uPat<1.5){ float s=fract(f.y*3.+abs(fract(f.x*3.)-.5)*1.2+wob); m=smoothstep(.1,.16,s)*smoothstep(.58,.52,s); }
         else if(uPat<2.5){ vec2 g=fract(f*3.4+wob)-.5; m=1.-smoothstep(.2,.26,length(g)); }
-        else { float s=fract(f.y*3.6+wob); m=smoothstep(.08,.12,s)*smoothstep(.5,.46,s); }
+        else if(uPat<3.5){ float s=fract(f.y*3.6+wob); m=smoothstep(.08,.12,s)*smoothstep(.5,.46,s); }
+        else { float s=vn(f*5.+vec2(uStep*2.3,uStep*1.1)); m=smoothstep(.54,.64,s); }
         float chalk=.72+.38*hh(floor(gl_FragCoord.xy/(1.6*uPxScale))+uStep*7.);
-        gl_FragColor=vec4(mix(uB,uA*chalk,m*(1.-smoothstep(.72,1.,e)*.85)),1.); }`
+        vec3 a=uA;
+        #ifdef HOT
+        a=mix(uA,uHot,vHot);
+        #endif
+        gl_FragColor=vec4(mix(uB,a*chalk,m*(1.-smoothstep(.72,1.,e)*.85)),1.); }`
   });
 }
 class Sweep {
@@ -1458,6 +1479,10 @@ function poseHero(tq) {
     const g = R.arm(1, V3(.1 + sw, -.42, .36), V3(.7, -.4, -.2), V3(0, 1, .25)); R.arm(0, V3(-.06 + sw, -.18, .3), V3(-.7, -.3, -.2), V3(0, 1, .25));
     broom.position.copy(g); broom.quaternion.setFromEuler(new THREE.Euler(.45, 0, -sw));
     R.leg(0, V3(-.14, -1.36, .02), V3(-.1, -1, .8)); R.leg(1, V3(.14, -1.36, .02), V3(.1, -1, .8));
+  } else if (k === 'struggle') {
+    const f = Math.sin(tq * 21) * .16;
+    R.arm(0, V3(-.44, -.12 + f, .3), V3(-.7, -.2, -.2)); R.arm(1, V3(.44, -.12 - f, .3), V3(.7, -.2, -.2));
+    R.leg(0, V3(-.2, -1.3, .3 + f * .5), V3(-.1, -1, .8), .2); R.leg(1, V3(.16, -1.36, -.22), V3(.1, -1, .8));
   } else {
     const a = Math.min(1, HP.speed / 4.2);
     for (let i = 0; i < 2; i++) {
@@ -1512,6 +1537,69 @@ const PICKUPS = [
   halo.scale.setScalar(.9); m.add(halo);
   return { m, x, y, z, got: false, ph: rnd() * 6 };
 });
+
+// ================================================================ the crowd's bodies
+// One body drawn many times: a hood, a face and four limbs, each a single mesh whoever's in it, so forty-eight of them
+// cost seven draw calls where one townsperson costs forty. Their limbs don't bend, which is most of what those forty pay for.
+// The look stands in until the owner says what they are.
+const CROWD_SHOWN = 48, CROWD_SEE = 110;
+const crowdGroup = new THREE.Group(); crowdGroup.visible = false; scene.add(crowdGroup);
+const crowdHatch = [1, 2, 3].map((k) => makeHatch(k * 15485, '#0a080c', ['#6f6878', '#938c9c', '#3d3844'], 420));
+const crowdCloth = () => new THREE.MeshToonMaterial({ map: crowdHatch[0], emissiveMap: crowdHatch[0], emissive: 0xffffff, emissiveIntensity: .26, gradientMap: toonGrad });
+const crowdHoodM = crowdCloth(), crowdSleeveM = crowdCloth(), crowdBody = buildHoodie(.3, 0, 0, 1, 16);
+function crowdMesh(geo, mat, n, share) {
+  const m = new THREE.InstancedMesh(geo, mat, n); m.frustumCulled = false; m.count = 0;
+  if (share) m.instanceMatrix = share.instanceMatrix; else m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  crowdGroup.add(m); return m;
+}
+const crowdLines = (m, px) => crowdMesh(m.geometry, outlineMat('#a99bc0', px, 1), m.instanceMatrix.count, m);
+// a limb hangs down from its pivot, with a hand or a foot on the end
+const crowdLimb = (len, top, end, tip) => mergeGeometries([new THREE.CylinderGeometry(top, end, len, 6, 2, true).translate(0, -len / 2, 0), tip.translate(0, -len, 0)]);
+const crowdArmGeo = crowdLimb(.66, .1, .075, new THREE.SphereGeometry(.078, 6, 4).scale(.9, 1.15, .8).translate(0, -.05, 0));
+const crowdLegGeo = crowdLimb(.66, .115, .08, new THREE.SphereGeometry(.088, 6, 4).scale(.85, .6, 1.6).translate(0, -.02, .07));
+const crowdHoods = crowdMesh(crowdBody.geo, crowdHoodM, CROWD_SHOWN);
+crowdHoods.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CROWD_SHOWN * 3).fill(1), 3).setUsage(THREE.DynamicDrawUsage);
+crowdBody.faceGeo.setAttribute('aHot', new THREE.InstancedBufferAttribute(new Float32Array(CROWD_SHOWN), 1).setUsage(THREE.DynamicDrawUsage));
+const crowdFaces = crowdMesh(crowdBody.faceGeo, faceMat(4, [.46, .42, .55], [.012, .01, .016], [1.7, .5, .14]), CROWD_SHOWN, crowdHoods); crowdFaces.renderOrder = 2;
+const crowdArms = crowdMesh(crowdArmGeo, crowdSleeveM, CROWD_SHOWN * 2), crowdLegs = crowdMesh(crowdLegGeo, heroPantsM, CROWD_SHOWN * 2);
+const crowdParts = [crowdHoods, crowdFaces, crowdLines(crowdHoods, 3), crowdArms, crowdLines(crowdArms, 2.2), crowdLegs, crowdLines(crowdLegs, 2)];
+const _cb = new THREE.Matrix4(), _cu = new THREE.Matrix4(), _cl = new THREE.Matrix4(), _cm = new THREE.Matrix4(), _cp = new THREE.Vector3(), _cq = new THREE.Quaternion(), _cs = new THREE.Vector3(), _ce = new THREE.Euler();
+const GAIT = [3.6, 4.6, 9, 11, 16, 0];   // how quickly their limbs go, by state
+const crowdShown = [];
+let crowdPicked = -1, crowdDrawn = -1;
+// Redrawn on the 12 fps step like everyone else, and they move on it too, which is also why it's cheap
+function drawCrowd(step) {
+  const k = step % 3; crowdHoodM.map = crowdHoodM.emissiveMap = crowdHatch[k]; crowdSleeveM.map = crowdSleeveM.emissiveMap = crowdHatch[(k + 1) % 3];
+  // who's drawn, nearest first, four times a second
+  if (Math.floor(step / 3) !== crowdPicked) {
+    crowdPicked = Math.floor(step / 3); crowdShown.length = 0;
+    for (const s of horde.active) { s.seen = Math.hypot(s.x - camera.position.x, s.z - camera.position.z); if (s.seen < CROWD_SEE) crowdShown.push(s); }
+    crowdShown.sort((a, b) => a.seen - b.seen); if (crowdShown.length > CROWD_SHOWN) crowdShown.length = CROWD_SHOWN;
+  }
+  const hoods = crowdHoods.instanceMatrix.array, arms = crowdArms.instanceMatrix.array, legs = crowdLegs.instanceMatrix.array, heat = crowdBody.faceGeo.attributes.aHot.array, tint = crowdHoods.instanceColor.array;
+  crowdShown.forEach((s, i) => {
+    const st = s.state, after = st === HUNTING || st === SWARM || st === GRABBING, still = !s.moving && st !== GRABBING;
+    s.gait += GAIT[st] / 12 * (still ? .2 : 1);
+    const p = s.gait, stride = still ? 0 : after ? .62 : .36;
+    _cb.compose(_cp.set(s.x, s.y + 1.43 * s.size + Math.abs(Math.sin(p)) * .03, s.z), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(s.size));
+    // the top half leans from the hips, so the feet stay on the ground
+    _cl.makeRotationFromEuler(_ce.set(st === STUNNED ? -.25 : after ? .34 : .14, 0, st === STUNNED ? Math.sin(step * .9) * .12 : Math.sin(p) * (after ? .05 : .1)));
+    const e = _cl.elements; _cl.setPosition(.7 * e[4], -.7 + .7 * e[5], .7 * e[6]);
+    _cu.multiplyMatrices(_cb, _cl).toArray(hoods, i * 16);
+    for (let a = 0; a < 2; a++) {
+      const side = a ? 1 : -1, swing = Math.sin(p + (a ? Math.PI : 0));
+      const reach = after ? -1.3 + Math.sin(p * 1.3 + a * 2) * .16 : st === CURIOUS ? -.4 - a * .25 : st === STUNNED ? .15 : swing * .18;
+      _cl.makeRotationFromEuler(_ce.set(reach, 0, side * (after ? .05 : .13))).setPosition(side * .3, -.07, 0);
+      _cm.multiplyMatrices(_cu, _cl).toArray(arms, (i * 2 + a) * 16);
+      _cl.makeRotationFromEuler(_ce.set(-swing * stride * (a === s.limp ? .55 : 1), 0, side * .03)).setPosition(side * .13, -.7, 0);
+      _cm.multiplyMatrices(_cb, _cl).toArray(legs, (i * 2 + a) * 16);
+    }
+    heat[i] = after ? 1 : st === CURIOUS ? .42 : st === STUNNED ? .2 : 0;
+    const c = CROWD_TINTS[s.look % CROWD_TINTS.length]; tint[i * 3] = c[0]; tint[i * 3 + 1] = c[1]; tint[i * 3 + 2] = c[2];
+  });
+  for (const m of crowdParts) m.count = crowdShown.length * (m.instanceMatrix.count / CROWD_SHOWN);
+  crowdHoods.instanceMatrix.needsUpdate = crowdArms.instanceMatrix.needsUpdate = crowdLegs.instanceMatrix.needsUpdate = crowdHoods.instanceColor.needsUpdate = crowdBody.faceGeo.attributes.aHot.needsUpdate = true;
+}
 
 // ================================================================ water moccasins
 const snakeMat = new THREE.MeshToonMaterial({ map: snakeTex, gradientMap: toonGrad, color: '#b8ac90' });
@@ -1841,10 +1929,10 @@ function setHidden(id, v) { if (hudCache['h' + id] !== v) { hudCache['h' + id] =
 function hudVitals() {
   const talk = S.mode === 'dialog' || S.mode === 'end' || S.mode === 'fail' || S.mode === 'title';
   if (hudCache.talk !== talk) { hudCache.talk = talk; document.body.classList.toggle('talking', talk); }
-  setHidden('hearts', !(S.mode === 'swim' || S.mode === 'bridge' || S.mode === 'land'));
+  setHidden('hearts', !(S.mode === 'swim' || S.mode === 'bridge' || S.mode === 'land' || S.mode === 'grabbed' || (crowdOut && S.mode === 'town')));
   setHTML('hearts', '♥'.repeat(Math.max(0, S.hp)) + '♡'.repeat(Math.max(0, 3 - S.hp)));
   setHidden('stam', S.mode !== 'swim'); $('stamFill').style.transform = `scaleX(${player.stamina.toFixed(2)})`;
-  const town = S.mode === 'town' || S.mode === 'dialog' || S.mode === 'sweep' || S.mode === 'end';
+  const town = S.mode === 'town' || S.mode === 'grabbed' || S.mode === 'dialog' || S.mode === 'sweep' || S.mode === 'end';
   setHidden('beans', !town); setHTML('beans', `Beans ${S.beans}/12`); setHidden('rep', !town);
   if (town) drawPeople();
 }
@@ -1881,7 +1969,12 @@ function fail(h, p) {
 }
 $('retry').addEventListener('click', () => {
   $('fail').hidden = true; S.hp = 3; player.inv = 1;
-  if (S.flags.town) { S.mode = 'town'; HP.kind = 'run'; player.pos.set(24.5, ROAD_TOP, 0); player.grounded = true; cam.snap = true; townObjective(); }
+  if (S.flags.town) {
+    S.mode = 'town'; HP.kind = 'run'; player.grounded = true; cam.snap = true;
+    // once they're out, back on the church steps, where they won't come
+    if (crowdOut) { const [x, z] = churchAt(68.5, -3); player.pos.set(x, floorAt(x, z), z); horde.calm(); } else player.pos.set(24.5, ROAD_TOP, 0);
+    townObjective();
+  }
   else if (S.flags.bridgeStarted) startBridge(); else startSwim(true);
 });
 
@@ -1928,6 +2021,7 @@ function endChapter() {
   const known = people.known().map((c) => ({ c, trust: Math.round(people.get(c.id, 'trust')) })), best = [...known].sort((a, b) => b.trust - a.trust)[0];
   $('endP').textContent = `${known.map(({ c, trust }) => `${c.short} ${trust >= 0 ? '+' : ''}${trust}`).join(' · ')}. ${best.trust > 0 ? best.c.name + ' has your back.' : 'Nobody trusts you yet.'}`;
   $('end').hidden = false;
+  bringOutCrowd();
 }
 $('again').addEventListener('click', () => { $('end').hidden = true; S.mode = 'town'; townObjective(); });
 
@@ -1977,6 +2071,7 @@ function startBridge() {
 function startTown() {
   S.mode = 'town'; S.collapse = 99; S.flags.town = true;
   card('Chunky, <span>Mississippi</span>', '2026', 3.4);
+  if (HORDE_EARLY) bringOutCrowd();
   townObjective(); hudVitals();
 }
 
@@ -2008,6 +2103,62 @@ function blocked(x, z, y) {
   // the rails on a road bridge
   if (SPANS.length && y > ROAD_TOP - 1) { const s = spanAt(x, z); if (s && MAP.roadGrid.nearest(x, z) > s.road.width / 2 && MAP.roadGrid.d < s.road.width / 2 + 1) return true; }
   return false;
+}
+// ---------------- the crowd: what they do is in src/horde.js
+// They aren't in Chapter 1. They come out when it ends, or as soon as town starts with ?horde.
+const HORDE_EARLY = new URLSearchParams(location.search).has('horde');
+const crowdRand = (() => { let s = 20260214; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+// A step asks for the floor it's on three times, and that's the most expensive thing they do
+let floorX = NaN, floorZ = NaN, floorY = 0;
+const floorOnce = (x, z) => { if (x !== floorX || z !== floorZ) { floorX = x; floorZ = z; floorY = floorAt(x, z); } return floorY; };
+const horde = createHorde({
+  blocked: (x, z, y) => blocked(x, z, y) || floorOnce(x, z) - y > .7,
+  water: (x, z) => floorOnce(x, z) < -.1,
+  floorAt: floorOnce,
+  rand: crowdRand,
+  // on down whichever street they're nearest
+  wander(s) {
+    if (MAP.roadGrid.nearest(s.x, s.z) === Infinity) return [s.x + (crowdRand() - .5) * 20, s.z + (crowdRand() - .5) * 20];
+    const id = MAP.roadGrid.seg.owner.id, p = MAP.along(id, MAP.sOn(id, s.x, s.z) + (crowdRand() < .5 ? -1 : 1) * (6 + crowdRand() * 30));
+    return [p.x + (crowdRand() - .5) * 8, p.z + (crowdRand() - .5) * 8];
+  },
+}, {}, {
+  grab() { S.mode = 'grabbed'; HP.kind = 'struggle'; HP.speed = 0; player.kb.set(0, 0); if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35); },
+  free() { S.mode = 'town'; HP.kind = 'run'; player.inv = 1.2; prompt(null); glitch(.4, .2); },
+  overrun() {
+    S.mode = 'town'; HP.kind = 'run'; player.inv = 1.4; prompt(null); S.hp -= 1; if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35);
+    if (S.hp <= 0) { fail('They dragged you off.', `Keep moving. Mash ${KA} to break free.`); return; }
+    if (S.beans > 0) { S.beans -= 1; toast('-1 beans · they got a can'); } else toast('Keep moving');
+  },
+});
+// where they start: along the streets of town, thickest on US 80
+const CROWD_STREETS = [['us_80', [120, 0], [900, 18], 56], ['church_st', [206, -397], [634, -181], 20], ['adams_st', [632, -5], [630, -320], 20]];
+const CROWD_TINTS = [[1, 1, 1], [1.2, .95, .82], [.85, 1.08, .88], [.9, .9, 1.25], [1.15, 1.08, .9]];
+let crowdOut = false;
+function bringOutCrowd() {
+  if (crowdOut) return; crowdOut = true; crowdGroup.visible = true; S.hp = 3;
+  const [cx, cz] = churchAt(68.5, -12);
+  horde.zones.push({ x: cx, z: cz, r: 15 });
+  for (const f of fires) horde.lights.push({ x: f.pl.position.x, z: f.pl.position.z, r: 30 });
+  horde.lights.push({ x: gasLight.position.x, z: gasLight.position.z, r: 40 });
+  for (const [id, a, b, n] of CROWD_STREETS) {
+    const s0 = MAP.sOn(id, ...a), s1 = MAP.sOn(id, ...b);
+    for (let i = 0, tries = 0; i < n && tries < n * 30; tries++) {
+      const p = MAP.along(id, s0 + (s1 - s0) * crowdRand()), x = p.x + (crowdRand() - .5) * 10, z = p.z + (crowdRand() - .5) * 10;
+      if (Math.hypot(x - player.pos.x, z - player.pos.z) < 35 || horde.inSanctuary(x, z) || floorOnce(x, z) < -.1 || blocked(x, z, floorOnce(x, z))) continue;
+      horde.add(x, z);
+      i++;
+    }
+  }
+}
+// what they can tell about him
+const feel = { x: 0, z: 0, y: 0, noise: 0, light: 0, beans: 0, night: 1, hidden: false, canGrab: false };
+function updateCrowd(dt, M) {
+  const P = player.pos; feel.x = P.x; feel.z = P.z; feel.y = P.y; feel.beans = S.beans;
+  feel.noise = M === 'town' ? HP.speed / 4.4 * 14 : 0;
+  feel.hidden = (M !== 'town' && M !== 'grabbed') || horde.inSanctuary(P.x, P.z);
+  feel.canGrab = M === 'town' && player.inv <= 0;
+  horde.update(dt, feel);
 }
 const camFwd = new THREE.Vector3(), camRight = new THREE.Vector3();
 function moveDir() {
@@ -2098,7 +2249,7 @@ function tick(dt, draw = true) {
     const f2 = floorAt(player.pos.x, player.pos.z);
     if (player.grounded && f2 < player.pos.y - .5) player.grounded = false;
     if (player.grounded) { player.pos.y += (f2 - player.pos.y) * Math.min(1, dt * 18); player.vy = 0; }
-    else { player.vy -= 15 * dt; player.pos.y += player.vy * dt; if (player.pos.y <= f2 && player.vy <= 0) { player.pos.y = f2; player.grounded = true; } }
+    else { player.vy -= 15 * dt; player.pos.y += player.vy * dt; if (player.pos.y <= f2 && player.vy <= 0) { player.pos.y = f2; player.grounded = true; if (crowdOut) horde.noise(player.pos.x, player.pos.z, 16, .6); } }
     HP.kind = player.grounded ? 'run' : 'air'; HP.speed = sp * (player.grounded ? 1 : 0); HP.phase += dt * sp * 2.4;
     // into the water from the bank or bridge
     if (player.pos.y < .05 && f2 < -.3) {
@@ -2140,11 +2291,21 @@ function tick(dt, draw = true) {
     prompt(`Hold ${KA} to sweep`, S.sweep); HP.kind = 'sweep';
     if (S.sweep >= 1) { prompt(null); S.mode = 'town'; HP.kind = 'run'; people.apply(people.data.events.swept, played); openDialog('odessa'); }
   }
+  // ---------------- held by the crowd: hauled along until he breaks free
+  if (M === 'grabbed' && horde.grab) {
+    const g = horde.grab, P = player.pos, nx = P.x + g.dx * dt, nz = P.z + g.dz * dt, fl = floorAt(nx, nz);
+    if (!blocked(nx, nz, P.y) && fl > -.1 && fl - P.y < .6) { P.x = nx; P.z = nz; P.y += (fl - P.y) * Math.min(1, dt * 18); }
+    player.yaw += angDiff(player.yaw, g.at + Math.PI) * Math.min(1, dt * 8);
+    HP.phase += dt * 14;
+    if (input.aEdge) horde.mash();
+    if (horde.grab) prompt(`Mash ${KA} to break free`, g.progress);
+  }
+  if (crowdOut) updateCrowd(dt, M);
   // ---------------- hero placement
-  if (M === 'swim' || M === 'land' || M === 'bridge' || M === 'town' || M === 'sweep' || M === 'dialog' || M === 'end' || (M === 'fail' && !S.flags.bridgeStarted)) {
+  if (M === 'swim' || M === 'land' || M === 'bridge' || M === 'town' || M === 'grabbed' || M === 'sweep' || M === 'dialog' || M === 'end' || (M === 'fail' && !S.flags.bridgeStarted)) {
     heroRoot.position.copy(player.pos); heroRoot.rotation.set(0, player.yaw, 0);
     if (HP.kind === 'swim') { hero.body.position.set(0, .2, 0); hero.body.rotation.set(.95, 0, Math.sin(HP.phase) * .08); }
-    else { const bob = Math.abs(Math.sin(HP.phase)) * .05 * Math.min(1, HP.speed / 4); hero.body.position.set(0, 1.43 + bob, 0); hero.body.rotation.set(.1 * Math.min(1, HP.speed / 4), 0, 0); }
+    else { const bob = Math.abs(Math.sin(HP.phase)) * .05 * Math.min(1, HP.speed / 4); hero.body.position.set(0, 1.43 + bob, 0); hero.body.rotation.set(HP.kind === 'struggle' ? .32 : .1 * Math.min(1, HP.speed / 4), 0, 0); }
   }
   hero.body.visible = !(player.inv > 0 && Math.floor(time * 16) % 2 === 0 && player.inv < 1.3);
   // dropped props: lantern and bottle fall, float, sink glowing
@@ -2175,7 +2336,9 @@ function tick(dt, draw = true) {
     const moving = Math.hypot(input.x, input.y) > .1;
     if (moving && time - lastLook > 1.2 && M !== 'fall') cam.yaw += angDiff(cam.yaw, player.yaw + Math.PI) * Math.min(1, dt * 1.6);
     const dist = swim ? 4.6 : M === 'dialog' ? 3.4 : 5.4;
-    V.set(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch)).multiplyScalar(dist).add(tgt);
+    // looking down on him when he's held, or whoever's holding him is all you'd see
+    const pitch = M === 'grabbed' ? Math.max(cam.pitch, .9) : cam.pitch;
+    V.set(Math.sin(cam.yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(cam.yaw) * Math.cos(pitch)).multiplyScalar(dist).add(tgt);
     if (V.y < .35) V.y = .35;
     if (cam.snap) { camera.position.copy(V); cam.snap = false; } else camera.position.lerp(V, 1 - Math.exp(-dt * (M === 'fall' ? 3 : 7)));
     if (cam.shake > 0) { cam.shake -= dt; camera.position.x += (Math.random() - .5) * cam.shake * .3; camera.position.y += (Math.random() - .5) * cam.shake * .3; }
@@ -2191,6 +2354,7 @@ function tick(dt, draw = true) {
   if (!draw) return;   // a test walking the whole map only needs the physics
   sky.position.copy(camera.position);
   updateWorld();
+  if (crowdOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
   updateParticles(dt, M);
   if (bottle.visible) levelLiquid();
   renderFrame(dt);
@@ -2225,6 +2389,7 @@ requestAnimationFrame(loop);
 if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, pointer, people, chunks: () => chunks.size,
+    horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdHoods.count }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
     topDown({ x0, z0, x1, z1, scale, everywhere }) {

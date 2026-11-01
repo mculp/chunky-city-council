@@ -113,7 +113,9 @@ d = await talk('odessa', 'Miss Odessa'); await snap('08-odessa');
 await choose(0); s = await choose(0); check('sweeping', s.mode === 'sweep', s.mode);
 await g(() => __game.key('e', true)); s = await g(() => __game.step(3.4)); await g(() => __game.key('e', false));
 check('swept for 3 beans, and twelve is plenty', s.flags.swept === true && s.beans >= 12, [s.flags.swept, s.beans]); await snap('09-swept');
+check('nobody else on the streets for the whole chapter', !(await g(() => __game.crowd())).out);
 s = await g(() => __game.step(2)); check('the chapter ends', s.mode === 'end', s.mode); await snap('10-end');
+check('and now they come out', (await g(() => __game.crowd())).all > 0);
 await page.click('#again'); s = await g(() => __game.step(.1)); check('the final objective', s.mode === 'town' && /Chunky is yours/.test(s.obj), [s.mode, s.obj]);
 arrow = await g(() => __game.pointer); check('and nothing left to point at', !arrow.on, arrow);
 
