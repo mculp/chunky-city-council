@@ -201,6 +201,16 @@ const through = await g(() => {
   return { down: f.down, past: past(v, t) };
 });
 check('a car goes through a low stretch of fence', through.down && through.past > 0, through);
+const rail = await g(() => {
+  if (G.driving()) G.getOut(true);
+  const c = G.map.crossings.find((q) => q.road === 'griffis_fountain_rd'), near = W.props.filter((p) => p.kind === 'fence' && Math.hypot(p.cx - c.x, p.cz - c.z) < 30), f = near[0], [nx, nz] = f.falls, P = G.player.pos;
+  G.place(f.cx - nx * 4, f.cz - nz * 4); walk(f.cx + nx * 3, f.cz + nz * 3, 3);
+  const stopped = (P.x - f.cx) * nx + (P.z - f.cz) * nz, t = { p: { x: f.cx, z: f.cz }, ux: nx, uz: nz, wall: 0 }, v = charge('pickup', t, 12, 14);
+  G.key('w', true); run(1.4); G.key('w', false);
+  const out = { n: near.length, stopped, down: f.down, past: past(v, t) }; if (G.driving()) G.getOut(true);
+  return out;
+});
+check('the rail coming off the Chunky River Bridge stops him, and a pickup takes it out', rail.n === 4 && rail.stopped < 0 && rail.down && rail.past > 0, rail);
 const first = await g(() => {
   if (G.driving()) G.getOut(true);
   const list = W.trees(-40, 30, 60), t = list.find((q) => !q.down); G.place(t.x - 30, t.z);

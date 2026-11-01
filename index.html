@@ -1522,6 +1522,8 @@ tieTo(CHURCH_HOUSE, (s, p) => {
 }
 // the white house on the north side of Commerce St's bend and its barn: what's around them, from the public aerial
 const PROP_WALLS = [];   // [ax, az, bx, bz, top, radius], the same as a building's walls
+// A vehicle tests for walls .6 m up, and a wall counts from .25 under its top, so a low one has to stop higher than it's drawn or a car goes through it without touching it. He can still hop it.
+const LOW_WALL = 1;
 const FIELDS = [];       // what the map draws under the buildings: { grass, dirt }, as lists of world points
 const leafGeo = new THREE.DodecahedronGeometry(1, 0);
 // One big tree that stands where it really does: clumps over a dome, one draw call and its ink. The leaves stop above where
@@ -1557,7 +1559,7 @@ function shrubs(list, colors) {
   flat(2.3, -497, 8.6, -497, 5.2);
   // the deck under the porch, with a low white block wall along its north end, and the stoop at the door
   flat(-5.59, -494.12, -6.22, -508.11, 2.6, .05);
-  { const [ax, az] = atTrue(-7.2, -501), [bx, bz] = atTrue(-7.52, -508.05); breakable('wall', 1.5, () => { flat(-7.2, -501, -7.52, -508.05, .22, .55, 0, whiteMat, 1.2); const w = [ax, az, bx, bz, Y0 + .55, .11]; PROP_WALLS.push(w); PROP.walls.push(w); }, { line: [ax, az, bx, bz], chip: '#c9c5b8', squash: .4 }); }
+  { const [ax, az] = atTrue(-7.2, -501), [bx, bz] = atTrue(-7.52, -508.05); breakable('wall', 1.5, () => { flat(-7.2, -501, -7.52, -508.05, .22, .55, 0, whiteMat, 1.2); const w = [ax, az, bx, bz, Y0 + LOW_WALL, .11]; PROP_WALLS.push(w); PROP.walls.push(w); }, { line: [ax, az, bx, bz], chip: '#c9c5b8', squash: .4 }); }
   flat(-1.6, -493.4, .4, -493.4, 1.4, .1);
   // boxwoods in low curbs either side of the door
   breakable('curb', .8, () => box(whiteMat, -3, .16, -493.4, 2.8, .32, 1.6), { chip: '#c9c5b8' }); breakable('curb', .8, () => box(whiteMat, 1.75, .16, -493.4, 2.7, .32, 1.6), { chip: '#c9c5b8' });
@@ -1945,7 +1947,7 @@ const SURFACES = { asphalt: roadMat, gravel: triplanar(stoneTex, .2, { roughness
     }
     // and the Chunky River Bridge has planks, with the road coming up to it the same way
     if (road.id === WAKE_ROAD) {
-      const s0 = MAP.sOn(road.id, WAKE_BRIDGE.x, WAKE_BRIDGE.z), far = WAKE_SPAN / 2 + .2, at = (s) => { const p = MAP.along(road.id, s); return [p.x, p.z]; }, near = (a, b) => { const out = []; for (let k = a; k <= b + .001; k += 3) out.push(at(k)); return out; };
+      const s0 = MAP.sOn(road.id, WAKE_BRIDGE.x, WAKE_BRIDGE.z), far = WAKE_SPAN / 2 + .2, at = (s) => { const p = MAP.along(road.id, s); return [p.x, p.z]; }, near = (a, b) => { const out = []; for (let k = a; k < b; k += 3) out.push(at(k)); out.push(at(b)); return out; };
       pieces = [[...road.pts.filter((_, i) => road.s[i] < s0 - 34), ...near(s0 - 34, s0 - far)], [...near(s0 + far, s0 + 34), ...road.pts.filter((_, i) => road.s[i] > s0 + 34)]];
     }
     // split into stretches of about 190 m, so that a stretch out of view isn't drawn
@@ -1966,42 +1968,86 @@ const SURFACES = { asphalt: roadMat, gravel: triplanar(stoneTex, .2, { roughness
     const disc = new THREE.Mesh(round, roadMat); disc.rotation.x = -Math.PI / 2; disc.position.set(n.x, y, n.z); scene.add(disc);
   }
 }
-// The Chunky River Bridge: a Pratt through truss from 1911, rust all over, on a plank deck. Five panels are enough to read as one:
-// posts at each panel, diagonals leaning in towards the middle, and bracing overhead he can look up through.
-const boardMat = triplanar(woodGrey, .5, { roughness: 1, color: '#8a7a6c' });
+// The Chunky River Bridge: a pin-connected Pratt through truss from 1911, rust all over, the way it looks on Street View. Six panels, so five posts a side:
+// a plain doubled one where each end post meets the top chord, and three laced ones between. The diagonals are pairs of flat bars, crossed by a thin one only in the
+// middle two panels. Each overhead strut has a shallow brace up to its middle from each side. The deck is planks laid across, with two wheel tracks of boards laid along them.
+const boardMat = new THREE.MeshStandardMaterial({ color: '#8f877c', roughness: 1 }), boardOld = new THREE.MeshStandardMaterial({ color: '#70675e', roughness: 1 }), rustDark = triplanar(rustTex, .32, { metalness: .55, roughness: .62, color: '#7d5a4e' });
 function chunkyRiverBridge(c, road) {
   const s0 = MAP.sOn(road.id, c.x, c.z), half = WAKE_SPAN / 2, A = MAP.along(road.id, s0 - half), B = MAP.along(road.id, s0 + half), L = Math.hypot(B.x - A.x, B.z - A.z) || 1;
-  const tx = (B.x - A.x) / L, tz = (B.z - A.z) / L, nx = -tz, nz = tx, ox = (A.x + B.x) / 2, oz = (A.z + B.z) / 2, W = WAKE_HALF + .1, H = 5.2, PANEL = WAKE_SPAN / 5, FLOOR = -.34;
-  const at = (a, side, y) => [ox + tx * a + nx * side, ROAD_TOP + y, oz + tz * a + nz * side];
+  const tx = (B.x - A.x) / L, tz = (B.z - A.z) / L, nx = -tz, nz = tx, ox = (A.x + B.x) / 2, oz = (A.z + B.z) / 2, W = WAKE_HALF + .25, H = 5.2, PANEL = WAKE_SPAN / 6, FLOOR = -.34;
+  const at = (a, side, y) => [ox + tx * a + nx * side, ROAD_TOP + y, oz + tz * a + nz * side], node = (i) => -half + i * PANEL;
   const beam = (a, b, w, h, ink = 1.2, mat = steelMat) => addBeam(a, b, w, h, mat, ink);
+  // how far along an end post is at a given height. The portal at that end lies in the same plane.
+  const lean = (e, y) => e * (half - PANEL * (y - FLOOR) / (H - FLOOR));
   for (const side of [-W, W]) {
-    beam(at(-half, side, FLOOR), at(half, side, FLOOR), .24, .34, 1.4);
-    beam(at(-half + PANEL, side, H), at(half - PANEL, side, H), .26, .3, 1.4);
-    // the end posts lean in to the top chord
-    for (const e of [-1, 1]) beam(at(e * half, side, FLOOR), at(e * (half - PANEL), side, H), .26, .3, 1.4);
-    for (let i = 1; i < 5; i++) beam(at(-half + i * PANEL, side, FLOOR), at(-half + i * PANEL, side, H), .16, .16);
-    // the diagonals come down towards the middle, and cross in it
-    for (const e of [-1, 1]) for (let i = 1; i < 3; i++) beam(at(e * (half - i * PANEL), side, H), at(e * (half - (i + 1) * PANEL), side, FLOOR), .07, .07, .9);
-    // a rail to lean on
-    for (const y of [.55, 1]) beam(at(-half, side * .985, y), at(half, side * .985, y), .05, .05, .7);
+    // the top chord, with its stay plates showing underneath, and flat bars for the bottom one
+    beam(at(node(1), side, H), at(node(5), side, H), .34, .26, 1.4, rustDark);
+    for (let a = node(1) + .28; a < node(5); a += .56) beam(at(a, side - .15, H - .15), at(a, side + .15, H - .15), .08, .04, 0, rustDark);
+    for (const off of [-.08, .08]) beam(at(-half, side + off, FLOOR), at(half, side + off, FLOOR), .05, .16, .7);
+    for (const e of [-1, 1]) beam(at(e * half, side, FLOOR), at(lean(e, H), side, H), .34, .3, 1.4, rustDark);
+    for (const i of [1, 5]) {
+      for (const off of [-.1, .1]) beam(at(node(i), side + off, FLOOR), at(node(i), side + off, H), .07, .07, .7, rustDark);
+      for (let y = .4; y < H - .2; y += 1.15) beam(at(node(i), side - .13, y), at(node(i), side + .13, y), .1, .05, 0, rustDark);
+    }
+    // the lacing is on the faces that look along the road, and it makes an X from there
+    for (const i of [2, 3, 4]) {
+      for (const off of [-.13, .13]) beam(at(node(i), side + off, FLOOR), at(node(i), side + off, H), .09, .09, .7);
+      for (let y = FLOOR + .1, k = 0; y < H - .2; y += .27, k++) for (const f of [-1, 1]) {
+        const d = (k % 2 ? .13 : -.13) * f;
+        beam(at(node(i) + f * .05, side + d, y), at(node(i) + f * .05, side - d, y + .27), .03, .03, 0);
+      }
+    }
+    for (const off of [-.07, .07]) for (const [top, foot] of [[1, 2], [2, 3], [4, 3], [5, 4]]) beam(at(node(top), side + off, H), at(node(foot), side + off, FLOOR), .04, .04, .7);
+    for (const foot of [2, 4]) beam(at(node(3), side, H), at(node(foot), side, FLOOR), .03, .03, .7);
+    // the rail, low and flat, just inside the posts
+    const rail = side - Math.sign(side) * .18;
+    for (const y of [.46, .94]) beam(at(-half, rail, y), at(half, rail, y), .03, .07, .7);
+    for (let i = 0; i < 6; i++) beam(at(node(i) + PANEL / 2, rail, FLOOR), at(node(i) + PANEL / 2, rail, .98), .05, .05, .7);
   }
-  for (let i = 0; i <= 5; i++) {
-    const a = -half + i * PANEL;
-    beam(at(a, -W, FLOOR - .02), at(a, W, FLOOR - .02), .22, .28);
-    if (i > 0 && i < 5) beam(at(a, -W, H), at(a, W, H), .16, .2);
-    if (i > 0 && i < 4) for (const e of [-1, 1]) beam(at(a, e * W, H - .02), at(a + PANEL, -e * W, H - .02), .05, .05, .7);
+  for (let i = 0; i <= 6; i++) beam(at(node(i), -W - .18, FLOOR - .02), at(node(i), W + .18, FLOOR - .02), .22, .26);
+  // overhead, thin rods cross each panel and each strut has its braces
+  for (const i of [2, 3, 4]) {
+    beam(at(node(i), -W, H), at(node(i), W, H), .16, .2);
+    for (const e of [-1, 1]) beam(at(node(i), e * W, H - 1.05), at(node(i), e * .1, H - .12), .06, .08, .7);
   }
-  // the portal, over the way in at each end
+  for (let i = 1; i < 5; i++) for (const e of [-1, 1]) beam(at(node(i), e * W, H - .02), at(node(i + 1), -e * W, H - .02), .03, .03, .7);
+  // the portal over each way in: two beams with a zigzag between them, and a heavy knee down to the end post either side
   for (const e of [-1, 1]) {
-    const a = e * (half - PANEL * .16), y = H - 1.05;
-    beam(at(a, -W, y), at(a, W, y), .14, .36);
-    for (const side of [-1, 1]) beam(at(a, side * W, y - .9), at(a, side * (W - .9), y), .08, .08, .8);
+    const low = H - 1;
+    beam(at(lean(e, H), -W, H), at(lean(e, H), W, H), .16, .22, 1.4, rustDark);
+    beam(at(lean(e, low), -W - .22, low), at(lean(e, low), W + .22, low), .16, .22, 1.4, rustDark);
+    for (let k = 0; k < 8; k++) {
+      const y0 = k % 2 ? H : low, y1 = k % 2 ? low : H, s = -W + k * W / 4;
+      beam(at(lean(e, y0), s, y0), at(lean(e, y1), s + W / 4, y1), .04, .04, .7);
+    }
+    for (const side of [-1, 1]) beam(at(lean(e, H - 2), side * W, H - 2), at(lean(e, low), side * (W - 1.25), low), .1, .12, 1.4, rustDark);
   }
-  for (const side of [-1.3, 0, 1.3]) beam(at(-half, side, FLOOR + .1), at(half, side, FLOOR + .1), .14, .2, 0);
-  // boards laid across, each a little proud of the next
-  for (let a = -half, i = 0; a < half; a += .6, i++) beam(at(a + .3, -WAKE_HALF - .08, -.05 + hash2(i, 41) * .03), at(a + .3, WAKE_HALF + .08, -.05 + hash2(i, 41) * .03), .56, .1, 0, boardMat);
+  for (const side of [-1.5, -.5, .5, 1.5]) beam(at(-half, side, FLOOR + .1), at(half, side, FLOOR + .1), .14, .2, 0);
+  // planks across, ragged at the ends, and on them the two wheel tracks of boards end to end. The world-mapped wood would run across the grain here, since the road's not square to the map.
+  const reach = half + .22;
+  for (let a = -reach, i = 0; a < reach; i++) {
+    const wide = Math.min(.24 + hash2(i, 41) * .12, reach - a), y = -.1 + hash2(i, 42) * .015;
+    beam(at(a + wide / 2, -WAKE_HALF - .02 - hash2(i, 43) * .16, y), at(a + wide / 2, WAKE_HALF + .02 + hash2(i, 44) * .16, y), wide - .025, .08, .6, hash2(i, 45) < .3 ? boardOld : boardMat);
+    a += wide;
+  }
+  for (const e of [-1, 1]) for (let b = 0; b < 5; b++) {
+    for (let a = -reach - hash2(b, e + 50) * 3, i = 0; a < reach; i++) {
+      const long = 2.4 + hash2(i + b * 7, e + 51) * 2.4, a0 = Math.max(a, -reach), a1 = Math.min(a + long - .02, reach);
+      if (a1 > a0) beam(at(a0, e * (.3 + b * .25), -.035), at(a1, e * (.3 + b * .25), -.035), .225, .07, .6, hash2(i + b * 7, e + 52) < .3 ? boardOld : boardMat);
+      a += long;
+    }
+  }
   // an abutment under each end, where the road comes in
-  for (const e of [-1, 1]) beam(at(e * (half + .55), -WAKE_HALF - 1, -2.6), at(e * (half + .55), WAKE_HALF + 1, -2.6), 1.3, 4.5, 1.2, stoneMat);
+  for (const e of [-1, 1]) beam(at(e * (half + .55), -W - .6, -2.6), at(e * (half + .55), W + .6, -2.6), 1.3, 4.5, 1.2, stoneMat);
+  // the rail carries on down each side of the way in, opening out with the road. A car takes it out the way it does a fence.
+  for (const e of [-1, 1]) for (const s of [-1, 1]) {
+    const p = at(e * half, s * (WAKE_HALF + .08), .62), q = at(e * (half + 9.5), s * (WAKE_HALF + 1.05), .62), w = [p[0], p[2], q[0], q[2], ROAD_TOP + LOW_WALL, .05];
+    breakable('fence', .5, () => {
+      beam(p, q, .03, .07, .7);
+      for (let k = 1; k <= 3; k++) { const t = k / 3, x = p[0] + (q[0] - p[0]) * t, z = p[2] + (q[2] - p[2]) * t; beam([x, ROAD_TOP - 1, z], [x, ROAD_TOP + .66, z], .07, .07, .7); }
+      PROP_WALLS.push(w); PROP.walls.push(w);
+    }, { rigid: true, line: [p[0], p[2], q[0], q[2]], falls: [s * nx, s * nz], chip: '#6a3a28' });
+  }
   SPANS.push({ x: ox, z: oz, r: half + .3, road, half: WAKE_HALF });
   flushBuckets();
 }

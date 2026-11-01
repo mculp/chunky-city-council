@@ -339,6 +339,8 @@ So town center is at world -6843, -7797, and distances and bearings are true eve
 
 At the Chunky River Bridge the river is drawn 7 m narrower than it is elsewhere, because the real span is 30.7 m. Its line doesn't move.
 
+**A correction to file.** By eye on Street View, the real span's middle is about 10 m south along the road from where TIGER's river line meets it. The bridge stands where TIGER has the crossing.
+
 ## Clip bounds
 
 Clips keep whole TIGER vertices. A line stops at its last vertex inside the bound, never at an interpolated point, so every end keeps its real lon/lat and can stop short of the bound itself.
