@@ -13,8 +13,8 @@ Everything is procedural three.js. The game has no image, model or texture files
 | `makeHatch` | Scribbled crosshatch cloth, as several drawings to cycle through |
 | `toonGrad`, `hoodMat` | Three-step toon shading (70, 150, 255) with the hatch as both colour and glow |
 | `tapeMat` | The warning tape in the hero's hood |
-| `drawCloth`, `drawSkull` | Everyone else's cloth and skulls, drawn on a canvas at load, in `src/looks.js` |
-| `clothMat`, `skullMat` | Putting those on a body, one at a time or a whole crowd at once |
+| `drawPerson`, `drawRadiation`, `drawAura` | What everyone else had on, how it's going through them and what's coming off them, drawn on a canvas at load, in `src/looks.js` |
+| `zombieMat` | Putting those on a body, one at a time or a whole crowd at once |
 | `outlineMat`, `outline` | Screen-space outlines. A `chalk` value above 0 adds the boil and the broken chalk texture |
 | `pixelTex`, `triplanar`, `textTex` | Surface textures and painted signage |
 | `vehicleGeometries`, `vehMat` | Everything with an engine: low-poly boxes in `src/vehiclemodels.js`, with paint that takes each one's colour and rusts through in patches |
@@ -46,22 +46,26 @@ This approach came from a failed one. Flat shapes drawn in code and set against 
 
 ## Everyone else
 
-Everyone else wears a look from `data/looks.json`, which `data/looks.md` explains. The looks are our own reading of ten of the owner's references, chosen at random, and these are the things those ten have in common:
+Everyone else is a radiating zombie, and how far gone they are varies. That's the owner's word for it, in `docs/lore.md`. How they look is below, and the owner can overrule any of it. Nobody but the player wears a hood. `data/looks.md` explains `data/looks.json`.
 
-- A hood with a tall, rounded top, half as wide again as the opening in it (`TOWN_SHAPE`).
-- A crayon fill rather than his scribble (`drawCloth`, `clothMat`). It's flat and saturated, with the paper's tooth in it, and goes dark into the outline. It never blooms, whatever light they're standing in. Some have stripes, shards or ribs instead of a plain fill, and some have a hazard mark on the chest.
-- A thick chalk line, in a colour of its own. Only a `glow` line blooms.
-- A skull drawn in the dark of the hood (`drawSkull`, `skullMat`): tall scribbled eyes 70% of the way up, a small nose just under halfway, and two rows of square teeth. Some have crossed eyes, rings, a visor or blood on the teeth. Lettering on the references is left out.
-- Black hands.
+- **A thin person.** Narrow and stooped, with long arms and a small bare head hanging forward on its neck (`ZOMBIE_SHAPE`), so that you can tell them from him by shape alone, a long way off. They were people from around here, and they've still got on what they had on: flannel, overalls, camo with a hunter's vest, a church dress, coveralls, or no shirt. It's all in crayon rather than his scribble, with the paper's tooth in it, going dark into the outline, and it never blooms, whatever light they're standing in.
+- **How far gone** is one number from 0 to 1, and everything below goes by it. `drawRadiation` draws one map of when each spot gives way, and `zombieMat` compares the map to the number, so someone at any stage costs the same as anyone else.
+- **Cracks** start at the breastbone, spread out along their branches, and light up in radium green, which stands out against the magenta sky (`RADIUM`). The trunks are brighter than the tips.
+- **Burning through.** Patches of what they had on go to char, with a lit edge, until there's not much but char and cracks. The face goes last.
+- **Eyes** are pinpricks to start with, and fill the sockets. The mouth lights once they're well on.
+- **The line** goes from dead chalk to burning. Their skin and clothes go a little greener too.
+- **What's coming off them** (`drawAura`): chalk strokes straight out from the body, like a comic drawing something that radiates, redrawn on the twelve frames, and a pool of the same green on the ground. Nothing shows until they're about a quarter gone, and the strokes get longer and more of them show from there.
 
-Coop, Tre and Miss Odessa each have a look that nobody else wears, along with Coop's cap and chain and her hat.
+With reduced motion the flicker and the strokes hold still.
+
+Coop, Tre and Miss Odessa are the least far gone, because they can still talk, and each has clothes nobody else wears, along with Coop's cap and chain and her hat and skirt. Robby's a ghost of the same build, and not far gone at all, because he didn't die.
 
 ## The crowd
 
-What they are is the owner's to decide, so nothing here says. They share one body so that dozens can be on a phone's screen at once: `crowdBody`, `crowdLimb`, `drawCrowd`. Every look is on one sheet with a row each, and each person reads their own row, so seven draw calls cover forty-eight of them however many looks there are.
+They share one body so that dozens can be on a phone's screen at once: `crowdBody`, `crowdLimb`, `drawCrowd`. Every look is on one sheet with a row each, and each person reads their own row and how far gone they are, so seven draw calls cover forty-eight of them, what's coming off them included, however many looks there are.
 
-- They wear the looks in `data/looks.json`, the same way the cast does. Heads hang forward.
-- The skull burns orange once they've noticed something, so you can read who's after you from a distance.
+- They wear the looks in `data/looks.json`. How far gone each of them is comes from a number they already have, by way of `degreeOf`, and most are in the middle.
+- Everything that's lit goes hotter and yellower once they've noticed something, and what's coming off them flares even on someone who's barely started, so you can read who's after you from a distance.
 - Their lines thin out with distance, or a far crowd would be nothing but chalk.
 - Limbs that don't bend, swung from the shoulder and hip on the same 12 fps step as everything else. Most of them limp. When they're after him their arms come up and they lean in.
 

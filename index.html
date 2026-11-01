@@ -206,7 +206,7 @@ import { loadWater } from './src/water.js';
 import { loadSound } from './src/sound.js';
 import { randomFrom } from './src/soundbank.js';
 import { createPeople } from './src/people.js';
-import { drawCloth, drawSkull } from './src/looks.js';
+import { drawPerson, drawRadiation, drawAura, degreeOf, PARTS, AURA_CELLS } from './src/looks.js';
 import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
 import { keysFor, buttonsFor, actWord, fastWord } from './src/controls.js';
 import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRim, drawArrow, drawLabel, labelSpace, clampCam, zoomAbout, fitScale, COLORS as MAPC } from './src/mapview.js';
@@ -480,15 +480,15 @@ const SEE_THROUGH = `if(uSee.w>0.&&gl_FragCoord.z<uSee.z&&vSeeY>uSeeY){ float se
 // A ghost's drawn in the dither a wall you're seeing through is drawn in: him, the same as anyone, with holes through him that move on the twelve frames.
 // His line has the same holes, or the inside of it would show through them. With reduced motion they hold still, since it's all of him flickering otherwise.
 const ghostHoles = (px, step) => `if(fract(sin(dot(floor(gl_FragCoord.xy/(2.*${px}))+${reduceMotion ? '0.' : step}*3.,vec2(91.7,47.3)))*24634.6345)<.52) discard;`;
-function outlineMat(color, px, chalk, { spikes = false, tinted = false, cut = false, ghost = false } = {}) {
-  const key = [color, px, chalk, spikes, tinted, cut, ghost].join('|');
+function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = false } = {}) {
+  const key = [color, px, chalk, tinted, cut, ghost].join('|');
   if (outlineMats.has(key)) return outlineMats.get(key);
   const uniforms = Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
     uColor: { value: new THREE.Color(color) }, uPx: { value: px }, uChalk: { value: chalk }, uStep: G.uStep, uRes: G.uRes, uPxScale: G.uPxScale, uMask: G.uMask, uSee: G.uSee, uSeeY: G.uSeeY, uHideRoof: G.uHideRoof
   });
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, fog: true, uniforms, userData: { outline: true },
-    defines: { ...(spikes && { SPIKES: 1 }), ...(tinted && { TINTED: 1 }), ...(cut && { CUT: 1 }), ...(ghost && { GHOST: 1 }) },
+    defines: { ...(tinted && { TINTED: 1 }), ...(cut && { CUT: 1 }), ...(ghost && { GHOST: 1 }) },
     vertexShader: `uniform float uPx, uStep, uChalk, uPxScale; uniform vec2 uRes;
       #ifdef TINTED
       varying vec3 vTint;
@@ -511,9 +511,6 @@ function outlineMat(color, px, chalk, { spikes = false, tinted = false, cut = fa
         vec4 clip=projectionMatrix*mvPosition;
         vec2 nc=(projectionMatrix*vec4(nv,0.)).xy; float l=length(nc); nc=l>1e-6?nc/l:vec2(0.);
         float boil=uChalk>0.?(.6+.8*vn(position*7.+vec3(uStep*1.37,uStep*2.11,uStep*.73))):1.;
-        #ifdef SPIKES
-          float h=hn(floor(position*26.)+.5); boil*=1.+pow(h,4.)*(6.+1.5*sin(uStep*2.+h*40.));
-        #endif
         #ifdef TINTED
           vTint=instanceColor; boil*=clamp(9./clip.w,.4,1.);   // a long way off the line thins, or it's all you'd see of them
         #endif
@@ -2452,7 +2449,7 @@ indexProps();
 // Where the town's props leave the random sequence, however many there are, so the lantern and the snakes stay as they were in the opening
 rs = 426193737;
 
-// ================================================================ characters: the hooded build from the drawing
+// ================================================================ characters: his hooded build from the drawing, and everyone else
 const cr = (p0, p1, p2, p3, t) => { const t2 = t * t, t3 = t2 * t; return .5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3); };
 // The hero's own shape, measured off the coin: 0.39 m to the side of his hood, the opening nearly filling it, and the hood
 // sitting right down between shoulders half as wide again
@@ -2468,19 +2465,15 @@ const HERO_SHAPE = {
     [0.823, .2758, .2657, -.068, 2], [0.9136, .195, .1917, -.091, 2], [0.9621, .1205, .1198, -.106, 2], [0.9844, .0543, .0541, -.113, 2], [0.9897, .0136, .0136, -.115, 2], [0.99, .004, .004, -.115, 2]
   ]
 };
-// Everyone else's shape, measured off the references: a tall hood half as wide again as the opening in it, and the opening a
-// rounded oblong, down to the top of the chest and well short of the hood's top. Cloth goes once round it and from hem to top.
-const TOWN_SCALE = .92, TOWN_HIPS = 1.43 * TOWN_SCALE;
-const TOWN_OPEN = { W: .21, mid: .471, up: .279, down: .341, power: 2.6 };
-const TOWN_SHAPE = {
-  pivot: [0, .2, -.03], bend: [.14, .3], fit: true, openY: [.13, .75],
-  open(y) { const O = TOWN_OPEN, t = Math.abs(y - O.mid) / (y > O.mid ? O.up : O.down); return t >= 1 ? 0 : O.W * Math.pow(1 - Math.pow(t, O.power), 1 / O.power); },
+// Everyone else's shape: a thin person, stooped, with a small bare head hanging forward on its neck, so that you can tell them
+// from him a long way off. Clothes go once round it and from hem to crown. src/looks.js's BODY is measured to these same heights.
+const TOWN_SCALE = .92, TOWN_HIPS = 1.43 * TOWN_SCALE, ZOMBIE_HIP = -.55;
+const ZOMBIE_SHAPE = {
+  pivot: [0, .16, .03], bend: [.13, .22], fit: true, openY: [0, 1], open: () => 0,
   rings: [
-    [-0.86, .31, .2, 0, 2.6], [-0.82, .345, .215, 0, 2.6], [-0.76, .37, .225, 0, 2.6], [-0.55, .395, .23, 0, 2.6],
-    [-0.30, .42, .235, 0, 2.6], [-0.16, .43, .24, -.005, 2.5], [-0.05, .425, .24, -.01, 2.3], [0.025, .395, .235, -.012, 2.2], [0.08, .355, .228, -.015, 2.1], [0.125, .31, .216, -.02, 2], [0.155, .27, .21, -.025, 2],
-    [0.185, .245, .212, -.03, 2],
-    [0.225, .272, .24, -.03, 2], [0.31, .305, .272, -.025, 2], [0.40, .315, .28, -.022, 2], [0.46, .316, .281, -.022, 2], [0.579, .305, .2801, -.027, 2], [0.69, .2737, .2586, -.041, 2],
-    [0.785, .2234, .2162, -.0595, 2], [0.858, .158, .1557, -.078, 2], [0.8975, .0976, .0971, -.09, 2], [0.9155, .044, .0438, -.0955, 2], [0.9197, .011, .011, -.097, 2], [0.92, .004, .004, -.097, 2]
+    [-0.62, .165, .118, 0, 2.3], [-0.50, .16, .115, 0, 2.3], [-0.34, .145, .105, .005, 2.2], [-0.18, .165, .112, .012, 2.2], [-0.04, .205, .122, .02, 2.2], [0.04, .232, .118, .028, 2.3], [0.085, .215, .1, .032, 2.2],
+    [0.125, .125, .08, .035, 2], [0.16, .066, .065, .04, 2], [0.205, .056, .058, .045, 2],
+    [0.24, .075, .08, .055, 2], [0.29, .108, .112, .062, 2], [0.35, .124, .128, .062, 2], [0.41, .125, .13, .06, 2], [0.475, .117, .122, .058, 2], [0.53, .088, .092, .056, 2], [0.56, .052, .055, .055, 2], [0.572, .02, .021, .055, 2], [0.575, .004, .004, .055, 2]
   ]
 };
 function buildHoodie(pitch, yaw, roll, SUB, M, { rings: C, open, openY, pivot, bend, fit = false }) {
@@ -2593,95 +2586,55 @@ function tapeMat({ pivot }) {
         gl_FragColor=vec4(mix(vec3(.004,.003,.006)+ink*.012,ink*1.3*chalk*mix(.55,1.,smoothstep(0.,.07,d)),m),1.); }`
   });
 }
-// Everyone else's cloth: crayon rather than his scribble, with the paper's tooth in it, going dark into the outline. A crowd's
-// is all on one sheet with a row for each look, so that everyone in it is one draw call.
-function clothMat(tex, { rows = 0, glow = .42 } = {}) {
-  const m = new THREE.MeshToonMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow, gradientMap: toonGrad });
-  if (rows) m.defines.ROWS = rows.toFixed(1);
+// Everyone else: what they had on when it happened, in crayon rather than his scribble, with the paper's tooth in it, going dark into
+// the outline, and how far it's got through them. drawRadiation says when each spot gives way, against how far gone they are, so a
+// crowd at every stage of it is one sheet and one draw call. What they're wearing never blooms, whatever light they're standing in. Only what's coming out of them does.
+// zombieZ says, for someone by themselves, what a crowd has per person: the row they're on, how far gone they are, how worked up, and which way round the map goes.
+let radiationMap = null;
+const RADIUM = 'vec3(.42,1.,.22)', RADIUM_HOT = 'vec3(.8,1.,.36)', STEP_HELD = reduceMotion ? '0.' : 'uStep';
+function zombieMat(sheet, part, { rows = 1, far = 0 } = {}) {
+  radiationMap ??= (() => { const t = canvasFor(1024, 512, (g) => drawRadiation(g, 1024, 512), false); t.colorSpace = THREE.NoColorSpace; return t; })();
+  const m = new THREE.MeshToonMaterial({ map: sheet, emissiveMap: sheet, emissive: 0xffffff, emissiveIntensity: .42, gradientMap: toonGrad }), rect = { value: new THREE.Vector2(...PARTS[part]) }, zombieZ = { value: new THREE.Vector4(0, far, 0, 0) };
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uStep = G.uStep; sh.uniforms.uPxScale = G.uPxScale;
+    Object.assign(sh.uniforms, { uStep: G.uStep, uPxScale: G.uPxScale, uRect: rect, uZ: zombieZ, uRows: { value: rows }, uRad: { value: radiationMap } });
     sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
-      uniform float uStep;
-      #ifdef ROWS
-      attribute float iLook;
-      #endif`).replace('#include <uv_vertex>', `#include <uv_vertex>
-      #ifdef ROWS
-      vMapUv.y=(clamp(vMapUv.y,.012,.988)+iLook)/ROWS;
+      uniform float uStep, uRows; uniform vec2 uRect;
+      #ifdef USE_INSTANCING
+      attribute vec4 iZ;
+      #else
+      uniform vec4 uZ;
       #endif
+      varying vec4 vZ; varying vec2 vOn;`).replace('#include <uv_vertex>', `#include <uv_vertex>
+      #ifdef USE_INSTANCING
+      vZ=iZ;
+      #else
+      vZ=uZ;
+      #endif
+      vOn=uv;
+      vMapUv=vec2(uRect.x+clamp(uv.x,.04,.95)*uRect.y,(clamp(uv.y,.012,.988)+vZ.x)/uRows);
       vMapUv+=vec2(uStep*.0013,-uStep*.0004); vEmissiveMapUv=vMapUv;`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      uniform float uStep, uPxScale;
+      uniform float uStep, uPxScale; uniform vec2 uRect; uniform sampler2D uRad; varying vec4 vZ; varying vec2 vOn;
       float hhs(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float zFar=vZ.y;
+        vec3 zRad=texture2D(uRad,vec2(uRect.x+(vZ.w>.5?fract(.5-vOn.x):vOn.x)*uRect.y,clamp(vOn.y,.002,.998))).rgb;
         { float k=(.88+.2*hhs(floor(gl_FragCoord.xy/(1.5*uPxScale))+uStep*13.))*mix(.3,1.,smoothstep(.05,.6,abs(dot(normal,normalize(vViewPosition)))));
-          diffuseColor.rgb*=k; totalEmissiveRadiance*=k; }`)
-      // however near a fire they stand it's still that colour: only the lines get to bloom
+          float gone=zFar>.001?smoothstep(zRad.g-.015,zRad.g+.015,zFar):0.; vec3 sick=mix(vec3(1.),vec3(.78,1.02,.72),zFar);
+          diffuseColor.rgb=mix(diffuseColor.rgb*k*sick,vec3(.022,.02,.026),gone); totalEmissiveRadiance=mix(totalEmissiveRadiance*k*sick,vec3(.006,.005,.008),gone); }`)
       .replace('#include <opaque_fragment>', `outgoingLight*=min(1.,.84/max(max(outgoingLight.r,max(outgoingLight.g,outgoingLight.b)),1e-4));
+        { float crack=smoothstep(1.-zFar,1.-zFar+.1,zRad.r), edge=zFar>.03?1.-smoothstep(0.,.05,abs(zFar-zRad.g)):0., fl=.84+.32*hhs(vec2(vZ.y*91.,${STEP_HELD}*7.+1.));
+          float e=max(.05,1.-zFar*1.3), eyes=smoothstep(e,e+.08,zRad.b)*smoothstep(0.,.06,zFar)*(.75+zFar*.9+vZ.z*.6);
+          outgoingLight+=mix(${RADIUM},${RADIUM_HOT},vZ.z*.75)*(crack*(.3+zRad.r*.8)*(.95+zFar*.45+vZ.z*.3)+edge*(.45+zFar*.3)+eyes+zFar*zFar*.08+vZ.z*.03)*fl; }
         #include <opaque_fragment>`);
   };
   return m;
 }
-// The skull in someone's hood, flat on a plane set back behind the opening like his tape, and for the same reason. The edge of
-// the opening is drawn here too, in the colour of their outline and as wide on screen. A crowd's are all on one sheet, side by side.
-function skullMat(tex, { cells = 0, line = '#ffffff', glow = 1, px = 3.8 } = {}) {
-  const O = TOWN_OPEN, n = (v) => v.toFixed(3), [y0, y1] = TOWN_SHAPE.openY;
-  return new THREE.ShaderMaterial({
-    defines: cells ? { CELLS: cells.toFixed(1) } : {},
-    uniforms: { uStep: G.uStep, uBurst: G.uBurst, uPxScale: G.uPxScale, uTilt: { value: new THREE.Matrix3() }, uMap: { value: tex }, uLine: { value: new THREE.Color(line).multiplyScalar(glow) }, uPx: { value: px } },
-    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-    vertexShader: `attribute vec2 aFace; uniform mat3 uTilt; varying vec2 vF; varying vec3 vP, vC;
-      #ifdef CELLS
-      attribute float iLook, aHot; attribute vec3 iLine; varying float vLook, vHot; varying vec3 vLine;
-      #endif
-      const vec3 PV=vec3(${TOWN_SHAPE.pivot.map(n).join(',')});
-      void main(){ vF=aFace; vec3 p=position+normal*.0025; mat4 mm=modelViewMatrix;
-        #ifdef CELLS
-        mm=modelViewMatrix*instanceMatrix; vLook=iLook; vHot=aHot; vLine=iLine;
-        #endif
-        vP=transpose(uTilt)*(position-PV)+PV;
-        vC=transpose(uTilt)*((inverse(mm)*vec4(0.,0.,0.,1.)).xyz-PV)+PV;
-        gl_Position=projectionMatrix*mm*vec4(p,1.); }`,
-    fragmentShader: `uniform float uStep, uBurst, uPxScale, uPx; uniform vec3 uLine; uniform sampler2D uMap; varying vec2 vF; varying vec3 vP, vC;
-      #ifdef CELLS
-      varying float vLook, vHot; varying vec3 vLine;
-      #endif
-      float hh(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
-      float vn(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); return mix(mix(hh(i),hh(i+vec2(1,0)),f.x),mix(hh(i+vec2(0,1)),hh(i+vec2(1,1)),f.x),f.y); }
-      void main(){
-        vec2 a=vec2(abs(vF.x)/${n(O.W)},abs(vF.y-${n(O.mid)})/(vF.y>${n(O.mid)}?${n(O.up)}:${n(O.down)}));
-        float e=pow(a.x,${n(O.power)})+pow(a.y,${n(O.power)})-1.+(vn(vF*26.+uStep*1.7)-.5)*.1;
-        // how many pixels past the edge this is, and how wide the line is, which has a limit, for someone a long way off
-        float past=e/max(length(vec2(dFdx(e),dFdy(e))),1e-5), wide=min(uPx*uPxScale,.03/max(length(vec2(dFdx(vF.y),dFdy(vF.y))),1e-5));
-        if(past>wide) discard;
-        // where the line of sight lands on the skull
-        const vec3 N=vec3(0.,.2,.98), C=vec3(0.,.44,.19);
-        vec3 rd=normalize(vP-vC);
-        vec2 q=(vP+rd*dot(N,C-vP)/min(dot(N,rd),-.12)).xy;
-        q.x+=uBurst*(hh(vec2(floor(q.y*40.),uStep+3.))-.5)*.2;
-        q+=(vec2(vn(q*40.+uStep*3.1),vn(q*40.+uStep*5.3+9.))-.5)*.007;
-        vec2 uv=vec2(q.x/${n(O.W)}*.5+.5,(q.y-${n(y0)})/${n(y1 - y0)});
-        vec3 col=vec3(.004,.003,.006), ln=uLine;
-        if(uv.x>0.&&uv.x<1.&&uv.y>0.&&uv.y<1.){
-          #ifdef CELLS
-          uv.x=(vLook+uv.x)/CELLS;
-          #endif
-          col=texture2D(uMap,uv).rgb;
-        }
-        float chalk=.74+.34*hh(floor(gl_FragCoord.xy/(1.6*uPxScale))+uStep*7.);
-        col*=chalk*mix(.5,1.,smoothstep(0.,14.*uPxScale,-past));
-        #ifdef CELLS
-        // once they've noticed something, it burns
-        ln=vLine; col=mix(col,vec3(1.8,.42,.1)*dot(col,vec3(.5)),vHot);
-        #endif
-        float ring=(1.-smoothstep(wide-1.,wide,abs(past)))*step(.15,hh(floor(gl_FragCoord.xy/(1.5*uPxScale))+uStep*13.));
-        gl_FragColor=vec4(mix(col,ln*chalk,ring),1.); }`
-  });
-}
 class Sweep {
-  constructor(nSeg, nRad, mat) {
+  constructor(nSeg, nRad, mat, strip = false) {
     this.nSeg = nSeg; this.nRad = nRad; const n = (nSeg + 1) * (nRad + 1);
     this.pos = new Float32Array(n * 3); this.nor = new Float32Array(n * 3); const uvs = new Float32Array(n * 2), idx = [];
-    for (let i = 0; i <= nSeg; i++) for (let j = 0; j <= nRad; j++) { const k = i * (nRad + 1) + j; uvs[k * 2] = j / nRad * 1.2; uvs[k * 2 + 1] = i / nSeg * 1.5; }
+    for (let i = 0; i <= nSeg; i++) for (let j = 0; j <= nRad; j++) { const k = i * (nRad + 1) + j; uvs[k * 2] = strip ? j / nRad : j / nRad * 1.2; uvs[k * 2 + 1] = strip ? 1 - i / nSeg : i / nSeg * 1.5; }
     for (let i = 0; i < nSeg; i++) for (let j = 0; j < nRad; j++) { const a = i * (nRad + 1) + j, b = (i + 1) * (nRad + 1) + j; idx.push(a, a + 1, b, b, a + 1, b + 1); }
     this.geo = new THREE.BufferGeometry();
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3)); this.geo.setAttribute('normal', new THREE.BufferAttribute(this.nor, 3)); this.geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
@@ -2719,41 +2672,40 @@ function orientGroup(g, axisY, awayZ) {
   const X = new THREE.Vector3().crossVectors(Y, Z); g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
 }
 // one rig used by the hero and the townsfolk
-function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, lineK = 1, lineStyle, rimmed = false, shoulder, out = 0, reach, thick = 1, legSize = 1, eyelets, chest, cord = 1, wave = 0, cordColor = null }) {
-  const body = new THREE.Group(), line = (m, px) => outline(m, ol, px * lineK, 1, lineStyle);
+function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, lineK = 1, rimmed = false, shoulder, out = 0, reach, thick = 1, legSize = 1, eyelets, chest, cord = 1, wave = 0, strip = false, hip = [.12, -.7], shin = .34, shoe = '#efe9de' }) {
+  const body = new THREE.Group(), line = (m, px) => outline(m, ol, px * lineK, 1);
   const hm = new THREE.Mesh(hood.geo, hoodM); line(hm, 4); body.add(hm);
-  const fm = new THREE.Mesh(hood.faceGeo, faceM); fm.renderOrder = 2; body.add(fm);
+  const fm = faceM ? new THREE.Mesh(hood.faceGeo, faceM) : null; if (fm) { fm.renderOrder = 2; body.add(fm); }
   const mkArm = () => {
-    const sleeve = new Sweep(14, 12, sleeveM); line(sleeve.mesh, 3.4); body.add(sleeve.mesh);
-    const cuff = new THREE.Mesh(cuffGeo, sleeveM); cuff.scale.set(.086 * thick, .07 * thick, .086 * thick); line(cuff, 2.8); body.add(cuff);
+    const sleeve = new Sweep(14, 12, sleeveM, strip); line(sleeve.mesh, 3.4); body.add(sleeve.mesh);
+    const cuff = new THREE.Mesh(cuffGeo, sleeveM); cuff.visible = !strip; cuff.scale.set(.086 * thick, .07 * thick, .086 * thick); line(cuff, 2.8); body.add(cuff);
     const fist = new THREE.Group(); fist.scale.setScalar(thick); body.add(fist);
     for (let i = 0; i < 4; i++) { const f = new THREE.Mesh(fingerGeo, handM); f.rotation.set(Math.PI / 2, 0, -Math.PI * .15); f.position.y = (i - 1.5) * .037; f.scale.setScalar(1 - Math.abs(i - 1.5) * .07); line(f, 2); fist.add(f); }
     const palm = new THREE.Mesh(sphGeo, handM); palm.scale.set(.066, .085, .052); palm.position.set(0, 0, -.06); line(palm, 2.4); fist.add(palm);
     return { sleeve, cuff, fist };
   };
   const arms = [mkArm(), mkArm()];
-  const legs = [0, 1].map(() => { const sw = new Sweep(10, 10, pantsM); line(sw.mesh, 2.4); body.add(sw.mesh); return sw; });
-  const shoeM = new THREE.MeshToonMaterial({ color: '#efe9de', gradientMap: toonGrad });
+  const legs = [0, 1].map(() => { const sw = new Sweep(10, 10, pantsM, strip); line(sw.mesh, 2.4); body.add(sw.mesh); return sw; });
+  const shoeM = new THREE.MeshToonMaterial({ color: shoe, gradientMap: toonGrad });
   const shoes = [0, 1].map(() => {
     const g = new THREE.Group(); body.add(g);
     const up = new THREE.Mesh(new THREE.CapsuleGeometry(.068, .16, 4, 10), shoeM); up.rotation.x = Math.PI / 2; up.position.set(0, .01, .07); up.scale.set(1, 1, .82); line(up, 2.2); g.add(up);
     return g;
   });
-  // drawstrings: white-outlined black cords from white eyelets, or for everyone else, cords of their own colour from a ball of the same
-  const cordM = cordColor ? new THREE.MeshBasicMaterial({ color: cordColor }) : stringMat, cordLine = cordColor && new THREE.Color(cordColor).getHSL({}).l > .5 ? INK : CHALK_WHITE;
-  const cords = [hood.surfAt(-eyelets[0], eyelets[1]), hood.surfAt(eyelets[0], eyelets[1])].map(({ p, n }) => {
-    const eye = cordColor ? outline(new THREE.Mesh(sphGeo, cordM), cordLine, 1.3, 1) : new THREE.Mesh(eyeGeo, whiteMat); eye.scale.setScalar(cordColor ? .026 : thick); eye.position.copy(p).addScaledVector(n, .003); eye.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n); body.add(eye);
-    const sw = new Sweep(8, 6, cordM); outline(sw.mesh, cordLine, 1.3, 1); body.add(sw.mesh);
-    const ag = new THREE.Mesh(agletGeo, whiteMat); ag.visible = !cordColor; body.add(ag);
+  // his drawstrings: white-outlined black cords from white eyelets
+  const cords = eyelets ? [hood.surfAt(-eyelets[0], eyelets[1]), hood.surfAt(eyelets[0], eyelets[1])].map(({ p, n }) => {
+    const eye = new THREE.Mesh(eyeGeo, whiteMat); eye.scale.setScalar(thick); eye.position.copy(p).addScaledVector(n, .003); eye.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n); body.add(eye);
+    const sw = new Sweep(8, 6, stringMat); outline(sw.mesh, CHALK_WHITE, 1.3, 1); body.add(sw.mesh);
+    const ag = new THREE.Mesh(agletGeo, whiteMat); body.add(ag);
     return { p, n, sw, ag };
-  });
+  }) : [];
   const rig = { body, arms, legs, shoes, hm, fm, hood };
   // a raised hem around the opening, so that what's in there reads as being inside
   const rim = rimmed ? new Sweep(64, 6, sleeveM) : null;
   if (rim) { line(rim.mesh, 2.2); body.add(rim.mesh); }
-  rig.setHood = (h) => { hm.geometry = hm.children[0].geometry = h.geo; fm.geometry = h.faceGeo; if (rim) rim.update(h.rim, .034); faceM.uniforms.uTilt.value.copy(h.tilt); };
+  rig.setHood = (h) => { hm.geometry = hm.children[0].geometry = h.geo; if (fm) { fm.geometry = h.faceGeo; faceM.uniforms.uTilt.value.copy(h.tilt); } if (rim) rim.update(h.rim, .034); };
   rig.S = [new THREE.Vector3(-shoulder[0], shoulder[1], 0), new THREE.Vector3(shoulder[0], shoulder[1], 0)];
-  rig.H = [new THREE.Vector3(-.12, -.7, 0), new THREE.Vector3(.12, -.7, 0)];
+  rig.H = [new THREE.Vector3(-hip[0], hip[1], 0), new THREE.Vector3(hip[0], hip[1], 0)];
   // set an arm (0 left, 1 right) to reach a wrist target; grip axis for the fist
   // `out` moves every hand out with his shoulders, so a pose works whatever he's built like
   rig.arm = (i, target, hint, gripAxis) => {
@@ -2781,7 +2733,7 @@ function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, lineK = 1, li
     }
   };
   rig.leg = (i, ankle, hint, toe = 0) => {
-    const Hp = rig.H[i], K = new THREE.Vector3(); ik(Hp, ankle, .34, .34, hint, K);
+    const Hp = rig.H[i], K = new THREE.Vector3(); ik(Hp, ankle, shin, shin, hint, K);
     const pts = new THREE.CatmullRomCurve3([Hp.clone().add(new THREE.Vector3(0, .14, 0)), Hp, K, ankle], false, 'centripetal').getSpacedPoints(10);
     legs[i].update(pts, pts.map((_, k) => legSize * (.118 - .035 * k / 10)));
     shoes[i].position.copy(ankle); shoes[i].rotation.set(toe, 0, 0);
@@ -2940,15 +2892,15 @@ function poseHero(tq) {
 }
 
 // ================================================================ townsfolk
-// What they wear is in data/looks.json. Nobody gets the hero's hoodie or his face: those are his alone.
+// What they had on is in data/looks.json, and so is how far gone each of the cast is. Nobody gets the hero's hoodie or his face: those are his alone.
 const LOOKS = await (await fetch('data/looks.json')).json();
-const SKULL_ASPECT = (TOWN_SHAPE.openY[1] - TOWN_SHAPE.openY[0]) / (TOWN_OPEN.W * 2), CLOTH_RANGE = { from: TOWN_SHAPE.rings[0][0], to: TOWN_SHAPE.rings[TOWN_SHAPE.rings.length - 1][0] };
 const canvasFor = (w, h, draw, repeat) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; draw(cv.getContext('2d')); return toTex(cv, repeat); };
-// a line only blooms if it's meant to
-const lineBright = (look) => (look.line.style === 'glow' ? 1.25 : .8), lineHex = (look) => '#' + new THREE.Color(look.line.color).multiplyScalar(lineBright(look)).getHexString();
-const townHood = buildHoodie(.08, 0, 0, 3, 32, TOWN_SHAPE);
-const townPantsM = new THREE.MeshToonMaterial({ color: '#2a2436', emissive: '#120e18', gradientMap: toonGrad });
-const paleTrousers = new THREE.MeshToonMaterial({ color: '#8fa9b6', emissive: '#2c3a42', gradientMap: toonGrad }), paleHand = new THREE.MeshToonMaterial({ color: '#b4cdd8', emissive: '#2c3a42', gradientMap: toonGrad });
+// The line goes from dead chalk to burning as they go, and hotter again once they've noticed something
+const zombieLine = (far, hot = 0, out = new THREE.Color()) => {
+  const k = far * far * (3 - 2 * far), b = .62 + k * .63 + hot * .25;
+  return out.setRGB((.72 - k * .3 + hot * .34) * b, (.78 + k * .22 + hot * .05) * b, (.68 - k * .4 + hot * .02) * b);
+};
+const townBody = buildHoodie(.1, 0, 0, 3, 32, ZOMBIE_SHAPE);
 function ghostMat(m) {
   const c = m.clone(), before = m.onBeforeCompile;
   c.onBeforeCompile = (sh, r) => {
@@ -2964,36 +2916,37 @@ function makeGhost(body) {
     if (!o.isMesh) return; const m = o.material;
     if (m.userData?.outline) { const u = m.uniforms; o.material = outlineMat(`#${u.uColor.value.getHexString()}`, u.uPx.value, u.uChalk.value, { ghost: true }); return; }
     if (m.isShaderMaterial) return;
-    if (!made.has(m)) made.set(m, ghostMat(m === townPantsM ? paleTrousers : m === darkHand ? paleHand : m));
+    if (!made.has(m)) made.set(m, ghostMat(m));
     o.material = made.get(m);
   });
 }
 function makeNPC({ id, name, x, z, y = Y0, yaw, extra, ghost = false, ph = null }) {
-  const look = LOOKS.cast[id];
-  const hm = clothMat(canvasFor(1024, 512, (g) => drawCloth(g, 0, 0, 1024, 512, look, CLOTH_RANGE), true)), sm = clothMat(canvasFor(256, 256, (g) => drawCloth(g, 0, 0, 256, 256, look, { ...CLOTH_RANGE, sleeve: true }), true));
-  const skull = canvasFor(512, Math.round(512 * SKULL_ASPECT), (g) => drawSkull(g, 0, 0, 512, Math.round(512 * SKULL_ASPECT), look), false);
-  const rig = makeRig({ hood: townHood, hoodM: hm, sleeveM: sm, pantsM: townPantsM, handM: darkHand, faceM: skullMat(skull, { line: look.line.color, glow: lineBright(look) }), ol: lineHex(look), lineK: 1.15, lineStyle: look.line.style === 'spikes' ? { spikes: true } : undefined, shoulder: [.39, -.07], out: .09, reach: [.31, .3], thick: 1.08, legSize: 1.12, eyelets: [.33, .1], chest: .25, cord: 1.25, cordColor: look.tassels.color });
-  rig.setHood(townHood);
+  const look = LOOKS.cast[id], far = look.degree ?? 0;
+  const sheet = canvasFor(1024, 1024, (g) => drawPerson(g, 0, 0, 1024, 1024, look), false), wear = (part) => zombieMat(sheet, part, { far });
+  const handM = new THREE.MeshToonMaterial({ color: look.skin, emissive: look.skin, emissiveIntensity: .35, gradientMap: toonGrad });
+  const rig = makeRig({ hood: townBody, hoodM: wear('body'), sleeveM: wear('arm'), pantsM: wear('leg'), handM, ol: look.line ?? `#${zombieLine(far).getHexString()}`, lineK: .85, strip: true, shoulder: [.205, .06], reach: [.39, .39], thick: .62, legSize: .74, hip: [.1, ZOMBIE_HIP], shin: .41, shoe: look.shoes });
+  rig.setHood(townBody);
   const root = new THREE.Group(); root.add(rig.body); rig.body.scale.setScalar(TOWN_SCALE); rig.body.position.y = TOWN_HIPS; root.position.set(x, y, z); root.rotation.y = yaw; scene.add(root);
   const V3 = (a, b, c) => new THREE.Vector3(a, b, c);
-  rig.arm(0, V3(-.36, -.58, .08), V3(-.7, -.35, -.25)); rig.arm(1, V3(.36, -.58, .08), V3(.7, -.35, -.25));
-  rig.leg(0, V3(-.13, -1.36, 0), V3(-.1, -1, .8)); rig.leg(1, V3(.13, -1.36, 0), V3(.1, -1, .8)); rig.strings(0, 0);
+  rig.arm(0, V3(-.25, -.68, .09), V3(-.7, -.3, -.3)); rig.arm(1, V3(.25, -.68, .09), V3(.7, -.3, -.3));
+  rig.leg(0, V3(-.11, -1.36, 0), V3(-.1, -1, .8)); rig.leg(1, V3(.11, -1.36, 0), V3(.1, -1, .8));
   if (extra) extra(rig.body);
   if (ghost) makeGhost(rig.body);
   const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTex([name.toUpperCase()], 256, 64, 'rgba(0,0,0,0)', '#f1e6cf', '34px Bungee, Impact, sans-serif'), transparent: true, depthTest: false, fog: false }));
-  tag.scale.set(1.4, .35, 1); tag.position.set(0, 2.45, 0); tag.renderOrder = 10; root.add(tag);
+  tag.scale.set(1.4, .35, 1); tag.position.set(0, 2.15, 0); tag.renderOrder = 10; root.add(tag);
   return { name, root, rig, yaw, tag, ghost, ph: ph ?? rnd() * 6 };
 }
 const gold = new THREE.MeshStandardMaterial({ color: '#e8b54a', metalness: .9, roughness: .3, emissive: '#3a2a08' });
 const NPCS = {
   coop: makeNPC({ id: 'coop', name: 'Coop', x: 53 + PLACES.gas.x, z: 8.4 + PLACES.gas.z, yaw: Math.PI * .95,
-    extra: (b) => { const ch = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([[-.235, .15, .17], [-.17, .01, .245], [-.08, -.12, .262], [0, -.165, .268], [.08, -.12, .262], [.17, .01, .245], [.235, .15, .17]].map((p) => new THREE.Vector3(...p))), 24, .017, 6), gold); b.add(ch);
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(.285, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshToonMaterial({ color: '#1b2a4a', emissive: '#0a1020', gradientMap: toonGrad })); cap.scale.y = .86; cap.position.set(0, .68, -.045); b.add(outline(cap, INK, 1.5));
-      const brim = new THREE.Mesh(new THREE.BoxGeometry(.36, .022, .22), cap.material); brim.position.set(0, .695, .29); b.add(outline(brim, INK, 1.2)); } }),
+    extra: (b) => { const ch = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([[-.072, .155, .035], [-.092, .092, .135], [-.058, .02, .162], [0, -.035, .162], [.058, .02, .162], [.092, .092, .135], [.072, .155, .035]].map((p) => new THREE.Vector3(...p))), 24, .011, 6), gold); b.add(ch);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(.137, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshToonMaterial({ color: '#1b2a4a', emissive: '#0a1020', gradientMap: toonGrad })); cap.scale.y = .78; cap.position.set(0, .455, .09); b.add(outline(cap, INK, 1.5));
+      const brim = new THREE.Mesh(new THREE.BoxGeometry(.2, .016, .13), cap.material); brim.position.set(0, .447, .225); brim.rotation.x = .16; b.add(outline(brim, INK, 1.2)); } }),
   tre: makeNPC({ id: 'tre', name: 'Tre', x: BOX.x + 3.3, z: BOX.z - 3, yaw: Math.PI * .9 }),
   odessa: makeNPC({ id: 'odessa', name: 'Miss Odessa', x: 68.5 + PLACES.church.x, z: -5.8 + PLACES.church.z, yaw: 0,
-    extra: (b) => { const hat = new THREE.Mesh(new THREE.CylinderGeometry(.47, .47, .04, 24), new THREE.MeshToonMaterial({ color: '#b8ad96', gradientMap: toonGrad })); hat.position.set(0, .8, -.06); b.add(outline(hat, INK, 1.3));
-      const crown = new THREE.Mesh(new THREE.CylinderGeometry(.2, .24, .18, 18), hat.material); crown.position.set(0, .89, -.07); b.add(outline(crown, INK, 1.2)); } }),
+    extra: (b) => { const hat = new THREE.Mesh(new THREE.CylinderGeometry(.23, .23, .024, 24), new THREE.MeshToonMaterial({ color: '#b8ad96', gradientMap: toonGrad })); hat.position.set(0, .49, .09); hat.rotation.x = .1; b.add(outline(hat, INK, 1.3));
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(.105, .125, .1, 18), hat.material); crown.position.set(0, .55, .095); crown.rotation.x = .1; b.add(outline(crown, INK, 1.2));
+      const skirt = new THREE.Mesh(new THREE.CylinderGeometry(.168, .29, .5, 16, 1, true), new THREE.MeshToonMaterial({ color: LOOKS.cast.odessa.top.colors[0], emissive: LOOKS.cast.odessa.top.colors[0], emissiveIntensity: .3, gradientMap: toonGrad, side: THREE.DoubleSide })); skirt.position.set(0, -.83, .005); b.add(outline(skirt, '#'+zombieLine(LOOKS.cast.odessa.degree).getHexString(), 2)); } }),
   // he didn't die, he moved back to Louisiana
   robby: makeNPC({ id: 'robby', name: 'Robby', x: ROBBY.x, z: ROBBY.z, y: ROBBY.y, yaw: -Math.PI / 2, ghost: true, ph: 1.7 })
 };
@@ -3014,15 +2967,13 @@ const PICKUPS = [
 });
 
 // ================================================================ the crowd's bodies
-// One body drawn many times: a hood, a face and four limbs, each a single mesh whoever's in it, so forty-eight of them
-// cost seven draw calls where one townsperson costs forty. Their limbs don't bend, which is most of what those forty pay for.
-// What they're wearing is on one sheet, with a row for each look, and they read their own off it.
-const CROWD_SHOWN = 48, CROWD_SEE = 110, CROWD_LOOKS = LOOKS.crowd, CROWD_LINE = CROWD_LOOKS.map((l) => new THREE.Color(l.line.color).multiplyScalar(lineBright(l)).toArray());
+// One body drawn many times: a body and four limbs, each a single mesh whoever's in it, so forty-eight of them cost seven draw calls
+// where one of the cast costs forty. Their limbs don't bend, which is most of what those forty pay for. What they had on is on
+// one sheet, with a row for each look, and they read their own off it, along with how far gone they are.
+const CROWD_SHOWN = 48, CROWD_SEE = 110, CROWD_LOOKS = LOOKS.crowd;
 const crowdGroup = new THREE.Group(); crowdGroup.visible = false; scene.add(crowdGroup);
-const crowdCloth = canvasFor(512, 256 * CROWD_LOOKS.length, (g) => CROWD_LOOKS.forEach((look, i) => drawCloth(g, 0, (CROWD_LOOKS.length - 1 - i) * 256, 512, 256, look, { ...CLOTH_RANGE, painted: true })), true);
-crowdCloth.wrapT = THREE.ClampToEdgeWrapping;
-const crowdSkull = canvasFor(256 * CROWD_LOOKS.length, Math.round(256 * SKULL_ASPECT), (g) => CROWD_LOOKS.forEach((look, i) => drawSkull(g, i * 256, 0, 256, Math.round(256 * SKULL_ASPECT), look)), false);
-const crowdClothM = clothMat(crowdCloth, { rows: CROWD_LOOKS.length }), crowdBody = buildHoodie(.3, 0, 0, 1, 16, TOWN_SHAPE);
+const crowdSheet = canvasFor(512, 256 * CROWD_LOOKS.length, (g) => CROWD_LOOKS.forEach((look, i) => drawPerson(g, 0, (CROWD_LOOKS.length - 1 - i) * 256, 512, 256, look)), false);
+const crowdBody = buildHoodie(.3, 0, 0, 1, 16, ZOMBIE_SHAPE);
 function crowdMesh(geo, mat, n, share) {
   const m = new THREE.InstancedMesh(geo, mat, n); m.frustumCulled = false; m.count = 0;
   if (share) m.instanceMatrix = share.instanceMatrix; else m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -3030,21 +2981,54 @@ function crowdMesh(geo, mat, n, share) {
 }
 const crowdLines = (m, px, tint) => { const o = crowdMesh(m.geometry, outlineMat('#ffffff', px, 1, { tinted: true }), m.instanceMatrix.count, m); o.instanceColor = tint; return o; };
 const crowdAttr = (n, size = 1) => new THREE.InstancedBufferAttribute(new Float32Array(n * size), size).setUsage(THREE.DynamicDrawUsage);
-// a limb hangs down from its pivot, with a hand or a foot on the end
-const crowdLimb = (len, top, end, tip) => mergeGeometries([new THREE.CylinderGeometry(top, end, len, 6, 2, true).translate(0, -len / 2, 0), tip.translate(0, -len, 0)]);
-const crowdArmGeo = crowdLimb(.66, .11, .08, new THREE.SphereGeometry(.082, 6, 4).scale(.9, 1.15, .8).translate(0, -.05, 0));
-// sleeves take their cloth from his back, where nothing's painted on, and a hand takes its black from his hem
-{ const uv = crowdArmGeo.attributes.uv, sleeve = new THREE.CylinderGeometry(.11, .08, .66, 6, 2, true).attributes.position.count; for (let i = 0; i < uv.count; i++) { if (i < sleeve) uv.setXY(i, .55 + uv.getX(i) * .3, .08 + uv.getY(i) * .4); else uv.setXY(i, .5, .014); } }
-const crowdLegGeo = crowdLimb(.66, .115, .08, new THREE.SphereGeometry(.088, 6, 4).scale(.85, .6, 1.6).translate(0, -.02, .07));
-const crowdLook = crowdAttr(CROWD_SHOWN), crowdLimbLook = crowdAttr(CROWD_SHOWN * 2), crowdLine = crowdAttr(CROWD_SHOWN, 3), crowdLimbLine = crowdAttr(CROWD_SHOWN * 2, 3), crowdHot = crowdAttr(CROWD_SHOWN);
-crowdBody.geo.setAttribute('iLook', crowdLook); crowdArmGeo.setAttribute('iLook', crowdLimbLook);
-crowdBody.faceGeo.setAttribute('iLook', crowdLook); crowdBody.faceGeo.setAttribute('iLine', crowdLine); crowdBody.faceGeo.setAttribute('aHot', crowdHot);
-const crowdSkullM = skullMat(crowdSkull, { cells: CROWD_LOOKS.length }); crowdSkullM.uniforms.uTilt.value.copy(crowdBody.tilt);
-const crowdHoods = crowdMesh(crowdBody.geo, crowdClothM, CROWD_SHOWN);
-const crowdFaces = crowdMesh(crowdBody.faceGeo, crowdSkullM, CROWD_SHOWN, crowdHoods); crowdFaces.renderOrder = 2;
-const crowdArms = crowdMesh(crowdArmGeo, crowdClothM, CROWD_SHOWN * 2), crowdLegs = crowdMesh(crowdLegGeo, townPantsM, CROWD_SHOWN * 2);
-const crowdParts = [crowdHoods, crowdFaces, crowdLines(crowdHoods, 3.4, crowdLine), crowdArms, crowdLines(crowdArms, 2.6, crowdLimbLine), crowdLegs, crowdLines(crowdLegs, 2.2, crowdLimbLine)];
-const _cb = new THREE.Matrix4(), _cu = new THREE.Matrix4(), _cl = new THREE.Matrix4(), _cm = new THREE.Matrix4(), _cp = new THREE.Vector3(), _cq = new THREE.Quaternion(), _cs = new THREE.Vector3(), _ce = new THREE.Euler();
+// a limb hangs down from its pivot, with a hand or a foot on the end, which takes its colour from the very end of its strip
+const crowdLimb = (len, top, end, tip) => { const tube = new THREE.CylinderGeometry(top, end, len, 6, 2, true).translate(0, -len / 2, 0), n = tube.attributes.position.count, g = mergeGeometries([tube, tip.translate(0, -len, 0)]), uv = g.attributes.uv; for (let i = n; i < uv.count; i++) uv.setXY(i, .5, .012); return g; };
+const crowdArmGeo = crowdLimb(.82, .062, .043, new THREE.SphereGeometry(.05, 6, 4).scale(.9, 1.3, .8).translate(0, -.03, 0));
+const crowdLegGeo = crowdLimb(.83, .09, .054, new THREE.SphereGeometry(.062, 6, 4).scale(.85, .6, 1.7).translate(0, -.02, .05));
+const crowdZ = crowdAttr(CROWD_SHOWN, 4), crowdLimbZ = crowdAttr(CROWD_SHOWN * 2, 4), crowdLine = crowdAttr(CROWD_SHOWN, 3), crowdLimbLine = crowdAttr(CROWD_SHOWN * 2, 3);
+crowdBody.geo.setAttribute('iZ', crowdZ); crowdArmGeo.setAttribute('iZ', crowdLimbZ); crowdLegGeo.setAttribute('iZ', crowdLimbZ);
+const crowdWear = (part) => zombieMat(crowdSheet, part, { rows: CROWD_LOOKS.length });
+const crowdBodies = crowdMesh(crowdBody.geo, crowdWear('body'), CROWD_SHOWN);
+const crowdArms = crowdMesh(crowdArmGeo, crowdWear('arm'), CROWD_SHOWN * 2), crowdLegs = crowdMesh(crowdLegGeo, crowdWear('leg'), CROWD_SHOWN * 2);
+// What's coming off them. Two quads for each of them, one facing you and one flat on the ground, in one draw call, and nothing
+// at all from someone who's not far enough gone unless they've noticed you.
+const AURA_CELL = 256, auraMap = canvasFor(AURA_CELL * AURA_CELLS, AURA_CELL, (g) => drawAura(g, AURA_CELL), false); auraMap.colorSpace = THREE.NoColorSpace;
+const auraGeo = new THREE.BufferGeometry();
+auraGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0, -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1], 3));
+auraGeo.setIndex([0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6]);
+const crowdAuraZ = crowdAttr(CROWD_SHOWN, 3); auraGeo.setAttribute('iAura', crowdAuraZ);
+const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true,
+  uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), { uStep: G.uStep, uPxScale: G.uPxScale, uAura: { value: auraMap } }),
+  vertexShader: `attribute vec3 iAura; varying vec2 vQ; varying vec3 vA; varying float vFlat;
+    #include <fog_pars_vertex>
+    void main(){
+      vQ=position.xy; vA=iAura; vFlat=position.z;
+      vec3 feet=(instanceMatrix*vec4(0.,0.,0.,1.)).xyz; float far=max(iAura.x,iAura.y*.55);
+      vec4 mvPosition;
+      if(position.z<.5){ mvPosition=viewMatrix*vec4(feet+vec3(0.,.92,0.),1.); mvPosition.xy+=position.xy*vec2(1.25,1.45); }
+      else mvPosition=viewMatrix*vec4(feet+vec3(position.x,0.,position.y)*(.7+far*1.2)+vec3(0.,.05,0.),1.);
+      gl_Position=projectionMatrix*mvPosition;
+      #include <fog_vertex>
+    }`,
+  fragmentShader: `uniform sampler2D uAura; uniform float uStep, uPxScale; varying vec2 vQ; varying vec3 vA; varying float vFlat;
+    #include <fog_pars_fragment>
+    float h2(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+    void main(){
+      float far=max(vA.x,vA.y*.55), a; vec2 q=floor(gl_FragCoord.xy/(1.5*uPxScale))+uStep*13.;
+      if(vFlat<.5){
+        float cell=mod(${STEP_HELD}+vA.z,${AURA_CELLS}.), t=texture2D(uAura,vec2((cell+vQ.x*.5+.5)/${AURA_CELLS}.,vQ.y*.5+.5)).r;
+        a=smoothstep(1.-far,1.-far+.1,t)*smoothstep(.22,.34,far)*(.75+vA.y*.35)*step(.1,h2(q));
+      } else { float r=1.-length(vQ); if(r<=0.) discard; a=r*r*far*far*(.2+vA.y*.14)*(.85+.3*h2(q)); }
+      if(a<.008) discard;
+      gl_FragColor=vec4(mix(${RADIUM},${RADIUM_HOT},vA.y*.75)*a,1.);
+      #ifdef USE_FOG
+        gl_FragColor.rgb*=exp(-fogDensity*fogDensity*vFogDepth*vFogDepth);
+      #endif
+    }`
+}), CROWD_SHOWN);
+const crowdParts = [crowdBodies, crowdLines(crowdBodies, 2.8, crowdLine), crowdArms, crowdLines(crowdArms, 2.2, crowdLimbLine), crowdLegs, crowdLines(crowdLegs, 2, crowdLimbLine), crowdAura];
+const _cc = new THREE.Color(), _cb = new THREE.Matrix4(), _cu = new THREE.Matrix4(), _cl = new THREE.Matrix4(), _cm = new THREE.Matrix4(), _cp = new THREE.Vector3(), _cq = new THREE.Quaternion(), _cs = new THREE.Vector3(), _ce = new THREE.Euler();
 const GAIT = [3.6, 4.6, 9, 11, 16, 0];   // how quickly their limbs go, by state
 const crowdShown = [];
 let crowdPicked = -1, crowdDrawn = -1;
@@ -3056,7 +3040,7 @@ function drawCrowd(step) {
     for (const s of horde.active) { s.seen = Math.hypot(s.x - camera.position.x, s.z - camera.position.z); if (s.seen < CROWD_SEE) crowdShown.push(s); }
     crowdShown.sort((a, b) => a.seen - b.seen); if (crowdShown.length > CROWD_SHOWN) crowdShown.length = CROWD_SHOWN;
   }
-  const hoods = crowdHoods.instanceMatrix.array, arms = crowdArms.instanceMatrix.array, legs = crowdLegs.instanceMatrix.array;
+  const bodies = crowdBodies.instanceMatrix.array, arms = crowdArms.instanceMatrix.array, legs = crowdLegs.instanceMatrix.array, auras = crowdAura.instanceMatrix.array;
   crowdShown.forEach((s, i) => {
     const st = s.state, after = st === HUNTING || st === SWARM || st === GRABBING, still = !s.moving && st !== GRABBING;
     s.gait += GAIT[st] / 12 * (still ? .2 : 1);
@@ -3067,23 +3051,26 @@ function drawCrowd(step) {
     _cb.compose(_cp.set(s.x, s.y + 1.43 * size * (1 - lie) + .28 * lie + Math.abs(Math.sin(p)) * .03, s.z), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(size));
     if (lie) _cb.multiply(_cl.makeRotationX(-1.45 * lie));
     // the top half leans from the hips, so the feet stay on the ground
-    _cl.makeRotationFromEuler(_ce.set(st === STUNNED ? -.25 : after ? .34 : .14, 0, st === STUNNED ? Math.sin(step * .9) * .12 : Math.sin(p) * (after ? .05 : .1)));
-    const e = _cl.elements; _cl.setPosition(.7 * e[4], -.7 + .7 * e[5], .7 * e[6]);
-    _cu.multiplyMatrices(_cb, _cl).toArray(hoods, i * 16);
+    const list = (s.phase - 3.14) * .035;
+    _cl.makeRotationFromEuler(_ce.set(st === STUNNED ? -.25 : after ? .34 : .16, 0, list + (st === STUNNED ? Math.sin(step * .9) * .12 : Math.sin(p) * (after ? .05 : .1))));
+    const e = _cl.elements; _cl.setPosition(-ZOMBIE_HIP * e[4], ZOMBIE_HIP - ZOMBIE_HIP * e[5], -ZOMBIE_HIP * e[6]);
+    _cu.multiplyMatrices(_cb, _cl).toArray(bodies, i * 16);
     for (let a = 0; a < 2; a++) {
       const side = a ? 1 : -1, swing = Math.sin(p + (a ? Math.PI : 0));
-      const reach = after ? -1.3 + Math.sin(p * 1.3 + a * 2) * .16 : st === CURIOUS ? -.4 - a * .25 : st === STUNNED ? .15 : swing * .18;
-      _cl.makeRotationFromEuler(_ce.set(reach, 0, side * (after ? .05 : .13))).setPosition(side * .39, -.07, 0);
+      const reach = after ? -1.3 + Math.sin(p * 1.3 + a * 2) * .16 : st === CURIOUS ? -.4 - a * .25 : st === STUNNED ? .15 : swing * .18 - .1 - (a === s.limp ? .22 : .04);
+      _cl.makeRotationFromEuler(_ce.set(reach, 0, side * (after ? .03 : .07))).setPosition(side * .205, .06, 0);
       _cm.multiplyMatrices(_cu, _cl).toArray(arms, (i * 2 + a) * 16);
-      _cl.makeRotationFromEuler(_ce.set(-swing * stride * (a === s.limp ? .55 : 1), 0, side * .03)).setPosition(side * .13, -.7, 0);
+      _cl.makeRotationFromEuler(_ce.set(-swing * stride * (a === s.limp ? .55 : 1), 0, side * .03)).setPosition(side * .1, ZOMBIE_HIP, 0);
       _cm.multiplyMatrices(_cb, _cl).toArray(legs, (i * 2 + a) * 16);
     }
-    crowdHot.array[i] = after ? 1 : st === CURIOUS ? .42 : st === STUNNED ? .2 : 0;
-    crowdLook.array[i] = look; crowdLine.array.set(CROWD_LINE[look], i * 3);
-    for (let a = 0; a < 2; a++) { crowdLimbLook.array[i * 2 + a] = look; crowdLimbLine.array.set(CROWD_LINE[look], (i * 2 + a) * 3); }
+    // how far gone they are comes from a number they already have, since asking for a new one would change what everyone does after it
+    const far = s.far ??= degreeOf(s.phase / 6.28), hot = after ? 1 : st === CURIOUS ? .42 : st === STUNNED ? .2 : 0, flip = s.limp;
+    crowdZ.setXYZW(i, look, far, hot, flip); zombieLine(far, hot, _cc).toArray(crowdLine.array, i * 3);
+    for (let a = 0; a < 2; a++) { crowdLimbZ.setXYZW(i * 2 + a, look, far, hot, flip); _cc.toArray(crowdLimbLine.array, (i * 2 + a) * 3); }
+    _cm.makeTranslation(s.x, s.y, s.z).toArray(auras, i * 16); crowdAuraZ.setXYZ(i, far, hot, look);
   });
   for (const m of crowdParts) m.count = crowdShown.length * (m.instanceMatrix.count / CROWD_SHOWN);
-  crowdHoods.instanceMatrix.needsUpdate = crowdArms.instanceMatrix.needsUpdate = crowdLegs.instanceMatrix.needsUpdate = crowdLook.needsUpdate = crowdLimbLook.needsUpdate = crowdLine.needsUpdate = crowdLimbLine.needsUpdate = crowdHot.needsUpdate = true;
+  crowdBodies.instanceMatrix.needsUpdate = crowdArms.instanceMatrix.needsUpdate = crowdLegs.instanceMatrix.needsUpdate = crowdAura.instanceMatrix.needsUpdate = crowdZ.needsUpdate = crowdLimbZ.needsUpdate = crowdLine.needsUpdate = crowdLimbLine.needsUpdate = crowdAuraZ.needsUpdate = true;
 }
 
 // ================================================================ water moccasins
@@ -4997,7 +4984,7 @@ if (location.hash === '#signs') openSignBoard();
 if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
-    horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdHoods.count }),
+    horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far) }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
     topDown({ x0, z0, x1, z1, scale, everywhere, houses }) {

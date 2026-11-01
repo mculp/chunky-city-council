@@ -19,7 +19,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 
 - `index.html`: the game
 - `src/map.js`: the road graph as the game walks on it
-- `src/looks.js`: draws what everyone but the hero wears, from `data/looks.json`
+- `src/looks.js`: draws what everyone but the hero had on, from `data/looks.json`, and how far it's gone through them
 - `src/structures.js`: turns every real building's footprint into walls, windows, doors and a roof, in pieces that can break
 - `src/damage.js`: what breaks, what burns and what comes down with it
 - `reference/stuckeys-bridge.html`: the scene the game grew out of

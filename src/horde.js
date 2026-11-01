@@ -1,7 +1,7 @@
 // What the crowd does. There's no three.js or page in here, so node tests load it too. How they look is in index.html.
 //
 // They've got no eyes to speak of: sound, light and the smell of beans are all they go on, and all of it's
-// sharper at night. Nothing here says what they are. That's the owner's to decide.
+// sharper at night. What they are is in docs/lore.md, and how far gone each of them is only changes how they look so far.
 
 export const SHAMBLE = 0, CURIOUS = 1, HUNTING = 2, SWARM = 3, GRABBING = 4, STUNNED = 5;
 export const STATE_NAMES = ['shamble', 'curious', 'hunting', 'swarm', 'grabbing', 'stunned'];

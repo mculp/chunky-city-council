@@ -9,7 +9,7 @@ The owner sends lore for the story. It goes in `docs/lore.md` in their words as 
 ## Rules
 
 - All art is procedural three.js. Don't add image, model or texture files.
-- Only the hero has his hoodie and his taped head. They're the owner's own. Everyone else wears a look from `data/looks.json`.
+- Only the hero has his hoodie and his taped head. They're the owner's own. Everyone else is a radiating zombie of some degree, as the owner said in `docs/lore.md`, wearing a look from `data/looks.json`, and nobody else wears a hood.
 - No real trademarks on labels, signs, filenames or docs. Use invented brands or the orange warning triangle.
 - No Gen Z or Gen Alpha slang in game text.
 - Roads come from Census TIGER/Line data. Never derive geometry from Google imagery or commit any. Comparing by eye is fine, and differences get filed as corrections.

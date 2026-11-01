@@ -1,88 +1,108 @@
 {
   "cast": {
     "coop": {
-      "id": "mint-flammable",
-      "hood": { "pattern": "plain", "colors": ["#5efca6"] },
-      "line": { "color": "#f8fdfb" },
-      "skull": {},
-      "tassels": { "color": "#0c0809" },
+      "id": "coop",
+      "degree": 0.22,
+      "skin": "#6f5843",
+      "hair": "#120d0b",
+      "top": { "kind": "tee", "colors": ["#5efca6"] },
+      "bottom": { "kind": "trousers", "color": "#2b2f45" },
+      "shoes": "#d9d3c4",
       "mark": { "kind": "flammable", "color": "#e626be" }
     },
     "tre": {
-      "id": "cantaloupe-spikes",
-      "hood": { "pattern": "plain", "colors": ["#fca640"] },
-      "line": { "color": "#fd4386", "style": "spikes" },
-      "skull": { "eyes": "shades" },
-      "tassels": { "color": "#0c0809" }
+      "id": "tre",
+      "degree": 0.38,
+      "skin": "#a8957a",
+      "hair": "#3a2416",
+      "top": { "kind": "tee", "colors": ["#fca640"] },
+      "bottom": { "kind": "shorts", "color": "#39405c" },
+      "shoes": "#efe9de"
     },
     "odessa": {
-      "id": "yellow-violet",
-      "hood": { "pattern": "plain", "colors": ["#fdfc55"] },
-      "line": { "color": "#fc4cbb" },
-      "skull": {},
-      "tassels": { "color": "#f8fdfb" }
+      "id": "odessa",
+      "degree": 0.12,
+      "skin": "#52402f",
+      "hair": "#d8d4c8",
+      "top": { "kind": "dress", "colors": ["#f4e84e", "#e9b83c", "#f6f1de"] },
+      "bottom": { "kind": "skirt", "color": "#f4e84e" },
+      "shoes": "#efe9de"
     },
     "robby": {
       "id": "pale-ghost",
-      "hood": { "pattern": "plain", "colors": ["#cfe6ee"] },
-      "line": { "color": "#dff6ff", "style": "glow" },
-      "skull": {},
-      "tassels": { "color": "#f8fdfb" }
+      "degree": 0,
+      "line": "#dff6ff",
+      "skin": "#cfe6ee",
+      "hair": "#a9c4d0",
+      "top": { "kind": "tee", "colors": ["#cfe6ee"] },
+      "bottom": { "kind": "trousers", "color": "#8fa9b6" },
+      "shoes": "#b4cdd8"
     }
   },
   "crowd": [
     {
-      "id": "crimson-aqua",
-      "hood": { "pattern": "plain", "colors": ["#fd3a50"] },
-      "line": { "color": "#42d9be" },
-      "skull": {},
-      "tassels": { "color": "#f8fdfb" },
+      "id": "red-flannel",
+      "skin": "#a8977b",
+      "hair": "#3a2a1c",
+      "top": { "kind": "flannel", "colors": ["#8c2f2a", "#22161a", "#e0d3b0"] },
+      "bottom": { "kind": "trousers", "color": "#2f3b58" },
+      "shoes": "#3a2c20"
+    },
+    {
+      "id": "overalls",
+      "skin": "#8a7459",
+      "top": { "kind": "overalls", "colors": ["#d8d2bf", "#37507c"] },
+      "bottom": { "kind": "trousers", "color": "#37507c" },
+      "shoes": "#2c2018"
+    },
+    {
+      "id": "camo-vest",
+      "skin": "#b5a98f",
+      "hair": "#241a14",
+      "top": { "kind": "camo", "colors": ["#59583a", "#2f3220", "#7a6f48"], "vest": "#e5691f" },
+      "bottom": { "kind": "trousers", "color": "#4a4a30" },
+      "shoes": "#2a2018"
+    },
+    {
+      "id": "church-dress",
+      "skin": "#6a5540",
+      "hair": "#15100e",
+      "top": { "kind": "dress", "colors": ["#9d8ac7", "#e6def0", "#f0ead6"] },
+      "bottom": { "kind": "skirt", "color": "#9d8ac7" },
+      "shoes": "#2a2430"
+    },
+    {
+      "id": "coveralls",
+      "skin": "#4f3d2f",
+      "hair": "#0e0b0a",
+      "top": { "kind": "coveralls", "colors": ["#5a6a70"] },
+      "bottom": { "kind": "trousers", "color": "#5a6a70" },
+      "shoes": "#1e1a18",
+      "mark": { "kind": "radioactive", "color": "#e9c31f" }
+    },
+    {
+      "id": "yellow-tee",
+      "skin": "#a8977b",
+      "hair": "#6b5a3a",
+      "top": { "kind": "tee", "colors": ["#c9b24a"] },
+      "bottom": { "kind": "trousers", "color": "#343c58" },
+      "shoes": "#c9c2b0"
+    },
+    {
+      "id": "shirtless",
+      "skin": "#8f7a5e",
+      "hair": "#1f1712",
+      "top": { "kind": "none" },
+      "bottom": { "kind": "trousers", "color": "#3a3f52" },
+      "shoes": "#2a2420"
+    },
+    {
+      "id": "striped-shorts",
+      "skin": "#5c4836",
+      "top": { "kind": "tee", "colors": ["#3a6a5a", "#dfe0c8"] },
+      "bottom": { "kind": "shorts", "color": "#7a6a4e" },
+      "shoes": "#b9b2a0",
       "mark": { "kind": "caution", "color": "#f4ee2a" }
-    },
-    {
-      "id": "shards-pink",
-      "hood": { "pattern": "bolts", "colors": ["#b91a44", "#f92659", "#a32bff"] },
-      "line": { "color": "#f64abc" },
-      "skull": {},
-      "tassels": { "color": "#0c0809" },
-      "mark": { "kind": "flammable", "color": "#fca640" }
-    },
-    {
-      "id": "white-violet-stripes",
-      "hood": { "pattern": "stripes", "colors": ["#f4f3f5", "#e647e6"] },
-      "line": { "color": "#f4f6f6", "style": "glow" },
-      "skull": {},
-      "tassels": { "color": "#0c0809" },
-      "mark": { "kind": "radioactive", "color": "#e647e6" }
-    },
-    {
-      "id": "black-ribs",
-      "hood": { "pattern": "ribs", "colors": ["#0a0612", "#e626be", "#f8fdfd"] },
-      "line": { "color": "#f8fdfd", "style": "glow" },
-      "skull": {},
-      "tassels": { "color": "#0c0809" }
-    },
-    {
-      "id": "yellow-glow",
-      "hood": { "pattern": "plain", "colors": ["#fdfc55"] },
-      "line": { "color": "#f8f8f7", "style": "glow" },
-      "skull": { "eyes": "rings" },
-      "tassels": { "color": "#f8fdfb", "tied": true }
-    },
-    {
-      "id": "cantaloupe-bloody",
-      "hood": { "pattern": "plain", "colors": ["#fca640"] },
-      "line": { "color": "#fc994b" },
-      "skull": { "teeth": "bloody" },
-      "tassels": { "color": "#0c0809", "tied": true }
-    },
-    {
-      "id": "mint-crossed",
-      "hood": { "pattern": "plain", "colors": ["#5efca6"] },
-      "line": { "color": "#f8fdfb" },
-      "skull": { "eyes": "x", "accent": "#17e0d0" },
-      "tassels": { "color": "#f8fdfb" },
-      "mark": { "kind": "radioactive", "color": "#e647e6" }
     }
   ]
 }
