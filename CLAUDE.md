@@ -7,6 +7,7 @@ Read `docs/art-direction.md` before changing anything visible. `reference/stucke
 ## Rules
 
 - All art is procedural three.js. Don't add image, model or texture files.
+- Only the hero has his hoodie and his taped head. They're the owner's own. Everyone else wears a look from `data/looks.json`.
 - No real trademarks on labels, signs, filenames or docs. Use invented brands or the orange warning triangle.
 - No Gen Z or Gen Alpha slang in game text.
 - Roads come from Census TIGER/Line data. Never derive geometry from Google imagery or commit any. Comparing by eye is fine, and differences get filed as corrections.

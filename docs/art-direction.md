@@ -12,7 +12,9 @@ Everything is procedural three.js. The game has no image, model or texture files
 |---|---|
 | `makeHatch` | Scribbled crosshatch cloth, as several drawings to cycle through |
 | `toonGrad`, `hoodMat` | Three-step toon shading (70, 150, 255) with the hatch as both colour and glow |
-| `faceMat` | The glowing face opening and its bars |
+| `tapeMat` | The warning tape in the hero's hood |
+| `drawCloth`, `drawSkull` | Everyone else's cloth and skulls, drawn on a canvas at load, in `src/looks.js` |
+| `clothMat`, `skullMat` | Putting those on a body, one at a time or a whole crowd at once |
 | `outlineMat`, `outline` | Screen-space outlines. A `chalk` value above 0 adds the boil and the broken chalk texture |
 | `pixelTex`, `triplanar`, `textTex` | Surface textures and painted signage |
 | `swayMat` | Foliage that moves |
@@ -24,23 +26,37 @@ This approach came from a failed one. Flat shapes drawn in code and set against 
 
 ## The protagonist
 
-- One continuous hood flowing into broad shoulders. Not a ball stacked on a tube.
+- His proportions are measured off the coin: a big hood, 0.78 m wide and 0.9 m tall with a rounded top, sitting right down between sloping shoulders half as wide again. One continuous hood flowing into the shoulders (`HERO_SHAPE`), a little smaller all over so that it's the hood that's big.
 - Black cloth `#08050a` scribbled with hot red crosshatch: `#d81f4f`, `#f2305f`, `#7e1030`.
 - A chalky orange outline, `#ff7a2c`, that wobbles from frame to frame.
-- A big oval face opening with glowing, chalky yellow vertical bars on near-black.
-- White-outlined black drawstrings hanging from white eyelets.
+- A wide opening in the hood with a raised rim: arched at the top, widest just below the middle, a V at the chin.
+- There's no face in there. There's warning tape, set back inside the hood (`tapeMat`): flat and straight, amber and black in equal parts, 34 degrees off vertical and rising to the right, so you see three wide bars and a sliver at each end. The bars are scribbled in with the same strokes as his hoodie, and the strokes rough up their edges. It's worked out along the line of sight, so it stays flat and slides behind the rim as he turns.
+- White-outlined black drawstrings hanging long and a little wavy from white eyelets either side of the chin.
+- Hanging, his head lolls away from the rope. Swimming, it comes up out of the water.
 - Dark fists outlined in orange.
 - A long-neck bottle with a white chalk outline (`#f6f2ea`) and glowing cyan liquid (`#3ad9d2`). The label is black with an orange warning triangle and no lettering. The liquid stays level as the bottle tips, so it runs up into the neck.
 
-Other characters use the same construction with their own colours, like Coop, Tre and Miss Odessa in `makeNPC`. Distinct characters must read as different people, not reskins.
+**All of this is his alone.** He's the owner's own, and nobody else in the game gets his scribbled hoodie, his orange line or the tape. Don't reuse them to save time, not even on someone in the distance.
+
+## Everyone else
+
+Everyone else wears a look from `data/looks.json`, which `data/looks.md` explains. The looks are our own reading of ten of the owner's references, chosen at random, and these are the things those ten have in common:
+
+- A hood with a tall, rounded top, half as wide again as the opening in it (`TOWN_SHAPE`).
+- A crayon fill rather than his scribble (`drawCloth`, `clothMat`). It's flat and saturated, with the paper's tooth in it, and goes dark into the outline. It never blooms, whatever light they're standing in. Some have stripes, shards or ribs instead of a plain fill, and some have a hazard mark on the chest.
+- A thick chalk line, in a colour of its own. Only a `glow` line blooms.
+- A skull drawn in the dark of the hood (`drawSkull`, `skullMat`): tall scribbled eyes 70% of the way up, a small nose just under halfway, and two rows of square teeth. Some have crossed eyes, rings, a visor or blood on the teeth. Lettering on the references is left out.
+- Black hands.
+
+Coop, Tre and Miss Odessa each have a look that nobody else wears, along with Coop's cap and chain and her hat.
 
 ## The crowd
 
-What they are is the owner's to decide, so their look is a stand-in that says as little as it can. They share one body so that dozens can be on a phone's screen at once: `crowdBody`, `crowdLimb`, `drawCrowd`.
+What they are is the owner's to decide, so nothing here says. They share one body so that dozens can be on a phone's screen at once: `crowdBody`, `crowdLimb`, `drawCrowd`. Every look is on one sheet with a row each, and each person reads their own row, so seven draw calls cover forty-eight of them however many looks there are.
 
-- Grey scribbled cloth (`#6f6878`, `#938c9c`, `#3d3844`), washed out so the hero's red stays the only hot thing in a crowd, with a slight tint per person.
-- A broken dusk outline, `#a99bc0`. Heads hang forward.
-- No face, just static in the opening. It's dim until they've noticed something, and burns amber once they've noticed him, so you can read who's after you from a distance.
+- They wear the looks in `data/looks.json`, the same way the cast does. Heads hang forward.
+- The skull burns orange once they've noticed something, so you can read who's after you from a distance.
+- Their lines thin out with distance, or a far crowd would be nothing but chalk.
 - Limbs that don't bend, swung from the shoulder and hip on the same 12 fps step as everything else. Most of them limp. When they're after him their arms come up and they lean in.
 
 ## The GIF feel

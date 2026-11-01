@@ -1,0 +1,81 @@
+{
+  "cast": {
+    "coop": {
+      "id": "mint-flammable",
+      "hood": { "pattern": "plain", "colors": ["#5efca6"] },
+      "line": { "color": "#f8fdfb" },
+      "skull": {},
+      "tassels": { "color": "#0c0809" },
+      "mark": { "kind": "flammable", "color": "#e626be" }
+    },
+    "tre": {
+      "id": "cantaloupe-spikes",
+      "hood": { "pattern": "plain", "colors": ["#fca640"] },
+      "line": { "color": "#fd4386", "style": "spikes" },
+      "skull": { "eyes": "shades" },
+      "tassels": { "color": "#0c0809" }
+    },
+    "odessa": {
+      "id": "yellow-violet",
+      "hood": { "pattern": "plain", "colors": ["#fdfc55"] },
+      "line": { "color": "#fc4cbb" },
+      "skull": {},
+      "tassels": { "color": "#f8fdfb" }
+    }
+  },
+  "crowd": [
+    {
+      "id": "crimson-aqua",
+      "hood": { "pattern": "plain", "colors": ["#fd3a50"] },
+      "line": { "color": "#42d9be" },
+      "skull": {},
+      "tassels": { "color": "#f8fdfb" },
+      "mark": { "kind": "caution", "color": "#f4ee2a" }
+    },
+    {
+      "id": "shards-pink",
+      "hood": { "pattern": "bolts", "colors": ["#b91a44", "#f92659", "#a32bff"] },
+      "line": { "color": "#f64abc" },
+      "skull": {},
+      "tassels": { "color": "#0c0809" },
+      "mark": { "kind": "flammable", "color": "#fca640" }
+    },
+    {
+      "id": "white-violet-stripes",
+      "hood": { "pattern": "stripes", "colors": ["#f4f3f5", "#e647e6"] },
+      "line": { "color": "#f4f6f6", "style": "glow" },
+      "skull": {},
+      "tassels": { "color": "#0c0809" },
+      "mark": { "kind": "radioactive", "color": "#e647e6" }
+    },
+    {
+      "id": "black-ribs",
+      "hood": { "pattern": "ribs", "colors": ["#0a0612", "#e626be", "#f8fdfd"] },
+      "line": { "color": "#f8fdfd", "style": "glow" },
+      "skull": {},
+      "tassels": { "color": "#0c0809" }
+    },
+    {
+      "id": "yellow-glow",
+      "hood": { "pattern": "plain", "colors": ["#fdfc55"] },
+      "line": { "color": "#f8f8f7", "style": "glow" },
+      "skull": { "eyes": "rings" },
+      "tassels": { "color": "#f8fdfb", "tied": true }
+    },
+    {
+      "id": "cantaloupe-bloody",
+      "hood": { "pattern": "plain", "colors": ["#fca640"] },
+      "line": { "color": "#fc994b" },
+      "skull": { "teeth": "bloody" },
+      "tassels": { "color": "#0c0809", "tied": true }
+    },
+    {
+      "id": "mint-crossed",
+      "hood": { "pattern": "plain", "colors": ["#5efca6"] },
+      "line": { "color": "#f8fdfb" },
+      "skull": { "eyes": "x", "accent": "#17e0d0" },
+      "tassels": { "color": "#f8fdfb" },
+      "mark": { "kind": "radioactive", "color": "#e647e6" }
+    }
+  ]
+}
