@@ -183,7 +183,7 @@ The ticket's figures are closer to the east-west distance than to the straight l
 
 - All five are vertices shared by the road and the line, and a one-off check confirmed the road passes through the line at each. The build itself lists every contact without testing that, and adds a report line for any contact that isn't a shared vertex. There are none on this data.
 - Crossings and trestles are found on the unclipped geometry. Crossings don't split road edges, so `nodes`, `roads` and `edges` are unchanged by adding `reference`.
-- **Near-misses.** A gap within 30 m of a contact counts as that contact, because lines crossing at a shallow angle are close for a few metres either side: one pair is 4.6 m apart, 5.7 m from the US 80 railroad crossing. Nothing else comes under 5 m.
+- **Near-misses.** A gap within 30 m of a contact counts as that contact, because short segments next to a crossing or trestle sit close to the other line: 11 pairs of segments that don't touch come under 5 m, the closest 1.05 m apart, all within 6.4 m of a crossing or trestle. Nothing else comes under 5 m.
 
 ## Debug plot check
 

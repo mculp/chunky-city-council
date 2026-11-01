@@ -1,4 +1,5 @@
-// Checks data/roads.json by itself: no TIGER zips, Python or network.
+// Checks data/roads.json by itself: no TIGER zips, Python or network. The last
+// block also holds data/roads.md to it, so the docs can't drift from the data.
 //
 // Every vertex in the file keeps its TIGER lon/lat beside its game x/z, so most
 // of this re-derives the game side from the lon/lat side. Comparing the file
@@ -563,6 +564,185 @@ describe('reference data and compression', () => {
         assert.ok(xTrue < band.trueFrom || xTrue > band.trueTo, `${label} is at true x ${xTrue}, inside a band`);
         assert.ok(x < band.gameFrom || x > band.gameTo, `${label} is at game x ${x}, inside a band`);
       }
+    }
+  });
+});
+
+// Everything data/roads.md copies from the JSON is compared by table row, so a
+// value can't pass by appearing somewhere else on the page. Each comparison runs
+// both ways, so a row left behind after the data changes fails too.
+describe('data/roads.md matches the data', () => {
+  const docs = readFileSync(new URL('./roads.md', import.meta.url), 'utf8');
+
+  // The text under a heading, up to the next heading of the same or a higher level.
+  function docsSection(title) {
+    const lines = docs.split('\n');
+    const level = (line) => /^(#+) /.exec(line)?.[1].length ?? Infinity;
+    const start = lines.findIndex((line) => level(line) !== Infinity && line.replace(/^#+ /, '') === title);
+    assert.notEqual(start, -1, `data/roads.md has no "${title}" heading`);
+    const end = lines.findIndex((line, i) => i > start && level(line) <= level(lines[start]));
+    return lines.slice(start + 1, end === -1 ? undefined : end).join('\n');
+  }
+
+  // Each table row under a heading, as an object keyed by its column headings,
+  // with the backticks taken off its cells.
+  function tableRows(title) {
+    const cells = (line) =>
+      line
+        .slice(1, -1)
+        .split('|')
+        .map((cell) => cell.trim().replaceAll('`', ''));
+    const rows = [];
+    let headings = null;
+    for (const line of docsSection(title).split('\n').map((text) => text.trim())) {
+      if (!line.startsWith('|')) {
+        headings = null;
+      } else if (!headings) {
+        headings = cells(line);
+      } else if (!/^[|\s:-]+$/.test(line)) {
+        const values = cells(line);
+        rows.push(Object.fromEntries(headings.map((heading, i) => [heading, values[i]])));
+      }
+    }
+    return rows;
+  }
+
+  const sorted = (values) => [...values].sort();
+  const commaList = (values) => values.join(', ');
+
+  // A number standing alone, so 223 can't pass by appearing inside 1223.
+  function mentionsNumber(text, value) {
+    const escaped = String(value).replaceAll('.', '\\.');
+    return new RegExp(`(?<![\\d.])${escaped}(?!\\d)`).test(text);
+  }
+
+  // Every field path in the file, with [] for an array of objects. roadClasses is
+  // keyed by code, so its codes collapse to <code>.
+  function fieldPaths(value, path = '') {
+    const isObject = (item) => item !== null && typeof item === 'object' && !Array.isArray(item);
+    if (Array.isArray(value) && value.some(isObject)) {
+      return value.flatMap((item) => fieldPaths(item, `${path}[]`));
+    }
+    if (!isObject(value)) return [path];
+    return Object.entries(value).flatMap(([key, item]) =>
+      fieldPaths(item, path === 'roadClasses' ? `${path}.<code>` : path ? `${path}.${key}` : key),
+    );
+  }
+
+  test('it gives the vintage and base URL, and no other vintage', () => {
+    const sourcing = docsSection('Sourcing');
+    assert.ok(sourcing.includes(data.source.vintage), `no ${data.source.vintage} under Sourcing`);
+    assert.ok(sourcing.includes(data.source.baseUrl), `no ${data.source.baseUrl} under Sourcing`);
+    assert.deepEqual([...new Set(docs.match(/TIGER\/Line \d{4}/g))], [data.source.vintage]);
+  });
+
+  test('it lists every source file with its sha256, and no other', () => {
+    const rows = tableRows('Sourcing');
+    assert.deepEqual(sorted(rows.map((row) => row.File)), sorted(data.source.files.map((file) => file.path)));
+    for (const { path, sha256 } of data.source.files) {
+      assert.equal(rows.find((row) => row.File === path).sha256, sha256, `${path} sha256`);
+    }
+    assert.deepEqual(
+      sorted(new Set(docs.match(/\b[0-9a-f]{64}\b/g))),
+      sorted(data.source.files.map((file) => file.sha256)),
+      'every hash on the page should be a source file hash',
+    );
+  });
+
+  test('it lists every field in the file under Schema, and no other', () => {
+    assert.deepEqual(
+      sorted(new Set(tableRows('Schema').map((row) => row.Field))),
+      sorted(new Set(fieldPaths(data))),
+    );
+  });
+
+  test('it maps every road to its id, TIGER names and LINEARIDs', () => {
+    const rows = tableRows('Road names').filter((row) => 'Display name' in row);
+    assert.deepEqual(sorted(rows.map((row) => row['Display name'])), sorted(data.roads.map((road) => road.name)));
+    for (const road of data.roads) {
+      const row = rows.find((candidate) => candidate['Display name'] === road.name);
+      assert.equal(row['Road id'], road.id, `${road.name} id`);
+      assert.equal(row['TIGER names'], commaList(road.tigerNames), `${road.name} TIGER names`);
+      assert.equal(row.LINEARIDs, commaList(road.linearIds), `${road.name} LINEARIDs`);
+    }
+  });
+
+  test('it lists every roadClasses code with its width and surface, and no other', () => {
+    const rows = tableRows('By road class');
+    assert.deepEqual(sorted(rows.map((row) => row.MTFCC)), sorted(Object.keys(data.roadClasses)));
+    for (const [code, { label, width, surface }] of Object.entries(data.roadClasses)) {
+      const row = rows.find((candidate) => candidate.MTFCC === code);
+      assert.equal(row.Class, label, `${code} label`);
+      assert.equal(Number(row['Width (m)']), width, `${code} width`);
+      assert.equal(row.Surface, surface, `${code} surface`);
+    }
+  });
+
+  test('it gives every road its class, width, surface and source', () => {
+    const rows = tableRows('By road');
+    assert.deepEqual(sorted(rows.map((row) => row.Road)), sorted(data.roads.map((road) => road.name)));
+    for (const road of data.roads) {
+      const row = rows.find((candidate) => candidate.Road === road.name);
+      assert.equal(row.MTFCC, road.mtfcc, `${road.name} class`);
+      assert.equal(Number(row['Width (m)']), road.width, `${road.name} width`);
+      assert.equal(row.Surface, road.surface, `${road.name} surface`);
+      assert.equal(row.Source, road.specSource, `${road.name} source`);
+    }
+  });
+
+  test('it lists every override with a reason, or says there are none', () => {
+    const overridden = data.roads.filter((road) => road.specSource === 'override');
+    const rows = tableRows('Overrides');
+    assert.deepEqual(sorted(rows.map((row) => row.Road)), sorted(overridden.map((road) => road.name)));
+    for (const road of overridden) {
+      const row = rows.find((candidate) => candidate.Road === road.name);
+      assert.equal(Number(row['Width (m)']), road.width, `${road.name} override width`);
+      assert.equal(row.Surface, road.surface, `${road.name} override surface`);
+      assert.ok(row.Reason, `${road.name} override has no reason`);
+    }
+    assert.equal(
+      /\bno overrides\b/i.test(docsSection('Overrides')),
+      overridden.length === 0,
+      'the page should say "No overrides" exactly when there are none',
+    );
+  });
+
+  test('it lists every compression band with its ranges, factor and reason, and no other', () => {
+    const rows = tableRows('Compressed stretches').map((row) => ({
+      trueFrom: Number(row['True x from']),
+      trueTo: Number(row['True x to']),
+      gameFrom: Number(row['Game x from']),
+      gameTo: Number(row['Game x to']),
+      factor: Number(row.Factor),
+    }));
+    assert.deepEqual(
+      rows,
+      data.compression.map(({ trueFrom, trueTo, gameFrom, gameTo, factor }) => ({
+        trueFrom,
+        trueTo,
+        gameFrom,
+        gameTo,
+        factor,
+      })),
+    );
+    for (const band of data.compression) {
+      assert.ok(docsSection('Compressed stretches').includes(band.reason), `no reason for band at ${band.trueFrom}`);
+    }
+  });
+
+  test('its conversion gives the projection constants and every band', () => {
+    const conversion = docsSection('Lat/long to game coordinates');
+    const constants = [data.projection.radiusM, data.origin.lat, data.origin.lon];
+    const bandValues = data.compression.flatMap((band) => [
+      band.trueFrom,
+      band.trueTo,
+      band.gameFrom,
+      band.gameTo,
+      band.factor,
+      Math.abs(band.gameTo - band.trueTo),
+    ]);
+    for (const value of [...constants, ...bandValues]) {
+      assert.ok(mentionsNumber(conversion, value), `the conversion doesn't mention ${value}`);
     }
   });
 });
