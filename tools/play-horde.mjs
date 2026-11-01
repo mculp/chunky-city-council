@@ -51,8 +51,8 @@ const roam = await g(() => {
   G.S.beans = 0; G.player.inv = 1e4;
   const from = H.all.map((z) => [z.x, z.z]), r = { worst: 0, wet: 0, out: 0, inside: 0, church: 0 };
   // past each part of town in turn, which is what wakes them
-  for (const x of [420, 620, 820, 1020]) {
-    G.place(x, 30);
+  for (const x of [-495, -295, -95, 105]) {
+    G.place(...M.fromTrue(x, 12));
     for (let i = 0; i < 40; i++) {
       G.sim(1, 1 / 30);
       for (const z of H.active) {
@@ -70,7 +70,7 @@ check(`and they keep to the streets, at worst ${roam.worst.toFixed(0)} m off one
 check('never in the water, out of bounds, inside anything or in the church', !roam.wet && !roam.out && !roam.inside && !roam.church, roam);
 
 // ---------------- senses
-await g(() => { clearCrowd(); __game.S.beans = 0; __game.place(__game.places.hall.x + 40, 3); });
+await g(() => { clearCrowd(); __game.S.beans = 0; __game.place(__game.places.hall.x + 40, __game.map.fromTrue(0, -15)[1]); });
 let r = await g(() => {
   const G = __game, H = G.horde, P = G.player.pos, one = H.add(P.x + 14, P.z);
   G.sim(4, 1 / 30);
@@ -95,7 +95,7 @@ r = await g(() => {
 check('he can be smelled at 8 m carrying a lot of beans, and not without them', r.none === 0 && r.beans >= 1, r);
 
 // ---------------- a pack
-await g(() => { clearCrowd(); __game.S.beans = 0; __game.S.mode = 'town'; __game.player.inv = 0; __game.place(__game.places.hall.x + 40, 3); crowdRing(7, 13); });
+await g(() => { clearCrowd(); __game.S.beans = 0; __game.S.mode = 'town'; __game.player.inv = 0; __game.place(__game.places.hall.x + 40, __game.map.fromTrue(0, -15)[1]); crowdRing(7, 13); });
 await snap('01-ring');
 r = await g(() => {
   const G = __game, P = G.player.pos, seen = new Set(), x = P.x, z = P.z;
@@ -177,7 +177,7 @@ check('inside the church they don\'t notice him and won\'t come in', r.sanctuary
 check(`the bell brings them in anyway: ${r.bell} of 10`, r.bell >= 5, r);
 
 // ---------------- what it costs: thirty and more on screen
-await g(() => { const G = __game; clearCrowd(); G.S.mode = 'town'; G.S.beans = 0; G.player.inv = 0; G.horde.T.grabReach = 0; G.place(G.places.hall.x + 40, 3); crowdRing(48, 9); for (let i = 0; i < 48; i++) { const z = G.horde.all[i], d = 3 + i * .8; z.x = G.player.pos.x + ((i * 7) % 11 / 5 - 1) * .2 * (d + 5.4); z.z = G.player.pos.z - d; z.y = G.floorAt(z.x, z.z); z.yaw = 0; } G.look(0, .28); G.step(.5, 1 / 30); });   // down a portrait phone's narrow view
+await g(() => { const G = __game; clearCrowd(); G.S.mode = 'town'; G.S.beans = 0; G.player.inv = 0; G.horde.T.grabReach = 0; G.place(G.places.hall.x + 40, G.map.fromTrue(0, -15)[1]); crowdRing(48, 9); for (let i = 0; i < 48; i++) { const z = G.horde.all[i], d = 3 + i * .8; z.x = G.player.pos.x + ((i * 7) % 11 / 5 - 1) * .2 * (d + 5.4); z.z = G.player.pos.z - d; z.y = G.floorAt(z.x, z.z); z.yaw = 0; } G.look(0, .28); G.step(.5, 1 / 30); });   // down a portrait phone's narrow view
 await snap('06-forty-eight');
 c = await g(() => __game.crowd());
 const onScreen = await g(() => { const G = __game, cam = G.camera, v = cam.position.clone(); let n = 0; for (const s of G.horde.all) { v.set(s.x, s.y + 1, s.z).project(cam); if (Math.abs(v.x) < 1 && Math.abs(v.y) < 1 && v.z < 1) n++; } return n; });
@@ -205,7 +205,7 @@ await close();
 // ---------------- on a phone: the same thing with the A button
 const phone = await serveAndOpen({ touch: true, query: '?test&horde' });
 await phone.page.evaluate(helpers);
-await phone.page.evaluate(() => { const G = __game; G.pause(); G.jump('town'); clearCrowd(); G.place(G.places.hall.x + 40, 3); const one = G.horde.add(G.player.pos.x + .6, G.player.pos.z); one.state = 2; G.step(.2, 1 / 30); });
+await phone.page.evaluate(() => { const G = __game; G.pause(); G.jump('town'); clearCrowd(); G.place(G.places.hall.x + 40, G.map.fromTrue(0, -15)[1]); const one = G.horde.add(G.player.pos.x + .6, G.player.pos.z); one.state = 2; G.step(.2, 1 / 30); });
 let t = await phone.page.evaluate(() => __game.state());
 check('on a phone it says to mash FREE', t.mode === 'grabbed' && /^Mash FREE to break free/.test(t.prompt), t);
 let taps = 0;

@@ -269,14 +269,13 @@ describe('the plot of the real graph', () => {
     assert.ok(textsIn(source).includes('Town center'));
   });
 
-  test('the scale bar is 1 km at the map scale, and says where that holds', () => {
+  test('the scale bar is 1 km at the map scale', () => {
     const source = layer('scale-bar');
     const bar = tagsIn(source, 'path').find((path) => path['data-part'] === 'bar');
     const [start, end] = vertices(bar.d);
     assert.equal(start[1], end[1], 'the bar should be level');
     assert.ok(Math.abs(end[0] - start[0] - 1000 * view.scale) <= 2 * WRITTEN_PX, 'bar length');
     assert.ok(textsIn(source).includes('1 km'));
-    assert.ok(textsIn(source).some((label) => label.includes('outside shaded bands')));
   });
 
   test('the legend names everything drawn', () => {
@@ -288,43 +287,10 @@ describe('the plot of the real graph', () => {
       'Trestle',
       'node',
       'Town center',
-      'bearings not true',
     ];
     for (const name of names) {
       assert.ok(labels.some((label) => label.includes(name)), `the legend doesn't mention ${name}`);
     }
-  });
-
-  test('each compression band is shaded across its game x, with its factor and warning', () => {
-    assert.ok(graph.compression.length > 0);
-    const source = layer('compression');
-    const rects = tagsIn(source, 'rect');
-    assert.equal(rects.length, graph.compression.length);
-
-    graph.compression.forEach((band, i) => {
-      const [left] = toPlot(band.gameFrom, 0, view);
-      const [right] = toPlot(band.gameTo, 0, view);
-      assert.ok(Math.abs(Number(rects[i].x) - left) <= WRITTEN_PX, 'band left edge');
-      assert.ok(Math.abs(Number(rects[i].width) - (right - left)) <= 2 * WRITTEN_PX, 'band width');
-      assert.ok(Number(rects[i]['fill-opacity']) < 1, "the band shouldn't hide the lines under it");
-      assert.ok(textsIn(source).some((label) => label.includes(String(band.factor))), 'no factor');
-    });
-    assert.ok(
-      textsIn(source).some((label) => label.includes('x scale and bearings are not true')),
-      'no warning',
-    );
-  });
-
-  test('the band runs the height of everything drawn', () => {
-    const [rect] = tagsIn(layer('compression'), 'rect');
-    const ys = [...tagsIn(layer('river'), 'path'), ...tagsIn(layer('road-meehan-savoy-rd'), 'path')]
-      .flatMap((path) => vertices(path.d))
-      .map(([, y]) => y);
-    assert.ok(Number(rect.y) <= Math.min(...ys) + WRITTEN_PX, 'the band should reach the top');
-    assert.ok(
-      Number(rect.y) + Number(rect.height) >= Math.max(...ys) - 2 * WRITTEN_PX,
-      'the band should reach the bottom',
-    );
   });
 
   // Against TIGER's own lon/lat rather than the x/z the path was drawn from, so
@@ -403,6 +369,10 @@ describe('renderRoadPlot on other input', () => {
     const source = layerIn(plot, 'compression');
     assert.equal(tagsIn(source, 'rect').length, graph.compression.length + 1);
     assert.ok(textsIn(source).some((label) => label.includes('0.5')));
+    assert.ok(textsIn(source).some((label) => label.includes('x scale and bearings are not true')), 'no warning');
+    assert.ok(Number(tagsIn(source, 'rect')[0]['fill-opacity']) < 1, "the band shouldn't hide the lines under it");
+    assert.ok(textsIn(layerIn(plot, 'legend')).some((label) => label.includes('bearings not true')), 'nothing in the legend');
+    assert.ok(textsIn(layerIn(plot, 'scale-bar')).some((label) => label.includes('outside shaded bands')), 'the scale bar should say where it holds');
   });
 
   test('with no bands nothing is shaded or warned about', () => {
@@ -410,6 +380,7 @@ describe('renderRoadPlot on other input', () => {
     assert.deepEqual(tagsIn(layerIn(plot, 'compression'), 'rect'), []);
     assert.deepEqual(textsIn(layerIn(plot, 'compression')), []);
     assert.ok(!textsIn(layerIn(plot, 'legend')).some((label) => label.includes('bearings')));
+    assert.ok(!textsIn(layerIn(plot, 'scale-bar')).some((label) => label.includes('bands')));
   });
 
   test('the map is framed around the data, not fixed to this graph', () => {

@@ -4,7 +4,7 @@
 //
 //   npm run overlay:structures -- [x0 z0 x1 z1] [--scale 4] [--aerial-only]
 //
-// The corners are in true metres from town center. Only do this where the map isn't compressed.
+// The corners are in true metres from town center.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { serveAndOpen } from './browser.mjs';

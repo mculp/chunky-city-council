@@ -1,7 +1,7 @@
 // Draws data/roads.json as an SVG, to check by eye that the graph sits the right
 // way round. It plots game coordinates at one scale on both axes, north up and
-// east right, so x distances and bearings are only untrue inside the shaded
-// compression bands.
+// east right, so x distances and bearings are true, apart from inside any shaded
+// compression bands. There are none at the moment.
 //
 //   node tools/plot-roads.js [out.svg]
 //
@@ -311,7 +311,7 @@ function northArrowLayer(x, baseY, view) {
 }
 
 // The bar's length is measured through toPlot too.
-function scaleBarLayer(x, y, view) {
+function scaleBarLayer(x, y, view, bands) {
   const length = toPlot(SCALE_BAR_M, 0, view)[0] - toPlot(0, 0, view)[0];
   const right = x + length;
   return group('scale-bar', [
@@ -321,7 +321,7 @@ function scaleBarLayer(x, y, view) {
       `M${number(right)} ${number(y - 5)} L${number(right)} ${number(y + 5)}" ` +
       `fill="none" stroke="${COLOURS.text}" stroke-width="2"/>`,
     text(x, y - 12, `${SCALE_BAR_M / 1000} km`),
-    text(x, y + 20, 'outside shaded bands'),
+    ...(bands ? [text(x, y + 20, 'outside shaded bands')] : []),
   ]);
 }
 
@@ -383,7 +383,7 @@ export function renderRoadPlot(graph) {
     originLayer(view),
     titleLayer(graph),
     northArrowLayer(MARGIN + 20, footerTop + 84, view),
-    scaleBarLayer(MARGIN + 60, footerTop + 40, view),
+    scaleBarLayer(MARGIN + 60, footerTop + 40, view, graph.compression.length > 0),
     legendLayer(graph, MARGIN + 240, footerTop + 14),
     '</svg>',
     '',

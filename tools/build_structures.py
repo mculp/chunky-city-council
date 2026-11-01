@@ -192,21 +192,18 @@ def rings_touch(ring_a, ring_b, gap):
 
 
 class World:
-    """toWorld from src/map.js: the bridge is the origin, and US 80 is laid straight from it to the edge of town."""
+    """toWorld from src/map.js: the true map moved over so the bridge is the origin, with its one bent road."""
 
     def __init__(self, roads):
         self.bands = roads["compression"]
         edges = {e["id"]: e for e in roads["edges"]}
-        us80 = next(r for r in roads["roads"] if r["id"] == "us_80")
-        line = self.walk(us80, edges)
-        self.bridge_x = next(c for c in roads["reference"]["crossings"] if c["road"] == "us_80" and c["with"] == "river")["x"]
-        west = [b for b in self.bands if b["trueTo"] <= 0]
-        self.lean_end = west[-1]["gameTo"] if west else self.bridge_x
-        self.knots = [p for p in line if p[0] <= self.lean_end]
-        i = next(k for k, p in enumerate(line) if p[0] > self.lean_end)
-        a, b = line[i - 1], line[i]
-        self.lean_end_z = a[1] + (b[1] - a[1]) * (self.lean_end - a[0]) / (b[0] - a[0])
-        self.roads = [(r["width"], [self.point(*p) for p in self.walk(r, edges)]) for r in roads["roads"]]
+        opening = roads["opening"]
+        crossing = next(c for c in roads["reference"]["crossings"] if c["road"] == opening["road"] and c["with"] == "river")
+        self.bridge_x, self.bridge_z = crossing["x"], crossing["z"]
+        self.roads = []
+        for r in roads["roads"]:
+            line = [self.point(*p) for p in self.walk(r, edges)]
+            self.roads.append((r["width"], self.bend(line, opening) if r["id"] == opening["road"] else line))
         self.rail = [[self.point(*p) for p in l["points"]] for l in roads["reference"]["railroad"]["lines"]]
         self.river = [[self.point(*p) for p in l["points"]] for l in roads["reference"]["river"]["lines"]]
 
@@ -217,19 +214,16 @@ class World:
             pts += edges[eid]["points"][1 if i else 0:]
         return pts
 
-    def lean(self, x):
-        if x >= self.lean_end:
-            return self.lean_end_z
-        k = self.knots
-        if x <= k[0][0]:
-            return k[0][1]
-        for a, b in zip(k, k[1:]):
-            if a[0] <= x <= b[0]:
-                return a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]) if b[0] > a[0] else a[1]
-        return k[-1][1]
+    @staticmethod
+    def bend(pts, opening):
+        """bendOpeningRoad from src/map.js, near enough to keep buildings off it: straight between its ends, and a chord to where it rejoins."""
+        pts = pts if pts[0][0] < pts[-1][0] else pts[::-1]
+        near = lambda q: min(range(len(pts)), key=lambda i: math.hypot(pts[i][0] - q[0], pts[i][1] - q[1]))
+        a, b = near(opening["joinWest"]), near(opening["joinEast"])
+        return [*pts[: a + 1], (opening["west"], 0), (opening["east"], 0), *pts[b:]]
 
     def point(self, x, z):
-        return x - self.bridge_x, z - self.lean(x)
+        return x - self.bridge_x, z - self.bridge_z
 
     def from_true(self, x, z):
         return self.point(compress_x(x, self.bands), z)

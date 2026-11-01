@@ -20,11 +20,13 @@ const tiger = JSON.parse(py.stdout);
 
 // Runs in the page. Measures the game against TIGER. Nothing here draws.
 function measure({ tiger, tolerance }) {
-  const g = __game, M = g.map, [tcx, tcz] = M.fromTrue(0, 0), bands = M.compression;
-  const toWorld = ([lon, lat]) => M.fromLonLat(lon, lat), aligned = ([lon, lat]) => { const [x, z] = M.trueOf(lon, lat); return [x + tcx, z + tcz]; };
+  const g = __game, M = g.map, [tcx, tcz] = M.fromTrue(0, 0);
+  const toWorld = ([lon, lat]) => M.fromLonLat(lon, lat);
   const roadName = (id) => M.roadById.get(id).name;
-  // the stretch with no compression and no lean, where the world is the true map moved over
-  const townEdges = { west: bands.filter((b) => b.trueTo <= 0).at(-1).trueTo, east: bands.filter((b) => b.trueFrom >= 0)[0].trueFrom };
+  // Right at Stuckey's the opening scene bends its road and the river, on purpose. data/roads.md says how.
+  const { road: OPENING, joinWest, joinEast } = M.opening;
+  const bentRoad = ([x, z]) => x > joinWest[0] && x < joinEast[0] && z > joinEast[1] && z < joinWest[1];
+  const bentRiver = ([x, z]) => Math.abs(z) < 200 && Math.abs(x) < 300;
 
   const nodes = M.nodes.map((n) => {
     const roads = n.roads, candidates = roads.length > 1
@@ -33,23 +35,15 @@ function measure({ tiger, tolerance }) {
     let best = null;
     for (const c of candidates) { const [x, z] = toWorld(c), off = Math.hypot(x - n.x, z - n.z); if (!best || off < best.off) best = { c, off }; }
     if (!best) return { id: n.id, kind: n.kind, what: roads.map(roadName).join(' × '), missing: true };
-    const [ax, az] = aligned(best.c), [tx] = M.trueOf(...best.c);
-    const between = bands.filter((b) => (tx < 0 ? b.trueTo <= 0 && tx < b.trueTo : b.trueFrom >= 0 && tx > b.trueFrom));
-    return {
-      id: n.id, kind: n.kind, what: roads.map(roadName).join(' × '), lon: best.c[0], lat: best.c[1], world: [n.x, n.z], fromCenter: [n.x - tcx, n.z - tcz], tigerFromCenter: M.trueOf(...best.c),
-      offMapped: best.off, offTrue: Math.hypot(ax - n.x, az - n.z), bands: between.map((b) => `${b.trueFrom}..${b.trueTo} ×${b.factor}`),
-    };
+    return { id: n.id, kind: n.kind, what: roads.map(roadName).join(' × '), lon: best.c[0], lat: best.c[1], world: [n.x, n.z], fromCenter: [n.x - tcx, n.z - tcz], tigerFromCenter: M.trueOf(...best.c), off: best.off };
   });
 
-  const inTown = ([x]) => x > townEdges.west && x < townEdges.east;
   // the railroad and river are only kept this far past the roads
   const inArea = ([x, z]) => x >= tiger.area.xMinM && x <= tiger.area.xMaxM && z >= tiger.area.zMinM && z <= tiger.area.zMaxM;
   const lineRow = (name, lines, grid, opts = {}) => {
-    const row = { name, town: 0, townMax: 0, map: 0, mapMax: 0, off: 0, skipped: 0 };
+    const row = { name, map: 0, mapMax: 0, off: 0, skipped: 0 };
     for (const line of lines) for (const p of line) {
-      const t = M.trueOf(...p);
-      if (opts.inside && !opts.inside(t)) continue;
-      if (inTown(t)) { const d = grid.nearest(...aligned(p)); row.town++; row.townMax = Math.max(row.townMax, d); }
+      if (opts.inside && !opts.inside(M.trueOf(...p))) continue;
       const w = toWorld(p);
       if (opts.skip && opts.skip(w)) { row.skipped++; continue; }
       const d = grid.nearest(...w);
@@ -59,15 +53,14 @@ function measure({ tiger, tolerance }) {
   };
   // A road's raw features can run past where the map clips it, so it's measured inside its own extent
   const extent = (id) => {
-    const r = M.roadById.get(id), box = [Infinity, Infinity, -Infinity, -Infinity];
-    for (const n of r.nodes) { const node = M.nodes.find((x) => x.id === n), [x, z] = M.trueOf(node.lon, node.lat); box[0] = Math.min(box[0], x); box[1] = Math.min(box[1], z); box[2] = Math.max(box[2], x); box[3] = Math.max(box[3], z); }
+    const box = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const [wx, wz] of M.roadById.get(id).pts) { const x = wx - tcx, z = wz - tcz; box[0] = Math.min(box[0], x); box[1] = Math.min(box[1], z); box[2] = Math.max(box[2], x); box[3] = Math.max(box[3], z); }
     return ([x, z]) => x >= box[0] - 1 && x <= box[2] + 1 && z >= box[1] - 1 && z <= box[3] + 1;
   };
   const lines = [
-    ...M.roads.map((r) => lineRow(r.name, tiger.roads[r.id], M.roadGrid, { inside: extent(r.id) })),
+    ...M.roads.map((r) => lineRow(r.name, tiger.roads[r.id], M.roadGrid, { inside: extent(r.id), skip: r.id === OPENING ? bentRoad : null })),
     lineRow('Railroad', tiger.railroad, M.railGrid, { inside: inArea }),
-    // the river is bent onto the opening scene's channel at the bridge, on purpose
-    lineRow('River', tiger.river, M.riverGrid, { inside: inArea, skip: ([x, z]) => Math.abs(z) < 200 && Math.abs(x) < 300 }),
+    lineRow('River', tiger.river, M.riverGrid, { inside: inArea, skip: bentRiver }),
   ];
 
   // what standing there in the game gets you, not just where the data says the line is
@@ -76,53 +69,38 @@ function measure({ tiger, tolerance }) {
     for (const line of lines) for (let i = 1; i < line.length; i++) {
       const a = M.trueOf(...line[i - 1]), b = M.trueOf(...line[i]), k = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step);
       for (let j = 0; j < k; j++) {
-        const t = [a[0] + (b[0] - a[0]) * j / k, a[1] + (b[1] - a[1]) * j / k];
-        if (!keep(t)) continue;
-        n++; if (test(t[0] + tcx, t[1] + tcz)) hit++;
+        const t = [a[0] + (b[0] - a[0]) * j / k, a[1] + (b[1] - a[1]) * j / k], w = [t[0] + tcx, t[1] + tcz];
+        if (!keep(t, w)) continue;
+        n++; if (test(...w)) hit++;
       }
     }
     return { n, hit };
   };
   const surface = [
-    ...M.roads.filter((r) => r.id !== 'meehan_savoy_rd').map((r) => { const inside = extent(r.id); return { what: `${r.name} is road`, ...sample(tiger.roads[r.id], 5, (t) => inTown(t) && inside(t), (x, z) => g.onRoad(x, z)) }; }),
-    { what: 'River is water', ...sample(tiger.river, 5, (t) => inTown(t) && inArea(t), (x, z) => g.groundH(x, z) < 0) },
+    ...M.roads.map((r) => { const inside = extent(r.id); return { what: `${r.name} is road`, ...sample(tiger.roads[r.id], 5, (t, w) => inside(t) && !(r.id === OPENING && bentRoad(w)), (x, z) => g.onRoad(x, z)) }; }),
+    { what: 'River is water', ...sample(tiger.river, 5, (t, w) => inArea(t) && !bentRiver(w), (x, z) => g.groundH(x, z) < 0) },
   ];
   const failures = [
     ...nodes.filter((n) => n.missing).map((n) => `${n.id} (${n.what}): TIGER has no matching point`),
-    ...nodes.filter((n) => !n.missing && n.offMapped > tolerance).map((n) => `${n.id} (${n.what}) is ${n.offMapped.toFixed(3)} m from TIGER`),
-    ...nodes.filter((n) => !n.missing && n.offTrue > tolerance && !n.bands.length).map((n) => `${n.id} (${n.what}) is ${n.offTrue.toFixed(1)} m out with no compressed stretch to explain it`),
-    ...lines.filter((l) => l.townMax > tolerance).map((l) => `${l.name} is ${l.townMax.toFixed(3)} m from TIGER in town`),
-    ...lines.filter((l) => l.mapMax > tolerance).map((l) => `${l.name} is ${l.mapMax.toFixed(3)} m from TIGER on the map`),
+    ...nodes.filter((n) => !n.missing && n.off > tolerance).map((n) => `${n.id} (${n.what}) is ${n.off.toFixed(3)} m from TIGER`),
+    ...lines.filter((l) => l.mapMax > tolerance).map((l) => `${l.name} is ${l.mapMax.toFixed(3)} m from TIGER`),
     ...surface.filter((s) => s.hit < s.n).map((s) => `${s.what}: ${s.hit} of ${s.n} samples`),
   ];
-  return { nodes, lines, surface, failures, townEdges, center: [tcx, tcz] };
+  return { nodes, lines, surface, failures, center: [tcx, tcz] };
 }
 
-// Runs in the page. Draws one view: { box in world metres, scale in px per metre, and whether TIGER goes on true or through the map }
+// Runs in the page. Draws one view: { box in world metres, scale in px per metre }
 function drawView({ tiger, view, result, tolerance }) {
   const G = __game, M = G.map, { box, scale } = view, [tcx, tcz] = result.center;
   const cv = G.topDown({ ...box, scale, everywhere: view.trueScale }), g = cv.getContext('2d'), W = cv.width, H = cv.height, font = Math.round(Math.max(20, W / 170));
   const px = (x, z) => [(x - box.x0) * scale, (z - box.z0) * scale];
-  const place = view.trueScale ? ([x, z]) => [x + tcx, z + tcz] : ([x, z]) => M.fromTrue(x, z);
   const label = (text, x, y, color = '#fff', size = font, align = 'left') => { g.font = `600 ${size}px "IBM Plex Mono", monospace`; g.textAlign = align; g.lineJoin = 'round'; g.lineWidth = size / 4; g.strokeStyle = 'rgba(0,0,0,.9)'; g.strokeText(text, x, y); g.fillStyle = color; g.fillText(text, x, y); };
-
-  // what isn't to scale in this picture
-  const shade = (x0, x1, text, row = 0) => {
-    const a = (x0 - box.x0) * scale, b = (x1 - box.x0) * scale; if (b < 0 || a > W) return;
-    g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(a, 0, b - a, H); g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 2; g.strokeRect(a, -9, b - a, H + 18);
-    label(text, a > W * .7 ? a - 10 : Math.max(a, 0) + 10, H - font * 1.2 * (row + 1), '#ddd', font * .8, a > W * .7 ? 'right' : 'left');
-  };
-  if (view.trueScale) { shade(-1e5, tcx + result.townEdges.west, 'compressed from here west: not to scale'); shade(tcx + result.townEdges.east, 1e5, 'compressed from here east: not to scale'); }
-  else M.compression.forEach((b, i) => { const [a] = M.fromTrue(b.trueFrom, 0), [c] = M.fromTrue(b.trueTo, 0); shade(a, c, `x ${b.trueFrom}..${b.trueTo} at ×${b.factor}`, i); });
 
   const stroke = (lines, color, width, dash = []) => {
     g.strokeStyle = color; g.lineWidth = width; g.setLineDash(dash); g.lineJoin = 'round'; g.lineCap = 'round';
     for (const line of lines) {
       g.beginPath();
-      for (let i = 1; i < line.length; i++) {
-        const a = M.trueOf(...line[i - 1]), b = M.trueOf(...line[i]), k = view.trueScale ? 1 : Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 20);
-        for (let j = i === 1 ? 0 : 1; j <= k; j++) { const [x, z] = place([a[0] + (b[0] - a[0]) * j / k, a[1] + (b[1] - a[1]) * j / k]), [u, v] = px(x, z); if (j === 0) g.moveTo(u, v); else g.lineTo(u, v); }
-      }
+      line.forEach((p, i) => { const [x, z] = M.trueOf(...p), [u, v] = px(x + tcx, z + tcz); if (i) g.lineTo(u, v); else g.moveTo(u, v); });
       g.stroke();
     }
     g.setLineDash([]);
@@ -136,7 +114,7 @@ function drawView({ tiger, view, result, tolerance }) {
     if (n.missing) continue;
     const [u, v] = px(...n.world); if (u < 0 || u > W || v < 0 || v > H) continue;
     g.strokeStyle = '#ff5a7a'; g.lineWidth = lw * 1.5; g.beginPath(); g.arc(u, v, font * .55, 0, 7); g.stroke();
-    label(`${n.id} ${n.offMapped.toFixed(3)} m`, u + font * .8, v + font * 1.3, '#ff9fb2', font * .8);
+    label(`${n.id} ${n.off.toFixed(3)} m`, u + font * .8, v + font * 1.3, '#ff9fb2', font * .8);
   }
   const [cu, cv2] = px(tcx, tcz); g.strokeStyle = '#fff'; g.lineWidth = lw; g.beginPath(); g.moveTo(cu - font, cv2); g.lineTo(cu + font, cv2); g.moveTo(cu, cv2 - font); g.lineTo(cu, cv2 + font); g.stroke();
   label('town center', cu + font * .7, cv2 - font * .5, '#fff', font * .8);
@@ -165,8 +143,8 @@ const views = [
     title: 'Chunky, Mississippi: town at true scale', frame: 'Aligned on town center 32.32583, -88.92806, with the graph\'s lat/long conversion.', labels: { us_80: [.17, .3], adams_st: [.4], church_st: [.35] },
   },
   {
-    file: 'map-overlay-whole.png', trueScale: false, scale: .5, legendAt: [.58, .3], box: { x0: bounds[0] - 400, x1: bounds[2] + 400, z0: bounds[1] - 400, z1: bounds[3] + 400 },
-    title: 'The whole game map', frame: 'TIGER through the map\'s conversion: bands compress x, and the world lays US 80 straight from the bridge.', labels: { us_80: [.55], adams_st: [.6], church_st: [.2], meehan_savoy_rd: [.5] },
+    file: 'map-overlay-whole.png', trueScale: false, scale: .25, legendAt: [.01, .62], box: { x0: bounds[0] - 400, x1: bounds[2] + 400, z0: bounds[1] - 400, z1: bounds[3] + 400 },
+    title: 'The whole game map', frame: 'The true map moved over. Only the road and river right at Stuckey\'s Bridge are bent, for the opening.', labels: { us_80: [.55], adams_st: [.6], church_st: [.2], meehan_savoy_rd: [.5], stuckey_bridge_rd: [.5] },
   },
 ];
 for (const view of views) {
@@ -180,23 +158,23 @@ const f = (v, n = 1) => v.toFixed(n), xz = ([x, z]) => `${f(x)}, ${f(z)}`;
 const report = [
   '# Game map against TIGER/Line 2025', '',
   `Tolerance: ${TOLERANCE_M} m. Town center is world ${xz(result.center)}.`,
-  `The town stretch, with no compression or lean, is true x ${result.townEdges.west} to ${result.townEdges.east}.`, '',
+  '',
   '## Intersections and road ends', '',
-  '"Through the map" goes from TIGER through the graph\'s conversion, the compression bands and the world frame. "True scale" compares both as metres from town center, so it shows what compression moved.', '',
-  '| Node | Kind | Roads | TIGER lon, lat | Game, from town center | TIGER, from town center | Off, through the map (m) | Off, true scale (m) | Compressed stretches on the way |',
-  '|---|---|---|---|---|---|---|---|---|',
-  ...result.nodes.map((n) => (n.missing ? `| ${n.id} | ${n.kind} | ${n.what} | none | | | | | |` : `| ${n.id} | ${n.kind} | ${n.what} | ${n.lon}, ${n.lat} | ${xz(n.fromCenter)} | ${xz(n.tigerFromCenter)} | ${f(n.offMapped, 3)} | ${f(n.offTrue, n.offTrue < 1 ? 3 : 1)} | ${n.bands.join(', ') || 'none'} |`)), '',
-  '## Lines', '',
-  'Each TIGER vertex against the game\'s line. Town is at true scale, aligned on town center. Map is through the conversion. "Past the map" is TIGER running on beyond where the map stops.', '',
-  '| Line | Vertices in town | Furthest in town (m) | Vertices on the map | Furthest on the map (m) | Past the map | Left out at the bridge |',
+  'From TIGER through the graph\'s conversion and the world frame, against where the game has it.', '',
+  '| Node | Kind | Roads | TIGER lon, lat | Game, from town center | TIGER, from town center | Off (m) |',
   '|---|---|---|---|---|---|---|',
-  ...result.lines.map((l) => `| ${l.name} | ${l.town} | ${f(l.townMax, 3)} | ${l.map} | ${f(l.mapMax, 3)} | ${l.off} | ${l.skipped} |`), '',
+  ...result.nodes.map((n) => (n.missing ? `| ${n.id} | ${n.kind} | ${n.what} | none | | | |` : `| ${n.id} | ${n.kind} | ${n.what} | ${n.lon}, ${n.lat} | ${xz(n.fromCenter)} | ${xz(n.tigerFromCenter)} | ${f(n.off, 3)} |`)), '',
+  '## Lines', '',
+  'Each TIGER vertex against the game\'s line. "Past the map" is TIGER running on beyond where the map stops. "Bent at Stuckey\'s" is what the opening scene moves on purpose.', '',
+  '| Line | Vertices on the map | Furthest (m) | Past the map | Bent at Stuckey\'s |',
+  '|---|---|---|---|---|',
+  ...result.lines.map((l) => `| ${l.name} | ${l.map} | ${f(l.mapMax, 3)} | ${l.off} | ${l.skipped} |`), '',
   '## In the game', '',
-  'TIGER sampled every 5 m in town and asked of the running game.', '',
+  'TIGER sampled every 5 m, all the way out, and asked of the running game.', '',
   '| Check | Samples | Passed |', '|---|---|---|',
   ...result.surface.map((s) => `| ${s.what} | ${s.n} | ${s.hit} |`), '',
   '## Result', '',
-  ...(result.failures.length ? result.failures.map((x) => `- FAIL: ${x}`) : [`Everything is within ${TOLERANCE_M} m or in a documented compressed stretch.`]), '',
+  ...(result.failures.length ? result.failures.map((x) => `- FAIL: ${x}`) : [`Everything is within ${TOLERANCE_M} m.`]), '',
 ];
 writeFileSync(`${OUT}map-overlay-report.md`, report.join('\n'));
 console.log(report.join('\n'));

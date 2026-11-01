@@ -47,7 +47,19 @@ for (let i = 0; i < 60 && st.mode === 'bridge'; i++) {
   if (hop && i % 2 === 0) await key(' '); st = await step(.25); await key(' ', false); st = await step(.25);
 }
 await key('w', false);
-check('into town', st.mode === 'town', [st.mode, st.pos]); await snap('town');
+
+// a moccasin where the boards stop, the fever, and he comes to on the Chunky River Bridge at the edge of town
+check('a moccasin at the end of the bridge', st.mode === 'bitten', [st.mode, st.pos]); await snap('bitten');
+const noControls = async (what) => check(`nothing to press ${what}`, await g(() => { const on = (el) => el && !el.hidden && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none'; return !on(document.getElementById('keyStrip')) && ![...document.querySelectorAll('.ctl')].some(on); }), null);
+await noControls('in the bite');
+st = await step(4.2); check('the fever has him', st.mode === 'dream', st.mode); await snap('dream'); await noControls('in the dream');
+st = await step(11); check('he comes to', st.mode === 'wake', st.mode); await snap('wake'); await noControls('as he comes to');
+const wakeAt = await g(() => { const P = __game.player.pos, c = __game.map.crossings.find((q) => q.road === 'griffis_fountain_rd'); return Math.hypot(P.x - c.x, P.z - c.z); });
+check(`on the Chunky River Bridge, ${wakeAt.toFixed(0)} m from its middle`, wakeAt < 15, wakeAt);
+st = await step(4); check('on his feet, and into town', st.mode === 'town', [st.mode, st.pos]); await snap('town');
+check('the road into town', /Griffis Fountain Rd/.test(st.obj), st.obj);
+const stuckeys = await g(() => { const P = __game.player.pos; return { far: Math.hypot(P.x, P.z) }; });
+check(`and Stuckey's is ${(stuckeys.far / 1609.344).toFixed(1)} miles behind him`, stuckeys.far > 9000, stuckeys);
 
 // Coop's bag to Tre
 await g(() => { const c = __game.npcs.coop; __game.place(c.x, c.z - 1.5); });

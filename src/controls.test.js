@@ -29,7 +29,7 @@ test('the map key is only there once there\'s a map', () => {
 });
 
 test('the opening has no strip, just the prompt', () => {
-  for (const mode of ['title', 'hang', 'fall']) assert.deepEqual(keysFor(mode), []);
+  for (const mode of ['title', 'hang', 'fall', 'bitten', 'dream', 'wake']) assert.deepEqual(keysFor(mode), []);
 });
 
 test('in the water the phone\'s one button swims faster, and nothing else is on screen', () => {

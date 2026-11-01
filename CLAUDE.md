@@ -37,7 +37,7 @@ Read `docs/art-direction.md` before changing anything visible. `reference/stucke
 
 - 1 unit = 1 m. +X is east, +Y is up and -Z is north.
 - Map data has its origin at town center, 32.32583, -88.92806, and uses a local equirectangular projection with R = 6,371,000 m: `x = R * dLon * cos(lat0)`, `z = -R * dLat`, in radians.
-- The game's world has its origin at Stuckey's Bridge, which is US 80's first river crossing, so the opening scene never moves. West of the edge of town it also lays US 80 straight along z 0. `src/map.js` converts everything, and `data/roads.md` has the formulas. Place new things with `atTrue(x, z)`, in true metres from town center, so they follow the map if its compression changes.
+- The game's world is that map moved over so that its origin is Stuckey's Bridge, where Stuckey Bridge Rd really crosses the river, so the opening scene never moves. Town center is about 6.8 km west and 7.8 km north of it. The map is true scale. Only the road and river right at the bridge are bent, for the opening. `src/map.js` converts everything, and `data/roads.md` has the formulas. Place new things with `atTrue(x, z)`, in true metres from town center.
 - What breaks is in `src/damage.js`, and how it looks and what breaks it is in `index.html` under "what burns and what goes up". A piece is known by its place in its building, so damage survives a cell being dropped and written again. Stuckey's Bridge doesn't break.
 - Keep the opening as it is. The first scene's terrain, trees and random sequence are deliberately untouched inside its square, which is why `firstSceneH` exists and why new code doesn't call `rnd()`. Use `hash()` for anything new that needs to be random and repeatable.
 
@@ -57,7 +57,7 @@ Then open http://localhost:8000.
 
 `npm run walk` walks every road end to end, both ways, with the game's own movement code.
 
-`npm run play` plays Chapter 1 on foot from the bridge to its final objective, following the objective's arrow, and fails if anything's blocked or unreachable. `npm run smoke` teleports between beats, so it can't catch that.
+`npm run play` plays Chapter 1 on foot from where he wakes on the Chunky River Bridge to its final objective, following the objective's arrow, and fails if anything's blocked or unreachable. `npm run smoke` teleports between beats, so it can't catch that.
 
 `npm run horde` plays against the crowd with real key presses and taps: they roam the real map, notice him, run him down and grab him, and he gets away. It also reports what 48 of them cost.
 
@@ -70,5 +70,7 @@ Then open http://localhost:8000.
 `npm run wreck` wrecks the town with real key presses and taps: through a house and through brick in a pickup, over a young tree and into a big one, into a parked car, a hammer through a wall, a can through a window, cars going up and a house burning down, then that it all stays down after going away and coming back. It also reports what the worst of it costs.
 
 The crowd comes out when Chapter 1 ends. `index.html?horde` brings it out as soon as town starts, which is the quick way to try it. `index.html#free`, or Skip to town on the title card, goes straight to town with the crowd out and three gas cans. It's an anchor because that's the only part of an address the shared link passes on.
+
+Chapter 1's bridge run ends in a moccasin bite, a fever dream and waking on the Chunky River Bridge at the edge of town: the modes `bitten`, `dream` and `wake`. `jump('town')` puts him where he wakes.
 
 `index.html?test` adds `window.__game`, which is what the smoke test drives. The clock starts held. `step(seconds)` advances it and `sim(seconds)` does the same without drawing, `jump(phase)` starts a phase, `place(x, z)` moves the player, `key(k, down)` and `stick(x, y)` give input, `state()` reads the game, and Math.random is seeded. A background tab runs at about 1 fps, so test with the clock held or in a real window.

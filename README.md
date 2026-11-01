@@ -1,6 +1,6 @@
 # Chunky 2026
 
-A phone-first survival game set in post-apocalyptic Chunky, Mississippi. Chapter 1, "Cut Down", is playable now.
+A phone-first survival game set in post-apocalyptic Chunky, Mississippi, on the real map at its real scale. Chapter 1, "Cut Down", is playable now.
 
 ## Play
 
@@ -31,7 +31,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/`: the scripts that fetch the source data, build the road graph and plot it
 - `tools/smoke.mjs`: plays Chapter 1 in Chrome (`npm i`, then `npm run smoke`)
 - `tools/walk-roads.mjs`: walks every road end to end in Chrome (`npm run walk`)
-- `tools/play-chapter1.mjs`: plays Chapter 1 on foot in Chrome, from the bridge to the final objective (`npm run play`)
+- `tools/play-chapter1.mjs`: plays Chapter 1 on foot in Chrome, from where he wakes to the final objective (`npm run play`)
 - `tools/play-horde.mjs`: plays against the crowd in Chrome and reports what it costs (`npm run horde`)
 - `tools/play-drive.mjs`: drives every kind of vehicle in Chrome, on the roads and off them, into walls and through the crowd (`npm run drive`)
 - `tools/play-field.mjs`: walks onto the ball field and tries its fence and gates, on foot and in a pickup (`npm run field`)

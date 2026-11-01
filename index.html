@@ -567,8 +567,14 @@ const DY = 6.0, TY = 11.6, ZS = 2.8, XE = 20, XP = 15, DECK_TOP = 6.36, ROAD_TOP
 // The opening scene's river. The map's river bends over to it near the bridge.
 const channel = (z) => 3.5 * Math.sin(z * .035);
 const MAP = await loadMap('data/roads.json', { riverAtBridge: channel });
+// Stuckey Bridge Rd, which is laid along z 0 through the first scene
+const OPENING_ROAD = MAP.opening.road;
 // where things stand, in true metres from town center, so that they move with the map if its bands change
 const atTrue = (x, z) => MAP.fromTrue(x, z);
+// The Chunky River Bridge on Griffis Fountain Rd, at the edge of town: one lane wide, 30.7 m long, where he comes to
+const WAKE_ROAD = 'griffis_fountain_rd', WAKE_BRIDGE = MAP.crossings.find((c) => c.road === WAKE_ROAD && c.with === 'river');
+const WAKE_HALF = 2.15, WAKE_SPAN = 30.7;
+const fromWake = (x, z) => Math.hypot(x - WAKE_BRIDGE.x, z - WAKE_BRIDGE.z);
 // The ground the first scene was drawn on, kept as it was because the trees are chosen by it.
 function firstSceneH(x, z) {
   const d = Math.abs(x - channel(z));
@@ -579,7 +585,8 @@ function firstSceneH(x, z) {
 }
 function riverDist(x, z) {
   const az = Math.abs(z);
-  if (az >= 160 || Math.abs(x) > 150) return MAP.riverGrid.nearest(x, z);
+  // it's narrower at the Chunky River Bridge, or the bridge wouldn't reach across
+  if (az >= 160 || Math.abs(x) > 150) { const d = MAP.riverGrid.nearest(x, z), w = fromWake(x, z); return w < 90 ? d + 7 * (1 - sstep(40, 90, w)) : d; }
   const near = Math.abs(x - channel(z));
   if (az <= 100) return near;
   return near + (Math.min(MAP.riverGrid.nearest(x, z), 60) - near) * sstep(100, 160, az);
@@ -603,11 +610,12 @@ function padWeight(x, z, lawn = false) {
   }
   return w;
 }
-// US 80 narrows to the bridge's width as it comes up to it, and the bridge's own deck takes over at the abutment
+// The road narrows to the bridge's width as it comes up to it, and the bridge's own deck takes over at the abutment
 const ROAD_GAP = 20.4;
 function roadHalf(road, x, z) {
   const half = road.width / 2, ax = Math.abs(x);
-  return road.id === 'us_80' && ax < 60 && Math.abs(z) < 8 ? 2.8 + (half - 2.8) * sstep(30, 60, ax) : half;
+  if (road.id === WAKE_ROAD) { const w = fromWake(x, z); return w < 26 ? WAKE_HALF + (half - WAKE_HALF) * sstep(16, 26, w) : half; }
+  return road.id === OPENING_ROAD && ax < 60 && Math.abs(z) < 8 ? 2.8 + (half - 2.8) * sstep(30, 60, ax) : half;
 }
 function groundH(x, z) {
   const d = riverDist(x, z);
@@ -648,11 +656,15 @@ function groundColor(x, z, h, col, i) {
   let c = h < .6 ? lerp3(hex('#1c1420'), hex('#2a1e22'), n) : lerp3(hex('#24302b'), hex('#3a2a30'), n);
   if (h > .6 && n > .62) c = lerp3(c, hex('#8a3a1e'), .7);
   // packed dirt around the bridge's east end, under buildings, along the shoulders and the track bed
-  let dust = x > 26 ? .5 * (1 - sstep(180, 240, x)) : 0;
-  if (Math.abs(x) > 60 && MAP.roadGrid.nearest(x, z) < MAP.roadGrid.reach) dust = Math.max(dust, .9 * sstep(60, 125, Math.abs(x)) * (1 - sstep(MAP.roadGrid.seg.owner.width / 2 + 2.5, MAP.roadGrid.seg.owner.width / 2 + 8, MAP.roadGrid.d)));
+  const fromBridge = Math.max(Math.abs(x), Math.abs(z));
+  let dust = x > 26 ? .5 * (1 - sstep(180, 240, x)) * (1 - sstep(240, 400, Math.abs(z))) : 0;
+  if (fromBridge > 60 && MAP.roadGrid.nearest(x, z) < MAP.roadGrid.reach) dust = Math.max(dust, .9 * sstep(60, 125, fromBridge) * (1 - sstep(MAP.roadGrid.seg.owner.width / 2 + 2.5, MAP.roadGrid.seg.owner.width / 2 + 8, MAP.roadGrid.d)));
   if (MAP.railGrid.nearest(x, z) < 8) dust = Math.max(dust, .8 * (1 - sstep(2, 7, MAP.railGrid.d)));
   dust = Math.max(dust, .5 * padWeight(x, z));
   if (dust > 0) c = lerp3(c, DUST, dust);
+  // sand where the river's cut down under the Chunky River Bridge
+  const w = fromWake(x, z);
+  if (w < 80) c = lerp3(c, hex('#6f6048'), .85 * (1 - sstep(35, 80, w)) * (1 - sstep(3.5, 6, h)));
   // mown grass, where someone kept it
   const lawn = padWeight(x, z, true);
   if (lawn > 0) c = lerp3(c, lerp3(hex('#34452a'), hex('#46583a'), n), lawn * .9);
@@ -758,6 +770,14 @@ function plankUnder(x, z) {
   if (Math.abs(x) > 20.5 || Math.abs(z) > 2.55) return null;
   const i = Math.round(x), row = z >= 0 ? 1 : 0;
   return PLANKS[row * 41 + (i + 20)];
+}
+function stepPlanks(dt) {
+  S.collapse += 3.5 * dt;
+  for (const p of PLANKS) {
+    if (!p.hole && p.fall === 0 && p.x < S.collapse) { p.fall = 1; p.vy = 0; }
+    if (p.fall) { p.vy -= 9.8 * dt; p.y += p.vy * dt; p.rot += dt * (p.row ? 1.4 : -1.1); if (p.y < -1 && p.fall === 1) { p.fall = 2; addRipple(p.x, p.z, .25, 0); } }
+  }
+  drawPlanks();
 }
 function resetPlanks() { for (const p of PLANKS) { p.fall = 0; p.vy = 0; p.rot = 0; p.y = DY + .2; } drawPlanks(); }
 resetPlanks();
@@ -1748,8 +1768,8 @@ const beacon = new THREE.Mesh(new THREE.SphereGeometry(.18, 10, 8), lit('#ff2a2a
 // burnt cars, power poles, fire barrels, the town sign
 const burnt = new THREE.MeshStandardMaterial({ color: '#2a2024', roughness: 1, metalness: .3 });
 {
-  const roadside = (x, side) => { const p = onRoadAt('us_80', x); return [p.x, p.z + side * 5.4]; };
-  for (const [[x, z], r] of [[roadside(62, 1), .2], [roadside(worldX(-590), -1), -.15], [roadside(worldX(-395), 1), .4]]) {
+  const roadside = (id, x, side) => { const p = onRoadAt(id, x); return [p.x, p.z + side * 5.4]; };
+  for (const [[x, z], r] of [[roadside(OPENING_ROAD, 62, 1), .2], [roadside('us_80', worldX(-590), -1), -.15], [roadside('us_80', worldX(-395), 1), .4]]) {
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, r, 0));
     breakable('car', 4, () => {
       addBox(burnt, x, Y0 + .6, z, 4.2, .9, 1.9, 1.4, q); addBox(burnt, x - .2, Y0 + 1.3, z, 2.2, .7, 1.7, 1.2, q);
@@ -1757,33 +1777,37 @@ const burnt = new THREE.MeshStandardMaterial({ color: '#2a2024', roughness: 1, m
     }, { squash: .4, chip: '#3a2c30' });
   }
 }
-// power poles along the north side of US 80: every 12 m out of the bridge, wider once in town
+// power poles along the north side of the road: every 12 m out of Stuckey's Bridge, and every 24 m along US 80 through town
 const poleMat = new THREE.MeshStandardMaterial({ color: '#2d2026', roughness: 1 });
 const wireMat = new THREE.MeshBasicMaterial({ color: '#0c080e' });
 {
   const adamsX = MAP.nodes.find((n) => n.roads.includes('us_80') && n.roads.includes('adams_st')).x, canopy0 = gasAt(44, 0)[0], canopy1 = gasAt(60, 0)[0];
-  const poles = [];
-  for (let x = 26, end = worldX(420); x <= end; x += x < 300 ? 12 : 24) {
-    if (Math.abs(x - adamsX) < 8 || (x > canopy0 && x < canopy1)) continue;
-    const z = MAP.zAt('us_80', x) - 4.3;
-    if (houseAt(x, z) || MAP.roadGrid.within(x, z, (road) => road.id === 'us_80' ? 0 : road.width / 2 + 1.5)) continue;
-    const j = poles.length;
-    breakable('pole', 2, () => { addBox(poleMat, x, Y0 + 4, z, .25, 8, .25, 1.1); addBox(poleMat, x, Y0 + 7.6, z, .12, .12, 2.2, 1); solid(x - .2, x + .2, z - .2, z + .2, Y0 + 8); }, { rigid: true, chip: '#4a3640', broke() { dropWires(wires[j - 1]); dropWires(wires[j]); } });
-    poles.push([x, z]);
-  }
-  // when a pole goes, so do the wires either side of it
-  const wires = [];
-  // one merged mesh for every eight spans, so wires out of view cost nothing
-  for (let i = 0; i < poles.length - 1; i += 8) {
-    const geos = [];
-    for (let j = i; j < Math.min(i + 8, poles.length - 1); j++) for (const dz of [-.9, .9]) {
-      const a = new THREE.Vector3(poles[j][0], Y0 + 7.65, poles[j][1] + dz), b = new THREE.Vector3(poles[j + 1][0], Y0 + 7.65, poles[j + 1][1] + dz), m = a.clone().lerp(b, .5); m.y -= .9;
-      geos.push(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(a, m, b), 12, .02, 4));
+  const polesAlong = (id, x0, x1, step) => {
+    const poles = [];
+    // when a pole goes, so do the wires either side of it
+    const wires = [];
+    for (let x = x0; x <= x1; x += step) {
+      if (id === 'us_80' && (Math.abs(x - adamsX) < 8 || (x > canopy0 && x < canopy1))) continue;
+      const z = MAP.zAt(id, x) - 4.3;
+      if (houseAt(x, z) || MAP.roadGrid.within(x, z, (road) => road.id === id ? 0 : road.width / 2 + 1.5)) continue;
+      const j = poles.length;
+      breakable('pole', 2, () => { addBox(poleMat, x, Y0 + 4, z, .25, 8, .25, 1.1); addBox(poleMat, x, Y0 + 7.6, z, .12, .12, 2.2, 1); solid(x - .2, x + .2, z - .2, z + .2, Y0 + 8); }, { rigid: true, chip: '#4a3640', broke() { dropWires(wires[j - 1]); dropWires(wires[j]); } });
+      poles.push([x, z]);
     }
-    const g = mergeGeometries(geos), per = geos[0].attributes.position.count * 2;
-    for (let j = i; j < Math.min(i + 8, poles.length - 1); j++) wires[j] = { g, first: (j - i) * per, count: per };
-    scene.add(new THREE.Mesh(g, wireMat));
-  }
+    // one merged mesh for every eight spans, so wires out of view cost nothing
+    for (let i = 0; i < poles.length - 1; i += 8) {
+      const geos = [];
+      for (let j = i; j < Math.min(i + 8, poles.length - 1); j++) for (const dz of [-.9, .9]) {
+        const a = new THREE.Vector3(poles[j][0], Y0 + 7.65, poles[j][1] + dz), b = new THREE.Vector3(poles[j + 1][0], Y0 + 7.65, poles[j + 1][1] + dz), m = a.clone().lerp(b, .5); m.y -= .9;
+        geos.push(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(a, m, b), 12, .02, 4));
+      }
+      const g = mergeGeometries(geos), per = geos[0].attributes.position.count * 2;
+      for (let j = i; j < Math.min(i + 8, poles.length - 1); j++) wires[j] = { g, first: (j - i) * per, count: per };
+      scene.add(new THREE.Mesh(g, wireMat));
+    }
+  };
+  polesAlong(OPENING_ROAD, 26, 254, 12);
+  polesAlong('us_80', worldX(-613), worldX(420), 24);
 }
 const fires = [];
 for (const [x, z] of [[...gasAt(50, 7.4)], [96, -5.5], [BOX.x - 3, BOX.z - 6]]) {
@@ -1794,9 +1818,11 @@ for (const [x, z] of [[...gasAt(50, 7.4)], [96, -5.5], [BOX.x - 3, BOX.z - 6]]) 
   fires.push(f);
 }
 {
-  const townSign = breakable('sign', 1.5, () => { addBox(poleMat, 24, Y0 + 1.2, 4.6, .15, 2.4, .15, 1); addBox(poleMat, 26.4, Y0 + 1.2, 4.6, .15, 2.4, .15, 1); }, { rigid: true, chip: '#1f5a3a' });
+  // at the edge of town, just over the Chunky River Bridge, where he can read it as he gets up. It's on his right, facing him as he comes.
+  const s0 = MAP.sOn(WAKE_ROAD, WAKE_BRIDGE.x, WAKE_BRIDGE.z), p = MAP.along(WAKE_ROAD, s0 - 24), rx = p.tz, rz = -p.tx, cx = p.x + rx * 5.4, cz = p.z + rz * 5.4;
+  const townSign = breakable('sign', 1.5, () => { for (const e of [-1.2, 1.2]) { const x = cx + rx * e, z = cz + rz * e, g = Math.min(groundH(x, z), Y0); addBox(poleMat, x, (g + Y0 + 2.4) / 2, z, .15, Y0 + 2.4 - g, .15, 1); } }, { rigid: true, chip: '#1f5a3a' });
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(3, 1.5), new THREE.MeshStandardMaterial({ map: textTex(['CHUNKY', 'POP. 254'], 512, 256, '#1f5a3a', '#f1e6cf', '64px Bungee, Impact, sans-serif', { after: (g) => { g.strokeStyle = '#ff2a6a'; g.lineWidth = 10; g.beginPath(); g.moveTo(250, 160); g.lineTo(420, 190); g.stroke(); g.fillStyle = '#ff2a6a'; g.font = '62px Bungee, Impact, sans-serif'; g.fillText('41', 440, 220); } }), roughness: .8 }));
-  sign.position.set(25.2, Y0 + 2.1, 4.66); sign.rotation.y = Math.PI; scene.add(sign); townSign.objs.push(sign);
+  sign.position.set(cx + p.tx * .06, Y0 + 2.1, cz + p.tz * .06); sign.rotation.y = Math.atan2(p.tx, p.tz); scene.add(sign); townSign.objs.push(sign);
 }
 flushBuckets();
 // ================================================================ the roads, from the graph: each one's width and surface
@@ -1871,7 +1897,7 @@ const SURFACES = { asphalt: roadMat, gravel: triplanar(stoneTex, .2, { roughness
   // Paint stops short of a junction or a railroad crossing, and short of the bridge
   const stops = [...MAP.nodes.filter((n) => n.kind === 'junction'), ...MAP.crossings.filter((c) => c.with !== 'river')];
   const stopDist = (x, z) => { let d = Infinity; for (const n of stops) d = Math.min(d, Math.hypot(x - n.x, z - n.z)); return d; };
-  const inkAt = (road, x, z) => (road.id === 'us_80' ? sstep(30, 60, Math.abs(x)) : 1) * sstep(7, 13, stopDist(x, z));
+  const inkAt = (road, x, z) => (road.id === OPENING_ROAD ? sstep(30, 60, Math.abs(x)) : 1) * sstep(7, 13, stopDist(x, z));
   // Points close enough together for the paint to run out smoothly: every 12 m, and every 3 m by a stop
   const dense = (pts) => {
     const out = [pts[0]];
@@ -1912,10 +1938,15 @@ const SURFACES = { asphalt: roadMat, gravel: triplanar(stoneTex, .2, { roughness
   for (const road of MAP.roads) {
     // Stuckey's Bridge has its own deck, and the road comes up to it in short steps so the narrowing is smooth
     let pieces = [road.pts];
-    if (road.id === 'us_80') {
+    if (road.id === OPENING_ROAD) {
       const west = road.pts.filter(([x]) => x < -60), east = road.pts.filter(([x]) => x > 60);
-      const steps = (a, b) => { const out = []; for (let x = a; x <= b + .001; x += 3) out.push([x, MAP.zAt('us_80', x)]); return out; };
+      const steps = (a, b) => { const out = []; for (let x = a; x <= b + .001; x += 3) out.push([x, MAP.zAt(road.id, x)]); return out; };
       pieces = [[...west, ...steps(-60, -20)], [...steps(20.5, 60), ...east]];
+    }
+    // and the Chunky River Bridge has planks, with the road coming up to it the same way
+    if (road.id === WAKE_ROAD) {
+      const s0 = MAP.sOn(road.id, WAKE_BRIDGE.x, WAKE_BRIDGE.z), far = WAKE_SPAN / 2 + .2, at = (s) => { const p = MAP.along(road.id, s); return [p.x, p.z]; }, near = (a, b) => { const out = []; for (let k = a; k <= b + .001; k += 3) out.push(at(k)); return out; };
+      pieces = [[...road.pts.filter((_, i) => road.s[i] < s0 - 34), ...near(s0 - 34, s0 - far)], [...near(s0 + far, s0 + 34), ...road.pts.filter((_, i) => road.s[i] > s0 + 34)]];
     }
     // split into stretches of about 190 m, so that a stretch out of view isn't drawn
     let along = 0;
@@ -1935,11 +1966,51 @@ const SURFACES = { asphalt: roadMat, gravel: triplanar(stoneTex, .2, { roughness
     const disc = new THREE.Mesh(round, roadMat); disc.rotation.x = -Math.PI / 2; disc.position.set(n.x, y, n.z); scene.add(disc);
   }
 }
+// The Chunky River Bridge: a Pratt through truss from 1911, rust all over, on a plank deck. Five panels are enough to read as one:
+// posts at each panel, diagonals leaning in towards the middle, and bracing overhead he can look up through.
+const boardMat = triplanar(woodGrey, .5, { roughness: 1, color: '#8a7a6c' });
+function chunkyRiverBridge(c, road) {
+  const s0 = MAP.sOn(road.id, c.x, c.z), half = WAKE_SPAN / 2, A = MAP.along(road.id, s0 - half), B = MAP.along(road.id, s0 + half), L = Math.hypot(B.x - A.x, B.z - A.z) || 1;
+  const tx = (B.x - A.x) / L, tz = (B.z - A.z) / L, nx = -tz, nz = tx, ox = (A.x + B.x) / 2, oz = (A.z + B.z) / 2, W = WAKE_HALF + .1, H = 5.2, PANEL = WAKE_SPAN / 5, FLOOR = -.34;
+  const at = (a, side, y) => [ox + tx * a + nx * side, ROAD_TOP + y, oz + tz * a + nz * side];
+  const beam = (a, b, w, h, ink = 1.2, mat = steelMat) => addBeam(a, b, w, h, mat, ink);
+  for (const side of [-W, W]) {
+    beam(at(-half, side, FLOOR), at(half, side, FLOOR), .24, .34, 1.4);
+    beam(at(-half + PANEL, side, H), at(half - PANEL, side, H), .26, .3, 1.4);
+    // the end posts lean in to the top chord
+    for (const e of [-1, 1]) beam(at(e * half, side, FLOOR), at(e * (half - PANEL), side, H), .26, .3, 1.4);
+    for (let i = 1; i < 5; i++) beam(at(-half + i * PANEL, side, FLOOR), at(-half + i * PANEL, side, H), .16, .16);
+    // the diagonals come down towards the middle, and cross in it
+    for (const e of [-1, 1]) for (let i = 1; i < 3; i++) beam(at(e * (half - i * PANEL), side, H), at(e * (half - (i + 1) * PANEL), side, FLOOR), .07, .07, .9);
+    // a rail to lean on
+    for (const y of [.55, 1]) beam(at(-half, side * .985, y), at(half, side * .985, y), .05, .05, .7);
+  }
+  for (let i = 0; i <= 5; i++) {
+    const a = -half + i * PANEL;
+    beam(at(a, -W, FLOOR - .02), at(a, W, FLOOR - .02), .22, .28);
+    if (i > 0 && i < 5) beam(at(a, -W, H), at(a, W, H), .16, .2);
+    if (i > 0 && i < 4) for (const e of [-1, 1]) beam(at(a, e * W, H - .02), at(a + PANEL, -e * W, H - .02), .05, .05, .7);
+  }
+  // the portal, over the way in at each end
+  for (const e of [-1, 1]) {
+    const a = e * (half - PANEL * .16), y = H - 1.05;
+    beam(at(a, -W, y), at(a, W, y), .14, .36);
+    for (const side of [-1, 1]) beam(at(a, side * W, y - .9), at(a, side * (W - .9), y), .08, .08, .8);
+  }
+  for (const side of [-1.3, 0, 1.3]) beam(at(-half, side, FLOOR + .1), at(half, side, FLOOR + .1), .14, .2, 0);
+  // boards laid across, each a little proud of the next
+  for (let a = -half, i = 0; a < half; a += .6, i++) beam(at(a + .3, -WAKE_HALF - .08, -.05 + hash2(i, 41) * .03), at(a + .3, WAKE_HALF + .08, -.05 + hash2(i, 41) * .03), .56, .1, 0, boardMat);
+  // an abutment under each end, where the road comes in
+  for (const e of [-1, 1]) beam(at(e * (half + .55), -WAKE_HALF - 1, -2.6), at(e * (half + .55), WAKE_HALF + 1, -2.6), 1.3, 4.5, 1.2, stoneMat);
+  SPANS.push({ x: ox, z: oz, r: half + .3, road, half: WAKE_HALF });
+  flushBuckets();
+}
 // bridges carrying the roads over the river where they cross it, apart from Stuckey's
 const SPANS = [];
 {
   const conc = stoneMat;
-  for (const c of MAP.crossings) if (c.with === 'river' && Math.abs(c.x) > 30) {
+  for (const c of MAP.crossings) if (c.with === 'river' && Math.hypot(c.x, c.z) > 30) {
+    if (c.road === WAKE_ROAD) { chunkyRiverBridge(c, MAP.roadById.get(c.road)); continue; }
     const road = MAP.roadById.get(c.road), s0 = MAP.sOn(c.road, c.x, c.z), half = road.width / 2, L = 26;
     SPANS.push({ x: c.x, z: c.z, r: L + 2, road });
     let prev = null;
@@ -2021,11 +2092,12 @@ const SIGNS = [];
   for (const n of MAP.nodes) if (n.kind === 'junction') junctionSign(n);
   const nearJunction = (road, s) => MAP.nodes.some((n) => n.kind === 'junction' && n.roads.includes(road.id) && Math.abs(MAP.sOn(road.id, n.x, n.z) - s) < 30);
   const onBridge = (road, s) => { const p = MAP.along(road.id, s); return Math.abs(p.x) < 30 && Math.abs(p.z) < 8 || spanAt(p.x, p.z); };
+  // none in the first scene, which has no words in it but the cards
+  const inOpening = (road, s) => { if (road.id !== OPENING_ROAD) return false; const p = MAP.along(road.id, s); return Math.hypot(p.x, p.z) < 200; };
   for (const road of MAP.roads) {
     // from each end of the road, and repeated down the long ones
-    const first = road.id === 'us_80' ? MAP.sOn('us_80', 34, 0) : 45;
-    for (const [dir, from] of [[1, first], [-1, road.length - 45]]) {
-      for (let s = from; s > 5 && s < road.length - 5; s += dir * 1200) if (!nearJunction(road, s) && !onBridge(road, s)) roadSign(road, s, dir);
+    for (const [dir, from] of [[1, 45], [-1, road.length - 45]]) {
+      for (let s = from; s > 5 && s < road.length - 5; s += dir * 1200) if (!nearJunction(road, s) && !onBridge(road, s) && !inOpening(road, s)) roadSign(road, s, dir);
     }
   }
   for (const { long, map, faces } of blades.values()) {
@@ -2518,6 +2590,14 @@ function poseHero(tq) {
     const g = R.arm(1, V3(.1 + sw, -.42, .36), V3(.7, -.4, -.2), V3(0, 1, .25)); R.arm(0, V3(-.06 + sw, -.18, .3), V3(-.7, -.3, -.2), V3(0, 1, .25));
     broom.position.copy(g); broom.quaternion.setFromEuler(new THREE.Euler(.45, 0, -sw));
     R.leg(0, V3(-.14, -1.36, .02), V3(-.1, -1, .8)); R.leg(1, V3(.14, -1.36, .02), V3(.1, -1, .8));
+  } else if (k === 'down') {
+    // HP.down is 0 on his feet and 1 flat on his face. His knees go first, and his hands go out too late.
+    const d = HP.down, knees = Math.sin(Math.min(1, d * 1.25) * Math.PI), f = Math.sin(tq * 6) * .04 * (1 - d);
+    for (let i = 0; i < 2; i++) {
+      const s = i ? 1 : -1;
+      R.arm(i, V3(s * (.36 + d * .14), -.6 + d * .78 + s * f, .08 + d * .5), V3(s * .7, -.35, -.25));
+      R.leg(i, V3(s * .14, -1.36 + knees * .34, -knees * .62 * (i ? 1 : .8) + (1 - d) * (i ? -.1 : .06)), V3(s * .1, -1, .8), knees * .3);
+    }
   } else if (k === 'struggle') {
     const f = Math.sin(tq * 21) * .16;
     R.arm(0, V3(-.44, -.12 + f, .3), V3(-.7, -.2, -.2)); R.arm(1, V3(.44, -.12 - f, .3), V3(.7, -.2, -.2));
@@ -2697,7 +2777,13 @@ class Moccasin {
     const inWater = S.mode === 'swim';
     let speed = .55, target = null;
     this.timer -= dt;
-    if (this.deck) {
+    if (this.bite) {
+      // it's lying where the boards stop. It rears up and opens, goes for his leg, and it's off into the weeds.
+      const b = this.bite; b.t += dt;
+      if (b.t < BITE_AT - .12) { speed = 0; this.open = Math.min(1, this.open + dt * 6); this.lift = Math.min(1, this.lift + dt * 4); this.h += angDiff(this.h, Math.atan2(dx, dz)) * Math.min(1, dt * 12); }
+      else if (b.t < BITE_AT + .3) { speed = dist > .22 ? 9 : 0; this.h = Math.atan2(dx, dz); }
+      else { speed = 2.2; this.open = Math.max(0, this.open - dt * 3); this.lift = Math.max(0, this.lift - dt * 2); target = new THREE.Vector2(this.p.x + 1, b.z + Math.sign(b.z) * 8); }
+    } else if (this.deck) {
       const zz = Math.sin(time * .55 + this.ph) * 2.25; target = new THREE.Vector2(this.home.x + Math.sin(time * 1.3) * .3, zz); speed = .7;
       if (Math.abs(pl.y - DECK_TOP) < .5 && dist < .55 && player.inv <= 0) hurt(new THREE.Vector2(-dx, -dz), 'deck');
     } else if (this.state === 'windup') {
@@ -2730,17 +2816,57 @@ class Moccasin {
     this.ph += dt * (speed * 7 + 2);
     this.p.x += Math.sin(this.h) * speed * dt; this.p.z += Math.cos(this.h) * speed * dt;
     const perp = new THREE.Vector3(Math.cos(this.h), 0, -Math.sin(this.h));
-    const baseY = this.deck ? DECK_TOP + .05 : .02 + Math.sin(time * 2 + this.ph) * .01;
-    const headP = this.p.clone().addScaledVector(perp, Math.sin(this.ph) * .07 * Math.min(1, speed + .3)); headP.y = baseY + .07 + this.lift * .14;
+    const baseY = this.bite ? ROAD_TOP + .04 : this.deck ? DECK_TOP + .05 : .02 + Math.sin(time * 2 + this.ph) * .01;
+    const headP = this.p.clone().addScaledVector(perp, Math.sin(this.ph) * .07 * Math.min(1, speed + .3)); headP.y = baseY + .07 + this.lift * (this.bite ? .85 : .14);
     if (headP.distanceTo(this.trail[0]) > .015) { this.trail.unshift(headP.clone()); if (this.trail.length > 160) this.trail.pop(); }
     this.trail[0].copy(headP);
     const sp = this.spine(); for (let i = 1; i < sp.length; i++) sp[i].y = baseY + .03;
-    this.tube.update(sp, sp.map((_, i) => { const t = i / 22; return t < .08 ? .028 + t * .25 : (.05 * (1 - Math.pow(t, 1.6)) + .006); }));
+    // reared up, the front of it comes up off the ground with the head and draws back in an S to strike from. At the strike the S goes straight.
+    if (this.bite) {
+      const g = sp[12], coil = this.bite.t < BITE_AT - .12 ? this.lift * .3 : 0;
+      for (let i = 1; i < 12; i++) {
+        const k = i / 12, m = 1 - k, back = Math.sin(k * 6.283) * coil;
+        sp[i].set(headP.x + (g.x - headP.x) * k - Math.sin(this.h) * back, baseY + .03 + (headP.y - baseY - .03) * m * m * (3 - 2 * m), headP.z + (g.z - headP.z) * k - Math.cos(this.h) * back);
+      }
+    }
+    this.tube.update(sp, sp.map((_, i) => { const t = i / 22; return (t < .08 ? .028 + t * .25 : (.05 * (1 - Math.pow(t, 1.6)) + .006)) * (this.fat ?? 1); }));
     this.head.position.copy(headP);
     this.head.rotation.set(-this.lift * .5, this.h, 0);
     this.jaw.rotation.x = this.open * .9; this.mouth.visible = this.open > .2;
+    if (this.close) { const c = this.close; c.position.copy(headP); c.rotation.set(-this.lift * .15, this.h, 0); c.userData.upper.rotation.x = -this.open * .62; c.userData.lower.rotation.x = this.open * .72; }
   }
-  reset() { this.p.set(this.home.x, 0, this.home.y); this.trail = [this.p.clone()]; this.state = 'wander'; this.open = 0; this.lift = 0; this.wp = null; }
+  reset() { this.p.set(this.home.x, 0, this.home.y); this.trail = [this.p.clone()]; this.state = 'wander'; this.open = 0; this.lift = 0; this.wp = null; this.bite = null; this.L = 1.1; this.fat = 1; this.show(true); }
+  show(on) { this.tube.mesh.visible = on; this.head.visible = on && !this.bite; if (this.close) this.close.visible = on && !!this.bite; }
+  strike(x, z) {
+    // lying there across his way, with its tail off towards the weeds
+    this.p.set(x, 0, z); this.open = 0; this.lift = 0; this.bite = { t: 0, z }; this.h = Math.atan2(player.pos.x - x, player.pos.z - z);
+    // it's drawn a good deal bigger than the ones in the water, for the one moment you see it close
+    this.L = 2.6; this.fat = 2.2; this.close ??= cottonmouth(); this.show(true);
+    const away = -Math.sign(z - player.pos.z) || 1; this.trail = []; for (let i = 0; i < 90; i++) { const k = i * .035; this.trail.push(new THREE.Vector3(x + Math.sin(k * 3.4) * .3, ROAD_TOP + .07, z + away * k)); }
+  }
+}
+// the head you see close, at the end of the bridge: a flat spade that opens right up, white as cotton inside
+function spadeGeo(w, h, l, flat) {
+  const g = new THREE.SphereGeometry(1, 12, 8); g.rotateX(Math.PI / 2);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const k = (p.getZ(i) + 1) / 2, y = flat < 0 ? Math.max(p.getY(i), flat) : Math.min(p.getY(i), flat);
+    p.setXYZ(i, p.getX(i) * w * (1 - .6 * k * k), y * h * (1 - .3 * k), k * l);
+  }
+  g.computeVertexNormals(); return g;
+}
+function cottonmouth() {
+  const c = new THREE.Group(), upper = new THREE.Group(), lower = new THREE.Group(); c.rotation.order = 'YXZ'; c.add(upper, lower); scene.add(c);
+  const top = new THREE.Mesh(spadeGeo(.2, .11, .52, -.12), snakeMat), bottom = new THREE.Mesh(spadeGeo(.18, .055, .48, .12), snakeMat);
+  outline(top, INK, 1.4); outline(bottom, INK, 1.2); upper.add(top); lower.add(bottom);
+  const gum = new THREE.MeshBasicMaterial({ color: '#d8b9ae' }), roof = new THREE.Mesh(spadeGeo(.17, .012, .47, .9), gum), floor = new THREE.Mesh(spadeGeo(.155, .012, .44, -.9), gum); roof.position.y = -.016; floor.position.y = .01; upper.add(roof); lower.add(floor);
+  const throat = new THREE.Mesh(sphGeo, new THREE.MeshBasicMaterial({ color: '#34101e' })); throat.scale.set(.1, .09, .06); throat.position.z = .05; c.add(throat);
+  for (const s of [-1, 1]) {
+    const fang = new THREE.Mesh(new THREE.ConeGeometry(.032, .21, 5), mouthMat); fang.position.set(s * .08, -.115, .36); fang.rotation.x = Math.PI - .3; upper.add(fang);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(.02, 6, 5), lit('#ffcf40', 2.5)); eye.position.set(s * .12, .055, .27); upper.add(eye);
+  }
+  c.userData.upper = upper; c.userData.lower = lower;
+  return c;
 }
 const SNAKES = [new Moccasin(6, 11), new Moccasin(-5, -7), new Moccasin(9, -3), new Moccasin(-8, 15), new Moccasin(-11, 0)];
 const deckSnake = new Moccasin(6, 0, true);
@@ -2783,7 +2909,7 @@ let partY = 0, lastDrip = 0;
 function updateParticles(dt, M) {
   const cx = camera.position.x, cz = camera.position.z;
   // on foot they drift around him; at the river they hang over the water
-  partY += ((M === 'land' || M === 'bridge' || M === 'town' || M === 'drive' || M === 'sweep' || M === 'dialog' ? player.pos.y : 0) - partY) * Math.min(1, dt * .8);
+  partY += ((M === 'land' || M === 'bridge' || M === 'bitten' || M === 'dream' || M === 'wake' || M === 'town' || M === 'drive' || M === 'sweep' || M === 'dialog' ? player.pos.y : 0) - partY) * Math.min(1, dt * .8);
   // cyan: a stray drop from the bottle while he still has it, and a ring where it lands
   if (bottle.parent === hero.body && bottle.visible && time - lastDrip > 3.1) {
     const d = drips.find(x => !x.on);
@@ -2836,27 +2962,32 @@ const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
 const FSV = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }`;
 const gifMat = new THREE.ShaderMaterial({
   depthTest: false, depthWrite: false,
-  uniforms: { tScene: { value: null }, tPrev: { value: null }, tMask: { value: maskRT.texture }, uMaskOn: { value: 0 }, uTime: { value: 0 }, uFrame: { value: 0 }, uBurst: G.uBurst, uHold: { value: 0 }, uFine: { value: 0 }, uSeed: { value: 0 }, uPxScale: G.uPxScale, uHurt: { value: 0 } },
+  uniforms: { tScene: { value: null }, tPrev: { value: null }, tMask: { value: maskRT.texture }, uMaskOn: { value: 0 }, uTime: { value: 0 }, uFrame: { value: 0 }, uBurst: G.uBurst, uHold: { value: 0 }, uFine: { value: 0 }, uSeed: { value: 0 }, uPxScale: G.uPxScale, uHurt: { value: 0 }, uDream: { value: 0 }, uTint: { value: 0 }, uFade: { value: 1 } },
   vertexShader: FSV,
-  fragmentShader: `uniform sampler2D tScene,tPrev,tMask; uniform float uMaskOn,uTime,uFrame,uBurst,uHold,uFine,uSeed,uPxScale,uHurt; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tScene,tPrev,tMask; uniform float uMaskOn,uTime,uFrame,uBurst,uHold,uFine,uSeed,uPxScale,uHurt,uDream,uTint,uFade; varying vec2 vUv;
     float h2(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
     float b2(vec2 a){ a=floor(a); return fract(dot(a,vec2(.5,a.y*.75))); }
     float bayer8(vec2 a){ return b2(.25*a)*.0625+b2(.5*a)*.25+b2(a); }
     void main(){ vec2 uv=vUv; float st=uFrame+uSeed;
+      // the fever: rows slide on the twelve-frame clock, and the whole picture breathes
+      if(uDream>0.){ float row=floor(uv.y*64.); uv.x+=(sin(row*.31+uFrame*.7)+.6*sin(row*.97-uFrame*.43))*.02*uDream; uv.y+=sin(uv.x*9.+uFrame*.21)*.012*uDream; uv=(uv-.5)*(1.-.04*uDream*sin(uFrame*.19))+.5; }
       float bg=1.-uMaskOn*smoothstep(.15,.6,texture2D(tMask,uv).r);
       float band=floor(uv.y*90.); float tear=step(1.-.25*uBurst,h2(vec2(band,st)))*(h2(vec2(band,st+3.1))-.5)*.08*uBurst;
       // uFine 0 is a hit: big blocks that slide. uFine 1 is a timed burst: finer blocks of any size that also swap colour.
       float sc=1.+floor(h2(vec2(st,1.7))*4.)*uFine; vec2 blk=floor(uv*vec2(9.,16.)*sc);
       float on=step(1.-mix(.25,.32,uFine)*uBurst,h2(blk+st*1.31))*step(.001,uBurst);
       vec2 suv=clamp(uv+vec2(tear+on*(h2(blk+st+5.)-.5)*mix(.12,.18,uFine)*uBurst,on*(h2(blk+st+9.)-.5)*.02*uBurst*uFine)*bg,0.,1.);
-      float ca=(.0012+.01*uBurst)*mix(.3,1.,bg);
+      float ca=(.0012+.01*uBurst+.016*uDream)*mix(.3,1.,bg);
       vec3 col=vec3(texture2D(tScene,suv+vec2(ca,0.)).r,texture2D(tScene,suv).g,texture2D(tScene,suv-vec2(ca,0.)).b);
       vec2 c=uv-.5; col*=1.-dot(c,c)*.85; col=mix(col,vec3(col.r*1.4+.08,col.g*.6,col.b*.7),uHurt);
       // holds read the finished last frame, so they come after the vignette or they'd darken every frame
       col=mix(col,texture2D(tPrev,uv+vec2(0.,.003)).rgb,uHold*step(.42,h2(blk*1.7+floor(st*.5)))*bg);
+      // it leans hot and cyan, and drags what was there a moment ago along behind it
+      if(uTint>0.){ float lum=dot(col,vec3(.3,.59,.11)); col=mix(col,mix(vec3(.02,.33,.36),vec3(.95,.12,.32),smoothstep(.08,.5,lum))*(.32+.3*uTint+lum*1.7),.6*uTint); }
+      if(uDream>0.) col=mix(col,texture2D(tPrev,(uv-.5)*.982+.5).rgb,.62*uDream);
       col=mix(col,col.brg,on*step(.78,h2(blk+st+13.))*bg*.85*uFine);
       vec2 fc=floor(gl_FragCoord.xy/uPxScale); col+=(h2(fc+fract(uTime*7.3)*113.)-.5)*.045;
-      float L=mix(30.,9.,on*bg*mix(uBurst,1.,uFine)); col=floor(clamp(col,0.,1.)*(L-1.)+bayer8(fc))/(L-1.);
+      float L=mix(30.,9.,on*bg*mix(uBurst,1.,uFine)); col=floor(clamp(col,0.,1.)*uFade*(L-1.)+bayer8(fc))/(L-1.);
       gl_FragColor=vec4(col,1.); }`
 });
 const blitMat = new THREE.ShaderMaterial({ depthTest: false, depthWrite: false, uniforms: { t: { value: null } }, vertexShader: FSV, fragmentShader: `uniform sampler2D t; varying vec2 vUv; void main(){ gl_FragColor=texture2D(t,vUv); }` });
@@ -2891,9 +3022,9 @@ function renderFrame(dt) {
   // 2) the scene with bloom, 3) the GIF pass, through the ping-pong buffer only during a burst
   composer.render(dt);
   const u = gifMat.uniforms; u.tScene.value = composer.readBuffer.texture; u.uMaskOn.value = burstOn ? 1 : 0;
-  if (burstOn) {
+  if (burstOn || u.uDream.value > 0) {
     // nothing is in the buffer on a burst's first frame, so holds start on the second
-    u.tPrev.value = rtB.texture; u.uHold.value = burstFrames++ > 0 ? burstHold : 0;
+    u.tPrev.value = rtB.texture; u.uHold.value = burstOn && burstFrames++ > 0 ? burstHold : 0;
     renderer.setRenderTarget(rtA); renderer.render(gifScene, fsCam);
     blitMat.uniforms.t.value = rtA.texture; renderer.setRenderTarget(null); renderer.render(blitScene, fsCam);
     const tmp = rtA; rtA = rtB; rtB = tmp;
@@ -3018,13 +3149,13 @@ function updateControls() {
 }
 function hudVitals() {
   updateControls();
-  const talk = S.mode === 'dialog' || S.mode === 'end' || S.mode === 'fail' || S.mode === 'title';
+  const talk = S.mode === 'dialog' || S.mode === 'end' || S.mode === 'fail' || S.mode === 'title' || S.mode === 'bitten' || S.mode === 'dream' || S.mode === 'wake';
   if (hudCache.talk !== talk) { hudCache.talk = talk; document.body.classList.toggle('talking', talk); }
   setHidden('hearts', !(S.mode === 'swim' || S.mode === 'bridge' || S.mode === 'land' || S.mode === 'grabbed' || (crowdOut && (S.mode === 'town' || S.mode === 'drive'))));
   setHTML('hearts', '♥'.repeat(Math.max(0, S.hp)) + '♡'.repeat(Math.max(0, 3 - S.hp)));
   // driving, the bar's what the vehicle has left
   const left = S.mode === 'drive' ? driving.hp / driving.K.hp : player.stamina;
-  setHidden('stam', S.mode !== 'swim' && S.mode !== 'drive' && !player.ran); $('stamFill').style.transform = `scaleX(${left.toFixed(2)})`;
+  setHidden('stam', S.mode === 'bitten' || S.mode === 'dream' || S.mode === 'wake' || (S.mode !== 'swim' && S.mode !== 'drive' && !player.ran)); $('stamFill').style.transform = `scaleX(${left.toFixed(2)})`;
   setHidden('mph', S.mode !== 'drive'); if (S.mode === 'drive') setHTML('mph', `${Math.round(speedOf(driving) * 2.237)} MPH`);
   const town = S.mode === 'town' || S.mode === 'drive' || S.mode === 'grabbed' || S.mode === 'dialog' || S.mode === 'sweep' || S.mode === 'end';
   setHidden('beans', !town); setHTML('beans', `Beans ${S.beans}/12`); setHidden('rep', !town);
@@ -3066,7 +3197,7 @@ $('retry').addEventListener('click', () => {
   if (S.flags.town) {
     S.mode = 'town'; HP.kind = 'run'; player.grounded = true; cam.snap = true;
     // once they're out, back on the church steps, where they won't come
-    if (crowdOut) { const [x, z] = churchAt(68.5, -3); player.pos.set(x, floorAt(x, z), z); horde.calm(); } else player.pos.set(24.5, ROAD_TOP, 0);
+    if (crowdOut) { const [x, z] = churchAt(68.5, -3); player.pos.set(x, floorAt(x, z), z); horde.calm(); } else onWakeBridge();
     townObjective();
   }
   else if (S.flags.bridgeStarted) startBridge(); else startSwim(true);
@@ -3106,14 +3237,19 @@ const standing = (npc) => ({ x: npc.root.position.x, z: npc.root.position.z });
 // Where the next beans are: whoever or whatever's nearest. Someone you're standing next to has already had their say.
 function nextBeans() {
   const left = PICKUPS.filter((c) => !c.got).map((c) => ({ x: c.x, z: c.z, hint: '' }));
-  if (!(S.items.bag > 0) && !S.flags.delivered && !S.flags.opened) left.push({ ...standing(NPCS.coop), hint: `Coop is at the gas station on ${street('us_80')}` });
+  if (!(S.items.bag > 0) && !S.flags.delivered && !S.flags.opened) {
+    const coop = { ...standing(NPCS.coop), hint: `Coop is at the gas station on ${street('us_80')}` };
+    // he's who you come into town looking for, whichever way you've come in
+    if (!S.beans) return coop;
+    left.push(coop);
+  }
   if (!S.flags.swept) left.push({ ...standing(NPCS.odessa), hint: `Miss Odessa is at the church on ${street('church_st')}` });
   const away = (o) => Math.hypot(o.x - player.pos.x, o.z - player.pos.z), far = left.filter((o) => away(o) > 6);
   return (far.length ? far : left).sort((a, b) => away(a) - away(b))[0];
 }
 function townObjective() {
   if (S.flags.ended) { objective('Chunky is yours. For now.'); return; }
-  if (!S.flags.arrived) { objective(`Follow ${street('us_80')} into town`, standing(NPCS.coop)); return; }
+  if (!S.flags.arrived) { objective(`Follow ${street('griffis_fountain_rd')} into town`, standing(NPCS.coop)); return; }
   const count = `Stock up on beans (${S.beans}/12)`;
   if (S.items.bag > 0) objective(`${count} · Take Coop's bag to Tre at the boxcar, south of ${street('us_80')}`, standing(NPCS.tre));
   else if (S.flags.delivered && !S.flags.paid) objective(`${count} · Go get paid by Coop at the gas station on ${street('us_80')}`, standing(NPCS.coop));
@@ -3173,8 +3309,36 @@ function startBridge() {
   card('<span>Run</span>.', 'Jump the rotten planks', 2);
   deckSnake.reset();
 }
+// The end of the bridge. A moccasin gets him where the boards stop, the fever has him, and he comes to on the Chunky River Bridge at the edge of town,
+// ten miles off by road. There isn't a word in any of it.
+const BITE_AT = .75, BITE_CUT = .22, BITE_BACK = 1.3, BITE_OUT = 3.9, DREAM_T = reduceMotion ? 4.5 : 11, WAKE_UP = 3.8, FEVER_FADES = .1;
+let biteT = 0, biteV = 0, biteSide = 1, dreamT = 0, wakeT = 0, feverLeft = 0, dreamYaw = 0;
+const dreamFrom = new THREE.Vector3(), biteAt = new THREE.Vector3();
+function feverTo(k) { const u = gifMat.uniforms; u.uTint.value = k; u.uDream.value = reduceMotion ? 0 : k; }
+function startBitten() {
+  S.mode = 'bitten'; biteT = 0; HP.kind = 'run'; prompt(null); objective(null); cardT = 0; $('card').classList.remove('show'); hudVitals();
+  // he stops where it's lying, just as it gets to him. It's a metre or so ahead of there, facing him.
+  biteV = Math.max(HP.speed, 3); biteSide = player.pos.z > 0 ? -1 : 1;
+  biteAt.set(player.pos.x + biteV * BITE_AT / 2, player.pos.y, player.pos.z);
+  deckSnake.strike(biteAt.x + .95, player.pos.z + biteSide * .85);
+}
+function startDream() {
+  S.mode = 'dream'; dreamT = 0; dreamYaw = cam.yaw; dreamFrom.copy(camera.position); hudVitals();
+}
+// on the boards of the Chunky River Bridge, and pointing at town
+function onWakeBridge() {
+  const s0 = MAP.sOn(WAKE_ROAD, WAKE_BRIDGE.x, WAKE_BRIDGE.z), p = MAP.along(WAKE_ROAD, s0 - 3);
+  player.pos.set(p.x, ROAD_TOP, p.z); player.vy = 0; player.grounded = true; player.yaw = Math.atan2(-p.tx, -p.tz); cam.yaw = player.yaw + Math.PI; cam.snap = true;
+  S.collapse = 99; S.flags.town = true; vehGroup.visible = true; gasMesh.visible = gasLine.visible = true;
+}
+function startWake() {
+  S.mode = 'wake'; wakeT = 0; onWakeBridge(); HP.kind = 'down'; HP.down = 1; HP.speed = 0; cam.pitch = .42; feverLeft = 1; gifMat.uniforms.uFade.value = 0; hudVitals();
+}
 function startTown() {
   S.mode = 'town'; S.collapse = 99; S.flags.town = true; vehGroup.visible = true; gasMesh.visible = gasLine.visible = true;
+  // Stuckey's is a ruin by now, however he got here, with nothing moving on it
+  for (const q of PLANKS) if (!q.hole) { q.fall = 2; q.y = -50; }
+  drawPlanks(); deckSnake.show(false);
   card('Chunky, <span>Mississippi</span>', '2026', 3.4);
   if (touchUI) after(5, () => { if (S.mode === 'town') toast('Tap the map to open it'); });
   if (HORDE_EARLY) bringOutCrowd();
@@ -3184,7 +3348,7 @@ function startTown() {
 // ---------------- movement helpers
 function onRoad(x, z) {
   const g = MAP.roadGrid.within(x, z, roadHalf);
-  return !!g && !(g.owner.id === 'us_80' && Math.abs(x) < ROAD_GAP && Math.abs(z) < 8);
+  return !!g && !(g.owner.id === OPENING_ROAD && Math.abs(x) < ROAD_GAP && Math.abs(z) < 8);
 }
 function floorAt(x, z) {
   let f = groundH(x, z);
@@ -3232,7 +3396,7 @@ function blocked(x, z, y) {
   const parked = vehCells.get(cell);
   if (parked) for (let i = 0; i < parked.length; i++) if (y < parked[i].y + 1.4 && inVehicle(parked[i], x, z, .3)) return true;
   // the rails on a road bridge
-  if (SPANS.length && y > ROAD_TOP - 1) { const s = spanAt(x, z); if (s && MAP.roadGrid.nearest(x, z) > s.road.width / 2 && MAP.roadGrid.d < s.road.width / 2 + 1) return true; }
+  if (SPANS.length && y > ROAD_TOP - 1) { const s = spanAt(x, z); if (s) { const half = s.half ?? s.road.width / 2; if (MAP.roadGrid.nearest(x, z) > half && MAP.roadGrid.d < half + 1) return true; } }
   return false;
 }
 // and a tree stops him and anything he's driving, though not the crowd, and not until he's in town
@@ -3265,7 +3429,7 @@ const horde = createHorde({
   },
 });
 // where they start: along the streets of town, thickest on US 80
-const CROWD_STREETS = [['us_80', [300, 0], [1100, 18], 56], ['church_st', [206, -397], [634, -181], 20], ['adams_st', [632, -5], [630, -320], 20]];
+const CROWD_STREETS = [['us_80', atTrue(-615, -18), atTrue(185, 0), 56], ['church_st', atTrue(-1098, -379), atTrue(-281, -199), 20], ['adams_st', atTrue(-283, -23), atTrue(-285, -338), 20]];
 let crowdOut = false;
 function bringOutCrowd() {
   if (crowdOut) return; crowdOut = true; crowdGroup.visible = true; S.hp = 3;
@@ -3338,8 +3502,8 @@ function vehicleFits(kind, x, z, yaw) {
   return true;
 }
 const VEH_SET = [
-  // the first one you come to, on the shoulder just past the bridge, and pointing into town
-  ['quad', onRoadAt('us_80', 128).x, onRoadAt('us_80', 128).z + 5.6, Math.PI / 2, .12],
+  // the first one you come to, on the shoulder just past the Chunky River Bridge, and pointing into town
+  (() => { const r = 'griffis_fountain_rd', [x, z] = atTrue(-336.76, 490.37), p = MAP.along(r, MAP.sOn(r, x, z) - 34); return ['quad', p.x + p.nx * 5, p.z + p.nz * 5, Math.atan2(-p.tx, -p.tz), .12]; })(),
   // a truck by the pumps, pointing at the road, and a car outside the town hall
   ['pickup', ...gasAt(60.8, 9.2), 0, .3], ['car', PLACES.hall.x + 41, PLACES.hall.z - .9, -Math.PI / 2, .2],
 ].filter(([kind, x, z, yaw]) => vehicleFits(kind, x, z, yaw));
@@ -3499,7 +3663,8 @@ function drawHeadlights(v, braking) {
   const reach = v.K.length / 2 + 10;
   gLight.position.set(v.x + fx * reach, v.y + 1.9, v.z + fz * reach); gLight.intensity = 52 * on * (v.hp / v.K.hp < .25 && Math.floor(time * 12) % 5 === 0 ? .5 : 1);
 }
-function arriving() { if (!S.flags.arrived && player.pos.x > NPCS.coop.root.position.x - 70) { S.flags.arrived = true; townObjective(); } }
+// he's in town once he's off Griffis Fountain Rd
+function arriving() { if (!S.flags.arrived && Math.hypot(player.pos.x - NPCS.coop.root.position.x, player.pos.z - NPCS.coop.root.position.z) < 400) { S.flags.arrived = true; townObjective(); } }
 function pickUpCans(reach) {
   for (const c of PICKUPS) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; c.m.visible = false; addBeans(1, 'found'); townObjective(); hudVitals(); }
 }
@@ -3734,7 +3899,7 @@ const booms = Array.from({ length: BOOM_N }, () => {
   return { m, glow, t: 9, r: 0, x: 0, y: 0, z: 0 };
 });
 let boomNext = 0, scorchNext = 0, boomLight = 0, lastBoomGlitch = -9;
-const _boomAt = new THREE.Vector3();
+const _dream = new THREE.Vector3(), _dreamLook = new THREE.Vector3(), _dreamFar = new THREE.Vector3(), _boomAt = new THREE.Vector3();
 function updateBooms(dt) {
   for (const b of booms) {
     if (b.t > .9) continue;
@@ -3948,7 +4113,7 @@ layOutGas();
 const mapData = buildMapData({ roads: MAP.roads, rail: MAP.rail, river: MAP.river, structures: STRUCTURES, fields: FIELDS });
 const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d') };
 const MAP_PLACES = [
-  ["Stuckey's Bridge", 0, 0, 3], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-64.5, -39.5), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Ball field', ...atTrue(-345, -495), 3], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
+  ["Stuckey's Bridge", 0, 0, 3], ['Chunky River Bridge', WAKE_BRIDGE.x, WAKE_BRIDGE.z, 2], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-64.5, -39.5), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Ball field', ...atTrue(-345, -495), 3], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
   ...STRUCTURES.filter((s) => s.use === 'church').map((s) => ['Church', s.wx, s.wz, 2]),
 ].sort((a, b) => b[3] - a[3]);
 let mapOpen = false, mapDirty = false, mapCam = { x: 0, z: 0, scale: .4 };
@@ -3963,7 +4128,7 @@ const mapPaper = (() => {
 const canOpenMap = () => S.flags.town && (S.mode === 'town' || S.mode === 'swim' || S.mode === 'drive');
 // The small one, turning with the camera, at most at the game's own 12 frames a second
 function updateMini(step) {
-  const show = !!S.flags.town;
+  const show = !!S.flags.town && S.mode !== 'wake';
   setHidden('mini', !show);
   if (!show || step === MINI.step) { if (!show) setHidden('miniName', true); return; }
   MINI.step = step;
@@ -4018,10 +4183,11 @@ function drawFullMap() {
     if (free(x + 13 + tw / 2, y, tw, 16)) drawLabel(g, name, x + 13, y, BIG, MAPC.cyan, 0, 'left');
   }
   for (const [name, wx, wz, rank] of MAP_PLACES) {
-    if (mapCam.scale < [0, .3, .16, .03][rank]) continue;
+    if (mapCam.scale < [0, .3, .16, .012][rank]) continue;
     const [x, y] = toScreen(v, wx, wz); if (!on(x, y)) continue;
     const tw = name.length * 6.8 + 6, ly = free(x, y + 17, tw, 14) ? y + 17 : free(x, y - 17, tw, 14) ? y - 17 : null;
     if (ly === null) continue;
+    free(x, y, 10, 10);
     g.fillStyle = MAPC.rust; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.beginPath(); g.rect(x - 3, y - 3, 6, 6); g.stroke(); g.fill();
     drawLabel(g, name, x, ly, SMALL, MAPC.cream);
   }
@@ -4142,7 +4308,7 @@ function tick(dt, draw = true) {
     let nx = player.pos.x + (Math.sin(player.yaw) * sp + player.kb.x) * dt, nz = player.pos.z + (Math.cos(player.yaw) * sp + player.kb.y) * dt;
     player.kb.multiplyScalar(Math.exp(-dt * 5));
     if (!S.flags.toldEdge && !MAP.inBounds(nx, nz)) { S.flags.toldEdge = true; toast('Nothing that way.'); after(12, () => { S.flags.toldEdge = false; }); }
-    if (player.pos.y > DECK_TOP - .4 && Math.abs(nx) < 20.6) nz = clamp(nz, -2.25, 2.25);
+    if (player.pos.y > DECK_TOP - .4 && Math.abs(nx) < 20.6 && Math.abs(nz) < 40) nz = clamp(nz, -2.25, 2.25);
     const fl = floorAt(nx, nz), stops = M === 'town' ? blockedInTown : blocked;
     if (fl - player.pos.y > .6 || stops(nx, nz, player.pos.y)) {
       if (!(floorAt(nx, player.pos.z) - player.pos.y > .6 || stops(nx, player.pos.z, player.pos.y))) nz = player.pos.z;
@@ -4166,16 +4332,11 @@ function tick(dt, draw = true) {
       if (player.pos.x < -20.6 && player.pos.x > -60 && Math.abs(player.pos.z) < 2.7 && player.pos.y > ROAD_TOP - .3) startBridge();
     }
     if (M === 'bridge') {
-      S.collapse += 3.5 * dt;
-      for (const p of PLANKS) {
-        if (!p.hole && p.fall === 0 && p.x < S.collapse) { p.fall = 1; p.vy = 0; }
-        if (p.fall) { p.vy -= 9.8 * dt; p.y += p.vy * dt; p.rot += dt * (p.row ? 1.4 : -1.1); if (p.y < -1 && p.fall === 1) { p.fall = 2; addRipple(p.x, p.z, .25, 0); } }
-      }
-      drawPlanks();
+      stepPlanks(dt);
       deckSnake.update(dt);
       ghost.position.lerp(new THREE.Vector3(Math.min(player.pos.x + 5, 23), DECK_TOP + 1.7, 0), Math.min(1, dt * 2));
       if (player.pos.y < DECK_TOP - 2.5 && Math.abs(player.pos.x) < 20.5) fail('The Chunky takes you back.', 'Jump the gaps. Don\'t stop running.');
-      if (player.pos.x > 21.5 && player.pos.y > ROAD_TOP - .3) startTown();
+      if (player.pos.x > 21.5 && player.pos.y > ROAD_TOP - .3) startBitten();
     }
     if (M === 'town') {
       ghost.position.lerp(new THREE.Vector3(26, -3, 3), Math.min(1, dt * .5));
@@ -4206,6 +4367,28 @@ function tick(dt, draw = true) {
     if (input.aEdge) horde.mash();
     if (horde.grab) prompt(`Mash ${press('FREE')} to break free`, g.progress);
   }
+  if (M === 'bitten') {
+    biteT += dt;
+    // what's left of the bridge keeps coming down behind him, and he runs on a step or two before the leg goes
+    stepPlanks(dt); deckSnake.update(dt);
+    if (biteT >= BITE_AT && HP.kind !== 'down') { HP.kind = 'down'; HP.down = 0; flash(); glitch(.9, .35); if (!reduceMotion) cam.shake = .6; }
+    HP.speed = Math.max(0, biteV * (1 - biteT / BITE_AT)); player.pos.x += HP.speed * dt; HP.phase += dt * HP.speed * 2.4;
+    if (HP.kind === 'down') HP.down = sstep(BITE_AT + .5, BITE_OUT - .7, Math.floor(biteT * 12) / 12);
+    feverTo(.6 * sstep(BITE_AT, BITE_OUT, biteT));
+    if (biteT >= BITE_OUT) startDream();
+  }
+  if (M === 'dream') {
+    dreamT += dt;
+    const k = dreamT / DREAM_T; feverTo(.6 + .4 * sstep(0, .4, k)); gifMat.uniforms.uFade.value = 1 - sstep(.74, .97, k);
+    if (dreamT >= DREAM_T) startWake();
+  }
+  if (M === 'wake') {
+    wakeT += dt; gifMat.uniforms.uFade.value = sstep(.5, 2, wakeT);
+    HP.down = 1 - sstep(2.1, WAKE_UP, Math.floor(wakeT * 12) / 12);
+    if (wakeT >= WAKE_UP) { HP.kind = 'run'; startTown(); }
+  }
+  // it takes a while to leave him
+  if (feverLeft > 0) { feverLeft = Math.max(0, feverLeft - dt * FEVER_FADES); feverTo(feverLeft * feverLeft * .8); }
   if (M === 'drive') updateDrive(dt);
   if (crowdOut) updateCrowd(dt, S.mode);
   if (S.flags.town) updateWreck(dt, step);
@@ -4213,9 +4396,10 @@ function tick(dt, draw = true) {
   if (S.mode === 'drive') {
     _v.set(driving.K.seat[0], driving.K.seat[1], driving.K.seat[2]).applyMatrix4(toBody(driving)); heroRoot.position.copy(_v);
     heroRoot.rotation.set(driving.pitch, driving.yaw, driving.roll); hero.body.position.set(0, 0, 0); hero.body.rotation.set(0, 0, 0);
-  } else if (M === 'drive' || M === 'swim' || M === 'land' || M === 'bridge' || M === 'town' || M === 'grabbed' || M === 'sweep' || M === 'dialog' || M === 'end' || (M === 'fail' && !S.flags.bridgeStarted)) {
+  } else if (M === 'drive' || M === 'swim' || M === 'land' || M === 'bridge' || M === 'bitten' || M === 'dream' || M === 'wake' || M === 'town' || M === 'grabbed' || M === 'sweep' || M === 'dialog' || M === 'end' || (M === 'fail' && !S.flags.bridgeStarted)) {
     heroRoot.position.copy(player.pos); heroRoot.rotation.set(0, player.yaw, 0);
     if (HP.kind === 'swim') { hero.body.position.set(0, .2, 0); hero.body.rotation.set(.95, 0, Math.sin(HP.phase) * .08); }
+    else if (HP.kind === 'down') { const d = HP.down, e = d * d; hero.body.position.set(0, HERO_HIPS + (.3 - HERO_HIPS) * Math.min(1, d * 1.08), 0); hero.body.rotation.set(.3 * (1 - d) + 1.46 * e, 0, Math.sin(Math.floor(time * 12) * .9) * .05 * (1 - d) + .16 * e); }
     else { const bob = Math.abs(Math.sin(HP.phase)) * .05 * Math.min(1, HP.speed / 4); hero.body.position.set(0, HERO_HIPS + bob, 0); hero.body.rotation.set(HP.kind === 'struggle' ? .32 : .1 * Math.min(1, HP.speed / 4) + .22 * player.runK, 0, 0); }
   }
   hero.body.visible = !(player.inv > 0 && Math.floor(time * 16) % 2 === 0 && player.inv < 1.3);
@@ -4241,14 +4425,24 @@ function tick(dt, draw = true) {
   // ---------------- camera
   if (M === 'title' || M === 'hang') {
     camera.position.set(-4.4 + Math.sin(time * .2) * .4, 3.5, 9.8); camera.lookAt(0, 3.55, 3.1); camera.fov = 48; camera.updateProjectionMatrix();
+  } else if (M === 'dream') {
+    // straight up off him, looking down and turning, and then it comes up to look along the road and drifts away down it
+    const k = reduceMotion ? 0 : Math.min(1, dreamT / DREAM_T), up = sstep(0, .45, k), on = sstep(.3, 1, k), H = heroRoot.position, turn = dreamYaw + k * 1.5, r = 4.6;
+    _dream.set(H.x + on * 74 + Math.sin(turn) * r, H.y + 3 + up * 11 + on * 7, H.z + Math.cos(turn) * r);
+    camera.position.lerpVectors(dreamFrom, _dream, sstep(0, .14, k));
+    _dreamLook.set(H.x, H.y + .4, H.z).lerp(_dreamFar.set(H.x + 74 * on + 130, H.y + 7, 0), sstep(.34, .78, k)); camera.lookAt(_dreamLook);
+    camera.fov = 55 + up * 8 + on * 12 + Math.sin(Math.floor(time * 12) * .17) * 2.4 * Math.min(1, k * 6) * (reduceMotion ? 0 : 1); camera.updateProjectionMatrix();
   } else {
     const swim = M === 'swim' || (M === 'fail' && !S.flags.bridgeStarted) || M === 'fall';
     const car = S.mode === 'drive' ? driving : null, carSpeed = car ? speedOf(car) : 0;
-    const tgt = car ? new THREE.Vector3(car.x, car.y + car.K.camLook, car.z) : heroRoot.position.clone().add(new THREE.Vector3(0, swim ? .55 : 1.55, 0));
+    const lying = M === 'bitten' || M === 'wake' ? HP.kind === 'down' ? HP.down : 0 : 0;
+    const tgt = car ? new THREE.Vector3(car.x, car.y + car.K.camLook, car.z) : heroRoot.position.clone().add(new THREE.Vector3(0, swim ? .55 : 1.55 - lying * 1.15, 0));
     const moving = Math.hypot(input.x, input.y) > .1;
     // In something with an engine it swings round behind it by itself, once it's moving
     if (car) { if (carSpeed > 1.5 && time - lastLook > 1.2) cam.yaw += angDiff(cam.yaw, car.yaw + Math.PI) * Math.min(1, dt * 2.6); }
     else if (moving && time - lastLook > 1.2 && M !== 'fall') cam.yaw += angDiff(cam.yaw, player.yaw + Math.PI) * Math.min(1, dt * 1.6);
+    // round to the side of him as he goes down, so you can see it
+    if (M === 'bitten' && !reduceMotion) { cam.yaw += angDiff(cam.yaw, player.yaw + Math.PI - 1.05) * Math.min(1, dt * 1.5); cam.pitch += (.42 - cam.pitch) * Math.min(1, dt * 1.5); }
     const dist = car ? car.K.camDist + carSpeed * .04 : swim ? 4.6 : 5.4;
     // looking down on him when he's held, or whoever's holding him is all you'd see
     const pitch = M === 'grabbed' ? Math.max(cam.pitch, .9) : cam.pitch;
@@ -4266,6 +4460,11 @@ function tick(dt, draw = true) {
     if (cam.snap) { camera.position.copy(V); cam.snap = false; } else camera.position.lerp(V, 1 - Math.exp(-dt * (M === 'fall' ? 3 : car ? 12 : 7)));
     if (cam.shake > 0) { cam.shake -= dt; camera.position.x += (Math.random() - .5) * cam.shake * .3; camera.position.y += (Math.random() - .5) * cam.shake * .3; }
     camera.lookAt(tgt); { const fov = 55 + (reduceMotion ? 0 : 5 * player.runK + 12 * Math.min(1, Math.abs(car ? car.f : 0) / 30)); if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); } }
+    // it cuts down to the road for the bite itself, low behind his legs and looking up the road, so that its mouth is coming at you against the sky
+    if (M === 'bitten' && biteT > BITE_CUT && biteT < BITE_BACK) {
+      camera.position.set(biteAt.x - 2.4, biteAt.y + .28, biteAt.z + biteSide * 1.25); camera.lookAt(biteAt.x + .75, biteAt.y + .92, biteAt.z + biteSide * .55);
+      camera.fov = 46; camera.updateProjectionMatrix(); cam.snap = true;
+    }
     if (S.flags.town) {
       // Indoors the roof's out of the way, and so is the roof of whatever the camera's backed into, or that'd be all you'd see.
       // Anything else between the camera and him opens up around him, down to his knees.
@@ -4380,7 +4579,10 @@ if (TEST) {
       else if (phase === 'swim') { startHang(); cardT = 0; $('card').classList.remove('show'); startSwim(true); }
       else if (phase === 'land') { S.mode = 'land'; HP.kind = 'run'; player.pos.set(-20, ROAD_TOP, 2); player.grounded = true; player.yaw = Math.PI / 2; cam.yaw = player.yaw + Math.PI; cam.snap = true; heroRoot.quaternion.identity(); nooseRing.visible = knot.visible = false; S.removedNoose = true; objective('Get up to the road.'); }
       else if (phase === 'bridge') { nooseRing.visible = knot.visible = false; S.removedNoose = true; ropeTop.visible = false; lantern.visible = false; bottle.visible = false; startBridge(); }
-      else if (phase === 'town') { nooseRing.visible = knot.visible = false; S.removedNoose = true; ropeTop.visible = false; lantern.visible = false; bottle.visible = false; HP.kind = 'run'; player.pos.set(24, ROAD_TOP, 0); player.grounded = true; player.yaw = Math.PI / 2; cam.yaw = player.yaw + Math.PI; cam.snap = true; startTown(); }
+      else if (phase === 'bitten') { nooseRing.visible = knot.visible = false; S.removedNoose = true; ropeTop.visible = false; lantern.visible = false; bottle.visible = false; startBridge(); player.pos.set(22, ROAD_TOP, 0); HP.speed = 4.4; startBitten(); }
+      else if (phase === 'dream') { this.jump('bitten'); biteT = BITE_OUT; HP.kind = 'down'; HP.down = 1; feverTo(.6); startDream(); }
+      else if (phase === 'wake') { this.jump('bitten'); startWake(); }
+      else if (phase === 'town') { nooseRing.visible = knot.visible = false; S.removedNoose = true; ropeTop.visible = false; lantern.visible = false; bottle.visible = false; HP.kind = 'run'; onWakeBridge(); feverLeft = 0; feverTo(0); gifMat.uniforms.uFade.value = 1; startTown(); }
       return this.state();
     },
     place(x, z, y) { player.pos.set(x, y ?? floorAt(x, z), z); player.grounded = true; player.vy = 0; cam.snap = true; return this.state(); },

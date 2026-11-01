@@ -28,7 +28,8 @@ await g(() => {
   window.move = (x, z, yaw) => { const v = G.driving(); v.x = x; v.z = z; v.y = G.floorAt(x, z); v.yaw = yaw; v.f = v.s = v.steer = 0; v.grounded = true; G.look(yaw + Math.PI); return v; };
   // the start of a long clear run east across open ground
   window.openRun = (len) => {
-    for (let x = 200; x < 2000; x += 10) for (const off of [40, -40, 60, -60, 80, -80, 100, -100, 25, -25]) {
+    const [x0] = G.map.fromTrue(-715, 0);
+    for (let x = x0; x < x0 + 1800; x += 10) for (const off of [40, -40, 60, -60, 80, -80, 100, -100, 25, -25]) {
       const z = G.map.zAt('us_80', x) + off; let ok = true, y0 = G.floorAt(x, z);
       for (let t = -3; t <= len && ok; t += 1) for (const c of [-3, -1.5, 0, 1.5, 3]) {
         const px = x + t, pz = z + c, f = G.floorAt(px, pz);
@@ -39,6 +40,16 @@ await g(() => {
     }
     throw new Error(`no clear run of ${len} m`);
   };
+  // takes down whatever's standing between two points, so a test of one thing doesn't hit another
+  window.clearLane = (x0, z0, x1, z1) => {
+    const W = G.wreck, L = Math.hypot(x1 - x0, z1 - z0), ux = (x1 - x0) / L, uz = (z1 - z0) / L;
+    const off = (x, z) => { const t = Math.max(0, Math.min(L, (x - x0) * ux + (z - z0) * uz)); return Math.hypot(x - x0 - ux * t, z - z0 - uz * t); };
+    for (const p of W.props) if (!p.down && off(p.cx, p.cz) < 4) W.breakProp(p, ux, uz);
+    for (let t = 0; t <= L; t += 6) for (const tree of W.trees(x0 + ux * t, z0 + uz * t, 8)) if (!tree.down && off(tree.x, tree.z) < 3) W.fellTree(tree, ux, uz);
+    G.sim(3, 1 / 30);
+  };
+  // on US 80 through town, by true metres from town center
+  window.onUS80 = (x) => { const [wx, wz] = G.map.fromTrue(x, -18); return G.map.along('us_80', G.map.sOn('us_80', wx, wz)); };
   // holds the stick the way a thumb does, steering at a point along a road ahead, for so many seconds
   window.follow = (id, dir, seconds, gas = 1) => {
     const v = G.driving(), M = G.map; let top = 0, hits = 0, far = 0, s0 = M.sOn(id, v.x, v.z), last = v.hp;
@@ -74,8 +85,8 @@ for (const k of KINDS) check(`there are ${k}s to find`, census.n[k] > 0, census.
 check('none parked on a road, in a building, out of bounds or in the water', census.list.every((v) => !v.road && !v.house && v.bounds && v.floor > .3), census.list.filter((v) => v.road || v.house || !v.bounds || v.floor <= .3));
 const neighbours = await g(() => { const G = __game, V = G.vehicles; let least = Infinity; for (let i = 0; i < V.length; i++) for (let j = 0; j < i; j++) least = Math.min(least, Math.hypot(V[i].x - V[j].x, V[i].z - V[j].z)); return least; });
 check(`none parked on top of another: closest ${neighbours.toFixed(1)} m`, neighbours >= 6, neighbours);
-const firstOne = await g(() => { const G = __game, v = G.vehicles[0]; return { kind: v.kind, x: v.x }; });
-check(`the first one's just past the bridge: a ${firstOne.kind} at x ${firstOne.x}`, firstOne.x > 60 && firstOne.x < 200, firstOne);
+const firstOne = await g(() => { const G = __game, v = G.vehicles[0], c = G.map.crossings.find((q) => q.road === 'griffis_fountain_rd'); return { kind: v.kind, far: Math.hypot(v.x - c.x, v.z - c.z), onRoad: G.onRoad(v.x, v.z) }; });
+check(`the first one's just past where he wakes: a ${firstOne.kind}, ${firstOne.far.toFixed(0)} m from the Chunky River Bridge`, firstOne.far > 20 && firstOne.far < 80 && !firstOne.onRoad, firstOne);
 const station = await g(() => { const G = __game, c = G.npcs.coop; return G.vehicles.filter((v) => Math.hypot(v.x - c.x, v.z - c.z) < 40).map((v) => v.kind); });
 check(`there's something to drive at the gas station and the town hall: ${station}`, station.includes('pickup') && station.includes('car'), station);
 
@@ -91,7 +102,7 @@ for (const kind of KINDS) {
   await snap(`${kind}-1-in`);
 
   // ---------------- a straight run on US 80, at the same place, with the stick held forward
-  const r = await g(() => { const G = __game, M = G.map, s = M.sOn('us_80', 300, 0), p = M.along('us_80', s); move(p.x, p.z, Math.atan2(p.tx, p.tz)); return follow('us_80', 1, 18); });
+  const r = await g(() => { const p = onUS80(-615); move(p.x, p.z, Math.atan2(p.tx, p.tz)); return follow('us_80', 1, 18); });
   const K = await g((k) => __game.kinds[k], kind);
   check(`${kind}: on the road it gets near its own top speed: ${r.top.toFixed(1)} of ${K.top} m/s`, r.top > K.top * .85 && r.top <= K.top + .01, r);
   check(`${kind}: it keeps to US 80 with the stick alone, and doesn't hit anything`, r.far < 7 && r.hits === 0, r);
@@ -129,19 +140,42 @@ for (const id of await g(() => __game.map.roads.map((r) => r.id))) {
   check(`${id}: a pickup stays on it both ways: ${r.map((x) => x.s.toFixed(0) + ' m')}`, r.every((x) => x.s > Math.min(40, whole * .4) && x.far < 9 && x.hits === 0), r);
 }
 
+// ---------------- the whole way out to Stuckey's, and off the end of it
+const trip = await g(() => {
+  const G = __game, M = G.map, node = (a, b) => M.nodes.find((n) => n.roads.includes(a) && n.roads.includes(b)); board('pickup'); const v = G.driving();
+  const p = onUS80(-40); move(p.x, p.z, Math.atan2(p.tx, p.tz));
+  let metres = 0, seconds = 0, hits = 0, far = 0;
+  for (const [id, dir, to] of [['us_80', 1, node('us_80', 'meehan_savoy_rd')], ['meehan_savoy_rd', 1, node('meehan_savoy_rd', M.opening.road)], [M.opening.road, -1, { x: 45, z: 0 }]]) {
+    const goal = M.sOn(id, to.x, to.z), start = M.sOn(id, v.x, v.z), p0 = M.along(id, start); move(p0.x, p0.z, Math.atan2(p0.tx * dir, p0.tz * dir));
+    for (let i = 0; i < 900 && (goal - M.sOn(id, v.x, v.z)) * dir > 90; i++) { const f = follow(id, dir, 1); hits += f.hits; far = Math.max(far, f.far); seconds += 1; }
+    stop(); metres += Math.abs(M.sOn(id, v.x, v.z) - start);
+  }
+  const at = { hits, far, metres, seconds, x: v.x, z: v.z, hp: v.hp / v.K.hp, dryBefore: !v.drowned };
+  // and on, where there's no bridge left
+  move(45, 0, -Math.PI / 2); G.key('w', true); for (let i = 0; i < 300 && !v.drowned; i++) G.sim(1 / 30, 1 / 30); G.key('w', false);
+  at.drowned = v.drowned; at.endX = v.x; at.endY = v.y; at.toast = G.state().toast;
+  const r = out(); G.sim(1 / 30, 1 / 30); at.mode = G.S.mode;
+  if (at.mode === 'swim') { G.place(...M.fromTrue(-115, -58)); G.S.mode = 'town'; G.HP.kind = 'run'; }
+  return at;
+});
+console.log(`     town to Stuckey's: ${(trip.metres / 1609.344).toFixed(1)} miles in ${trip.seconds} s`);
+check(`a pickup gets from town to Stuckey's on the real roads, and stays on them`, trip.metres > 14000 && trip.far < 9 && trip.hits === 0 && trip.x > 30 && trip.x < 200 && Math.abs(trip.z) < 8, trip);
+check('and the bridge is out: it goes in the river', trip.dryBefore && trip.drowned && trip.endX < 21 && trip.mode === 'swim', trip);
+
 // ---------------- into a wall
 const crash = await g(() => {
-  const G = __game; board('pickup'); const v = G.driving(), S = G.structures.find((b) => b.use === 'house' && Math.hypot(b.wx - 800, b.wz) < 200);
-  const a = Math.atan2(S.wx - 800, S.wz - 0), x = S.wx - Math.sin(a) * 34, z = S.wz - Math.cos(a) * 34; move(x, z, a); const hp0 = v.hp; G.key('w', true);
+  const G = __game; board('pickup'); const v = G.driving(), [cx, cz] = G.map.fromTrue(-115, -18), S = G.structures.find((b) => b.use === 'house' && Math.hypot(b.wx - cx, b.wz - cz) < 200);
+  const a = Math.atan2(S.wx - cx, S.wz - cz), x = S.wx - Math.sin(a) * 34, z = S.wz - Math.cos(a) * 34; clearLane(x, z, S.wx, S.wz); move(x, z, a); const hp0 = v.hp; G.key('w', true);
   let hit = 0, t = 0; while (t < 8 && v.hp === hp0) { G.sim(1 / 30, 1 / 30); t += 1 / 30; } G.key('w', false);
   return { hp0, hp: v.hp, t, speed: Math.abs(v.f), shake: G.cam.shake, inside: G.blocked(v.x, v.z, v.y + .6) };
 });
-check(`a pickup into a house takes damage (${crash.hp0} to ${crash.hp.toFixed(0)}) and stops at the wall`, crash.hp < crash.hp0 && crash.speed < 8 && !crash.inside, crash);
+check(`a pickup into a house takes damage (${crash.hp0} to ${crash.hp.toFixed(0)}) and comes out the far side of the wall at ${crash.speed.toFixed(0)} m/s`, crash.hp < crash.hp0 && crash.speed < 14 && !crash.inside, crash);
 await snap('crash');
 // over and over until it's done for
 const wreck = await g(() => {
-  const G = __game, v = G.driving(), S = G.structures.find((b) => b.use === 'house' && Math.hypot(b.wx - 800, b.wz) < 200), a = Math.atan2(S.wx - 800, S.wz); let tries = 0, toast = '';
-  while (!v.wrecked && tries < 30) { tries++; move(S.wx - Math.sin(a) * 26, S.wz - Math.cos(a) * 26, a); v.f = 22; G.key('w', true); for (let i = 0; i < 90 && !v.wrecked; i++) G.sim(1 / 30, 1 / 30); G.key('w', false); toast = G.state().toast || toast; }
+  // a house only stands so many of these, so it's a different one each time
+  const G = __game, v = G.driving(), [cx, cz] = G.map.fromTrue(-115, -18), houses = G.structures.filter((b) => b.use === 'house' && Math.hypot(b.wx - cx, b.wz - cz) < 500); let tries = 0, toast = '';
+  for (const S of houses) { if (v.wrecked || tries >= 30) break; tries++; const a = Math.atan2(S.wx - cx, S.wz - cz); move(S.wx - Math.sin(a) * 26, S.wz - Math.cos(a) * 26, a); v.f = 22; G.key('w', true); for (let i = 0; i < 90 && !v.wrecked; i++) G.sim(1 / 30, 1 / 30); G.key('w', false); toast = G.state().toast || toast; }
   const x = v.x, z = v.z; G.key("w", true); G.key("a", true); v.f = v.s = 0; G.sim(1, 1 / 30); G.key("w", false); G.key("a", false);
   return { wrecked: v.wrecked, tries, toast, moved: Math.hypot(v.x - x, v.z - z), hp: v.hp };
 });
@@ -152,7 +186,7 @@ check('he climbs out of a wreck, and it can\'t be got back into', left.gone && l
 
 // ---------------- one vehicle into another
 const bump = await g(() => {
-  const G = __game; board('car'); const v = G.driving(), o = G.vehicles.find((p) => p !== v && p.kind === 'quad' && p.x > 300); const hp0 = o.hp, x0 = o.x, z0 = o.z, a = o.yaw + Math.PI / 2;
+  const G = __game; board('car'); const v = G.driving(), o = G.vehicles.find((p) => p !== v && p.kind === 'quad' && p.x > G.map.fromTrue(-615, 0)[0] && p.x < G.map.fromTrue(1200, 0)[0]); const hp0 = o.hp, x0 = o.x, z0 = o.z, a = o.yaw + Math.PI / 2;
   G.key('w', true); move(o.x + Math.sin(a) * 26, o.z + Math.cos(a) * 26, a + Math.PI); v.f = 22; G.sim(.1, 1 / 30); for (let i = 0; i < 90 && o.hp === hp0; i++) G.sim(1 / 30, 1 / 30); G.key('w', false);
   const r = { hp0, hp: o.hp, moved: Math.hypot(o.x - x0, o.z - z0), still: G.blocked(o.x, o.z, o.y + .2) || true };
   v.hp = v.K.hp; window.out(); return r;
@@ -167,7 +201,7 @@ const river = await g(() => {
   move(best[0], best[1], 0); v.y = best[2]; v.f = 6; G.key('w', true); G.sim(1, 1 / 30); G.key('w', false);
   const flooded = v.drowned, toast = G.state().toast, r = out();
   G.sim(1 / 30, 1 / 30);
-  const m = G.S.mode, kind = G.state().kind; if (m === 'swim') { G.place(800, -40); G.S.mode = 'town'; G.HP.kind = 'run'; }
+  const m = G.S.mode, kind = G.state().kind; if (m === 'swim') { G.place(...G.map.fromTrue(-115, -58)); G.S.mode = 'town'; G.HP.kind = 'run'; }
   return { flooded, toast, m, kind, r };
 });
 check('in deep water the engine floods and it stops', river.flooded && /Flooded/.test(river.toast), river);
@@ -184,7 +218,7 @@ check('the edge of the map holds it back, and doesn\'t hurt it', edge.inBounds &
 // ---------------- the crowd
 await g(() => { __game.bringOutCrowd(); __game.horde.calm(); __game.horde.all.length = 0; __game.step(.1); });
 const crowd = await g(() => {
-  const G = __game, H = G.horde; board('pickup'); const v = G.driving(), M = G.map, p = M.along('us_80', M.sOn('us_80', 620, 0));
+  const G = __game, H = G.horde; board('pickup'); const v = G.driving(), p = onUS80(-295);
   move(p.x, p.z, Math.atan2(p.tx, p.tz));
   const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw), line = [];
   for (let i = 0; i < 9; i++) line.push(H.add(v.x + fx * (30 + i * 2.4), v.z + fz * (30 + i * 2.4)));
@@ -200,10 +234,10 @@ const up = await g(() => { const G = __game, H = G.horde, v = G.driving(); stop(
 check('they get up again', up.flat === 0 && up.standing === 9, up);
 // an engine carries, and a golf cart's barely there
 const hears = await g(async () => {
-  const G = __game, H = G.horde, M = G.map, r = {};
+  const G = __game, H = G.horde, r = {};
   for (const kind of ['pickup', 'golf']) {
     if (G.driving()) { G.driving().hp = G.driving().K.hp; window.out(); }
-    H.calm(); H.all.length = 0; board(kind); const v = G.driving(), p = M.along('us_80', M.sOn('us_80', 700, 0)); move(p.x, p.z, Math.atan2(p.tx, p.tz));
+    H.calm(); H.all.length = 0; board(kind); const v = G.driving(), p = onUS80(-215); move(p.x, p.z, Math.atan2(p.tx, p.tz));
     const s = H.add(v.x, v.z + 45); v.f = v.K.top * .9; G.sim(4, 1 / 30);
     r[kind] = { alert: s.alert, state: s.state, d: Math.hypot(s.x - v.x, s.z - v.z) };
   }

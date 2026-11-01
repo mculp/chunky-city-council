@@ -48,10 +48,12 @@ const setup = () => g(() => {
   window.tapKey = (k) => { G.key(k, true); G.sim(T, T); G.key(k, false); G.sim(T, T); };
   // A tree of the size asked for with a clear run at it across level ground
   window.treeRun = (small) => {
-    for (let x = 900; x < 3500; x += 40) for (const tree of W.trees(x, 30, 60)) {
+    const [x0, z0] = G.map.fromTrue(-15, 12);
+    for (let x = x0; x < x0 + 2600; x += 40) for (const tree of W.trees(x, z0, 60)) {
       if ((tree.size < (tree.pine ? 1.05 : 1.1)) !== small || tree.first || used.has(tree)) continue;
       const yaw = 1.2 + (tree.x % 2), ux = Math.sin(yaw), uz = Math.cos(yaw); let clear = true;
-      for (let k = 1.5; k < 34; k += .5) { const px = tree.x - ux * k, pz = tree.z - uz * k; if (G.blocked(px, pz, tree.h + .7) || W.treeBlocks(px, pz) || Math.abs(G.floorAt(px, pz) - tree.h) > 1.2) { clear = false; break; } }
+      // on the way to it, and a little way past it for whatever gets through
+      for (let k = -10; k < 34 && clear; k += .5) for (const c of [-1.6, -.8, 0, .8, 1.6]) { if (Math.abs(k) < 1.5 && !c) continue; const px = tree.x - ux * k + uz * c, pz = tree.z - uz * k - ux * c; if (G.blocked(px, pz, tree.h + .7) || W.treeBlocks(px, pz) || Math.abs(G.floorAt(px, pz) - tree.h) > 1.2) { clear = false; break; } }
       if (clear) { used.add(tree); return { tree, p: { x: tree.x, z: tree.z }, ux, uz, wall: 0 }; }
     }
     return null;
@@ -97,6 +99,8 @@ const shoved = await g(() => {
   run(.5); G.key('w', false);
   const hard = { hp: parked.hp, moved: Math.hypot(parked.x - at[0], parked.z - at[1]), wrecked: parked.wrecked, speed, left: v.hp / v.K.hp };
   run(5);
+  // it won't come to rest on top of what he's driving, so he backs off
+  v.x -= t.ux * 14; v.z -= t.uz * 14; v.y = G.floorAt(v.x, v.z); run(1.5);
   return { hp, bump, hard, exploded: !!parked.exploded, settled: !parked.loose, atRest: [parked.x, parked.z].map((n) => +n.toFixed(1)), driven: !!G.driving() };
 });
 check('a bump at walking pace does nothing to a parked car', shoved.bump.hp === shoved.hp && shoved.bump.moved === 0, shoved);
@@ -208,7 +212,7 @@ check('a tree from the first scene comes down as well, once he\'s in town', firs
 // ---------------- everything else
 const things = await g(() => {
   const count = {}, stuck = [];
-  G.place(0, 0);
+  G.place(-60, 0);
   for (const p of W.props) {
     count[p.kind] = (count[p.kind] ?? 0) + 1;
     W.breakProp(p, 1, 0);
@@ -223,6 +227,8 @@ check('every kind of thing in town comes down, and stops stopping him', things.s
 check('nothing\'s still falling after a few seconds', things.falling === 0, things.falling);
 const bridge = await g(() => { const y = G.floorAt(0, 0); W.blast(0, y + .5, 0, 8, 8); return { before: y, after: G.floorAt(0, 0), mode: G.S.mode }; });
 check('Stuckey\'s Bridge stands up to all of it', bridge.before === bridge.after, bridge);
+const wakes = await g(() => { const c = G.map.crossings.find((q) => q.road === 'griffis_fountain_rd'), y = G.floorAt(c.x, c.z); G.place(c.x + 40, c.z); W.blast(c.x, y + .5, c.z, 8, 8); run(1); return { before: y, after: G.floorAt(c.x, c.z), mode: G.S.mode }; });
+check('and so does the Chunky River Bridge', wakes.before === wakes.after && wakes.after > 6, wakes);
 check('no console errors', errors.length === 0, errors.slice(0, 5));
 await close();
 
@@ -233,8 +239,8 @@ const titled = await phone.page.evaluate(() => { const b = document.getElementBy
 check('the title card offers a way straight into town', titled, titled);
 await phone.page.tap('#free');
 await phone.page.evaluate(() => { __game.pause(); __game.step(.5); });
-const free = await phone.page.evaluate(() => ({ mode: __game.S.mode, gas: __game.S.gas, crowd: __game.crowd().out, free: !!__game.S.flags.ended }));
-check('and that drops him in town with some cans and the crowd out', free.mode === 'town' && free.gas === 3 && free.crowd && free.free, free);
+const free = await phone.page.evaluate(() => ({ mode: __game.S.mode, gas: __game.S.gas, crowd: __game.crowd().out, free: !!__game.S.flags.ended, ruin: __game.floorAt(0, 0) < 0 }));
+check('and that drops him in town with some cans and the crowd out, and Stuckey\'s is down', free.mode === 'town' && free.gas === 3 && free.crowd && free.free && free.ruin, free);
 const a = await label('bA'), c = await label('bC');
 check('on a phone the big button swings and the other throws', a === 'SWING' && /^THROW/.test(c ?? ''), { a, c });
 await phone.page.tap('#bC'); await phone.page.evaluate(() => __game.step(.1));
