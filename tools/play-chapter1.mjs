@@ -75,7 +75,7 @@ s = await st(); check('arriving points at Coop', /Stock up on beans \(0\/12\) ·
 
 // Coop's bag
 let d = await talk('coop', 'Coop'); await snap('03-coop');
-await choose(0); await choose(0); s = await choose(0); check('took the bag', s.flags.bag === true, s.flags);
+await choose(0); await choose(0); s = await choose(0); check('took the bag', s.items.bag === 1, s.items);
 check('Coop says where the tracks really are', /south, across the road/.test(s.dialog?.say), s.dialog); s = await choose(0);
 check('the objective says where Tre is', /Take Coop's bag to Tre at the boxcar, south of US 80/.test(s.obj), s.obj); await snap('04-bag');
 
