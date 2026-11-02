@@ -148,6 +148,8 @@ They sent a picture of this from above too, and it stays out of the repo.
 
 > An old dead millionaire named Mr Barber lived south of the bridge and owned most of the farmland as soon as you go south of the bridge and had a compound about a mile south of the bridge maybe you can find it on satellite.
 
+**In the game:** the land's all there, as it is from above, from the river's bank south of the bridge he wakes on: the pastures and their fences, and about a mile on, the barns, a pond and two houses. Nobody's there, and nothing says whose it was. Which farm it is was read off the public aerial from what's said above, and hasn't been confirmed. There's no story in it yet.
+
 ## The land
 
 > we should look a bit into altitude and hills. there aren't a lot but many are very prominent

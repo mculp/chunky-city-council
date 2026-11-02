@@ -17,6 +17,7 @@
     "stumble": "node tools/play-stumble.mjs",
     "hills": "node tools/play-hills.mjs",
     "keys": "node tools/play-keys.mjs",
+    "farm": "node tools/play-farm.mjs",
     "water": "node tools/play-water.mjs",
     "lore": "node tools/play-lore.mjs",
     "lanes": "node tools/play-lanes.mjs",

@@ -174,10 +174,12 @@ def choose_roads(roads, network, config, world):
     # a road the config takes further than the map would have gone, as far as it says
     for reach in config.get("reachOut", []):
         for fi, pts in enumerate(network.points):
-            if network.records[fi].name not in reach["names"]:
+            if network.records[fi].name not in reach.get("names", []) and network.records[fi].linear_id not in reach.get("ids", []):
                 continue
             for k in range(len(pts) - 1):
-                if not network.is_kept(fi, k) and clear_of_the_opening(fi, k) and min(network.xz[fi][k][1], network.xz[fi][k + 1][1]) >= reach["north"]:
+                z0, z1 = sorted((network.xz[fi][k][1], network.xz[fi][k + 1][1]))
+                east = max(network.xz[fi][k][0], network.xz[fi][k + 1][0])
+                if not network.is_kept(fi, k) and clear_of_the_opening(fi, k) and z0 >= reach.get("north", -math.inf) and z1 <= reach.get("south", math.inf) and east <= reach.get("east", math.inf):
                     chosen.add((fi, k))
 
     # the way back from each of those

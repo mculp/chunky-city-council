@@ -303,7 +303,7 @@ A road with a class missing from this table fails the build. S1750 (748 features
 | School St | S1400 | 6.0 | asphalt | class |
 | Wood St | S1400 | 6.0 | asphalt | class |
 | Alexander Rd | S1400 | 6.0 | asphalt | class |
-| Griffis Fountain Rd | S1400 | 6.0 | asphalt | class |
+| Griffis Fountain Rd | S1400 | 6.0 | gravel | override |
 | Pine Forest Rd | S1400 | 6.0 | asphalt | class |
 | Clarence Culpepper Rd | S1400 | 6.0 | asphalt | class |
 
@@ -312,6 +312,7 @@ A road with a class missing from this table fails the build. S1750 (748 features
 | Road | Width (m) | Surface | Reason |
 | --- | --- | --- | --- |
 | Stuckey Bridge Rd | 7.3 | asphalt | The opening was drawn with a road this wide, and it has to stay as it was. |
+| Griffis Fountain Rd | 6.0 | gravel | It isn't paved. TIGER's class says it would be, and Street View on both sides of the Chunky River Bridge and at the farm south of it shows tan gravel. |
 
 To add another, key it by road id with `{width, surface, reason}` in the config and rebuild, which sets that road's `specSource` to `override`, and add a row here with the display name in `Road`.
 
@@ -351,7 +352,7 @@ Clips keep whole TIGER vertices. A line stops at its last vertex inside the boun
 
 **Stuckey Bridge Rd.** True x 6200 to 7500. It runs from Meehan-Savoy Rd 1.8 km to Stuckey's Bridge, and stops 1 km past it at x 6207, z 8530, at the last whole vertex inside the bound. It carries on in TIGER.
 
-**Griffis Fountain Rd and Pine Forest Rd.** Griffis Fountain Rd stops at x -636, z 585, 432 m past the Chunky River Bridge, where it's just woods. Pine Forest Rd stops at x 1217, z 2193, out of town across the tracks. Both carry on in TIGER.
+**Griffis Fountain Rd and Pine Forest Rd.** Griffis Fountain Rd stops at x -636, z 585, 432 m past the Chunky River Bridge, and carries on from there in `data/lanes.json` to a farm about a mile south of the bridge. Pine Forest Rd stops at x 1217, z 2193, out of town across the tracks. Both carry on in TIGER.
 
 No other road is clipped.
 

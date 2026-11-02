@@ -32,6 +32,7 @@ The owner sends lore for the story. It goes in `docs/lore.md` in their words as 
 
 - Game data is JSON under `data/`, such as `data/roads.json`, with its schema documented alongside it.
 - The smaller roads and a drive to every building are in `data/lanes.json`, documented in `data/lanes.md`. To everything that asks what road is here they're roads, but `MAP.roads` stays the graph.
+- The big farm south of the Chunky River Bridge, where the woods stop and its fences, is in `data/farm.json`, documented in `data/farm.md`.
 - Dialogue and the relationship meters are in `data/cast.json`, documented in `data/cast.md`.
 - How high the land stands is in `data/hills.json`, documented in `data/hills.md`. The world's flat, and it's only what's drawn that goes up and down. A new `ShaderMaterial` with a vertex shader of its own has to `#include <hill_pars>` and use `hillOver`, or define `FLAT_WORLD`, and anything long goes through `HILLS.follow`.
 - What the church signs say is in `data/signs.json`, documented in `data/signs.md`, and all of it can be read at `#signs`.
@@ -89,6 +90,8 @@ Then open http://localhost:8000.
 `npm run keys` plays with real key presses and a real mouse: looking with nothing held, WASD with the camera, a click that hits what's in the middle of the screen and a right click that throws there, what lets the mouse go, in a pickup, all of it again in an iframe that won't let a page take the mouse, and that a phone hasn't changed. It takes `--shots dir`. Chrome won't give a headless page the mouse, so that one part is stood in for.
 
 `npm run water` walks into a pond and swims across it, floods a pickup in another, and checks that the crowd keeps out, that nothing real ended up under water, and that the ponds are on the map. The ponds are in `data/water.json`, documented in `data/water.md`.
+
+`npm run farm` goes from the Chunky River Bridge down the gravel to the farm south of it on foot, then looks at what's growing where, gets stopped by a fence, jumps it, knocks it down and drives through it, swims the pond and walks its dock. It also reports what it costs to draw. It takes `--shots dir`.
 
 `npm run wreck` wrecks the town with real key presses and taps: through a house and through brick in a pickup, over a young tree and into a big one, into a parked car, a hammer through a wall, a can through a window, cars going up and a house burning down, then that it all stays down after going away and coming back. It also reports what the worst of it costs.
 

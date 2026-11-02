@@ -208,6 +208,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { loadMap } from './src/map.js';
 import { loadWater } from './src/water.js';
+import { loadFarm } from './src/farm.js';
 import { loadHills } from './src/hills.js';
 import { loadSound } from './src/sound.js';
 import { randomFrom } from './src/soundbank.js';
@@ -221,7 +222,7 @@ import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boun
 import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
 import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, rimHit, placeVehicles, settle, speedOf } from './src/vehicles.js';
 import { vehicleGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
-import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones } from './src/things.js';
+import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, feedBin, stockTank } from './src/things.js';
 import { CEMETERY, layGraves, graveSolid } from './src/graves.js';
 import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/volley.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
@@ -667,6 +668,15 @@ const DY = 6.0, TY = 11.6, ZS = 2.8, XE = 20, XP = 15, DECK_TOP = 6.36, ROAD_TOP
 const channel = (z) => 3.5 * Math.sin(z * .035);
 const MAP = await loadMap('data/roads.json', { riverAtBridge: channel, lanes: 'data/lanes.json' });
 const WATER = await loadWater('data/water.json', MAP);
+const FARM = await loadFarm('data/farm.json', MAP);
+// The dock on the farm's pond, which is the only prop anybody stands on out there
+const DOCK = { deg: 8, x: 0, z: 0, top: 0, prop: null };
+const onDock = (x, z) => {
+  const dx = x - DOCK.x, dz = z - DOCK.z;
+  if (Math.abs(dx) > 11 || Math.abs(dz) > 11 || !DOCK.prop || DOCK.prop.down) return false;
+  const t = DOCK.deg * Math.PI / 180, u = dx * Math.cos(t) + dz * Math.sin(t), v = dz * Math.cos(t) - dx * Math.sin(t);
+  return u > -7.5 && u < 9.2 && Math.abs(v) < (u > 5.6 ? 1.8 : 1);
+};
 const HILLS = await loadHills('data/hills.json', MAP);
 {
   const half = new Uint16Array(HILLS.heights.length); for (let i = 0; i < half.length; i++) half[i] = THREE.DataUtils.toHalfFloat(HILLS.heights[i]);
@@ -780,18 +790,25 @@ const chunkIndex = (() => {
 })();
 const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
 const chunks = new Map(), chunkPool = [];
-const DUST = hex('#2c2a24');
+const DUST = hex('#2c2a24'), FARM_DUST = hex('#6a5f47');
 function groundColor(x, z, h, col, i) {
   const n = fbm((x + 500) * .12, (z + 500) * .12, 8, 1e6, 3);
   let c = h < .6 ? lerp3(hex('#1c1420'), hex('#2a1e22'), n) : lerp3(hex('#24302b'), hex('#3a2a30'), n);
   if (h > .6 && n > .62) c = lerp3(c, hex('#8a3a1e'), .7);
+  // pasture, with the bare rings where bales have been fed
+  const grass = FARM.grass(x, z);
+  if (grass > 0) {
+    c = lerp3(c, lerp3(hex('#6d7440'), hex('#a39a55'), fbm(x * .018 + 9, z * .018 + 3, 31, 1e6, 3)), grass * .94);
+    const scar = FARM.scar(x, z);
+    if (scar > 0) c = lerp3(c, hex('#2f2619'), scar * .9);
+  }
   // packed dirt around the bridge's east end, under buildings, along the shoulders and the track bed
   const fromBridge = Math.max(Math.abs(x), Math.abs(z));
   let dust = x > 26 ? .5 * (1 - sstep(180, 240, x)) * (1 - sstep(240, 400, Math.abs(z))) : 0;
   if (fromBridge > 60 && MAP.roadGrid.nearest(x, z) < MAP.roadGrid.reach) dust = Math.max(dust, .9 * sstep(60, 125, fromBridge) * (1 - sstep(MAP.roadGrid.seg.owner.width / 2 + 2.5, MAP.roadGrid.seg.owner.width / 2 + 8, MAP.roadGrid.d)));
   if (MAP.railGrid.nearest(x, z) < 8) dust = Math.max(dust, .8 * (1 - sstep(2, 7, MAP.railGrid.d)));
   dust = Math.max(dust, .5 * padWeight(x, z));
-  if (dust > 0) c = lerp3(c, DUST, dust);
+  if (dust > 0) c = lerp3(c, grass > 0 ? lerp3(DUST, FARM_DUST, grass) : DUST, dust);
   // sand where the river's cut down under the Chunky River Bridge
   const w = fromWake(x, z);
   if (w < 80) c = lerp3(c, hex('#6f6048'), .85 * (1 - sstep(35, 80, w)) * (1 - sstep(3.5, 6, h)));
@@ -917,7 +934,7 @@ const wrapRope = new THREE.Mesh(new THREE.TorusGeometry(.36, .045, 8, 24), new T
 wrapRope.rotation.y = Math.PI / 2; wrapRope.position.set(0, DY, ZS); scene.add(wrapRope);
 
 // ================================================================ trees (autumn hardwoods + loblolly pines), kept off the roads and the town
-let fillTrees = null, treesNear = null, treeBlocks = null, fellTree = null, stepTrees = null, scorchTree = null, treeCrown = null, leafOf = null;
+let fillTrees = null, fillGrass = null, treesNear = null, treeBlocks = null, fellTree = null, stepTrees = null, scorchTree = null, treeCrown = null, leafOf = null;
 const swayU = { uTime: { value: 0 } };
 function swayMat(params) {
   const m = new THREE.MeshStandardMaterial(params);
@@ -990,7 +1007,15 @@ function swayMat(params) {
     const r = (i) => hash(cx, cz, 900 + i), x = (cx + r(1)) * CELL, z = (cz + r(2)) * CELL;
     // the first scene's forest has its own square, apart from where its town stood
     const first = x > -100 && x < 140 && z > -120 && z < 120 && !(x > 64 && x < 125 && Math.abs(z) < 34);
-    if (r(0) < .62 && !first && fbm(x * .012 + 40, z * .012 + 40, 77, 1e6, 2) > .36) {
+    // on the farm south of the bridge: the trees that stand on their own where they really do, rows of young pines, and no others out on the grass
+    const lone = FARM.lone(cx, cz);
+    if (lone) {
+      const pine = r(3) < .82;
+      if (padWeight(lone.x, lone.z) === 0 && MAP.roadGrid.nearest(lone.x, lone.z) > 6 && !(WATER.look(lone.x, lone.z) && WATER.d < 1)) t = { x: lone.x, z: lone.z, h: groundH(lone.x, lone.z), r, pine, size: pine ? 1.6 + r(4) * .8 : 1.1 + r(4) * .35 };
+    } else if (FARM.young(x, z)) {
+      const rx = (cx + .5) * CELL, h = groundH(rx, z);
+      if (r(0) < .9 && padWeight(rx, z) === 0 && MAP.roadGrid.nearest(rx, z) > 7) t = { x: rx, z, h, r, pine: true, young: true, size: .5 + r(4) * .35 };
+    } else if (r(0) < .62 && !first && !FARM.clear(x, z) && (FARM.edge(x, z) || fbm(x * .012 + 40, z * .012 + 40, 77, 1e6, 2) > .36)) {
       const h = groundH(x, z), rd = MAP.roadGrid.nearest(x, z), half = rd < 32 ? MAP.roadGrid.seg.owner.width / 2 : 0;
       if (h >= 2.2 && rd > half + 4 && MAP.railGrid.nearest(x, z) > 6 && padWeight(x, z) === 0 && !(WATER.look(x, z) && WATER.d < 2)) { const pine = r(3) < .33; t = { x, z, h, r, pine, size: pine ? .8 + r(4) * .7 : .7 + r(4) * .9 }; }
     }
@@ -1001,7 +1026,7 @@ function swayMat(params) {
   function poolTree(t) {
     const { x, z, h, r } = t, k = t.size;
     if (t.pine) {
-      const th = 6.5 * k; TM[0].compose(P.set(x, h + th / 2, z), Q.identity(), S.set(k * .8, th, k * .8));
+      const th = (t.young ? 1.7 : 6.5) * k; TM[0].compose(P.set(x, h + th / 2, z), Q.identity(), S.set(k * .8, th, k * .8));
       const c = ppal[Math.floor(r(5) * ppal.length)];
       for (let n = 0; n < 3; n++) { const w = (1.7 - n * .45) * k; TM[n + 1].compose(P.set(x, h + th - .6 * k + n * 1.25 * k, z), Q.identity(), S.set(w, 2.4 * k, w)); TC[n + 1].copy(c); }
     } else {
@@ -1041,6 +1066,49 @@ function swayMat(params) {
     tm.setMatrixAt(t.ti, TM[0]); for (let k = 1; k <= n; k++) crown.setMatrixAt(t.ci + k - 1, TM[k]);
     tm.instanceMatrix.needsUpdate = crown.instanceMatrix.needsUpdate = true;
   }
+  // Grass on the farm's pastures, or a dark field's just a void: a pool of tufts that moves with the camera, the same way, and only out there
+  const blades = new THREE.BufferGeometry();
+  {
+    // each blade twice, back to back: a double-sided material turns the normal over on the back face, which goes black under this light
+    const pos = [], col = [];
+    for (let i = 0; i < 7; i++) {
+      const a = i * 2.4 + .4, lean = .05 + i * .025, tall = .2 + (i % 4) * .075, cx = Math.cos(a), sz = Math.sin(a), wx = -sz * .022, wz = cx * .022, ox = cx * (.03 + i * .012), oz = sz * (.03 + i * .012), tx = ox + cx * lean, tz = oz + sz * lean;
+      pos.push(ox - wx, 0, oz - wz, ox + wx, 0, oz + wz, tx, tall, tz, ox + wx, 0, oz + wz, ox - wx, 0, oz - wz, tx, tall, tz); col.push(.62, .62, .62, .62, .62, .62, 1, 1, 1, .62, .62, .62, .62, .62, .62, 1, 1, 1);
+    }
+    blades.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); blades.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    blades.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
+  }
+  const coarse = matchMedia('(pointer:coarse)').matches, tufts = new THREE.InstancedMesh(blades, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), coarse ? 560 : 1100);
+  const TUFT = 1.9, TUFT_R = coarse ? 32 : 44, tuftCells = new Map(), straw = new THREE.Color('#d8c986'), green = new THREE.Color('#a1a95c');
+  tufts.setColorAt(0, straw); tufts.frustumCulled = false; tufts.count = 0; scene.add(tufts); FARM.tufts = tufts;
+  const tuftAt = (cx, cz) => {
+    const k = (cx + 32768) * 65536 + cz + 32768;
+    let t = tuftCells.get(k);
+    if (t !== undefined) return t;
+    t = null;
+    if (hash(cx, cz, 1200) < .62) {
+      const x = (cx + hash(cx, cz, 1201)) * TUFT, z = (cz + hash(cx, cz, 1202)) * TUFT;
+      if (FARM.grass(x, z) > .7 && !FARM.scar(x, z) && MAP.roadGrid.nearest(x, z) > 7 && !WATER.in(x, z)) t = { x, y: groundH(x, z), z, turn: hash(cx, cz, 1203) * 6.28, size: .75 + hash(cx, cz, 1204) * .8, tone: hash(cx, cz, 1205) };
+    }
+    tuftCells.set(k, t); return t;
+  };
+  let tuftX = 1e9, tuftZ = 1e9;
+  const tuftColor = new THREE.Color();
+  fillGrass = (cam_x, cam_z) => {
+    if (cam_x < FARM.x0 || cam_x > FARM.x1 || cam_z < FARM.z0 || cam_z > FARM.z1) { tufts.count = 0; tuftX = 1e9; return; }
+    if (Math.hypot(cam_x - tuftX, cam_z - tuftZ) < 4) return;
+    tuftX = cam_x; tuftZ = cam_z;
+    const cr = Math.ceil(TUFT_R / TUFT), c0x = Math.floor(cam_x / TUFT), c0z = Math.floor(cam_z / TUFT), most = tufts.instanceMatrix.count;
+    let n = 0;
+    for (let i = -cr; i <= cr; i++) for (let j = -cr; j <= cr; j++) {
+      if (i * i + j * j > cr * cr || n >= most) continue;
+      const t = tuftAt(c0x + i, c0z + j); if (!t) continue;
+      tufts.setMatrixAt(n, M.compose(P.set(t.x, t.y, t.z), Q.setFromAxisAngle(AXIS.set(0, 1, 0), t.turn), S.setScalar(t.size)));
+      tufts.setColorAt(n, tuftColor.copy(green).lerp(straw, t.tone));
+      n++;
+    }
+    tufts.count = n; tufts.instanceMatrix.needsUpdate = true; tufts.instanceColor.needsUpdate = true;
+  };
   fillTrees = (cam_x, cam_z) => {
     if (Math.hypot(cam_x - lastX, cam_z - lastZ) < 14) return;
     lastX = cam_x; lastZ = cam_z; filled++;
@@ -1155,19 +1223,20 @@ const waterMat = new THREE.ShaderMaterial({
 });
 const water = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), waterMat); water.rotation.x = -Math.PI / 2; scene.add(water);
 // A swimming pool's the same water with something other than mud under it, so it doesn't take much sky
-const POOL_LOOKS = { blue: { deep: [.03, .26, .46], sheen: -.08 }, green: { deep: [.04, .3, .11], sheen: -.02 } };
+const POOL_LOOKS = { blue: { deep: [.03, .26, .46], sheen: -.08 }, green: { deep: [.04, .3, .11], sheen: -.02 }, algae: { deep: [.13, .2, .05], sheen: .02 } };
 const pondWater = () => { const m = waterMat.clone(); m.defines = {}; for (const k of Object.keys(waterMat.uniforms)) m.uniforms[k] = waterMat.uniforms[k]; return m; }, stillWater = pondWater();
 const poolWater = (look) => { const m = pondWater(), L = POOL_LOOKS[look]; m.uniforms.uDeep = { value: new THREE.Vector3(...L.deep) }; m.uniforms.uSheen = { value: L.sheen }; return m; };
 // Each pond has its own flat sheet of the same water, at its own level. One that's down by the river doesn't need one.
 for (const p of WATER.ponds) if (p.level > 0) {
-  const pos = new Float32Array(p.ring.length * 3), idx = [];
-  p.ring.forEach(([x, z], i) => pos.set([x, p.level, z], i * 3));
-  for (const [a, b, c] of THREE.ShapeUtils.triangulateShape(p.ring.map(([x, z]) => new THREE.Vector2(x, z)), [])) {
-    const [ax, az] = p.ring[a], [bx, bz] = p.ring[b], [cx, cz] = p.ring[c];
+  const all = [...p.ring, ...p.islands.flat()], pos = new Float32Array(all.length * 3), idx = [];
+  all.forEach(([x, z], i) => pos.set([x, p.level, z], i * 3));
+  const flat = ([x, z]) => new THREE.Vector2(x, z);
+  for (const [a, b, c] of THREE.ShapeUtils.triangulateShape(p.ring.map(flat), p.islands.map((one) => one.map(flat)))) {
+    const [ax, az] = all[a], [bx, bz] = all[b], [cx, cz] = all[c];
     if ((bz - az) * (cx - ax) - (bx - ax) * (cz - az) > 0) idx.push(a, b, c); else idx.push(a, c, b);
   }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx);
-  const sheet = new THREE.Mesh(g, p.pool ? poolWater(p.pool) : stillWater); scene.add(sheet);
+  const sheet = new THREE.Mesh(g, p.pool || p.look ? poolWater(p.pool || p.look) : stillWater); scene.add(sheet);
   DISTANT.push({ obj: sheet, x: p.x, z: p.z, r: Math.hypot(p.x1 - p.x0, p.z1 - p.z0) / 2 + 300 });
 }
 
@@ -2412,7 +2481,7 @@ trackMat.onBeforeCompile = (sh) => {
         // the ruts, pressed darker
         float rr=(au-.82)/.3; col*=1.-.42*exp(-rr*rr)*(.55+.45*texture2D(uRoadN,vec2(s/40.,.31)).g);
         // grass up the middle of a dirt one
-        float crown=(1.-smoothstep(.22,.62,au))*clay, tuft=smoothstep(.5,.66,texture2D(uRoadN,P/3.1).r*.7+texture2D(uRoadN,vec2(s/26.,.77)).b*.3);
+        float crown=(1.-smoothstep(.22,.62,au))*step(.9,clay), tuft=smoothstep(.5,.66,texture2D(uRoadN,P/3.1).r*.7+texture2D(uRoadN,vec2(s/26.,.77)).b*.3);
         col=mix(col,mix(vec3(.03,.06,.025),vec3(.06,.1,.035),st.b),crown*mix(tuft,.4,far));
         // the edge, which wanders on each side on its own
         float side=u>0.?0.:.5, wob=texture2D(uRoadN,vec2(s/17.,.13+side)).r*.62+texture2D(uRoadN,vec2(s/4.3,.41+side)).g*.38-.5, rag=hw+wob*(.55+.35*clay);
@@ -2464,7 +2533,8 @@ const LANE_MESHES = [];
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('aRoad', new THREE.BufferAttribute(mark, 4)); g.setIndex(idx);
     return g;
   };
-  const strip = (road, pts, s0) => { const m = new THREE.Mesh(stripGeometry(road, pts, s0), SURFACES[road.surface] || roadMat); scene.add(m); return m; };
+  const strip = (road, pts, s0) => { const m = new THREE.Mesh(stripGeometry(road, pts, s0), roadMat); scene.add(m); return m; };
+  const unpaved = new Map();
   for (const road of MAP.roads) {
     // Stuckey's Bridge has its own deck, and the road comes up to it in short steps so the narrowing is smooth
     let pieces = [road.pts];
@@ -2478,6 +2548,7 @@ const LANE_MESHES = [];
       const s0 = MAP.sOn(road.id, WAKE_BRIDGE.x, WAKE_BRIDGE.z), far = WAKE_SPAN / 2 + .2, at = (s) => { const p = MAP.along(road.id, s); return [p.x, p.z]; }, near = (a, b) => { const out = []; for (let k = a; k < b; k += 3) out.push(at(k)); out.push(at(b)); return out; };
       pieces = [[...road.pts.filter((_, i) => road.s[i] < s0 - 34), ...near(s0 - 34, s0 - far)], [...near(s0 + far, s0 + 34), ...road.pts.filter((_, i) => road.s[i] > s0 + 34)]];
     }
+    if (road.surface !== 'asphalt') { unpaved.set(road, pieces); continue; }
     // split into stretches of about 190 m, so that a stretch out of view isn't drawn
     let along = 0;
     for (const piece of pieces) {
@@ -2525,9 +2596,13 @@ const LANE_MESHES = [];
     return pts;
   };
   // How wide a track is along its length: it opens out where it leaves another road, and fades into it. If there's no road at the end of it, it closes up.
-  const meets = (road, [x, z]) => { const g = MAP.roadGrid.within(x, z, (o) => (o === road ? 0 : o.width / 2 + .5)); return g ? g.owner.width / 2 : 0; };
+  // The same road carrying on past where one stretch of it stops isn't a road it meets, and nothing happens to its width there: that comes back as -1.
+  const sameName = new Map();
+  for (const r of [...MAP.roads, ...MAP.lanes]) if (r.name) { if (!sameName.has(r.name)) sameName.set(r.name, []); sameName.get(r.name).push(r); }
+  const carriesOnAs = (road, x, z) => (sameName.get(road.name) ?? []).some((r) => r !== road && [r.pts[0], r.pts.at(-1)].some((p) => Math.hypot(p[0] - x, p[1] - z) < 1));
+  const meets = (road, [x, z]) => { if (carriesOnAs(road, x, z)) return -1; const g = MAP.roadGrid.within(x, z, (o) => (o === road ? 0 : o.width / 2 + .5)); return g ? g.owner.width / 2 : 0; };
   const trackGeometry = (road, pts, s0, from, to) => {
-    const n = pts.length, pos = new Float32Array(n * 6), nor = new Float32Array(n * 6), mark = new Float32Array(n * 8), join = new Float32Array(n * 2), idx = [], clay = road.surface === 'dirt' ? 1 : 0, half0 = road.width / 2;
+    const n = pts.length, pos = new Float32Array(n * 6), nor = new Float32Array(n * 6), mark = new Float32Array(n * 8), join = new Float32Array(n * 2), idx = [], clay = road.surface === 'dirt' ? 1 : road.name === 'Griffis Fountain Rd' ? .5 : 0;   // that one's gravel with the red clay showing through it
     let along = s0;
     for (let i = 0; i < n; i++) {
       const [x, z] = pts[i], a = pts[Math.max(i - 1, 0)], b = pts[Math.min(i + 1, n - 1)];
@@ -2535,11 +2610,11 @@ const LANE_MESHES = [];
       let tx = b[0] - a[0], tz = b[1] - a[1]; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
       let miter = 1;
       if (i > 0 && i < n - 1) { const ax = x - a[0], az = z - a[1], al = Math.hypot(ax, az) || 1; miter = 1 / Math.max(.5, (tx * ax + tz * az) / al); }
-      const left = road.length - along, hw = half0 * (from ? 1 + .55 * (1 - sstep(from, from + 6, along)) : 1) * (to ? 1 : sstep(-.5, 2.5, left)), wide = hw + .7, half = wide * miter;
+      const left = road.length - along, hw = roadHalf(road, x, z) * (from > 0 ? 1 + .55 * (1 - sstep(from, from + 6, along)) : 1) * (to ? 1 : sstep(-.5, 2.5, left)), wide = hw + .7, half = wide * miter;
       pos.set([x + tz * half, ROAD_TOP - .008, z - tx * half, x - tz * half, ROAD_TOP - .008, z + tx * half], i * 6);
       nor.set([0, 1, 0, 0, 1, 0], i * 6);
       mark.set([wide, along, hw, clay, -wide, along, hw, clay], i * 8);
-      const fade = (from ? sstep(from - 1, from + 1.5, along) : 1) * (to ? sstep(to - 1, to + 1.5, left) : 1);
+      const fade = (from > 0 ? sstep(from - 1, from + 1.5, along) : 1) * (to > 0 ? sstep(to - 1, to + 1.5, left) : 1);
       join.set([fade, fade], i * 2);
       if (i < n - 1) { const v = i * 2; idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2); }
     }
@@ -2560,6 +2635,11 @@ const LANE_MESHES = [];
   for (const road of MAP.lanes) {
     if (road.surface === 'asphalt') pieces(dense(clipped(road)), (pts, s0) => cellFor(pts).paved.push(stripGeometry(road, pts, s0, ROAD_TOP + .004)));
     else { const from = meets(road, road.pts[0]), to = meets(road, road.pts.at(-1)); pieces(HILLS.follow(withEnds(road, from, to)), (pts, s0) => cellFor(pts).track.push(trackGeometry(road, pts, s0, from, to))); }
+  }
+  // A road of the graph that isn't paved is drawn the same way, a side of its bridge at a time
+  for (const [road, parts] of unpaved) for (const part of parts) {
+    const at = MAP.sOn(road.id, ...part[0]), first = part[0] === road.pts[0], last = part.at(-1) === road.pts.at(-1);
+    pieces(dense(part), (pts, s0) => cellFor(pts).track.push(trackGeometry(road, pts, at + s0, first ? meets(road, road.pts[0]) : -1, last ? meets(road, road.pts.at(-1)) : -1)));
   }
   for (const c of cells.values()) {
     const group = new THREE.Group();
@@ -3266,6 +3346,81 @@ const stoneWords = () => `<span class="words">${(STONE_WORDS.words || 'Words fro
   flushBuckets(210);
   bigTree(...atTrue(-446, -7375), { y0: 2.6, y1: 11, R: 6, count: 30, size: 1.5, colors: ['#3a5230', '#2f4a2c', '#4a5a30'], trunk: 5.5 });
   bigTree(...atTrue(-422.4, -7404.6), { y0: .9, y1: 2.4, R: 1.5, count: 8, size: .7, colors: ['#6e4a2c', '#5a3f2a', '#4a5a30'], trunk: 1.4 });
+}
+// ===== the farm south of the bridge: its fences and what's been left lying out there. Everything on it is off the aerial, and nothing says whose it was.
+clearing(-585, 1692, -470, 1762, 6);
+for (const ring of FARM.open) FIELDS.push({ grass: ring });
+const WIRE_TEX = (() => {
+  // woven wire, closer together at the bottom, with a strand of barbed along the top. One repeat is about 60 cm along and the fence's whole height up.
+  const c = document.createElement('canvas'); c.width = 64; c.height = 128; const g = c.getContext('2d');
+  g.strokeStyle = '#fff'; g.lineWidth = 2.5;
+  for (const v of [.05, .13, .22, .32, .44, .58, .74, .97]) { g.beginPath(); g.moveTo(0, 128 * (1 - v)); g.lineTo(64, 128 * (1 - v)); g.stroke(); }
+  g.lineWidth = 2; for (const u of [8, 24, 40, 56]) { g.beginPath(); g.moveTo(u, 128 * (1 - .74)); g.lineTo(u, 128); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; t.anisotropy = 4; return t;
+})();
+const WIRE_MAT = new THREE.MeshStandardMaterial({ color: '#8b8f8d', alphaMap: WIRE_TEX, alphaTest: .32, side: THREE.DoubleSide, metalness: .3, roughness: .7 });
+const FENCE_POST = new THREE.MeshStandardMaterial({ color: '#342d29', roughness: 1 });
+{
+  // A run of three spans goes over at a time. It's cut wherever a road, a building or water is in the way, and the ends of a cut get a braced post, as at the real gates.
+  const SPAN = 4, SPANS = 3, HIGH = 1.1, SQUARE = 300, cells = new Map();
+  const inTheWay = (x, z) => { const rd = MAP.roadGrid.nearest(x, z); return (rd < MAP.roadGrid.reach && rd < MAP.roadGrid.seg.owner.width / 2 + 1.4) || !!houseAt(x, z) || !!WATER.in(x, z); };
+  for (const line of FARM.fences) {
+    const posts = [line[0]];
+    for (let i = 1; i < line.length; i++) { const [ax, az] = line[i - 1], [bx, bz] = line[i], n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / SPAN)); for (let k = 1; k <= n; k++) posts.push([ax + (bx - ax) * k / n, az + (bz - az) * k / n]); }
+    const runs = [];
+    for (let i = 0; i < posts.length - 1; i += SPANS) { const here = posts.slice(i, Math.min(i + SPANS, posts.length - 1) + 1); runs.push({ here, cut: here.some(([x, z]) => inTheWay(x, z)) || here.slice(1).some(([x, z], k) => inTheWay((x + here[k][0]) / 2, (z + here[k][1]) / 2)) }); }
+    runs.forEach((run, i) => {
+      if (run.cut) return;
+      run.braced = [!runs[i - 1] || runs[i - 1].cut, !runs[i + 1] || runs[i + 1].cut];
+      const [x, z] = run.here[0], k = `${Math.floor(x / SQUARE)},${Math.floor(z / SQUARE)}`;
+      if (!cells.has(k)) cells.set(k, { x: (Math.floor(x / SQUARE) + .5) * SQUARE, z: (Math.floor(z / SQUARE) + .5) * SQUARE, runs: [] });
+      cells.get(k).runs.push(run);
+    });
+  }
+  for (const c of cells.values()) {
+    const pos = [], uvs = [], idx = [];
+    for (const run of c.runs) {
+      const { here, braced } = run, ys = here.map(([x, z]) => groundH(x, z)), [ax, az] = here[0], [bx, bz] = here.at(-1), nx = bz - az, nz = ax - bx, nl = Math.hypot(nx, nz) || 1;
+      run.first = pos.length / 3;
+      let along = 0;
+      for (let i = 1; i < here.length; i++) {
+        const n = pos.length / 3, [px, pz] = here[i - 1], [qx, qz] = here[i], L = Math.hypot(qx - px, qz - pz) / .6, ya = ys[i - 1], yb = ys[i];
+        pos.push(px, ya, pz, qx, yb, qz, qx, yb + HIGH, qz, px, ya + HIGH, pz); uvs.push(along, 0, along + L, 0, along + L, 1, along, 1); idx.push(n, n + 1, n + 2, n, n + 2, n + 3); along += L;
+      }
+      run.count = pos.length / 3 - run.first;
+      run.prop = breakable('fence', .5, () => {
+        for (let i = 1; i < here.length; i++) { const w = [here[i - 1][0], here[i - 1][1], here[i][0], here[i][1], Math.max(ys[i - 1], ys[i]) + HIGH, .06]; PROP_WALLS.push(w); PROP.walls.push(w); }
+        here.forEach(([x, z], i) => addBox(FENCE_POST, x, ys[i] + (HIGH + .06) / 2, z, .09, HIGH + .06, .09, 0));
+        [0, 1].forEach((end) => {
+          if (!braced[end]) return;
+          const a = end ? here.at(-1) : here[0], b = end ? here.at(-2) : here[1], y = end ? ys.at(-1) : ys[0], y2 = end ? ys.at(-2) : ys[1];
+          addBox(FENCE_POST, a[0], y + .78, a[1], .2, 1.56, .2, 1); addBox(FENCE_POST, b[0], y2 + .78, b[1], .2, 1.56, .2, 1); addBeam([a[0], y + 1.3, a[1]], [b[0], y2 + 1.3, b[1]], .11, .11, FENCE_POST, 0);
+        });
+      }, { rigid: true, line: [ax, az, bx, bz], falls: [nx / nl, nz / nl], chip: '#6a6a66' });
+      run.bounds = new THREE.Box3(new THREE.Vector3(Math.min(ax, bx), Math.min(...ys), Math.min(az, bz)), new THREE.Vector3(Math.max(ax, bx), Math.max(...ys) + HIGH, Math.max(az, bz)));
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.setIndex(idx); g.computeVertexNormals();
+    for (const run of c.runs) run.prop.boxes.push({ g, first: run.first, count: run.count, box: run.bounds, mat: FENCE_POST });
+    const wire = new THREE.Mesh(g, WIRE_MAT); scene.add(wire); DISTANT.push({ obj: wire, x: c.x, z: c.z, r: SQUARE * .71 + 230 });
+    flushBuckets(230);
+  }
+  // what's out on the grass and in the yard
+  const yard = nearHere(-500, 1680, 260), field = nearHere(-350, 1490, 320);
+  // on whatever the ground's doing there, since out here nobody's levelled it
+  const rest = (into, kind, parts, x, z, yaw, hp, { solid: [w, d, top], ...o }) => { const y = groundH(x, z) - Y0; return thing(into, kind, parts, x, z, yaw, hp, { y, solid: [w, d, top + y], ...o }); };
+  FARM.bales.forEach(([x, z, turn], i) => rest(i < 5 ? field : yard, 'bale', roundBale(), x, z, turn, 1.2, { chip: '#a8965e', solid: [1.5, 1.5, 1.2] }));
+  rest(yard, 'tractor', tractor(), ...atTrue(-485, 1652), 2.2, 5, { chip: '#3e6b38', solid: [1.7, 2.4, 1.6] });
+  rest(yard, 'trailer', utilityTrailer(), ...atTrue(-467.5, 1666), .6, 2.5, { chip: '#c9c8bf', solid: [1.4, 2.6, .9] });
+  rest(yard, 'bin', feedBin(), ...atTrue(-509, 1700.5), 0, 4, { chip: '#a9acab', solid: [2.2, 2.2, 5] });
+  for (const p of [[-375, 1547], [-372, 1565]]) rest(field, 'tank', stockTank(), ...atTrue(...p), 0, 2.5, { chip: '#7c8083', solid: [2, 2, .6] });
+  // the dock on the pond, from the bank by the house out over the water
+  const F = tilted(-584.5, 1853, DOCK.deg), level = WATER.in(...F.at(0, 0))?.level ?? TOWN_Y - 1, top = level + .55 - Y0;
+  [DOCK.x, DOCK.z] = F.at(0, 0); DOCK.top = Y0 + top;
+  DOCK.prop = breakable('dock', 4, () => {
+    F.box(benchMat, 0, top - .05, 0, 15, .1, 2, 1); F.box(benchMat, 7.4, top - .05, 0, 3.6, .1, 3.6, 1);
+    for (const [u, v] of [[-5, -.9], [-5, .9], [0, -.9], [0, .9], [5, -.9], [5, .9], [9, -1.7], [9, 1.7], [5.8, -1.7], [5.8, 1.7]]) F.box(poleMat, u, top - 1.3, v, .12, 2.5, .12, 0);
+  }, { rigid: true, line: [...F.at(-7.5, 0), ...F.at(9, 0)], chip: '#6e5238' });
+  flushBuckets(230);
 }
 indexProps();
 // Where the town's props leave the random sequence, however many there are, so the lantern and the snakes stay as they were in the opening
@@ -4622,6 +4777,7 @@ function floorAt(x, z) {
   if (onRoad(x, z)) f = Math.max(f, ROAD_TOP);
   if (Math.abs(z) < 4.25 && Math.abs(Math.abs(x) - 22) < 2.25) f = Math.max(f, DY - .05);
   const p = plankUnder(x, z); if (p && !p.hole && p.fall === 0) f = Math.max(f, DECK_TOP);
+  if (onDock(x, z)) f = Math.max(f, DOCK.top);
   return f;
 }
 // solids by cell, so a check only looks at what's around it
@@ -4782,7 +4938,7 @@ function vehicleFits(kind, x, z, yaw) {
   return true;
 }
 // Nothing gets parked at the compound on Pine Forest Rd but what's on the aerial
-const SET_ASIDE = [[...atTrue(880, 600), ...atTrue(1075, 740)], [...atTrue(-1600, -830), ...atTrue(-1490, -745)]];
+const SET_ASIDE = [[...atTrue(880, 600), ...atTrue(1075, 740)], [...atTrue(-1600, -830), ...atTrue(-1490, -745)], [...atTrue(-730, 1630), ...atTrue(-440, 1780)]];
 const VEH_SET = [
   // the first one you come to, on the shoulder just past the Chunky River Bridge, and pointing into town
   (() => { const r = 'griffis_fountain_rd', [x, z] = atTrue(-336.76, 490.37), p = MAP.along(r, MAP.sOn(r, x, z) - 34); return ['quad', p.x + p.nx * 5, p.z + p.nz * 5, Math.atan2(-p.tx, -p.tz), .12]; })(),
@@ -4792,6 +4948,8 @@ const VEH_SET = [
   ['pickup', ...atTrue(1034.1, 640.5), .56, .76], ['car', ...atTrue(1000.6, 652.6), 2.6, .635], ['pickup', ...atTrue(1028.6, 669.1), .1, .76], ['pickup', ...atTrue(1031.9, 669.9), .1, .3],
   // off True Light Rd: the white coupe where you come round the house, nose out and with no rust on it, and a white truck and a white car by the little shed
   ['coupe', ...atTrue(-1541, -787), -1.84, -1], ['pickup', ...atTrue(-1506.9, -796.7), 3.05, .76], ['car', ...atTrue(-1503.6, -797.2), 3.05, .3],
+  // at the farm south of the bridge, the white truck by the house
+  ['pickup', ...atTrue(-684.7, 1733), .2, .76],
 ].filter(([kind, x, z, yaw]) => vehicleFits(kind, x, z, yaw));
 const VEHICLES = [
   ...VEH_SET.map(([kind, x, z, yaw, tone]) => ({ kind, x, z, yaw, tone })),
@@ -5735,7 +5893,7 @@ let stepT = 0, lastStepIdx = -1;
 // ================================================================ main loop
 const clock = new THREE.Clock();
 // ================================================================ what he hears
-const METAL_PROPS = new Set(['sign', 'pump', 'icebox', 'cooler', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'tower', 'leg', 'trailer', 'boxcar', 'cart', 'bleachers', 'net', 'trampoline', 'propane']);
+const METAL_PROPS = new Set(['tractor', 'bin', 'sign', 'pump', 'icebox', 'cooler', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'tower', 'leg', 'trailer', 'boxcar', 'cart', 'bleachers', 'net', 'trampoline', 'propane']);
 const VEHICLE_LOOPS = ['engine.car', 'engine.pickup', 'engine.quad', 'engine.golf', 'vehicle.road', 'vehicle.dirt', 'vehicle.skid'];
 const SCORE = { title: 'title', hang: 'hang', fall: 'fall', land: 'bank', bridge: 'run', bitten: 'bite', dream: 'dream', wake: 'wake', grabbed: 'grabbed', fail: 'failed', end: 'end' };
 const FEVER_QUIET = { bitten: .25, dream: 0, wake: .5 };
@@ -6135,7 +6293,7 @@ function updateWorld() {
   const x = camera.position.x, z = camera.position.z, jumped = Math.hypot(x - worldX0, z - worldZ0) > 40;
   worldX0 = x; worldZ0 = z; worldTick++;
   updateGround(x, z, jumped ? Infinity : worldTick % 3 === 0 ? 1 : 0);
-  fillTrees(x, z); fillTies(x, z); updateHouses(x, z, jumped);
+  fillTrees(x, z); fillGrass(x, z); fillTies(x, z); updateHouses(x, z, jumped);
   const away = Math.hypot(x, z), k = away > 60 ? 1 - 60 / away : 0;
   if (k) water.position.set(x, 0, z); else water.position.set(0, 0, 0);
   moon.position.copy(MOON_DIR).multiplyScalar(440); moon.position.x += x * k; moon.position.z += z * k; moon.position.y += camera.position.y * k;
@@ -6166,7 +6324,7 @@ if (location.hash === '#signs') openSignBoard();
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, farm: FARM, dock: DOCK, onDock, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
     THREE, hills: { at: HILLS.at, slope: HILLS.slope, follow: HILLS.follow, here: () => HILL.uHillHere.value, uniforms: HILL, flat: hillsFlat, skyline },
     stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead },
