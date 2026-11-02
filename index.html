@@ -2239,7 +2239,7 @@ function updateChurchSigns(step) {
 }
 // ================================================================ what's left of Robby's house
 // The owner: "the first house on the right after coming off the bridge". Coming north off the Griffis Fountain bridge that's a big mown lawn by the road, with
-// structure 74582285 standing way back at the end of it. "I think the house burned down", and "he didn't die, he moved back to Louisiana". So on the lawn:
+// structure 74582285 standing way back at the end of it. "I think the house burned down", and he didn't die, he moved to California. So on the lawn:
 // brick piers with the charred joists fallen off them, the chimney, and the front steps going up to nothing. He stands where the front room's floor used to be.
 const LOT = (() => { const [x, z] = atTrue(-255, 362); return { x, z }; })(), ROBBY = { x: LOT.x - 2.5, y: Y0 + .62, z: LOT.z + .5 }, HEARTH = { x: LOT.x + 2.9, z: LOT.z - 1 };
 const charMat = new THREE.MeshStandardMaterial({ color: '#15110f', roughness: 1 }), concreteMat = new THREE.MeshStandardMaterial({ color: '#615d55', roughness: 1 });
@@ -2280,7 +2280,7 @@ around(LOT, () => {
     const tex = textTex([], 640, 400, '#3b2a20', '#e9e3d2', '40px Bungee, Impact, sans-serif', { after: (g) => {
       for (let i = 1; i < 5; i++) { g.fillStyle = 'rgba(12,8,6,.55)'; g.fillRect(0, i * 80 - 2, 640, 4); }
       const row = (t, y, px) => { g.font = `${px}px Bungee, Impact, sans-serif`; g.fillStyle = '#e9e3d2'; g.fillText(t, 320, y); };
-      row('IN MEMORY OF', 48, 36); row('ROBBY', 118, 88); row("HE DIDN'T DIE", 210, 52); row('HE MOVED BACK', 282, 52); row('TO LOUISIANA', 350, 52);
+      row('IN MEMORY OF', 48, 36); row('ROBBY', 118, 88); row("HE DIDN'T DIE", 210, 52); row('HE MOVED', 282, 52); row('TO CALIFORNIA', 350, 52);
     } });
     const face = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.375), new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: '#ffffff', emissiveIntensity: .55, roughness: 1 }));
     face.position.set(LOT.x - 12.01, Y0 + 1.15, LOT.z); face.rotation.y = -Math.PI / 2; scene.add(face); PROP.objs.push(face);
@@ -3773,7 +3773,7 @@ const NPCS = {
     extra: (b) => { const hat = new THREE.Mesh(new THREE.CylinderGeometry(.23, .23, .024, 24), new THREE.MeshToonMaterial({ color: '#b8ad96', gradientMap: toonGrad })); hat.position.set(0, .49, .09); hat.rotation.x = .1; b.add(outline(hat, INK, 1.3));
       const crown = new THREE.Mesh(new THREE.CylinderGeometry(.105, .125, .1, 18), hat.material); crown.position.set(0, .55, .095); crown.rotation.x = .1; b.add(outline(crown, INK, 1.2));
       const skirt = new THREE.Mesh(new THREE.CylinderGeometry(.168, .29, .5, 16, 1, true), new THREE.MeshToonMaterial({ color: LOOKS.cast.odessa.top.colors[0], emissive: LOOKS.cast.odessa.top.colors[0], emissiveIntensity: .3, gradientMap: toonGrad, side: THREE.DoubleSide })); skirt.position.set(0, -.83, .005); b.add(outline(skirt, '#'+zombieLine(LOOKS.cast.odessa.degree).getHexString(), 2)); } }),
-  // he didn't die, he moved back to Louisiana
+  // he didn't die, he moved to California
   robby: makeNPC({ id: 'robby', name: 'Robby', x: ROBBY.x, z: ROBBY.z, y: ROBBY.y, yaw: -Math.PI / 2, ghost: true, ph: 1.7 })
 };
 for (const n of Object.values(NPCS)) if (!n.ghost) solid(n.root.position.x - .4, n.root.position.x + .4, n.root.position.z - .4, n.root.position.z + .4, Y0 + 2);
