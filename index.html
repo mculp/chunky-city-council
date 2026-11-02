@@ -1532,7 +1532,7 @@ for (const [board, house] of [[hallBoard, HALL_HOUSE], [postBoard, POST_OFFICE]]
 // the gas station's canopy and pumps, in front of the old store they belonged to
 const canopyMat = new THREE.MeshStandardMaterial({ color: '#cfc9bb', roughness: .85 }), canopyPost = new THREE.MeshStandardMaterial({ color: '#a8342a', roughness: .7, metalness: .2 });
 const pumpMat = new THREE.MeshStandardMaterial({ color: '#c8c2b4', roughness: .6, metalness: .25 }), pumpFace = new THREE.MeshStandardMaterial({ color: '#17141c', roughness: .4 }), pumpDial = new THREE.MeshStandardMaterial({ color: '#d8d2c0', roughness: .7 }), hoseMat = new THREE.MeshStandardMaterial({ color: '#141014', roughness: .8 });
-const benchMat = new THREE.MeshStandardMaterial({ color: '#6e5238', roughness: 1 }), counterMat = new THREE.MeshStandardMaterial({ color: '#6b4a32', roughness: .9 }), shelfMat = new THREE.MeshStandardMaterial({ color: '#4a4650', roughness: .7, metalness: .3 }), iceMat = new THREE.MeshStandardMaterial({ color: '#dfe6e6', roughness: .5, metalness: .2 }), coolerMat = new THREE.MeshStandardMaterial({ color: '#b9b5a8', roughness: .6, metalness: .2 });
+const benchMat = new THREE.MeshStandardMaterial({ color: '#6e5238', roughness: 1 }), counterMat = new THREE.MeshStandardMaterial({ color: '#6b4a32', roughness: .9 }), shelfMat = new THREE.MeshStandardMaterial({ color: '#4a4650', roughness: .7, metalness: .3 }), coolerMat = new THREE.MeshStandardMaterial({ color: '#b9b5a8', roughness: .6, metalness: .2 });
 // What's left on the shelves, as one picture: the same thing a few times over, then something else, with gaps where it's been taken. There's no writing on any of it.
 const goodsTex = textTex([''], 1024, 205, '#120c12', '#000', '12px sans-serif', { after: (g) => {
   const tones = ['#b4532a', '#d9c9a0', '#3a7a78', '#c89a3a', '#7a2f3c', '#56507a', '#e0dccf', '#2f4a5c', '#8a8f3c'];
@@ -1551,7 +1551,7 @@ const goodsTex = textTex([''], 1024, 205, '#120c12', '#000', '12px sans-serif', 
     }
   }
 } });
-// and the coolers, lit from behind: rows of bottles behind three doors
+// and the coolers, which have been off for ten years: rows of bottles behind three doors, with a little of whatever's in the room on the glass
 const coolerTex = textTex([''], 512, 360, '#31555f', '#000', '12px sans-serif', { after: (g) => {
   const tones = ['#7a2318', '#c89a3a', '#e8843a', '#1f5a3a', '#2f4a7c', '#d9c9a0'];
   for (let row = 0; row < 4; row++) {
@@ -1569,11 +1569,17 @@ const coolerTex = textTex([''], 512, 360, '#31555f', '#000', '12px sans-serif', 
   g.fillStyle = '#17141c'; for (const x of [0, 169, 339, 506]) g.fillRect(x, 0, 6, 360);
   g.fillStyle = 'rgba(241,250,255,.13)'; g.beginPath(); g.moveTo(60, 0); g.lineTo(120, 0); g.lineTo(30, 360); g.lineTo(0, 360); g.lineTo(0, 240); g.fill();
 } });
-const goodsMat = new THREE.MeshStandardMaterial({ map: goodsTex, roughness: .85 }), coolerGlass = new THREE.MeshBasicMaterial({ map: coolerTex, color: new THREE.Color('#c6dde4') });
+const goodsMat = new THREE.MeshStandardMaterial({ map: goodsTex, roughness: .85 }), coolerGlass = new THREE.MeshStandardMaterial({ map: coolerTex, color: '#6f8a92', roughness: .35, metalness: .1 });
 // the canopy stands on four posts and doesn't stay up on one, and the pumps still have something in them
 let canopyProp = null, gasPower = 1, canopyPosts = 0;
 const signProp = {};
-const iceSign = (() => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.3, .62), new THREE.MeshStandardMaterial({ map: textTex(['ICE'], 256, 122, '#dfe6e6', '#2f6f9f', '92px Bungee, Impact, sans-serif'), roughness: .5, metalness: .2 })); m.position.set(PLACES.gas.x + 41.8, Y0 + 1.2, PLACES.gas.z + 6.31); scene.add(m); return m; })();
+// The store's been shut for ten years, and the ice box shows it: rust running down from every seam, what's left of the word on the door that's still shut, and the other one hanging open on nothing.
+const iceRust = (g, w, h, seed) => {
+  for (let i = 0; i < 26; i++) { const k = (a) => hash(i, seed, a), x = k(1) * w, top = k(2) * h * .7, long = h * (.12 + k(3) * .5), wide = 2 + k(4) * w * .05, grad = g.createLinearGradient(0, top, 0, top + long); grad.addColorStop(0, `rgba(${90 + k(5) * 60},${44 + k(6) * 24},22,.85)`); grad.addColorStop(1, 'rgba(90,50,24,0)'); g.fillStyle = grad; g.fillRect(x, top, wide, long); }
+  for (let i = 0; i < 9; i++) { const k = (a) => hash(i, seed + 1, a); g.fillStyle = `rgba(${70 + k(5) * 50},${36 + k(6) * 20},20,.9)`; g.beginPath(); g.ellipse(k(1) * w, k(2) * h, 3 + k(3) * w * .05, 2 + k(4) * h * .03, k(7) * 3, 0, 7); g.fill(); }
+};
+const iceBody = new THREE.MeshStandardMaterial({ map: textTex([''], 256, 256, '#a8a598', '#000', '12px sans-serif', { after: (g) => iceRust(g, 256, 256, 70) }), roughness: .85, metalness: .25 });
+const iceSign = (() => { const m = new THREE.Mesh(new THREE.PlaneGeometry(.72, .46), new THREE.MeshStandardMaterial({ map: textTex(['ICE'], 256, 164, '#a8a598', '#54707e', '110px Bungee, Impact, sans-serif', { after: (g) => iceRust(g, 256, 164, 74) }), roughness: .85, metalness: .2 })); m.position.set(PLACES.gas.x + 41.4, Y0 + 1.16, PLACES.gas.z + 6.32); m.rotation.z = .05; scene.add(m); return m; })();
 around(PLACES.gas, () => {
   pad(46, 60, 4, 15, 4);
   // a deep cream fascia with a red band along the top, as on the real one
@@ -1592,7 +1598,14 @@ around(PLACES.gas, () => {
   signProp.gas = breakable('sign', 1.5, () => { addBox(canopyPost, 46.5, Y0 + 3, 13.5, .2, 6, .2, 1); }, { rigid: true });
   flushBuckets();
   // what's out front of the store: the ice box, a bench against the wall and a picnic table by the pumps
-  breakable('icebox', 3, () => { addBox(iceMat, 41.8, Y0 + .85, 5.75, 1.6, 1.7, 1.1, 1.4); addBox(canopyPost, 41.8, Y0 + 1.74, 5.75, 1.64, .08, 1.14, 1); solid(41, 42.6, 5.2, 6.3, Y0 + 1.7); }, { chip: '#dfe6e6', hide: [iceSign] });
+  breakable('icebox', 3, () => {
+    addBox(iceBody, 41.8, Y0 + .85, 5.72, 1.6, 1.7, 1.04, 1.4); addBox(iceBody, 41.8, Y0 + 1.72, 5.72, 1.64, .07, 1.1, 1);
+    // the door that's still shut, the black inside of the other one with its bare shelf, and that door hanging off its bottom hinge
+    addBox(iceBody, 41.4, Y0 + .85, 6.26, .76, 1.58, .05, 1);
+    addBox(pumpFace, 42.2, Y0 + .85, 6.25, .7, 1.54, .02, 0); addBox(shelfMat, 42.2, Y0 + .62, 6.2, .68, .03, .06, 0);
+    addBox(iceBody, 42.92, Y0 + .78, 6.56, .05, 1.5, .74, 1, new THREE.Quaternion().setFromEuler(new THREE.Euler(.13, -.32, 0)));
+    solid(41, 42.6, 5.2, 6.3, Y0 + 1.7);
+  }, { chip: '#a8a598', hide: [iceSign] });
   breakable('bench', 1, () => { addBox(benchMat, 36.5, Y0 + .46, 5.6, 2.1, .07, .46, 1); addBox(benchMat, 36.5, Y0 + .82, 5.32, 2.1, .3, .05, 1); for (const x of [35.6, 37.4]) addBox(benchMat, x, Y0 + .22, 5.6, .08, .44, .4, 1); solid(35.45, 37.55, 5.3, 5.85, Y0 + .85); }, { chip: '#6e5238' });
   breakable('bench', 1, () => { addBox(benchMat, 45.5, Y0 + .78, 9.3, 2, .07, .84, 1); for (const z of [8.68, 9.92]) addBox(benchMat, 45.5, Y0 + .46, z, 2, .06, .28, 1); for (const x of [44.8, 46.2]) { addBox(benchMat, x, Y0 + .4, 9.3, .08, .78, .1, 1); addBox(benchMat, x, Y0 + .4, 9.3, .08, .06, 1.5, 1); } solid(44.5, 46.5, 8.55, 10.05, Y0 + .8); }, { chip: '#6e5238' });
   flushBuckets(120);
@@ -3171,25 +3184,23 @@ const PICKUPS = [
 });
 
 // What else is in the store, on the shelves and the counter. No arrow points at any of it: it's there for whoever goes looking. Beans are beans, and he just holds on to the rest for now.
-const LOOT_NAMES = { bottle: 'Bottles', crackers: 'Firecrackers', fluid: 'Lighter fluid', batteries: 'Batteries' };
+const LOOT_NAMES = { bottle: 'Bottles', crackers: 'Firecrackers', fluid: 'Lighter fluid' };
 const lootGroup = new THREE.Group(); scene.add(lootGroup); DISTANT.push({ obj: lootGroup, x: PLACES.gas.x + 48, z: PLACES.gas.z - 2, r: 90 });
 const LOOT_LOOKS = {};
 const LOOT = (() => {
   const canGeo = new THREE.CylinderGeometry(.11, .11, .26, 18);
-  // a pair of fat cells, copper at the top, and a tin with a spout, the orange warning triangle on yellow
-  const cellTex = textTex([''], 32, 64, '#141216', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#c0703a'; g.fillRect(0, 0, 32, 22); g.fillStyle = '#e6e0d0'; g.fillRect(0, 44, 32, 3); } });
+  // a tin with a spout, the orange warning triangle on yellow
   const fluidTex = textTex([''], 96, 160, '#d9a826', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#ec803a'; g.beginPath(); g.moveTo(48, 38); g.lineTo(82, 104); g.lineTo(14, 104); g.fill(); g.fillStyle = '#17141c'; g.fillRect(45, 58, 6, 26); g.fillRect(45, 88, 6, 7); } });
   // a brick of firecrackers in red paper, the triangle again, and a fuse out of the top of it
   const crackerTex = textTex([''], 96, 128, '#b3202a', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#e8c23a'; g.fillRect(0, 12, 96, 8); g.fillRect(0, 108, 96, 8); g.fillStyle = '#ec803a'; g.beginPath(); g.moveTo(48, 34); g.lineTo(76, 90); g.lineTo(20, 90); g.fill(); g.fillStyle = '#17141c'; g.fillRect(45, 50, 6, 22); g.fillRect(45, 76, 6, 6); } });
   const looks = Object.assign(LOOT_LOOKS, {
     beans: [canGeo, [canMat[0], canMat[1], canMat[1]]],
     crackers: [mergeGeometries([new THREE.BoxGeometry(.13, .19, .05), new THREE.BoxGeometry(.012, .07, .012).translate(0, .125, 0)]), new THREE.MeshStandardMaterial({ map: crackerTex, roughness: .7, emissive: '#2a0606' })],
-    batteries: [mergeGeometries([new THREE.CylinderGeometry(.07, .07, .24, 12).translate(-.08, 0, 0), new THREE.CylinderGeometry(.07, .07, .24, 12).translate(.08, 0, 0)]), new THREE.MeshStandardMaterial({ map: cellTex, roughness: .5, metalness: .3 })],
     fluid: [mergeGeometries([new THREE.BoxGeometry(.17, .28, .08), new THREE.BoxGeometry(.03, .1, .03).translate(.05, .18, 0)]), new THREE.MeshStandardMaterial({ map: fluidTex, roughness: .5, metalness: .2 })],
   });
   const halo = new THREE.SpriteMaterial({ map: radialTex, color: new THREE.Color(1, .55, .2), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: .7 });
   // on the shelves' aisle sides and the counter, in the store's own coordinates
-  return [['beans', 45.98, 1.05, -1], ['batteries', 53.1, 1.32, 2.4], ['batteries', 41.02, 1.05, -3.6], ['fluid', 37.98, 1.05, .6], ['fluid', 41.98, 1.05, -5], ['crackers', 45.02, 1.05, -2.6], ['crackers', 45.02, 1.05, .9], ['crackers', 41.02, 1.05, 1]].map(([kind, lx, ly, lz], i) => {
+  return [['beans', 45.98, 1.05, -1], ['fluid', 37.98, 1.05, .6], ['fluid', 41.98, 1.05, -5], ['crackers', 45.02, 1.05, -2.6], ['crackers', 45.02, 1.05, .9], ['crackers', 41.02, 1.05, 1]].map(([kind, lx, ly, lz], i) => {
     const [geo, mat] = looks[kind], m = new THREE.Mesh(geo, mat), x = PLACES.gas.x + lx, z = PLACES.gas.z + lz, y = Y0 + ly;
     m.position.set(x, y + .2, z); outline(m, INK, 1.5); lootGroup.add(m);
     const glow = new THREE.Sprite(halo); glow.scale.setScalar(.9); m.add(glow);

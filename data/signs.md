@@ -19,7 +19,7 @@ This is the owner's to change: edit a line and it's changed. `docs/lore.md` has 
 | Field | Type | What it is |
 |---|---|---|
 | `id` | string | How `feuds` refers to it, and what its letters' unevenness comes from. |
-| `name` | string[] | The header, in one or two rows. Invented, because the signs carry veiled threats and these are real congregations. |
+| `name` | string[] | The header, in one or two rows. These are the real churches' names, which the owner asked for: "sure, fk it, use the real names". |
 | `x`, `z` | number | Where it stands, in true metres from town center. |
 | `facing` | number | The way its front looks, in degrees: 0 north, 90 east. The back's the same. They stand side-on to the road, as the real ones here do. |
 

@@ -45,10 +45,14 @@ They sent three photos of real signs for how they look. The photos stay out of t
 **In the game:** every church has one, and they change at midnight in Mississippi. `data/signs.json` is everything they say, and `#signs` shows it all on one page. Decided around it:
 
 - The words are written fresh, not taken from the photos. One of the photos is a pun on a real brand.
-- The churches on the signs have invented names, because the signs carry veiled threats and these are real congregations. Going by the real ones would be the owner's call.
+- They go by the churches' real names, as it says below. They had invented ones until then, because the signs carry veiled threats and these are real congregations. The names are what the map calls them.
 - It goes by the real calendar, since the game has no days of its own yet, so that everyone sees the same sign on the same day. Every fifth day they argue with each other. That part wasn't asked for.
 - A few lines nod at the crowd without saying what they are. `REVIVAL TONIGHT / NOT THAT KIND` is the closest it comes.
 - Nobody's said who changes them. `DO NOT ASK WHO / CHANGES THE SIGN` is as far as it goes.
+
+Asked about the names and the days they argue, and about Robby's lot:
+
+> sure, fk it, use the real names. arguing days sounds hilarious. yes it's close enough for robby and it was pretty funny.
 
 ## Jason and Jesse
 
@@ -67,3 +71,31 @@ And there's the light. When he comes back to Stuckey's Bridge after the first ch
 - It comes when he's about 60 m from the bridge. If he stays put it gets him, and if he gets 140 m away it gives up. It comes again after he's been 300 m away.
 - There are no words. Nothing on the screen, the map or a sign says what it is or who saw it, and their names aren't anywhere in the game. Whether they should be is the owner's to say.
 - It has no sound of its own, because they never heard a thing.
+
+### Their people and their places
+
+Word for word, with the street addresses taken out, as everywhere in this file, and one line of a song, which isn't reproduced here. They sent a picture of the compound from above, for which building's which. It stays out of the repo.
+
+> [the address] is their compound. dana, husband, jason's two younger brothers, their kids and spouses (see screenshot)
+>
+> we used to play 6 on 6 volleyball in the yard
+>
+> jason really liked the st louis cardinals, maybe some volleyball side quest and cardinals gear available here. he drove an old t-top 90s white camaro so that'd be a cool vehicle to put out there. don't really have to mention by name. he was buried at cemetery at [the address] and has some of the lyrics to "nerdy" by poison the well *imprinted* on his tombstone. [the line of the song] ... some fun facts if anyone stumbles upon
+>
+> jesse died younger at 18 i think, he lived in the first row of trailers nearest the ballfield, second from the left. there is also a community pool directly west of the trailer park. it'd be funny if you could go in his trailer and see an old computer with CRT monitor with AIM on the screen. he was always on AIM
+
+## The gas station
+
+> it's funny the kid's name is randomly coop - that's jesse's older brother (joe) son's name, about 20 y/o now. he is really good at sports and all the girls like him. my mom used to work at the gas station for years. idk what the name of it is. pretty sure it's shut down 10 years now. so the ice box is probably in disrepair
+
+**In the game:** the ice box is rusted through, with one door hanging open and nothing in it, and the coolers along the back are off. The canopy's light still flickers, because the crowd gathers under it and Coop's still there, whatever the store's done. The store still has no name. Coop stays as he is: that he shares a name with someone real is an accident, and nothing about that person goes in the game.
+
+## The compound on Pine Forest Rd
+
+> [the address] ... The Murpheys have a compound here. Two of them will likely play this game and the dad will probably love seeing it because he loves computers and is a nerd and wrote most of the chunky wikipedia page. we need to make sure we get these houses shaped right. my friend and his wife live in a cabin to the north with an outdoor theater and his wife has an art studio. to the south is the mom and dad's really big, nice house with a swimming pool. and the shed nearest the road is where another of the brothers and I and my brother and other people used to get together and jam out - drums, guitars, keyboards, amps, all that stuff in there
+
+They sent a picture of this from above too, and it stays out of the repo.
+
+## The land
+
+> we should look a bit into altitude and hills. there aren't a lot but many are very prominent
