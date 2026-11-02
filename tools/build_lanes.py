@@ -576,7 +576,9 @@ def build_drives(roads, lanes, structures, water, config):
     wants = [s for s in structures if s["id"] not in own and not (abs(world.point(s["x"], s["z"])[0]) < OPENING and abs(world.point(s["x"], s["z"])[1]) < OPENING)]
     # nearest the road first, so that the ones behind them can branch off their drives, and sheds after houses
     wants.sort(key=lambda s: (s["use"] == "shed", places.nearest_road(*world.point(s["x"], s["z"]))[0], s["id"]))
-    drives, tally, served, stuck = [], defaultdict(int), [], []
+    drives, tally, stuck = [], defaultdict(int), []
+    # a shed by a building that has its own way in doesn't need one either
+    served = [world.point(s["x"], s["z"]) for s in structures if s["id"] in own]
     for s in wants:
         at = world.point(s["x"], s["z"])
         if s["use"] == "shed" and any(math.hypot(at[0] - p[0], at[1] - p[1]) < SHED_NEAR for p in served):

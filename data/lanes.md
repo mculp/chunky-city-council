@@ -2,7 +2,7 @@
 
 `data/lanes.json` holds the smaller roads that `data/roads.json` leaves out, and a drive to every building that needs one, so that nobody has to go through the woods to get to a house. `tools/build_lanes.py` generates it. `src/map.js` loads it into `MAP.lanes`.
 
-There are 215 lanes, 80.8 km of them, and 913 drives, 37.6 km.
+There are 215 lanes, 80.8 km of them, and 910 drives, 37.5 km.
 
 ## Where it comes from
 
@@ -38,7 +38,7 @@ TIGER has the same stretch twice where a road has two names. It goes to the full
 
 TIGER has no width or surface, so those are assumed, in `tools/lane_config.json`. `byName` there has what's been looked at by eye. On Street View True Light Rd, Ridge Rd and Johnson Rd are narrow and paved with no paint, and Point Wanita Lake Rd is paved with a double yellow and white edge lines. So a named road is asphalt with no paint unless `byName` says it has some. That unnamed roads are gravel and private ones dirt is a guess.
 
-`ownDrive` there is for buildings with a drive of their own, already built by hand in `index.html`.
+`ownDrive` there is for buildings with a drive or a forecourt of their own, already built by hand in `index.html`: the owner's house and barn, the gas station and the town hall. A shed beside one of those shares its way in, as it does with a drive.
 
 ## A building and a track
 

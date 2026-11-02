@@ -3926,7 +3926,8 @@ const vehWheels = vehMesh(vehGeos.wheel.geo, vehMat, VEH_WHEELS); vehWheels.inst
 const vehWheelLines = vehMesh(vehGeos.wheel.line, outlineMat(INK, 1.4), VEH_WHEELS, vehWheels);
 
 // Where they are: where the real buildings say, and a few where the game needs one
-const nearestRoadPoint = (x, z) => { if (MAP.roadGrid.nearest(x, z) === Infinity) return null; const id = MAP.roadGrid.seg.owner.id, p = MAP.along(id, MAP.sOn(id, x, z)); return { x: p.x, z: p.z }; };
+// a building's own drive stops at its wall, so it's the road that drive comes from that counts
+const nearestRoadPoint = (x, z) => { if (MAP.roadGrid.nearest(x, z, (o) => !!o.structure) === Infinity) return null; const id = MAP.roadGrid.seg.owner.id, p = MAP.along(id, MAP.sOn(id, x, z)); return { x: p.x, z: p.z }; };
 function vehicleFits(kind, x, z, yaw) {
   const K = KINDS[kind], fx = Math.sin(yaw), fz = Math.cos(yaw), y = floorAt(x, z), L = K.length / 2 + .35, W = K.width / 2 + .35;
   if (y < .5) return false;

@@ -31,11 +31,14 @@ export class SegGrid {
       list.push(seg);
     }
   }
-  nearest(x, z) {
+  // `skip(owner)`, if it's given, leaves some out.
+  nearest(x, z, skip = null) {
     const list = this.cells.get(this.key(Math.floor(x / this.cell), Math.floor(z / this.cell)));
     let best = Infinity, seg = null, tb = 0;
     if (list) for (let i = 0; i < list.length; i++) {
-      const g = list[i], px = x - g.ax, pz = z - g.az;
+      const g = list[i];
+      if (skip && skip(g.owner)) continue;
+      const px = x - g.ax, pz = z - g.az;
       let t = g.l2 ? (px * g.dx + pz * g.dz) / g.l2 : 0;
       t = t < 0 ? 0 : t > 1 ? 1 : t;
       const ex = px - g.dx * t, ez = pz - g.dz * t, d2 = ex * ex + ez * ez;

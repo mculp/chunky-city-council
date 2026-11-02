@@ -4,7 +4,7 @@
     "byName": "A road by its TIGER name, for what's been looked at by eye on Street View. paint is for one with lines on it, which the paved ones haven't got otherwise.",
     "leaveOut": "TIGER names that aren't taken.",
     "drive": "What a generated drive is. None of it is surveyed.",
-    "ownDrive": "Buildings with a drive of their own, already built by hand in index.html."
+    "ownDrive": "Buildings with a drive or a forecourt of their own, already built by hand in index.html: the owner's house and barn, the gas station and the town hall."
   },
   "classes": {
     "S1200": {
@@ -58,6 +58,8 @@
   },
   "ownDrive": [
     75414843,
-    75057300
+    75057300,
+    75177617,
+    75204375
   ]
 }
