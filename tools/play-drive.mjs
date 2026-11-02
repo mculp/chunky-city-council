@@ -83,8 +83,17 @@ const census = await g(() => {
 console.log(`     ${JSON.stringify(census.n)}`);
 for (const k of KINDS) check(`there are ${k}s to find`, census.n[k] > 0, census.n);
 check('none parked on a road, in a building, out of bounds or in the water', census.list.every((v) => !v.road && !v.house && v.bounds && v.floor > .3), census.list.filter((v) => v.road || v.house || !v.bounds || v.floor <= .3));
-const neighbours = await g(() => { const G = __game, V = G.vehicles; let least = Infinity; for (let i = 0; i < V.length; i++) for (let j = 0; j < i; j++) least = Math.min(least, Math.hypot(V[i].x - V[j].x, V[i].z - V[j].z)); return least; });
-check(`none parked on top of another: closest ${neighbours.toFixed(1)} m`, neighbours >= 6, neighbours);
+// Two can be parked side by side, as they are by that long building. What this is after is one on top of another, so it goes by their boxes.
+const onTop = await g(() => {
+  const V = __game.vehicles, out = [], axes = (v) => [[Math.sin(v.yaw), Math.cos(v.yaw)], [Math.cos(v.yaw), -Math.sin(v.yaw)]];
+  const reach = (v, n) => { const [f, s] = axes(v); return Math.abs(f[0] * n[0] + f[1] * n[1]) * v.K.length / 2 + Math.abs(s[0] * n[0] + s[1] * n[1]) * v.K.width / 2; };
+  for (let i = 0; i < V.length; i++) for (let j = 0; j < i; j++) {
+    const a = V[i], b = V[j];
+    if ([...axes(a), ...axes(b)].every((n) => Math.abs((a.x - b.x) * n[0] + (a.z - b.z) * n[1]) < reach(a, n) + reach(b, n))) out.push([a.kind, a.x, a.z, b.kind, b.x, b.z]);
+  }
+  return out;
+});
+check('none parked on top of another', onTop.length === 0, onTop);
 const firstOne = await g(() => { const G = __game, v = G.vehicles[0], c = G.map.crossings.find((q) => q.road === 'griffis_fountain_rd'); return { kind: v.kind, far: Math.hypot(v.x - c.x, v.z - c.z), onRoad: G.onRoad(v.x, v.z) }; });
 check(`the first one's just past where he wakes: a ${firstOne.kind}, ${firstOne.far.toFixed(0)} m from the Chunky River Bridge`, firstOne.far > 20 && firstOne.far < 80 && !firstOne.onRoad, firstOne);
 const station = await g(() => { const G = __game, c = G.npcs.coop; return G.vehicles.filter((v) => Math.hypot(v.x - c.x, v.z - c.z) < 40).map((v) => v.kind); });
@@ -238,6 +247,9 @@ const hears = await g(async () => {
   for (const kind of ['pickup', 'golf']) {
     if (G.driving()) { G.driving().hp = G.driving().K.hp; window.out(); }
     H.calm(); H.all.length = 0; board(kind); const v = G.driving(), p = onUS80(-215); move(p.x, p.z, Math.atan2(p.tx, p.tz));
+    // whatever's been left on the road gets moved off it, and nothing else is going off, or this hears that instead of the engine
+    for (const o of G.vehicles) if (o !== v && G.onRoad(o.x, o.z)) o.z += 30;
+    H.noises.length = 0;
     const s = H.add(v.x, v.z + 45); v.f = v.K.top * .9; G.sim(4, 1 / 30);
     r[kind] = { alert: s.alert, state: s.state, d: Math.hypot(s.x - v.x, s.z - v.z) };
   }
