@@ -17,7 +17,7 @@ const snap = async (name) => { if (shots) { await mkdir(shots, { recursive: true
 
 await g(() => {
   const G = __game;
-  G.pause();
+  G.pause(); G.fillTown();
   // The way from one place to another on foot, over a half-metre grid, or null if there's no way. It only looks as far as it has to.
   const CELL = .5;
   // what stops him on foot in town: anything standing, and tree trunks
@@ -162,7 +162,7 @@ d = await talk('odessa', 'Miss Odessa'); await snap('08-odessa');
 await choose(0); s = await choose(0); check('sweeping', s.mode === 'sweep', s.mode);
 await g(() => __game.key('e', true)); s = await g(() => __game.step(3.4)); await g(() => __game.key('e', false));
 check('swept for 3 beans, and twelve is plenty', s.flags.swept === true && s.beans >= 12, [s.flags.swept, s.beans]); await inShot('odessa', 'Miss Odessa'); await snap('09-swept');
-check('nobody else on the streets for the whole chapter', !(await g(() => __game.crowd())).out);
+check('the crowd stays away for the whole chapter', !(await g(() => __game.crowd())).out);
 s = await g(() => __game.step(2)); check('the chapter ends', s.mode === 'end', s.mode); await snap('10-end');
 check('and now they come out', (await g(() => __game.crowd())).all > 0);
 await page.click('#again'); s = await g(() => __game.step(.1)); check('the final objective', s.mode === 'town' && /Chunky is yours/.test(s.obj), [s.mode, s.obj]);

@@ -17,6 +17,7 @@ const step = (s) => g((s) => __game.step(s), s);
 const key = (k, down = true) => g(([k, d]) => __game.key(k, d), [k, down]);
 const snap = async (name) => { if (shots) { await mkdir(shots, { recursive: true }); await page.screenshot({ path: join(shots, name + '.png') }); } };
 
+await g(() => __game.fillTown());
 let st = await step(.5);
 check('title', st.mode === 'title', st.mode); await snap('title');
 

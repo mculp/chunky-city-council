@@ -44,6 +44,7 @@ export const TUNING = {
   trail: 30, trailGap: [7, 13],    // metres. How far off someone starts following him, and how far back they keep.
   tagalong: .55, tagReach: 20, tagLost: 30,   // who goes along with their own people, how far off they'll notice, and how far before they give up
   afterHim: .5,                    // the chance someone with a grudge heads his way when they've got nothing else to go on
+  atHome: [8, 26],                 // seconds someone at home stays where they've got to
 };
 
 const hypot = Math.hypot, TRY = [0, .8, 1.6, 2.4, 3.1];
@@ -65,7 +66,7 @@ export function createHorde(world, tuning = {}, on = {}) {
   h.add = (x, z, extra = {}) => {
     const s = { x, z, y: world.floorAt(x, z), yaw: world.rand() * 6.28, state: SHAMBLE, tx: x, tz: z, alert: 0, timer: 0, lost: 0, moving: 0, stuck: 0, side: 0, clear: 0, next: world.rand() * T.thinkEvery, phase: world.rand() * 6.28, gait: world.rand() * 6.28, limp: world.rand() < .5 ? 0 : 1, look: Math.floor(world.rand() * 1000), size: .94 + world.rand() * .12, ...extra };
     // Everyone's somebody, and what they look like goes with who they are
-    if (F) { const who = F.next(); Object.assign(s, who.looks, extra); s.who = who; who.body = s; s.homeX = x; s.homeZ = z; s.mood = 0; }
+    if (F) { const who = extra.who ?? F.next(); Object.assign(s, who.looks, extra); s.who = who; who.body = s; s.homeX = x; s.homeZ = z; s.mood = 0; }
     all.push(s); return s;
   };
   // Something loud: anyone in reach goes to look, and at a bell they forget the church is off limits
@@ -101,10 +102,21 @@ export function createHorde(world, tuning = {}, on = {}) {
     for (const n of noises) { if (n.lure && s.who && F.wise(s.who, n.kind)) continue; const d = hypot(n.x - s.x, n.z - s.z), k = n.lure ? d - 1e4 : d; if (d < n.r && k < bd) { bd = k; best = n; } }
     return best;
   }
+  // Someone at home goes between the house, the door and the yard and stays a while, and if they're the kind, goes off down the road and comes back
+  function homeStop(s) {
+    const H = s.home, r = world.rand(), door = hypot(s.x - H.door[0], s.z - H.door[1]) < 3;
+    s.timer = T.atHome[0] + world.rand() * (T.atHome[1] - T.atHome[0]);
+    if (s.inside) { s.inside = false; [s.tx, s.tz] = H.door; }
+    else if (door && r < .35) { s.inside = true; [s.tx, s.tz] = H.inside; }
+    else if (r > .55 + s.who.homebody * .45) { [s.tx, s.tz] = world.wander(s); s.timer = hypot(s.tx - s.x, s.tz - s.z) / T.speed[SHAMBLE] + 3; }
+    else if (hypot(s.x - s.homeX, s.z - s.homeZ) > 30 || r < .5) [s.tx, s.tz] = H.door;
+    else { const out = 2 + world.rand() * 5, by = (world.rand() - .5) * 10; s.tx = H.door[0] + H.nx * out + H.nz * by; s.tz = H.door[1] + H.nz * out - H.nx * by; }
+  }
   // Where someone goes next, once they've got nothing better to do, is up to them
   function nextStop(s, p) {
     const w = s.who;
     if (!w) { [s.tx, s.tz] = world.wander(s); return; }
+    if (s.home && s.mood !== AFTER) { homeStop(s); return; }
     // along with their own people, if they're the kind who would. It's always someone who'd sooner go their own way, so nobody ends up going round in a ring.
     if (w.tagalong > T.tagalong) {
       if (s.lead && (s.lead.under !== undefined || hypot(s.lead.x - s.x, s.lead.z - s.z) > T.tagLost)) s.lead = null;
@@ -125,7 +137,8 @@ export function createHorde(world, tuning = {}, on = {}) {
   function think(s, p) {
     const w = s.who, mood = w ? (s.mood = F.mood(w)) : 0;
     const d = hypot(s.x - p.x, s.z - p.z), sharp = 1 + (T.nightSense - 1) * p.night, loud = nearestNoise(s);
-    const reach = p.hidden ? 0 : Math.min(Math.max(p.noise * sharp, (T.smellBase + T.smellPerBean * p.beans) * sharp, p.light * sharp, T.touch) * (w ? F.senses(w, mood) : 1), loud?.lure ? T.drowned : Infinity);
+    // the people who live here have got nothing against him, until he gives them something
+    const reach = p.hidden || (w?.calm && !mood) ? 0 : Math.min(Math.max(p.noise * sharp, (T.smellBase + T.smellPerBean * p.beans) * sharp, p.light * sharp, T.touch) * (w ? F.senses(w, mood) : 1), loud?.lure ? T.drowned : Infinity);
     const sensed = d < reach;
     if (sensed) s.alert = Math.min(1, s.alert + T.thinkEvery * (T.alertRate[0] + (T.alertRate[1] - T.alertRate[0]) * (1 - d / reach)) * (mood === AFTER ? 2 : 1));
     else s.alert = Math.max(0, s.alert - T.thinkEvery * T.alertFade);
@@ -164,11 +177,11 @@ export function createHorde(world, tuning = {}, on = {}) {
       if (loud) { s.state = CURIOUS; s.tx = loud.x; s.tz = loud.z; s.timer = T.lookAround; return; }
       if (s.alert >= T.curiousAt) { s.state = CURIOUS; s.tx = p.x; s.tz = p.z; s.timer = T.lookAround; return; }
       s.timer -= T.thinkEvery;
-      if (s.timer <= 0 || hypot(s.tx - s.x, s.tz - s.z) < .6 || s.stuck > 1) {
+      if (s.timer <= 0 || (!s.home && hypot(s.tx - s.x, s.tz - s.z) < .6) || s.stuck > 1) {
         s.stuck = 0; s.timer = 6 + world.rand() * 10;
         const near = lights.find((l) => hypot(l.x - s.x, l.z - s.z) < l.r);
         // and it keeps going until it's there
-        if (near && world.rand() < T.lightPull * p.night) { const a = world.rand() * 6.28, r = 2 + world.rand() * 5; s.tx = near.x + Math.cos(a) * r; s.tz = near.z + Math.sin(a) * r; s.timer = hypot(s.tx - s.x, s.tz - s.z) / T.speed[SHAMBLE] + 2; }
+        if (near && !s.home && world.rand() < T.lightPull * p.night) { const a = world.rand() * 6.28, r = 2 + world.rand() * 5; s.tx = near.x + Math.cos(a) * r; s.tz = near.z + Math.sin(a) * r; s.timer = hypot(s.tx - s.x, s.tz - s.z) / T.speed[SHAMBLE] + 2; }
         else nextStop(s, p);
       }
     } else if (s.state === CURIOUS) {
@@ -188,7 +201,7 @@ export function createHorde(world, tuning = {}, on = {}) {
       let pack = 1;
       for (const o of active) if (o !== s && (o.state === HUNTING || o.state === SWARM) && hypot(o.x - s.x, o.z - s.z) < T.swarmReach) pack++;
       s.state = pack >= T.swarmSize ? SWARM : HUNTING;
-      if (s.state === SWARM) for (const o of active) if ((o.state === SHAMBLE || o.state === CURIOUS) && hypot(o.x - s.x, o.z - s.z) < T.callReach && !(o.who && F.mood(o.who) >= AWAY)) { o.alert = Math.min(1, o.alert + T.thinkEvery); if (o.state === SHAMBLE) { o.state = CURIOUS; o.timer = T.lookAround; } o.tx = s.tx; o.tz = s.tz; }
+      if (s.state === SWARM) for (const o of active) if ((o.state === SHAMBLE || o.state === CURIOUS) && hypot(o.x - s.x, o.z - s.z) < T.callReach && !(o.who && (o.who.calm || F.mood(o.who) >= AWAY))) { o.alert = Math.min(1, o.alert + T.thinkEvery); if (o.state === SHAMBLE) { o.state = CURIOUS; o.timer = T.lookAround; } o.tx = s.tx; o.tz = s.tz; }
     }
   }
   function walk(s, dt) {
@@ -263,7 +276,7 @@ export function createHorde(world, tuning = {}, on = {}) {
         if (s.soaked >= s.biteAt) { s.under = T.goesUnder; h.on.bitten?.(s); }
       }
     }
-    for (let i = all.length - 1; i >= 0; i--) if (all[i].under <= 0) { if (all[i].who) F.gone(all[i].who); all.splice(i, 1); owed++; }
+    for (let i = all.length - 1; i >= 0; i--) if (all[i].under <= 0) { const w = all[i].who; if (w) F.gone(w); all.splice(i, 1); if (!w?.calm) owed++; }
     // The water can have as many as it likes and the town doesn't empty: another wanders in for each, in time, from somewhere he isn't
     if (owed && (comeIn -= dt) <= 0) { const at = world.comeFrom?.(p); if (at) { h.add(at[0], at[1]); owed--; } comeIn = T.comeIn; }
     if (h.grab) { h.grab.x = p.x; h.grab.z = p.z; holdOn(dt, p); return; }
