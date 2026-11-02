@@ -86,6 +86,8 @@ Then open http://localhost:8000.
 
 `npm run hills` goes and looks at the hills: that the first scene is at the bottom of them, that the graphics card draws what `src/hills.js` says, that every material in the scene goes up with them, then a pickup up US 80's biggest hill with the phone's stick and back down it on foot, swimming under a bluff and in a pool on top of one. It takes `--shots dir`.
 
+`npm run keys` plays with real key presses and a real mouse: looking with nothing held, WASD with the camera, a click that hits what's in the middle of the screen and a right click that throws there, what lets the mouse go, in a pickup, all of it again in an iframe that won't let a page take the mouse, and that a phone hasn't changed. It takes `--shots dir`. Chrome won't give a headless page the mouse, so that one part is stood in for.
+
 `npm run water` walks into a pond and swims across it, floods a pickup in another, and checks that the crowd keeps out, that nothing real ended up under water, and that the ponds are on the map. The ponds are in `data/water.json`, documented in `data/water.md`.
 
 `npm run wreck` wrecks the town with real key presses and taps: through a house and through brick in a pickup, over a young tree and into a big one, into a parked car, a hammer through a wall, a can through a window, cars going up and a house burning down, then that it all stays down after going away and coming back. It also reports what the worst of it costs.

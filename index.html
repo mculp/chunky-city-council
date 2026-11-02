@@ -180,7 +180,7 @@ body.talking #mute{visibility:hidden}
     <button class="forget" id="free">Skip to town</button>
     <button class="forget" id="forget" hidden>Forget everyone</button>
     <button class="forget" id="soundWord">Sound on</button>
-    <p class="keys"><span class="k">WASD or arrows move · Shift runs · Space jumps · E uses · M is the map · N is the sound · drag to look</span><span class="t">Left thumb moves · the buttons say what they do · drag to look</span></p>
+    <p class="keys"><span class="k">The mouse looks · WASD or arrows move · Shift runs · Space jumps · E uses · click swings · right click throws · M is the map · N is the sound</span><span class="t">Left thumb moves · the buttons say what they do · drag to look</span></p>
   </div>
 </div>
 <div class="panel" id="fail" hidden>
@@ -215,7 +215,7 @@ import { createPeople } from './src/people.js';
 import { drawPerson, drawRadiation, drawAura, degreeOf, PARTS, AURA_CELLS } from './src/looks.js';
 import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
 import { LURES, ALARM, SWARM as SWARMED, GRAVITY, inHand, nextUp, kindsHeld, rangeOf, throwOf, aimedAt, whoIsSwarmed } from './src/lures.js';
-import { keysFor, buttonsFor, actWord, fastWord } from './src/controls.js';
+import { keysFor, buttonsFor, actWord, fastWord, lookBy, edgeTurn, needsCursor, mouseLooks, MOUSE } from './src/controls.js';
 import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRim, drawArrow, drawLabel, labelSpace, clampCam, zoomAbout, fitScale, COLORS as MAPC } from './src/mapview.js';
 import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, wallsOf, Sheet, PATTERN, hash2 } from './src/structures.js';
 import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
@@ -4233,7 +4233,7 @@ function renderFrame(dt) {
   } else { u.uHold.value = 0; renderer.setRenderTarget(null); renderer.render(gifScene, fsCam); }
 }
 
-// ================================================================ input: keyboard, touch stick, buttons, drag to look
+// ================================================================ input: keyboard, mouse, touch stick, buttons, drag to look
 const input = { x: 0, y: 0, a: false, b: false, run: false, aEdge: false, bEdge: false, cEdge: false, nEdge: false, sEdge: false };
 const keys = new Set();
 addEventListener('keydown', (e) => {
@@ -4242,10 +4242,13 @@ addEventListener('keydown', (e) => {
   keys.add(k);
   if (S.mode === 'dialog' && /^[1-4]$/.test(k)) { const b = $('dOpts').children[+k - 1]; if (b) b.click(); }
   if (k === 'm' && !e.repeat) { if (mapOpen) closeMap(); else if (canOpenMap()) openMap(); }
-  if (k === 'escape' && mapOpen) closeMap();
+  if (k === 'escape') { if (mapOpen) closeMap(); else mouse.free = false; }
   if (k === 'n' && !e.repeat) showMuted(!SFX.muted);
+  if ((k === '[' || k === ']') && !e.repeat) mouseSpeed(k === ']' ? 1.2 : 1 / 1.2);
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+// Whatever was held when it went to another window, it won't hear being let go
+addEventListener('blur', () => { keys.clear(); mouse.x = null; });
 let stickId = null; const stick = $('stick'), knob = $('knob');
 stick.addEventListener('pointerdown', (e) => { stickId = e.pointerId; stick.setPointerCapture(e.pointerId); moveStick(e); });
 stick.addEventListener('pointermove', (e) => { if (e.pointerId === stickId) moveStick(e); });
@@ -4266,10 +4269,66 @@ for (const [id, k] of [['bA', 'a'], ['bB', 'b'], ['bR', 'r'], ['bC', 'c'], ['bN'
   el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up);
 }
 let lookId = null, lookX = 0, lookY = 0, lastLook = -99;
-canvas.addEventListener('pointerdown', (e) => { if (lookId === null) { lookId = e.pointerId; lookX = e.clientX; lookY = e.clientY; canvas.setPointerCapture(e.pointerId); } });
-canvas.addEventListener('pointermove', (e) => { if (e.pointerId !== lookId) return; cam.yaw -= (e.clientX - lookX) * .006; cam.pitch = clamp(cam.pitch + (e.clientY - lookY) * .004, -.1, .9); lookX = e.clientX; lookY = e.clientY; lastLook = time; });
+const byMouse = (e) => e.pointerType === 'mouse' && !touchUI;
+canvas.addEventListener('pointerdown', (e) => { if (byMouse(e)) mouseDown(e.button); else if (lookId === null) { lookId = e.pointerId; lookX = e.clientX; lookY = e.clientY; canvas.setPointerCapture(e.pointerId); } });
+canvas.addEventListener('pointermove', (e) => {
+  // a second button going down while one's held only comes as a move
+  if (byMouse(e)) { if (e.buttons & [1, 4, 2][e.button]) mouseDown(e.button); return; }
+  if (e.pointerId !== lookId) return; cam.yaw -= (e.clientX - lookX) * .006; cam.pitch = clamp(cam.pitch + (e.clientY - lookY) * .004, -.1, .9); lookX = e.clientX; lookY = e.clientY; lastLook = time;
+});
 const endLook = (e) => { if (e.pointerId === lookId) lookId = null; };
 canvas.addEventListener('pointerup', endLook); canvas.addEventListener('pointercancel', endLook);
+// ---- The mouse, on a computer. It looks around just by moving, a click swings and a right click throws, as in any third-person game. A click takes it, Esc lets it go, and anything that
+// needs a cursor lets it go and takes it back after. An iframe can refuse to let a page take it, and the work link's in one, so there it looks around all the same, and turns at the sides.
+const mouse = { locked: false, free: false, refused: false, ever: false, back: false, hidden: false, asked: 0, x: null, y: null, speed: 1, wheel: 0 };
+const mouseHeld = () => mouse.locked || mouse.free;
+const cursorWanted = () => needsCursor(S.mode, mapOpen || boardOpen);
+function takeMouse() {
+  if (touchUI) return;
+  if (!mouse.refused && canvas.requestPointerLock) { canvas.requestPointerLock()?.catch?.(lockRefused); return; }
+  mouse.refused = mouse.free = true;
+}
+// Asking again straight after Esc gets refused too, so it's only taken as meant if it's never worked
+function lockRefused() { if (!mouse.ever) mouse.refused = mouse.free = true; }
+document.addEventListener('pointerlockerror', lockRefused);
+document.addEventListener('pointerlockchange', () => {
+  mouse.locked = document.pointerLockElement === canvas;
+  if (mouse.locked) { mouse.ever = true; mouse.free = false; }
+});
+function mouseDown(button) {
+  if (cursorWanted()) return;
+  if (!mouseHeld()) { if (button === 0) takeMouse(); return; }
+  // it may only have been refused because the page wasn't ready, so it's worth another couple of tries
+  if (mouse.free && canvas.requestPointerLock && mouse.asked++ < 2) canvas.requestPointerLock()?.catch?.(() => {});
+  if (button === 0) { input.sEdge = true; if (S.mode === 'grabbed') input.aEdge = true; } else if (button === 2) input.cEdge = true; else if (button === 1) input.nEdge = true;
+}
+function mouseLook(dx, dy) { if (mouseLooks(S.mode, mapOpen || boardOpen)) { lookBy(cam, dx, dy, mouse.speed); lastLook = time; } }
+function mouseSpeed(by) {
+  mouse.speed = clamp(mouse.speed * by, MOUSE.slowest, MOUSE.fastest);
+  try { saveStore?.setItem('chunky.mouseSpeed', mouse.speed); } catch { /* not saved */ }
+  toast(`Mouse speed ${Math.round(mouse.speed * 100)}%`);
+}
+document.addEventListener('mousemove', (e) => { if (mouse.locked) mouseLook(e.movementX, e.movementY); });
+canvas.addEventListener('mousemove', (e) => {
+  if (!mouse.free) return;
+  if (mouse.x !== null) mouseLook(e.clientX - mouse.x, e.clientY - mouse.y);
+  mouse.x = e.clientX; mouse.y = e.clientY;
+});
+canvas.addEventListener('mouseleave', () => { mouse.x = null; });
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  // a trackpad's one flick is a long run of these
+  if (mouseHeld() && performance.now() - mouse.wheel > 250) { mouse.wheel = performance.now(); input.nEdge = true; }
+}, { passive: false });
+function updateMouse(dt) {
+  const want = cursorWanted();
+  if (want && mouse.locked) { mouse.back = true; document.exitPointerLock(); }
+  else if (!want && mouse.back) { mouse.back = false; takeMouse(); }
+  if (mouse.free && mouse.x !== null && mouseLooks(S.mode, mapOpen || boardOpen)) { const turn = edgeTurn(mouse.x, innerWidth); if (turn) { cam.yaw += turn * mouse.speed * dt; lastLook = time; } }
+  const hide = mouse.free && !want;
+  if (hide !== mouse.hidden) { mouse.hidden = hide; canvas.style.cursor = hide ? 'none' : ''; }
+}
 function readInput() {
   let x = touchStick.x, y = touchStick.y;
   if (keys.has('a') || keys.has('arrowleft')) x -= 1; if (keys.has('d') || keys.has('arrowright')) x += 1;
@@ -4281,7 +4340,7 @@ function readInput() {
 // ================================================================ game state + UI
 const S = { mode: 'title', hp: 3, beans: 0, gas: 0, hand: null, items: {}, flags: {}, collapse: -99, sweep: 0, talkTo: null, removedNoose: false };
 // A private window can refuse storage outright, and then nothing's saved
-let saveStore = null; try { saveStore = localStorage; } catch { /* not saved */ }
+let saveStore = null; try { saveStore = localStorage; mouse.speed = clamp(+saveStore.getItem('chunky.mouseSpeed') || 1, MOUSE.slowest, MOUSE.fastest); } catch { /* not saved */ }
 const people = createPeople(await (await fetch('data/cast.json')).json(), { store: saveStore });
 Object.assign(S.flags, people.flags());
 // what dialogue reads and changes
@@ -4343,11 +4402,11 @@ function setButton(id, label, sizes) {
   el.innerHTML = label.replace(' ', '<br>'); el.style.fontSize = `${sizes[label.includes(' ') ? 2 : label.length < 4 ? 0 : label.length < 5 ? 1 : 2]}px`; el.setAttribute('aria-label', label);
 }
 function updateControls() {
-  const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, thrown = thrownNow(), now = `${S.mode}|${act}|${map}|${thrown?.word}|${thrown?.n}|${thrown?.more}`;
+  const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, thrown = thrownNow(), held = mouseHeld(), now = `${S.mode}|${act}|${map}|${thrown?.word}|${thrown?.n}|${thrown?.more}|${held}`;
   if (hudCache.controls === now) return; hudCache.controls = now;
   $('stam').classList.toggle('veh', S.mode === 'drive');
   if (touchUI) { const { a, b, run, c, swap } = buttonsFor(S.mode, { act, thrown }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); setHidden('bC', !c); setHidden('bN', !swap); if (c) { $('bC').innerHTML = c.replace(' ', '<br>'); $('bC').style.fontSize = thrown.word.length > 6 ? '10.5px' : '13px'; $('bC').setAttribute('aria-label', `Throw ${thrown.name}`); } return; }
-  const list = keysFor(S.mode, { act, map, thrown });
+  const list = keysFor(S.mode, { act, map, thrown, mouse: held });
   setHidden('keyStrip', !list.length); $('keyStrip').innerHTML = list.map(([key, what]) => `<span class="ks"><span class="kc">${key}</span>${what}</span>`).join('');
 }
 function hudVitals() {
@@ -5318,7 +5377,10 @@ function ram(x, z, y, speed, dirx, dirz, mass, self = null) {
 }
 
 // ---- the hammer. It's in his hands for as long as he's swinging it, which is all anyone sees of it.
-function swing() { if (swingT < 0 && S.mode === 'town') { swingT = 0; swingHit = false; SFX.play('swing'); } }
+// With the mouse, what he swings at or throws at is what the camera's looking at. He keeps going the way he was going while he does.
+let aimT = 0;
+function aimWithCamera() { if (mouseHeld()) { player.yaw = cam.yaw + Math.PI; aimT = .35; } }
+function swing() { if (swingT < 0 && S.mode === 'town') { aimWithCamera(); swingT = 0; swingHit = false; SFX.play('swing'); } }
 function updateSwing(dt) {
   if (throwT > 0) throwT -= dt;
   if (swingT < 0) return;
@@ -5507,6 +5569,7 @@ function pickUpLying(reach) {
 function throwOne() {
   if (S.mode !== 'town') return;
   const kind = inHand(haveNow(), S.hand); if (!kind) return;
+  aimWithCamera();
   if (kind === 'gas' ? !throwCan() : !throwLure(kind)) return;
   S.hand = kind;
   if (kind === 'gas') S.gas--; else if (kind === 'can') { S.beans--; townObjective(); } else S.items[kind]--;
@@ -5780,6 +5843,7 @@ function tick(dt, draw = true) {
   time += dt;
   for (let i = timers.length - 1; i >= 0; i--) if (time >= timers[i].at) timers.splice(i, 1)[0].fn();
   readInput();
+  updateMouse(dt);
   const step = Math.floor(time * 12);
   if (step !== lastStepIdx) { lastStepIdx = step; G.uStep.value = step % 4; gifMat.uniforms.uFrame.value = step % 997; const k = step % 3; heroHoodM.map = heroHoodM.emissiveMap = hatch[k]; heroSleeveM.map = heroSleeveM.emissiveMap = hatch[(k + 1) % 3]; heroPantsM.map = heroPantsM.emissiveMap = pantsHatch[k]; poseHero(step / 12); stepBurst(); pointAtObjective(); }
   if (player.inv > 0) player.inv -= dt;
@@ -5844,8 +5908,10 @@ function tick(dt, draw = true) {
     else if (player.ran) { player.stamina += RUN.rest * dt; if (player.winded && player.stamina > RUN.recover) player.winded = false; if (player.stamina >= 1) { player.stamina = 1; player.ran = false; } }
     player.runK += ((player.running ? 1 : 0) - player.runK) * Math.min(1, dt * RUN.ease); if (player.runK < .002) player.runK = 0;
     const sp = (4.4 + (RUN.speed - 4.4) * player.runK) * want;
-    if (want > .1) player.yaw += angDiff(player.yaw, Math.atan2(dir.x, dir.z)) * Math.min(1, dt * 10);
-    let nx = player.pos.x + (Math.sin(player.yaw) * sp + player.kb.x) * dt, nz = player.pos.z + (Math.cos(player.yaw) * sp + player.kb.y) * dt;
+    if (aimT > 0) aimT -= dt;
+    else if (want > .1) player.yaw += angDiff(player.yaw, Math.atan2(dir.x, dir.z)) * Math.min(1, dt * 10);
+    const heading = aimT > 0 && want > .1 ? Math.atan2(dir.x, dir.z) : player.yaw;
+    let nx = player.pos.x + (Math.sin(heading) * sp + player.kb.x) * dt, nz = player.pos.z + (Math.cos(heading) * sp + player.kb.y) * dt;
     player.kb.multiplyScalar(Math.exp(-dt * 5));
     if (!S.flags.toldEdge && !MAP.inBounds(nx, nz)) { S.flags.toldEdge = true; toast('Nothing that way.'); after(12, () => { S.flags.toldEdge = false; }); }
     if (player.pos.y > DECK_TOP - .4 && Math.abs(nx) < 20.6 && Math.abs(nz) < 40) nz = clamp(nz, -2.25, 2.25);
@@ -5993,7 +6059,8 @@ function tick(dt, draw = true) {
     const moving = Math.hypot(input.x, input.y) > .1;
     // In something with an engine it swings round behind it by itself, once it's moving
     if (car) { if (carSpeed > 1.5 && time - lastLook > 1.2) cam.yaw += angDiff(cam.yaw, car.yaw + Math.PI) * Math.min(1, dt * 2.6); }
-    else if (moving && time - lastLook > 1.2 && M !== 'fall') cam.yaw += angDiff(cam.yaw, player.yaw + Math.PI) * Math.min(1, dt * 1.6);
+    // On foot it does too, for a thumb that's busy, but with a mouse it stays where it's put, and A and D go sideways
+    else if (moving && time - lastLook > 1.2 && M !== 'fall' && !mouseHeld()) cam.yaw += angDiff(cam.yaw, player.yaw + Math.PI) * Math.min(1, dt * 1.6);
     // round to the side of him as he goes down, so you can see it
     if (M === 'bitten' && !reduceMotion) { cam.yaw += angDiff(cam.yaw, player.yaw + Math.PI - 1.05) * Math.min(1, dt * 1.5); cam.pitch += (.42 - cam.pitch) * Math.min(1, dt * 1.5); }
     const dist = car ? car.K.camDist + carSpeed * .04 : swim ? 4.6 : 5.4;
@@ -6016,7 +6083,7 @@ function tick(dt, draw = true) {
     cam.crt = reduceMotion ? +crtLook : clamp((cam.crt ?? 0) + (crtLook ? dt : -dt) * 2.2, 0, 1);
     if (cam.crt > 0) { const w = sstep(0, 1, cam.crt), eye = crtEye(); V.lerp(eye, w); tgt.lerp(_crtAt, w); }
     { const away = cam.crt > .5; if (away !== !!cam.away) { cam.away = away; heroRoot.visible = !away; } }
-    if (cam.snap) { camera.position.copy(V); cam.snap = false; } else camera.position.lerp(V, 1 - Math.exp(-dt * (M === 'fall' ? 3 : car ? 12 : 7)));
+    if (cam.snap) { camera.position.copy(V); cam.snap = false; } else camera.position.lerp(V, 1 - Math.exp(-dt * (M === 'fall' ? 3 : mouseHeld() ? (car ? 18 : 24) : car ? 12 : 7)));
     if (cam.shake > 0) { cam.shake -= dt; camera.position.x += (Math.random() - .5) * cam.shake * .3; camera.position.y += (Math.random() - .5) * cam.shake * .3; }
     camera.lookAt(tgt); { const fov = 55 + (reduceMotion ? 0 : 5 * player.runK + 12 * Math.min(1, Math.abs(car ? car.f : 0) / 30)); if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); } }
     // it cuts down to the road for the bite itself, low behind his legs and looking up the road, so that its mouth is coming at you against the sky
@@ -6080,8 +6147,10 @@ function updateWorld() {
 scene.traverse((o) => { if (o.isPointLight) hillLights.push(o); });
 let paused = TEST;
 function loop() { if (paused) return; if (!mapOpen) tick(Math.min(clock.getDelta(), .05)); requestAnimationFrame(loop); }
-$('start').addEventListener('click', () => { $('title').hidden = true; startHang(); });
-$('free').addEventListener('click', startFree);
+// the click that starts it takes the mouse, if it was the mouse that did it
+const clickedIn = (e) => { if (e.isTrusted && e.detail > 0) takeMouse(); };
+$('start').addEventListener('click', (e) => { $('title').hidden = true; startHang(); clickedIn(e); });
+$('free').addEventListener('click', (e) => { startFree(); clickedIn(e); });
 $('forget').hidden = !people.hasSave();
 $('forget').addEventListener('click', () => { people.forget(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
 // first frame: him hanging behind the title
@@ -6098,6 +6167,7 @@ if (location.hash === '#signs') openSignBoard();
 if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
     THREE, hills: { at: HILLS.at, slope: HILLS.slope, follow: HILLS.follow, here: () => HILL.uHillHere.value, uniforms: HILL, flat: hillsFlat, skyline },
     stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead },
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },
