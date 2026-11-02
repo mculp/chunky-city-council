@@ -28,6 +28,8 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `data/roads.md`: where that data comes from, its schema and how to regenerate it
 - `data/lanes.json`: the smaller roads from the same Census data, and a generated drive to every building that needs one
 - `data/lanes.md`: where that comes from, what's assumed about it and how to regenerate it
+- `data/hills.json`: how far the land stands over the floodplain, generated from the US Geological Survey's elevation data
+- `data/hills.md`: what's done to it, how it's drawn and how to regenerate it
 - `data/structures.json`: every real building within reach of those roads, generated from FEMA and ORNL footprints, USDA aerials and our own notes
 - `data/structures.md`: where that data comes from, what's left out and why, and how to regenerate it
 - `data/water.json`: the ponds within reach of those roads, generated from USGS's National Hydrography Dataset and corrections made by eye on a public-domain aerial
@@ -61,6 +63,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/level-sound.mjs`: sets the levels in `data/sound-new.json` to match the old sheet's, so comparing them is about the sound (`npm run sound:level`)
 - `tools/play-lore.mjs`: goes and looks at what's come from the owner's lore in `docs/lore.md`, like the church signs, and hits them (`npm run lore`)
 - `tools/play-wreck.mjs`: crashes, burns and blows up the town in Chrome and reports what the worst of it costs (`npm run wreck`)
+- `tools/play-hills.mjs`: goes and looks at the hills, up one in a pickup and down it on foot (`npm run hills`)
 - `tools/map-overlay.mjs`: draws TIGER's lines over a top-down capture of the game and measures the difference (`npm run overlay`)
 - `tools/structure-overlay.mjs`: draws the game's buildings over a public-domain aerial of the same ground (`npm run overlay:structures`)
 
@@ -70,4 +73,5 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - Building footprints: [USA Structures](https://www.arcgis.com/home/item.html?id=0ec8512ad21e4bb987d7e848d14e7e24) by Oak Ridge National Laboratory (ORNL) and the Federal Emergency Management Agency (FEMA) Geospatial Response Office, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). We've clipped a few, moved them along compressed road and added what they look like.
 - Roof colours, and the ponds' corrections: USDA National Agriculture Imagery Program, public domain.
 - Ponds: US Geological Survey National Hydrography Dataset, public domain.
+- Hills: US Geological Survey 3D Elevation Program, public domain.
 - The music and sounds in `audio/`: generated with ElevenLabs' models on fal. `data/sound.md` has what's on record about the rights.

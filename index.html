@@ -208,6 +208,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { loadMap } from './src/map.js';
 import { loadWater } from './src/water.js';
+import { loadHills } from './src/hills.js';
 import { loadSound } from './src/sound.js';
 import { randomFrom } from './src/soundbank.js';
 import { createPeople } from './src/people.js';
@@ -422,7 +423,61 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = .95;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+// ================================================================ the hills
+// The world's flat. Walking, driving, the crowd and everything solid happen on flat ground, and it's only what's drawn that goes up and down: every vertex goes up by how high
+// the land is where it stands, less how high it is where he is, so he stays where he is on the screen and nothing can float or sink. Near the first scene that's nothing at all,
+// and neither is it along the river. data/hills.md has the rest.
+const HILL = { uHills: { value: null }, uHillMap: { value: new THREE.Vector4() }, uHillSize: { value: new THREE.Vector2() }, uHillHere: { value: 0 }, uRiverUp: { value: 0 } };
+THREE.ShaderChunk.hill_pars = `
+  #ifndef FLAT_WORLD
+  uniform highp sampler2D uHills; uniform vec4 uHillMap; uniform vec2 uHillSize; uniform float uHillHere;
+  // the same cubic spline as src/hills.js, which is sixteen numbers there and four linear lookups here
+  float hillOver(vec2 p){
+    vec2 t=(p-uHillMap.xy)*uHillMap.zw-.5, i=floor(t), f=t-i, f2=f*f, f3=f2*f;
+    vec2 w0=(1.-3.*f+3.*f2-f3)/6., w1=(4.-6.*f2+3.*f3)/6., w2=(1.+3.*f+3.*f2-3.*f3)/6., w3=f3/6., g0=w0+w1, g1=w2+w3;
+    vec2 a=(i-.5+w1/g0)/uHillSize, b=(i+1.5+w3/g1)/uHillSize;
+    return g0.y*(g0.x*texture2D(uHills,a).r+g1.x*texture2D(uHills,vec2(b.x,a.y)).r)+g1.y*(g0.x*texture2D(uHills,vec2(a.x,b.y)).r+g1.x*texture2D(uHills,b).r)-uHillHere;
+  }
+  #endif`;
+THREE.ShaderChunk.logdepthbuf_pars_vertex = `#include <hill_pars>\n${THREE.ShaderChunk.logdepthbuf_pars_vertex}`;
+THREE.ShaderChunk.project_vertex = THREE.ShaderChunk.project_vertex.replace('mvPosition = modelViewMatrix * mvPosition;', `
+  #ifndef FLAT_WORLD
+    float hillUp = hillOver((modelMatrix * mvPosition).xz);
+  #endif
+  mvPosition = modelViewMatrix * mvPosition;
+  #ifndef FLAT_WORLD
+    mvPosition.xyz += viewMatrix[1].xyz * hillUp;
+  #endif`);
+THREE.ShaderLib.sprite.vertexShader = THREE.ShaderLib.sprite.vertexShader.replace('vec4 mvPosition = modelViewMatrix * vec4( 0.0, 0.0, 0.0, 1.0 );', `$&
+  #ifndef FLAT_WORLD
+    mvPosition.xyz += viewMatrix[1].xyz * hillOver(modelMatrix[3].xz);
+  #endif`);
+// Every material gets the uniforms, whether it has an onBeforeCompile of its own or not, so nothing can be left on flat ground by forgetting. The source of its own is still what tells programs apart.
+{
+  const addHills = (sh) => { Object.assign(sh.uniforms, HILL); };
+  Object.defineProperty(THREE.Material.prototype, 'onBeforeCompile', {
+    configurable: true,
+    get() { return addHills; },
+    set(fn) { const both = (sh, r) => { addHills(sh); fn.call(this, sh, r); }; both.toString = () => fn.toString(); Object.defineProperty(this, 'onBeforeCompile', { value: both, writable: true, configurable: true }); },
+  });
+  // what's out of view is worked out with it where it's drawn, not where it stands, in the scene and not in the passes after it
+  const seen = THREE.Frustum.prototype.intersectsSphere, moved = new THREE.Sphere();
+  THREE.Frustum.prototype.intersectsSphere = function (s) {
+    const up = inScene ? hillUp(s.center.x, s.center.z) : 0;
+    if (up === 0) return seen.call(this, s);
+    moved.center.set(s.center.x, s.center.y + up, s.center.z); moved.radius = s.radius * 1.2 + .5;
+    return seen.call(this, moved);
+  };
+}
+let inScene = false;
+const hillUp = (x, z) => HILLS.at(x, z) - HILL.uHillHere.value;
+// for looking down on the map from straight overhead, where they'd only get in the way of measuring it
+function hillsFlat() { HILLS.heights.fill(0); HILL.uHills.value.image.data.fill(0); HILL.uHills.value.needsUpdate = true; }
 const scene = new THREE.Scene();
+// A light's worked out in the renderer from where it stands, so it's moved there for as long as the frame takes
+const hillLights = [];
+scene.onBeforeRender = () => { inScene = true; for (const l of hillLights) { const m = l.matrixWorld.elements; m[13] += hillUp(m[12], m[14]); } };
+scene.onAfterRender = () => { inScene = false; };
 const FOG = new THREE.Color('#2a1838');
 scene.fog = new THREE.FogExp2(FOG, 0.0105);
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 900);
@@ -452,7 +507,7 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(500, 40, 20), new THREE.Shad
 }));
 sky.frustumCulled = false; sky.renderOrder = -10; scene.add(sky);
 const moon = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: moonTex, transparent: true, fog: false, depthWrite: false, color: new THREE.Color(1.9, 1.75, 1.5) }));
-moon.scale.setScalar(36); moon.position.copy(MOON_DIR).multiplyScalar(440); moon.lookAt(0, 0, 0); moon.renderOrder = -9; scene.add(moon);
+moon.material.defines = { FLAT_WORLD: 1 }; moon.scale.setScalar(36); moon.position.copy(MOON_DIR).multiplyScalar(440); moon.lookAt(0, 0, 0); moon.renderOrder = -9; scene.add(moon);
 scene.add(new THREE.HemisphereLight('#8a6fc0', '#1a2a2a', 1.15));
 const townFill = new THREE.DirectionalLight('#ffd2a0', .4); townFill.position.set(60, 30, 40); scene.add(townFill);
 const moonLight = new THREE.DirectionalLight('#c9d4ff', 1.5); moonLight.position.copy(MOON_DIR).multiplyScalar(100); scene.add(moonLight);
@@ -499,7 +554,8 @@ function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = fal
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, fog: true, uniforms, userData: { outline: true },
     defines: { ...(tinted && { TINTED: 1 }), ...(cut && { CUT: 1 }), ...(ghost && { GHOST: 1 }) },
-    vertexShader: `uniform float uPx, uStep, uChalk, uPxScale; uniform vec2 uRes;
+    vertexShader: `#include <hill_pars>
+      uniform float uPx, uStep, uChalk, uPxScale; uniform vec2 uRes;
       #ifdef TINTED
       varying vec3 vTint;
       #endif
@@ -517,6 +573,11 @@ function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = fal
           mm=modelViewMatrix*instanceMatrix; n=mat3(instanceMatrix)*normal;
         #endif
         vec4 mvPosition=mm*vec4(position,1.);
+        vec4 hillP=vec4(position,1.);
+        #ifdef USE_INSTANCING
+          hillP=instanceMatrix*hillP;
+        #endif
+        mvPosition.xyz+=viewMatrix[1].xyz*hillOver((modelMatrix*hillP).xz);
         vec3 nv=normalize(normalMatrix*n);
         vec4 clip=projectionMatrix*mvPosition;
         vec2 nc=(projectionMatrix*vec4(nv,0.)).xy; float l=length(nc); nc=l>1e-6?nc/l:vec2(0.);
@@ -604,6 +665,12 @@ const DY = 6.0, TY = 11.6, ZS = 2.8, XE = 20, XP = 15, DECK_TOP = 6.36, ROAD_TOP
 const channel = (z) => 3.5 * Math.sin(z * .035);
 const MAP = await loadMap('data/roads.json', { riverAtBridge: channel, lanes: 'data/lanes.json' });
 const WATER = await loadWater('data/water.json', MAP);
+const HILLS = await loadHills('data/hills.json', MAP);
+{
+  const half = new Uint16Array(HILLS.heights.length); for (let i = 0; i < half.length; i++) half[i] = THREE.DataUtils.toHalfFloat(HILLS.heights[i]);
+  const t = new THREE.DataTexture(half, HILLS.cols, HILLS.rows, THREE.RedFormat, THREE.HalfFloatType); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true;
+  HILL.uHills.value = t; HILL.uHillMap.value.set(HILLS.x0, HILLS.z0, 1 / HILLS.dx, 1 / HILLS.dz); HILL.uHillSize.value.set(HILLS.cols, HILLS.rows);
+}
 // The game plays what's been made with ElevenLabs, in data/sound-new.json, which the owner chose over the sounds worked out from code. Those stay in data/sound.json: #sounds is their board, and #old plays the game with them.
 const OLD_SOUND = location.hash === '#sounds' || location.hash === '#old';
 const SFX = await loadSound(OLD_SOUND ? 'data/sound.json' : ['data/sound-new.json', 'data/sound.json'], { onLine: (words) => { const el = $('sub'); el.textContent = words ?? ''; el.hidden = words === null; } });
@@ -1052,7 +1119,16 @@ function addRipple(x, z, a = .25, glow = 0) { rip[ripI].set(x, z, time, a); ripG
 const waterMat = new THREE.ShaderMaterial({
   uniforms: { uTime: { value: 0 }, uRip: { value: rip }, uRipG: { value: ripG }, uMoon: { value: MOON_DIR }, uFog: { value: FOG }, uFogD: { value: .0105 },
     uSkyLo: { value: new THREE.Color('#a3306c') }, uSkyHi: { value: new THREE.Color('#2a1640') }, uDeep: { value: new THREE.Vector3(.012, .035, .045) }, uSheen: { value: .2 } },
-  vertexShader: `varying vec3 vW; void main(){ vW=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*viewMatrix*vec4(vW,1.); }`,
+  defines: { RIVER: 1 },
+  vertexShader: `#include <hill_pars>
+    varying vec3 vW; uniform float uRiverUp;
+    void main(){ vW=(modelMatrix*vec4(position,1.)).xyz; vec3 q=vW;
+      #ifdef RIVER
+        q.y+=uRiverUp-uHillHere;   // the river's sheet is as big as the fog, and all at the bottom of the hills
+      #else
+        q.y+=hillOver(vW.xz);
+      #endif
+      gl_Position=projectionMatrix*viewMatrix*vec4(q,1.); }`,
   fragmentShader: `uniform float uTime,uFogD; uniform vec4 uRip[16]; uniform float uRipG[16]; uniform vec3 uMoon,uFog,uSkyLo,uSkyHi,uDeep; uniform float uSheen; varying vec3 vW;
     float hh(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
     float nn(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); return mix(mix(hh(i),hh(i+vec2(1,0)),f.x),mix(hh(i+vec2(0,1)),hh(i+vec2(1,1)),f.x),f.y); }
@@ -1078,7 +1154,8 @@ const waterMat = new THREE.ShaderMaterial({
 const water = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), waterMat); water.rotation.x = -Math.PI / 2; scene.add(water);
 // A swimming pool's the same water with something other than mud under it, so it doesn't take much sky
 const POOL_LOOKS = { blue: { deep: [.03, .26, .46], sheen: -.08 }, green: { deep: [.04, .3, .11], sheen: -.02 } };
-const poolWater = (look) => { const m = waterMat.clone(), L = POOL_LOOKS[look]; for (const k of Object.keys(waterMat.uniforms)) m.uniforms[k] = waterMat.uniforms[k]; m.uniforms.uDeep = { value: new THREE.Vector3(...L.deep) }; m.uniforms.uSheen = { value: L.sheen }; return m; };
+const pondWater = () => { const m = waterMat.clone(); m.defines = {}; for (const k of Object.keys(waterMat.uniforms)) m.uniforms[k] = waterMat.uniforms[k]; return m; }, stillWater = pondWater();
+const poolWater = (look) => { const m = pondWater(), L = POOL_LOOKS[look]; m.uniforms.uDeep = { value: new THREE.Vector3(...L.deep) }; m.uniforms.uSheen = { value: L.sheen }; return m; };
 // Each pond has its own flat sheet of the same water, at its own level. One that's down by the river doesn't need one.
 for (const p of WATER.ponds) if (p.level > 0) {
   const pos = new Float32Array(p.ring.length * 3), idx = [];
@@ -1088,9 +1165,41 @@ for (const p of WATER.ponds) if (p.level > 0) {
     if ((bz - az) * (cx - ax) - (bx - ax) * (cz - az) > 0) idx.push(a, b, c); else idx.push(a, c, b);
   }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx);
-  const sheet = new THREE.Mesh(g, p.pool ? poolWater(p.pool) : waterMat); scene.add(sheet);
+  const sheet = new THREE.Mesh(g, p.pool ? poolWater(p.pool) : stillWater); scene.add(sheet);
   DISTANT.push({ obj: sheet, x: p.x, z: p.z, r: Math.hypot(p.x1 - p.x0, p.z1 - p.z0) / 2 + 300 });
 }
+
+// The fog's taken the land by 200 m or so, and past that it was just sky. Hills stand up against it from miles off, so this is the land past the fog, from the same numbers but
+// a few pixels apart, in nothing but the fog's colour with more of the sky in it the further off it is. It's pulled in to fit under the far plane, in order, which doesn't move it on the screen.
+const SKYLINE_NEAR = 110, TREES_ON_IT = 11;
+const skyline = (() => {
+  const L = HILLS.skyline, pos = new Float32Array(L.cols * L.rows * 3), idx = [];
+  for (let j = 0, v = 0; j < L.rows; j++) for (let i = 0; i < L.cols; i++, v++) {
+    pos[v * 3] = L.x0 + i * L.dx; pos[v * 3 + 1] = TOWN_Y + L.heights[j * L.cols + i]; pos[v * 3 + 2] = L.z0 + j * L.dz;
+    if (i && j) { const a = v - L.cols - 1, b = v - L.cols, c = v - 1; idx.push(a, c, b, b, c, v); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx);
+  const m = new THREE.Mesh(g, new THREE.ShaderMaterial({
+    uniforms: { uFog: { value: FOG }, uMoon: { value: MOON_DIR }, uLow: sky.material.uniforms.uLow, uHor: sky.material.uniforms.uHor },
+    vertexShader: `#include <hill_pars>
+      varying vec3 vW; varying float vL;
+      void main(){ vW=position; vec3 p=position; p.y-=uHillHere; float L=length(p-cameraPosition); vL=L;
+        p.y+=${TREES_ON_IT}.*smoothstep(200.,900.,L);   // the trees on it, which can't be over his head or it'd be a ceiling
+        p.y-=16.*(1.-smoothstep(120.,260.,L));   // and it goes under the real ground as it comes in, which is still being built out to here just after he's jumped somewhere
+        vec4 mv=viewMatrix*vec4(p,1.);
+        if(L>300.) mv.xyz*=(300.+540.*(1.-exp(-(L-300.)/3000.)))/L;
+        gl_Position=projectionMatrix*mv; }`,
+    fragmentShader: `uniform vec3 uFog,uMoon,uLow,uHor; varying vec3 vW; varying float vL;
+      void main(){ if(vL<${SKYLINE_NEAR}.) discard;
+        vec3 d=normalize(vW-cameraPosition); float m=max(dot(d,uMoon),0.);
+        vec3 far=mix(uLow,uHor,pow(m,3.)*.9)+vec3(1.,.55,.3)*pow(m,7.)*.3;
+        gl_FragColor=vec4(mix(uFog,far,.5*smoothstep(250.,5000.,vL)),1.);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  }));
+  m.frustumCulled = false; m.renderOrder = 1; m.visible = false; scene.add(m); return m;
+})();
 
 flushBuckets();   // the bridge
 
@@ -1858,7 +1967,9 @@ function shrubs(list, colors) {
     const [ax, az] = line[i - 1], [bx, bz] = line[i], l = Math.hypot(bx - ax, bz - az); if (l < .01) continue;
     dir.set((bx - ax) / l, 0, (bz - az) / l); rq.setFromUnitVectors(XA, dir);
     const nx = -dir.z * .8, nz = dir.x * .8;
-    for (const s of [-1, 1]) { mid.set((ax + bx) / 2 + nx * s, Y0 + .18, (az + bz) / 2 + nz * s); addBox(railMat, mid.x, mid.y, mid.z, l + .02, .14, .12, 0, rq); }
+    // in lengths short enough to lie on the land
+    const run = HILLS.follow([[ax, az], [bx, bz]]);
+    for (let k = 1; k < run.length; k++) { const [px, pz] = run[k - 1], [qx, qz] = run[k]; for (const s of [-1, 1]) { mid.set((px + qx) / 2 + nx * s, Y0 + .18, (pz + qz) / 2 + nz * s); addBox(railMat, mid.x, mid.y, mid.z, Math.hypot(qx - px, qz - pz) + .02, .14, .12, 0, rq); } }
   }
   flushBuckets(1e6);
 }
@@ -2324,7 +2435,7 @@ const LANE_MESHES = [];
         for (let k = 1; k <= few; k++) { const t = t0 + (t1 - t0) * k / few; out.push([ax + (bx - ax) * t, az + (bz - az) * t]); }
       }
     }
-    return out;
+    return HILLS.follow(out);
   };
   // A strip for one stretch of road. Corners are mitred, and the width comes from roadHalf, so it narrows into the bridge.
   const stripGeometry = (road, pts, s0, y = ROAD_TOP) => {
@@ -2396,15 +2507,16 @@ const LANE_MESHES = [];
       if (run > LANE_PIECE || i === pts.length - 1) { each(pts.slice(start, i + 1), along); along += run; start = i; run = 0; }
     }
   };
-  // A paved one starts at the edge of the road it comes off, because it'd fight that road's paint if it went under it
+  // A paved one starts at the edge of the road it comes off, because it'd fight that road's paint if it went under it. One that carries on from where that road stops doesn't, or there's a gap.
   const onBigRoad = (x, z) => MAP.roadGrid.within(x, z, (o) => (o.lane ? 0 : o.width / 2));
+  const carriesOn = ([x, z]) => MAP.roads.some((r) => Math.hypot(r.pts[0][0] - x, r.pts[0][1] - z) < 1 || Math.hypot(r.pts.at(-1)[0] - x, r.pts.at(-1)[1] - z) < 1);
   const clipped = (road) => {
     let pts = road.pts;
     const pointAt = (list, s) => { let left = s; for (let i = 1; i < list.length; i++) { const L = Math.hypot(list[i][0] - list[i - 1][0], list[i][1] - list[i - 1][1]); if (left <= L) { const t = left / L; return [list[i - 1][0] + (list[i][0] - list[i - 1][0]) * t, list[i - 1][1] + (list[i][1] - list[i - 1][1]) * t, i]; } left -= L; } return null; };
     for (const end of [0, 1]) {
       if (end) pts = [...pts].reverse();
       let s = 0;
-      while (s < 12 && s < road.length / 2) { const p = pointAt(pts, s); if (!p || !onBigRoad(p[0], p[1])) break; s += .5; }
+      while (!carriesOn(pts[0]) && s < 12 && s < road.length / 2) { const p = pointAt(pts, s); if (!p || !onBigRoad(p[0], p[1])) break; s += .5; }
       if (s > 0 && s < 12) { const p = pointAt(pts, s); if (p) pts = [[p[0], p[1]], ...pts.slice(p[2])]; }
       if (end) pts = [...pts].reverse();
     }
@@ -2445,7 +2557,7 @@ const LANE_MESHES = [];
   };
   for (const road of MAP.lanes) {
     if (road.surface === 'asphalt') pieces(dense(clipped(road)), (pts, s0) => cellFor(pts).paved.push(stripGeometry(road, pts, s0, ROAD_TOP + .004)));
-    else { const from = meets(road, road.pts[0]), to = meets(road, road.pts.at(-1)); pieces(withEnds(road, from, to), (pts, s0) => cellFor(pts).track.push(trackGeometry(road, pts, s0, from, to))); }
+    else { const from = meets(road, road.pts[0]), to = meets(road, road.pts.at(-1)); pieces(HILLS.follow(withEnds(road, from, to)), (pts, s0) => cellFor(pts).track.push(trackGeometry(road, pts, s0, from, to))); }
   }
   for (const c of cells.values()) {
     const group = new THREE.Group();
@@ -3265,12 +3377,13 @@ function tapeMat({ pivot }) {
   return new THREE.ShaderMaterial({
     uniforms: { uStep: G.uStep, uBurst: G.uBurst, uPxScale: G.uPxScale, uTilt: { value: new THREE.Matrix3() }, uHatch: { value: tapeHatch } },
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-    vertexShader: `attribute vec2 aFace; uniform mat3 uTilt; varying vec2 vF; varying vec3 vP, vC;
+    vertexShader: `#include <hill_pars>
+      attribute vec2 aFace; uniform mat3 uTilt; varying vec2 vF; varying vec3 vP, vC;
       const vec3 PV=vec3(${pivot.map((v) => v.toFixed(3)).join(',')});
       void main(){ vF=aFace; vec3 p=position+normal*.0025;
         vP=transpose(uTilt)*(position-PV)+PV;
         vC=transpose(uTilt)*((inverse(modelViewMatrix)*vec4(0.,0.,0.,1.)).xyz-PV)+PV;
-        gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.); }`,
+        vec4 mv=modelViewMatrix*vec4(p,1.); mv.xyz+=viewMatrix[1].xyz*hillOver((modelMatrix*vec4(p,1.)).xz); gl_Position=projectionMatrix*mv; }`,
     fragmentShader: `uniform float uStep, uBurst, uPxScale; uniform sampler2D uHatch; varying vec2 vF; varying vec3 vP, vC;
       float hh(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
       float vn(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); return mix(mix(hh(i),hh(i+vec2(1,0)),f.x),mix(hh(i+vec2(0,1)),hh(i+vec2(1,1)),f.x),f.y); }
@@ -3475,7 +3588,8 @@ const ropeTail = new THREE.Mesh(new THREE.CylinderGeometry(.03, .026, 1, 8), rop
 const _la = new THREE.Vector3();
 const liqMat = new THREE.ShaderMaterial({
   uniforms: { uLevel: { value: 0 } }, side: THREE.DoubleSide,
-  vertexShader: `varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.); vW=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }`,
+  vertexShader: `#include <hill_pars>
+    varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.); vW=w.xyz; w.y+=hillOver(w.xz); gl_Position=projectionMatrix*viewMatrix*w; }`,
   fragmentShader: `uniform float uLevel; varying vec3 vW; void main(){ if(vW.y>uLevel) discard; float band=smoothstep(.014,0.,uLevel-vW.y);
     gl_FragColor=vec4(mix(vec3(.22,1.45,1.38),vec3(1.3,2.3,2.2),band),1.); }`
 });
@@ -3737,7 +3851,8 @@ const crowdAuraZ = crowdAttr(CROWD_SHOWN, 3); auraGeo.setAttribute('iAura', crow
 const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true,
   uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), { uStep: G.uStep, uPxScale: G.uPxScale, uAura: { value: auraMap } }),
-  vertexShader: `attribute vec3 iAura; varying vec2 vQ; varying vec3 vA; varying float vFlat;
+  vertexShader: `#include <hill_pars>
+    attribute vec3 iAura; varying vec2 vQ; varying vec3 vA; varying float vFlat;
     #include <fog_pars_vertex>
     void main(){
       vQ=position.xy; vA=iAura; vFlat=position.z;
@@ -3745,6 +3860,7 @@ const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
       vec4 mvPosition;
       if(position.z<.5){ mvPosition=viewMatrix*vec4(feet+vec3(0.,.92,0.),1.); mvPosition.xy+=position.xy*vec2(1.25,1.45); }
       else mvPosition=viewMatrix*vec4(feet+vec3(position.x,0.,position.y)*(.7+far*1.2)+vec3(0.,.05,0.),1.);
+      mvPosition.xyz+=viewMatrix[1].xyz*hillOver(feet.xz);
       gl_Position=projectionMatrix*mvPosition;
       #include <fog_vertex>
     }`,
@@ -5883,6 +5999,7 @@ function tick(dt, draw = true) {
     const pitch = M === 'grabbed' ? Math.max(cam.pitch, .9) : cam.pitch;
     V.set(Math.sin(cam.yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(cam.yaw) * Math.cos(pitch)).multiplyScalar(dist).add(tgt);
     V.y = Math.max(V.y, .35, WATER.level(V.x, V.z) + .35);
+    { const up = hillUp(V.x, V.z); if (up > 0) V.y = Math.max(V.y, TOWN_Y + up + .6); }
     // talking: over his shoulder, looking between them, or a hood that size is all you'd see of whoever it is
     cam.talk = clamp(cam.talk + (M === 'dialog' && S.talkTo ? dt : -dt) * 2.5, 0, 1);
     if (cam.talk > 0 && S.talkTo) {
@@ -5936,6 +6053,9 @@ function tick(dt, draw = true) {
   if (S.flags.town) { drawVehicles(step); drawWreck(step); }
   updateParticles(dt, M);
   if (bottle.visible) levelLiquid();
+  const hillHere = HILL.uHillHere.value = HILLS.at(heroRoot.position.x, heroRoot.position.z);
+  // the river's all at the foot of the land but for a little under a bluff or two, and it comes up to him if he's in that
+  HILL.uRiverUp.value = hillHere > 0 ? hillHere * (1 - sstep(14, 40, riverDist(heroRoot.position.x, heroRoot.position.z))) : 0;
   renderFrame(dt);
 }
 // a test run starts with the clock held, so nothing has ticked before its first step
@@ -5951,7 +6071,9 @@ function updateWorld() {
   if (k) water.position.set(x, 0, z); else water.position.set(0, 0, 0);
   moon.position.copy(MOON_DIR).multiplyScalar(440); moon.position.x += x * k; moon.position.z += z * k; moon.position.y += camera.position.y * k;
   if (jumped || worldTick % 20 === 0) for (const d of DISTANT) d.obj.visible = Math.hypot(x - d.x, z - d.z) < d.r;
+  skyline.visible = !!S.flags.town;
 }
+scene.traverse((o) => { if (o.isPointLight) hillLights.push(o); });
 let paused = TEST;
 function loop() { if (paused) return; if (!mapOpen) tick(Math.min(clock.getDelta(), .05)); requestAnimationFrame(loop); }
 $('start').addEventListener('click', () => { $('title').hidden = true; startHang(); });
@@ -5972,6 +6094,7 @@ if (location.hash === '#signs') openSignBoard();
 if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    THREE, hills: { at: HILLS.at, slope: HILLS.slope, follow: HILLS.follow, here: () => HILL.uHillHere.value, uniforms: HILL, flat: hillsFlat, skyline },
     stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead },
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },
     compound: { JAM, JAM_SHED, DECK, LAWN, spot: screenSpot, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach },
@@ -5980,6 +6103,7 @@ if (TEST) {
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
     topDown({ x0, z0, x1, z1, scale, everywhere, houses }) {
+      hillsFlat();
       const w = Math.round((x1 - x0) * scale), h = Math.round((z1 - z0) * scale), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
       if (houses) for (const c of houseCells) if (!c.mesh && c.x > x0 - HOUSE_CELL && c.x < x1 + HOUSE_CELL && c.z > z0 - HOUSE_CELL && c.z < z1 + HOUSE_CELL) buildHouses(c);
       const view = new THREE.OrthographicCamera((x0 - x1) / 2, (x1 - x0) / 2, (z1 - z0) / 2, (z0 - z1) / 2, 1, 3000);

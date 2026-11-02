@@ -151,3 +151,10 @@ They sent a picture of this from above too, and it stays out of the repo.
 ## The land
 
 > we should look a bit into altitude and hills. there aren't a lot but many are very prominent
+
+**In the game:** they're the real hills, at their real height, from the US Geological Survey. Decided around it:
+
+- Town's about 3 m over the floodplain, the compound on Pine Forest Rd about 20 m, the cemetery up Chunky Duffee Rd about 49 m, and the highest any road gets is 66 m, on the way down to Stuckey's Bridge. Nothing's exaggerated.
+- It's only how it looks. Walking and driving work as they did, so a golf cart doesn't slow down on a climb yet.
+- Past where the fog stops the ground, the same land carries on as a low dark line of far hills under the sky. There's none of it in the first scene.
+- The bank of the river, the first scene and the water are all kept level, and most buildings are on ground that's been levelled for them, as they are in life. A few on the steepest ground still lean a little.
