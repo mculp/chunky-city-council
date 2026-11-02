@@ -4894,7 +4894,7 @@ function drawWreck(step) {
 function startFree() {
   $('title').hidden = true;
   nooseRing.visible = knot.visible = false; S.removedNoose = true; ropeTop.visible = false; lantern.visible = false; bottle.visible = false;
-  S.flags.ended = S.flags.arrived = true; S.gas = 3; Object.assign(S.items, { bottle: 3, crackers: 2, fluid: 1 });
+  S.flags.ended = S.flags.arrived = true; S.gas = 3; S.hand = 'gas'; Object.assign(S.items, { bottle: 3, crackers: 2, fluid: 1 });
   // on the shoulder of US 80 outside the gas station, with the truck and the cans right there and the town ahead of him
   const [x, z] = gasAt(57, 15.5);
   HP.kind = 'run'; player.pos.set(x, floorAt(x, z), z); player.grounded = true; player.yaw = Math.PI / 2; cam.yaw = player.yaw + Math.PI; cam.snap = true; heroRoot.quaternion.identity();

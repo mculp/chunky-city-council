@@ -23,9 +23,9 @@ export async function serveAndOpen({ touch = false, viewport, query = '?test', r
   const size = viewport || (touch ? { width: 390, height: 844 } : { width: 513, height: 696 });
   const page = await (await browser.newContext({ viewport: size, deviceScaleFactor: 2, hasTouch: touch, isMobile: touch, reducedMotion })).newPage();
   const errors = [];
-  page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404|ERR_TIMED_OUT/.test(m.text())) errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(e.message));
-  // three.js comes from a CDN, which is sometimes slow enough to take most of a minute
+  // three.js comes from a CDN, which is sometimes slow enough to take most of a minute. If it timed out altogether the game wouldn't start, so a font doing it isn't the game's fault.
   await page.goto(`http://localhost:${server.address().port}/${query}`, { waitUntil: 'load', timeout: 120000 });
   await page.waitForFunction(() => window.__game, null, { timeout: 30000 });
   return { page, errors, close: async () => { await browser.close(); server.close(); } };
