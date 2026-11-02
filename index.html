@@ -427,6 +427,8 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 // The world's flat. Walking, driving, the crowd and everything solid happen on flat ground, and it's only what's drawn that goes up and down: every vertex goes up by how high
 // the land is where it stands, less how high it is where he is, so he stays where he is on the screen and nothing can float or sink. Near the first scene that's nothing at all,
 // and neither is it along the river. data/hills.md has the rest.
+const noHills = new THREE.DataTexture(new Uint16Array(1), 1, 1, THREE.RedFormat, THREE.HalfFloatType); noHills.needsUpdate = true;
+let hillTex = noHills;
 const HILL = { uHills: { value: null }, uHillMap: { value: new THREE.Vector4() }, uHillSize: { value: new THREE.Vector2() }, uHillHere: { value: 0 }, uRiverUp: { value: 0 } };
 THREE.ShaderChunk.hill_pars = `
   #ifndef FLAT_WORLD
@@ -469,10 +471,10 @@ THREE.ShaderLib.sprite.vertexShader = THREE.ShaderLib.sprite.vertexShader.replac
     return seen.call(this, moved);
   };
 }
-let inScene = false;
-const hillUp = (x, z) => HILLS.at(x, z) - HILL.uHillHere.value;
+let inScene = false, hillsOn = false;
+const hillUp = (x, z) => (hillsOn ? HILLS.at(x, z) - HILL.uHillHere.value : 0);
 // for looking down on the map from straight overhead, where they'd only get in the way of measuring it
-function hillsFlat() { HILLS.heights.fill(0); HILL.uHills.value.image.data.fill(0); HILL.uHills.value.needsUpdate = true; }
+function hillsFlat() { HILLS.heights.fill(0); hillTex.image.data.fill(0); hillTex.needsUpdate = true; }
 const scene = new THREE.Scene();
 // A light's worked out in the renderer from where it stands, so it's moved there for as long as the frame takes
 const hillLights = [];
@@ -669,7 +671,7 @@ const HILLS = await loadHills('data/hills.json', MAP);
 {
   const half = new Uint16Array(HILLS.heights.length); for (let i = 0; i < half.length; i++) half[i] = THREE.DataUtils.toHalfFloat(HILLS.heights[i]);
   const t = new THREE.DataTexture(half, HILLS.cols, HILLS.rows, THREE.RedFormat, THREE.HalfFloatType); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true;
-  HILL.uHills.value = t; HILL.uHillMap.value.set(HILLS.x0, HILLS.z0, 1 / HILLS.dx, 1 / HILLS.dz); HILL.uHillSize.value.set(HILLS.cols, HILLS.rows);
+  hillTex = t; HILL.uHills.value = noHills; HILL.uHillMap.value.set(HILLS.x0, HILLS.z0, 1 / HILLS.dx, 1 / HILLS.dz); HILL.uHillSize.value.set(HILLS.cols, HILLS.rows);
 }
 // The game plays what's been made with ElevenLabs, in data/sound-new.json, which the owner chose over the sounds worked out from code. Those stay in data/sound.json: #sounds is their board, and #old plays the game with them.
 const OLD_SOUND = location.hash === '#sounds' || location.hash === '#old';
@@ -6053,7 +6055,7 @@ function tick(dt, draw = true) {
   if (S.flags.town) { drawVehicles(step); drawWreck(step); }
   updateParticles(dt, M);
   if (bottle.visible) levelLiquid();
-  const hillHere = HILL.uHillHere.value = HILLS.at(heroRoot.position.x, heroRoot.position.z);
+  const hillHere = HILL.uHillHere.value = hillsOn ? HILLS.at(heroRoot.position.x, heroRoot.position.z) : 0;
   // the river's all at the foot of the land but for a little under a bluff or two, and it comes up to him if he's in that
   HILL.uRiverUp.value = hillHere > 0 ? hillHere * (1 - sstep(14, 40, riverDist(heroRoot.position.x, heroRoot.position.z))) : 0;
   renderFrame(dt);
@@ -6071,7 +6073,9 @@ function updateWorld() {
   if (k) water.position.set(x, 0, z); else water.position.set(0, 0, 0);
   moon.position.copy(MOON_DIR).multiplyScalar(440); moon.position.x += x * k; moon.position.z += z * k; moon.position.y += camera.position.y * k;
   if (jumped || worldTick % 20 === 0) for (const d of DISTANT) d.obj.visible = Math.hypot(x - d.x, z - d.z) < d.r;
+  // Nothing but the real land near him ever showed before he wakes at the edge of town, and the first chapter's frames are kept exactly as they are, even out at the horizon
   skyline.visible = !!S.flags.town;
+  if (hillsOn !== skyline.visible) { hillsOn = skyline.visible; HILL.uHills.value = hillsOn ? hillTex : noHills; }
 }
 scene.traverse((o) => { if (o.isPointLight) hillLights.push(o); });
 let paused = TEST;

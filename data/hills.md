@@ -35,7 +35,7 @@ Out of the survey comes a height above sea level, and these are what happens to 
 
 1. **It's measured from the river.** The river falls about 17 m across the map, so each pixel is taken from the river's level nearby, less `TOWN_Y`, since town has always stood that far above the water. Nothing goes below that, and the land comes up off the floodplain without a crease.
 2. **The roads and tracks are graded.** A paved road or the railroad doesn't follow every rise, so they run on an average of the land they cross, and the land's cut and filled to it. Lanes and drives aren't graded. They're just on the land.
-3. **The river and the first scene are cleared.** Nothing's above the floodplain within 60 m of the river, and the land comes up from it no more steeply than a bluff, or a road where there's a road going up it. The same goes for 380 m around Stuckey's Bridge, so the first scene's square is exactly as it was and the opening's frames don't change.
+3. **The river and the first scene are cleared.** Nothing's above the floodplain within 60 m of the river, and the land comes up from it no more steeply than a bluff, or a road where there's a road going up it. The same goes for 380 m around Stuckey's Bridge, so the first scene's square is exactly as it was when he goes back to it.
 4. **Buildings are levelled.** Somebody levelled most of the ground a building stands on, so each one's taken down to 3% of lean, or 5% next to a paved road, which has a slope of its own to keep. A pixel's 30 m, so that takes a good piece of land. It's done three times, since they overlap, with a pixel between two going mostly with the nearer. Of 1,114 buildings, 8 still lean more than 8%, and none more than 15%.
 5. **Ponds are level.** The land's all one height to 60 m from a pond's shore, and it's back to its own by 150 m. Ponds that run together share a height, because a pixel can only be one. This comes after the buildings and roads, and the buildings are levelled once more around them without touching that flat ground.
 6. **Swimming pools are level.** They and whatever's within 40 m of them come last. A pool's water is the same water as a pond's, and its coping would show it.
@@ -47,7 +47,10 @@ Everywhere else the river can be seen, the land's within 13 cm of the bottom. We
 
 ## The land past the fog
 
-The fog stops the ground at about 200 m, so the file's coarse heights are drawn as a skyline too: the same land with a point every 150 m or so, from there out to the edge of the map, in the fog's colour going towards the sky's. The first 110 m are thrown away and the next bit's tucked under the ground, so it can't show through. It has 11 m added further off, which is what a hill's trees add to it, and very far land is pulled in so that it fits in front of the camera's far plane. It only shows from when he wakes at the edge of town, since nothing changes in the first scene.
+The fog stops the ground at about 200 m, so the file's coarse heights are drawn as a skyline too: the same land with a point every 150 m or so, from there out to the edge of the map, in the fog's colour going towards the sky's. The first 110 m are thrown away and the next bit's tucked under the ground, so it can't show through. It has 11 m added further off, which is what a hill's trees add to it, and very far land is pulled in so that it fits in front of the camera's far plane. 
+## Before town
+
+All of this is off until he wakes at the edge of town. `uHills` is a flat texture until then and the skyline's hidden, so the first chapter's frames are exactly what they were, right out to the horizon, where a far hill would otherwise show over the flat land by a pixel or two. The first scene's square is still kept flat in the data, because he can go back there.
 
 ## Schema
 

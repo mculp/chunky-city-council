@@ -18,11 +18,11 @@ const snap = async (name) => { if (shots) { await g(() => __game.step(.6, 1 / 24
 // ---------------- the first scene
 const early = await g(() => {
   const G = __game, out = {}; G.pause();
-  for (const phase of ['hang', 'swim', 'land', 'bridge', 'bitten', 'dream', 'wake']) { G.jump(phase); G.step(.3, 1 / 30); out[phase] = { here: G.hills.here(), far: G.hills.skyline.visible, river: G.hills.uniforms.uRiverUp.value }; }
+  for (const phase of ['hang', 'swim', 'land', 'bridge', 'bitten', 'dream', 'wake']) { G.jump(phase); G.step(.3, 1 / 30); out[phase] = { here: G.hills.here(), far: G.hills.skyline.visible, off: G.hills.uniforms.uHills.value.image.width === 1, river: G.hills.uniforms.uRiverUp.value }; }
   return out;
 });
 check('all through the opening he is at the bottom of the hills', Object.values(early).every((e) => e.here < .005 && e.river < .005), early);
-check('and no far land shows until he wakes at the edge of town', Object.entries(early).every(([phase, e]) => e.far === (phase === 'wake')), early);
+check('and they\'re not there at all, and no far land shows, until he wakes at the edge of town', Object.entries(early).every(([phase, e]) => e.far === (phase === 'wake') && e.off === (phase !== 'wake')), early);
 
 await g(() => {
   const G = __game; G.jump('town'); G.S.flags.town = true; G.step(.3, 1 / 30);
