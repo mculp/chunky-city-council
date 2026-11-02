@@ -31,6 +31,7 @@ The owner sends lore for the story. It goes in `docs/lore.md` in their words as 
 ## Data
 
 - Game data is JSON under `data/`, such as `data/roads.json`, with its schema documented alongside it.
+- The smaller roads and a drive to every building are in `data/lanes.json`, documented in `data/lanes.md`. To everything that asks what road is here they're roads, but `MAP.roads` stays the graph.
 - Dialogue and the relationship meters are in `data/cast.json`, documented in `data/cast.md`.
 - What the church signs say is in `data/signs.json`, documented in `data/signs.md`, and all of it can be read at `#signs`.
 - What every sound and part of the score is, and how loud, is in `data/sound-new.json`, documented in `data/sound.md`. That's what the game plays: music and sounds made with ElevenLabs, which the owner chose. A file in `audio/` and one line there take a sound's place, without touching the code. The sounds worked out from code stay too, and nothing writes over them: `data/sound.json` is their sheet, `#sounds` is their board and `#old` plays the game with them.
@@ -74,6 +75,8 @@ Then open http://localhost:8000.
 `npm run sound` plays the game with the sound on, in real time: nothing until a touch, the mute, a hidden tab, the score through the opening, his feet on each surface, driving, the crowd, and a track and a voice line swapped in with nothing changed but the sheet, and then every real file in `audio/` on a phone-sized page. It can't say whether any of it sounds good. `-- --old` plays it through with the sounds worked out from code.
 
 `npm run sound:make` says what making the music and sounds with ElevenLabs on fal would cost, and `-- --go` makes them. `npm run sound:measure` then measures every file in `audio/` and fails on one that's silent, clipped, cut short, swells or clicks as it loops, or lands late, and `-- --pictures dir` draws their spectrograms. `npm run sound:level` sets `data/sound-new.json`'s levels to match the old sheet's, so run it after making anything over. The budget is a running total, kept in `audio/manifest.json`. `data/sound.md` has the rest.
+
+`npm run lanes` drives up a gravel lane and a dirt drive to somebody's door with the phone's stick, and checks that nothing stands on the lanes, the woods are cleared off them, what's underfoot, and no barricade across a road that carries on. `data/lanes.test.js` checks that they all join up and that every building has a way in.
 
 `npm run lore` goes and looks at what's come from the lore: every church's sign, what it says today and tomorrow, and what happens when it's hit, then Charlie Flake's marker, then Robby's lot, walking there from where he wakes, what Robby says and that he only says it once, the flies, the deer meat, and what a truck does to it. It takes `--shots dir`.
 

@@ -23,7 +23,7 @@ Google Maps is for comparing by eye and for noticing what's missing. No geometry
 
 An outline with an island in it stops the build, since nothing handles one. None of those it keeps has one.
 
-`ponds` in `tools/water_extras.json` are real ones NHD hasn't got, outlined by eye to the nearest few metres. There are four: two small ones west of town, the open water at the south end of the big marsh east of the railroad at about (15450, 4250), and the east arm of a lake at about (8820, -1830). NHD files the last two as swamp, and most of those outlines are forest and floating mat.
+`ponds` in `tools/water_extras.json` are real ones NHD hasn't got, outlined by eye to the nearest few metres. There are five: three small ones west of town, the open water at the south end of the big marsh east of the railroad at about (15450, 4250), and the east arm of a lake at about (8820, -1830). NHD files the last two as swamp, and most of those outlines are forest and floating mat.
 
 ### Corrections to file
 

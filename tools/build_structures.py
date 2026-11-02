@@ -55,7 +55,7 @@ WALL_DEFAULT = {"brick": "#8a4a38", "block": "#9a9488", "metal": "#8d8f8c", "mob
 ROOF_DEFAULT = {"shingle": "#3d3a3c", "metal": "#7b7f80"}
 USES = {
     "Single Family Dwelling": "house", "Manufactured Home": "mobile", "Unclassified": "shed", "Agriculture": "farm", "General Services": "public",
-    "Retail Trade": "shop", "Professional/Technical Services": "office", "Religious": "church", "Temporary Lodging": "cabin", "Entertainment and Recreation": "hall",
+    "Retail Trade": "shop", "Professional/Technical Services": "office", "Religious": "church", "Temporary Lodging": "cabin", "Entertainment and Recreation": "hall", "Institutional Dormitory": "public", "Personal and Repair Services": "shop", "Light": "shop",
 }
 
 
@@ -194,7 +194,7 @@ def rings_touch(ring_a, ring_b, gap):
 class World:
     """toWorld from src/map.js: the true map moved over so the bridge is the origin, with its one bent road."""
 
-    def __init__(self, roads):
+    def __init__(self, roads, lanes=()):
         self.bands = roads["compression"]
         edges = {e["id"]: e for e in roads["edges"]}
         opening = roads["opening"]
@@ -204,6 +204,14 @@ class World:
         for r in roads["roads"]:
             line = [self.point(*p) for p in self.walk(r, edges)]
             self.roads.append((r["width"], self.bend(line, opening) if r["id"] == opening["road"] else line))
+        # the smaller roads: a building moves off a real road, but somebody's track gives way to the building (build_lanes.py)
+        self.tracks = []
+        for lane in lanes:
+            line = [self.point(*p) for p in lane["points"]]
+            if lane["name"] or lane["mtfcc"] == "S1200":
+                self.roads.append((lane["width"], line))
+            else:
+                self.tracks.append((lane["width"], line))
         self.rail = [[self.point(*p) for p in l["points"]] for l in roads["reference"]["railroad"]["lines"]]
         self.river = [[self.point(*p) for p in l["points"]] for l in roads["reference"]["river"]["lines"]]
 
@@ -234,7 +242,7 @@ class World:
 
     def nearest_road(self, px, pz):
         best, width, on = math.inf, 0, None
-        for w, l in self.roads:
+        for w, l in [*self.roads, *self.tracks]:
             for a, b in zip(l, l[1:]):
                 d = seg_dist(px, pz, a, b)
                 if d < best:
@@ -474,7 +482,9 @@ def main():
     args = parser.parse_args()
 
     roads = json.loads(ROADS.read_text())
-    world = World(roads)
+    from build_lanes import CONFIG, build_tiger_lanes  # Here because it uses what's in this file.
+    from build_roads import read_road_records
+    world = World(roads, build_tiger_lanes(roads, read_road_records(), json.loads(CONFIG.read_text())))
     bbox = bbox_of(roads)
     raw, sha = download(bbox, args.refresh)
     notes = json.loads(NOTES.read_text()) if NOTES.exists() else {"structures": {}, "extras": []}
@@ -493,7 +503,7 @@ def main():
             ring = [(ox + dx, oz + dz) for dx, dz in note["shape"]]
         cx, cz = centroid(ring)
         wx, wz = world.from_true(cx, cz)
-        far = min(world.nearest(wx, wz, [l for _, l in world.roads]), world.nearest(wx, wz, world.rail))
+        far = min(world.nearest(wx, wz, [l for _, l in [*world.roads, *world.tracks]]), world.nearest(wx, wz, world.rail))
         if far > BOUND:
             outside += 1
             continue

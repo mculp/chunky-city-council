@@ -1,6 +1,6 @@
 // The map: the world's own roads, railroad, river and buildings, drawn flat on a canvas. No image files, and nothing here knows about the game.
 
-export const COLORS = { grass: '#2a3a2c', dirt: '#b0602c', ground: '#0d0812', river: 'rgba(111,214,200,.42)', rail: '#ec803a', house: '#5f5570', houseEdge: '#120b14', road: '#f1e6cf', ink: '#120b14', cream: '#f1e6cf', rust: '#ec803a', cyan: '#6fd6c8', hot: '#e3285c', dusk: '#a99bc0' };
+export const COLORS = { grass: '#2a3a2c', dirt: '#b0602c', ground: '#0d0812', river: 'rgba(111,214,200,.42)', rail: '#ec803a', house: '#5f5570', houseEdge: '#120b14', road: '#f1e6cf', lane: '#b5a68e', ink: '#120b14', cream: '#f1e6cf', rust: '#ec803a', cyan: '#6fd6c8', hot: '#e3285c', dusk: '#a99bc0' };
 
 // Long lines cut into short pieces with boxes round them, so a small view only draws what it can see
 const PIECE = 12;
@@ -13,9 +13,10 @@ function cut(line, out) {
   }
 }
 
-export function buildMapData({ roads, rail, river, ponds = [], structures, fields = [] }) {
-  const major = [], minor = [], tracks = [], water = [], lakes = [], houses = [], grass = [], dirt = [];
+export function buildMapData({ roads, lanes: laneRows = [], rail, river, ponds = [], structures, fields = [] }) {
+  const major = [], minor = [], lanes = [], drives = [], tracks = [], water = [], lakes = [], houses = [], grass = [], dirt = [];
   for (const r of roads) cut(r.pts, r.width > 7 ? major : minor);
+  for (const r of laneRows) cut(r.pts, r.structure ? drives : r.name ? minor : lanes);
   for (const l of rail) cut(l, tracks);
   for (const l of river) cut(l, water);
   const shape = (list) => {
@@ -27,8 +28,8 @@ export function buildMapData({ roads, rail, river, ponds = [], structures, field
   for (const s of structures) houses.push(shape(s.pts));
   for (const f of fields) { grass.push(shape(f.grass)); dirt.push(shape(f.dirt)); }
   const bounds = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
-  for (const p of [...major, ...minor, ...tracks]) { bounds.x0 = Math.min(bounds.x0, p.x0); bounds.x1 = Math.max(bounds.x1, p.x1); bounds.z0 = Math.min(bounds.z0, p.z0); bounds.z1 = Math.max(bounds.z1, p.z1); }
-  return { major, minor, tracks, water, lakes, houses, grass, dirt, bounds, roads };
+  for (const p of [...major, ...minor, ...lanes, ...tracks]) { bounds.x0 = Math.min(bounds.x0, p.x0); bounds.x1 = Math.max(bounds.x1, p.x1); bounds.z0 = Math.min(bounds.z0, p.z0); bounds.z1 = Math.max(bounds.z1, p.z1); }
+  return { major, minor, lanes, drives, tracks, water, lakes, houses, grass, dirt, bounds, roads };
 }
 
 // World to screen. A yaw of 0 is north up. Any other yaw turns the map with a camera at that yaw, so what's ahead of the camera is up.
@@ -72,6 +73,7 @@ function trace(g, list, box, close) {
   }
 }
 
+const DRIVES_FROM = .5;
 // The land itself. `road` is how wide the big and small roads are in pixels.
 export function drawWorld(g, data, v, dpr, box, { road, houses = true, edges = false }) {
   const s = v.scale;
@@ -83,6 +85,9 @@ export function drawWorld(g, data, v, dpr, box, { road, houses = true, edges = f
   if (houses) { trace(g, data.houses, box, true); g.fillStyle = COLORS.house; g.fill(); if (edges) { g.strokeStyle = COLORS.houseEdge; g.lineWidth = 1 / s; g.stroke(); } }
   trace(g, data.tracks, box); g.lineCap = 'butt'; g.strokeStyle = COLORS.rail; g.lineWidth = 1.6 / s; g.stroke();
   g.setLineDash([1.4 / s, 6 / s]); g.lineWidth = 5 / s; g.stroke(); g.setLineDash([]); g.lineCap = 'round';
+  // the little ones in one thin pale line, and somebody's drive only once you're close enough to tell which house it goes to
+  if (s > DRIVES_FROM) { trace(g, data.drives, box); g.strokeStyle = COLORS.ink; g.lineWidth = (road[1] * .3 + 1.5) / s; g.stroke(); g.strokeStyle = COLORS.lane; g.lineWidth = road[1] * .3 / s; g.stroke(); }
+  trace(g, data.lanes, box); g.strokeStyle = COLORS.ink; g.lineWidth = (road[1] * .55 + 1.5) / s; g.stroke(); g.strokeStyle = COLORS.lane; g.lineWidth = road[1] * .55 / s; g.stroke();
   trace(g, data.minor, box); g.strokeStyle = COLORS.ink; g.lineWidth = (road[1] + 2) / s; g.stroke();
   trace(g, data.major, box); g.lineWidth = (road[0] + 2) / s; g.stroke();
   trace(g, data.minor, box); g.strokeStyle = COLORS.road; g.lineWidth = road[1] / s; g.stroke();
