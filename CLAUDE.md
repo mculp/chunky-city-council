@@ -34,6 +34,7 @@ The owner sends lore for the story. It goes in `docs/lore.md` in their words as 
 - The smaller roads and a drive to every building are in `data/lanes.json`, documented in `data/lanes.md`. To everything that asks what road is here they're roads, but `MAP.roads` stays the graph.
 - Dialogue and the relationship meters are in `data/cast.json`, documented in `data/cast.md`.
 - What the church signs say is in `data/signs.json`, documented in `data/signs.md`, and all of it can be read at `#signs`.
+- What one stone in the cemetery says is in `data/stone.json`, documented in `data/stone.md`. It's empty, and it's the owner's to fill in: nobody else types those words.
 - What every sound and part of the score is, and how loud, is in `data/sound-new.json`, documented in `data/sound.md`. That's what the game plays: music and sounds made with ElevenLabs, which the owner chose. A file in `audio/` and one line there take a sound's place, without touching the code. The sounds worked out from code stay too, and nothing writes over them: `data/sound.json` is their sheet, `#sounds` is their board and `#old` plays the game with them.
 - Scripts that generate it go in `tools/`. Commit the generated JSON. Raw downloads such as TIGER zips go in `data/raw/`, which is gitignored.
 - Python tools run from a `.venv/` at the repo root, also gitignored, with dependencies pinned in `tools/requirements.txt`. Don't install anything globally.
@@ -91,6 +92,8 @@ Then open http://localhost:8000.
 `npm run compound` goes round the compound on Pine Forest Rd on a phone-sized page: up the measured drive from the road, in through every door, plays the drums, guitar, bass and keyboard with real taps and the crowd listening, swims the pool, watches the screen, and breaks the projector and the propane tank. It takes `--shots dir`. What's in it is under "the compound on Pine Forest Rd" in `index.html`, and `src/things.js` has what things look like that aren't vehicles.
 
 `npm run yard` goes round the yard off True Light Rd on a phone-sized page: up the measured drive from the road, across the pool, gets stopped by the net and goes round it, keeps the ball up six times in a row with the stick and real taps, takes the bat that gets him, bounces on the trampoline, and gets in the coupe and drives it. What keeping the ball up does is in `src/volley.js`.
+
+`npm run stumble` goes and finds what's only there for anyone who stumbles on it, on a phone-sized page with real taps: in from School St to the second trailer from the left, across its deck and down its length to the computer in the back, up to the screen and away again, breaks it, swims the green pool, drives a pickup up Chunky Duffee Rd from where the map used to stop, walks up the gravel loop and through the gate, finds its way between the stones to the one with words on it, and reads it. It takes `--shots dir`.
 
 The crowd comes out when Chapter 1 ends. `index.html?horde` brings it out as soon as town starts, which is the quick way to try it. `index.html#free`, or Skip to town on the title card, goes straight to town with the crowd out and something of everything to throw. It's an anchor because that's the only part of an address the shared link passes on.
 

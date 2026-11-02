@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from build_roads import BASE_URL, RAW_DIR, ROAD_FILES, VINTAGE, read_road_records, to_xz  # noqa: E402
-from build_structures import BOUND, OUT as STRUCTURES, ROADS, World, bbox_of, centroid, download, footprint, inside, seg_dist  # noqa: E402
+from build_structures import BOUND, OUT as STRUCTURES, ROADS, World, centroid, everything, footprint, inside, seg_dist  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "data" / "lanes.json"
@@ -171,6 +171,15 @@ def choose_roads(roads, network, config, world):
                 chosen.add((fi, k))
     print("inside the map", round(sum(math.dist(network.xz[f][k], network.xz[f][k + 1]) for f, k in chosen) / 1000, 1), "km")
 
+    # a road the config takes further than the map would have gone, as far as it says
+    for reach in config.get("reachOut", []):
+        for fi, pts in enumerate(network.points):
+            if network.records[fi].name not in reach["names"]:
+                continue
+            for k in range(len(pts) - 1):
+                if not network.is_kept(fi, k) and clear_of_the_opening(fi, k) and min(network.xz[fi][k][1], network.xz[fi][k + 1][1]) >= reach["north"]:
+                    chosen.add((fi, k))
+
     # the way back from each of those
     for fi, k in sorted(chosen):
         network.way_back(network.points[fi][k], chosen)
@@ -191,7 +200,7 @@ def choose_roads(roads, network, config, world):
                     chosen.update((fi, k) for k in gap)
 
     # and then round again for what that brings in, until it stops bringing in any more
-    raw, _ = download(bbox_of(roads), False)
+    raw = everything(roads)[0]
     centres = []
     for f in raw["features"]:
         cx, cz = centroid(footprint(f))

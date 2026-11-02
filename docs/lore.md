@@ -95,6 +95,22 @@ Word for word, with the street addresses taken out, as everywhere in this file, 
 - The trampoline's on the picture, and it works.
 - The walls can't be seen from above, so their colors are guesses.
 
+**In the game, the trailer:** it's there, second from the left in the row nearest the ball field, white with dark shutters and a stained deck at the door, which is how it looks from the road. Anyone can walk in. Nothing says whose it is. Decided around it:
+
+- The computer's in the back, still on: a tube monitor, a beige tower, speakers, a keyboard and a rack of discs with nothing on their spines. Its glow can be seen on the floor coming down the length of the place, and the button goes right up to the glass.
+- The messenger on the screen is invented, because the real one's a trademark. It's called ChunkyNet Messenger, with the orange warning triangle where a logo would go, and it's one line to change.
+- Its list says People (0/41), with nobody online and 41 offline, and not one name. The window beside it is an away message, the old default, with its button. The 41 and the time on the clock, 2:47 AM, are mine.
+- A bed, a couch, some kitchen and two posters with nothing on them anyone would know. None of that's from anything.
+
+The community pool's there too, directly west of the park, as green as it is from above, with the low grey-roofed building on its east side and the big patch of bare ground north of them.
+
+**In the game, the cemetery:** the road goes all the way up there now, and it's there as it is from the road and from above: the chain-link along the gravel loop, the gate at the far end of it, big bordered slabs where they are from above and rows of low grey stones, old thin ones and a few tall ones, some with flowers. The church is across the road. Decided around it:
+
+- There's nothing written on any of the stones, because they're somebody's. Where any of them stand, beyond the big slabs, is made up.
+- One's darker than the rest, off toward the back, and that's the one. Nothing points to it and it isn't on the map. Where the real one stands isn't known, and this isn't meant to be it.
+- The line of the song isn't in the game or anywhere else here. Up close it says "Words from a song, imprinted on the stone." `data/stone.json` is the place for the words themselves, if the owner wants to type them in. Nobody else does. Whether they can go in the game is the same question as music.
+- Nothing there breaks but the fence.
+
 ## The gas station
 
 > it's funny the kid's name is randomly coop - that's jesse's older brother (joe) son's name, about 20 y/o now. he is really good at sports and all the girls like him. my mom used to work at the gas station for years. idk what the name of it is. pretty sure it's shut down 10 years now. so the ice box is probably in disrepair

@@ -52,7 +52,7 @@ A footprint never changes shape or size, and it stands where the source has it. 
 |---|---|---|
 | `version` | number | The schema's version. |
 | `units` | string | `m`. |
-| `source` | object | Where each part came from, with the hash and date of the footprints that were fetched. |
+| `source` | object | Where each part came from, with the hash and date of the footprints that were fetched, and of any further box in `footprints.also`. |
 | `outsideTheMap` | number | How many in the source are out of reach. |
 | `structures` | object[] | The buildings. See below. |
 | `extras` | object[] | Real buildings the source missed, measured on the aerial, with the same fields as `structures`. They come straight from the `extras` in the notes. The old gas station's canopy, the steeple on the US 80 church and the store's sign are built by hand in `index.html`, around the real spot. |
@@ -98,6 +98,10 @@ Positions are true metres from town center. `MAP.fromTrue` takes them to the wor
 The compound on Pine Forest Rd is the most worked over of these, because it's come to matter that its buildings are the right shape. The source has two footprints there, both wrong, and the rest of it isn't in the source at all, so it's all measured on the aerial as rectangles on the one grid they're laid out on. A building with two roofs is two buildings a few centimetres apart, because `wingsOf` would run one ridge through both. One of them, the long tan building in the clearing, is newer than any public aerial, so it's the one thing here placed by eye off the map and rounded off, and it says so in its `what`. Measure it properly when a newer NAIP comes out. What can't be seen from above, which is mostly the walls, is a guess.
 
 The yard off True Light Rd is measured the same way. The source has its three footprints, about 4 or 5 m south of where the aerial has them, which is about what TIGER's road is off by there too, so it may well be the aerial that's out. They're drawn square on the grid they're laid out on, because `wingsOf` gives up on anything else and puts one roof over the lot. Two more in the source have nothing standing at them on the aerial, so they're marked gone. The walls are a guess here too.
+
+Chunky Duffee Rd goes on past where the map would have stopped, so `tools/lane_config.json` has a second box of footprints to fetch for it, which `source.footprints.also` records. Everything up there is whatever the source calls it unless a note says otherwise, which is how a barn and a home came to be read as a church and its hall from above, until they were looked at from the road. The real church is further on and across the road, and its footprint is moved to match the aerial like the others.
+
+The second trailer in the row nearest the ball field and the low building by the community pool are noted the same way. What's inside the trailer is `index.html`'s.
 
 | Field | What it does |
 |---|---|

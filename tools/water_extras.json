@@ -14,6 +14,7 @@
   ],
   "pools": [
     {"id": "pool-1", "pool": "blue", "seen": "a pale blue swimming pool with rounded corners in a concrete deck, on the south side of the big house off Pine Forest Rd", "ring": [[1040.47, 646.42], [1048.14, 641.9], [1048.9, 642.1], [1050.57, 644.94], [1050.38, 645.69], [1042.71, 650.21], [1041.95, 650.02], [1040.28, 647.17]]},
-    {"id": "pool-2", "pool": "blue", "seen": "a bright blue swimming pool in an oval of concrete, on the east side of a house with a red roof", "ring": [[-1532.35, -778.77], [-1531.67, -779.16], [-1527.83, -778.14], [-1527.43, -777.47], [-1529.77, -767.83], [-1530.44, -767.42], [-1534.66, -768.38], [-1535.05, -769.03]]}
+    {"id": "pool-2", "pool": "blue", "seen": "a bright blue swimming pool in an oval of concrete, on the east side of a house with a red roof", "ring": [[-1532.35, -778.77], [-1531.67, -779.16], [-1527.83, -778.14], [-1527.43, -777.47], [-1529.77, -767.83], [-1530.44, -767.42], [-1534.66, -768.38], [-1535.05, -769.03]]},
+    {"id": "pool-3", "pool": "green", "seen": "a community pool gone bright green, in a concrete deck, west of the trailer park", "ring": [[-445.9, -574.3], [-433, -574.3], [-433, -567.6], [-445.9, -567.6]]}
   ]
 }

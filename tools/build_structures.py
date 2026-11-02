@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / "data" / "raw" / "structures"
 ROADS = ROOT / "data" / "roads.json"
 NOTES = Path(__file__).parent / "structure_notes.json"
+LANE_CONFIG = Path(__file__).parent / "lane_config.json"
 OUT = ROOT / "data" / "structures.json"
 
 SERVICE = "https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/USA_Structures_View/FeatureServer/0/query"
@@ -100,6 +101,23 @@ def download(bbox, refresh):
         text = json.dumps({"fetched": time.strftime("%Y-%m-%d"), "bbox": bbox, "features": features}, indent=0)
         cache.write_text(text)
     return json.loads(text), hashlib.sha256(text.encode()).hexdigest()
+
+
+def everything(roads, refresh=False):
+    """What's in the box round the road graph, and in any box a road taken further than that needs. It says what it fetched."""
+    raw, sha = download(bbox_of(roads), refresh)
+    seen, also = {f["attributes"]["OBJECTID"] for f in raw["features"]}, []
+    for reach in json.loads(LANE_CONFIG.read_text()).get("reachOut", []):
+        x0, z0, x1, z1 = reach["box"]
+        west, south = to_lonlat(x0, z1)
+        east, north = to_lonlat(x1, z0)
+        box = (round(west, 5), round(south, 5), round(east, 5), round(north, 5))
+        more, more_sha = download(box, refresh)
+        new = [f for f in more["features"] if f["attributes"]["OBJECTID"] not in seen]
+        seen |= {f["attributes"]["OBJECTID"] for f in new}
+        raw["features"] += new
+        also.append({"fetched": more["fetched"], "sha256": more_sha, "bbox": list(box), "features": len(more["features"])})
+    return raw, sha, also
 
 
 # ---------------------------------------------------------------- shapes
@@ -486,7 +504,7 @@ def main():
     from build_roads import read_road_records
     world = World(roads, build_tiger_lanes(roads, read_road_records(), json.loads(CONFIG.read_text())))
     bbox = bbox_of(roads)
-    raw, sha = download(bbox, args.refresh)
+    raw, sha, also = everything(roads, args.refresh)
     notes = json.loads(NOTES.read_text()) if NOTES.exists() else {"structures": {}, "extras": []}
     print("box", bbox, "features", len(raw["features"]), "sha", sha[:12], "notes", len(notes["structures"]))
 
@@ -594,7 +612,7 @@ def main():
     print("roofs from the aerial", sum(1 for s in structures if s["roofColor"] not in ROOF_DEFAULT.values()), "tiles", len(tiles))
 
     source = {
-        "footprints": {"name": "USA Structures", "by": ATTRIBUTION, "license": LICENSE, "url": ITEM, "fetched": raw["fetched"], "sha256": sha, "bbox": list(bbox), "features": len(raw["features"])},
+        "footprints": {"name": "USA Structures", "by": ATTRIBUTION, "license": LICENSE, "url": ITEM, "fetched": raw["fetched"], "sha256": sha, "bbox": list(bbox), "features": len(raw["features"]), **({"also": also} if also else {})},
         "roofs": {"name": "National Agriculture Imagery Program", "by": "USDA Farm Production and Conservation", "license": "public domain", "url": NAIP},
         "byEye": "tools/structure_notes.json: what's written down from looking at Street View. Nothing is traced or copied from it.",
     }

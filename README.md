@@ -51,6 +51,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/play-lures.mjs`: moves the crowd with what he can throw: off US 80, off his back, into the river, and round someone who won't thank him for it (`npm run lures`)
 - `tools/play-compound.mjs`: goes round the compound on Pine Forest Rd: up its drive, in every door, plays what's in the shed with the crowd listening, swims the pool and watches the screen.
 - `tools/play-yard.mjs`: goes round the yard off True Light Rd: up its drive, across the pool, keeps the ball up six times with real taps, takes the bat, bounces on the trampoline and drives the coupe away (`npm run yard`)
+- `tools/play-stumble.mjs`: goes and finds what's only there for anyone who stumbles on it: the computer in the back of the trailer, the green pool, the road up past where the map used to stop and the stone in the cemetery (`npm run stumble`)
 - `tools/play-station.mjs`: goes round the gas station for what's on its shelves, bars its door with the crowd outside, and checks that the crowd goes for its light (`npm run station`)
 - `tools/play-water.mjs`: swims across a pond, floods a pickup in another and checks what's under them (`npm run water`)
 - `tools/play-sound.mjs`: plays the game with the sound on and checks what it's playing (`npm run sound`)
