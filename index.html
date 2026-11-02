@@ -28,6 +28,7 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .stam{width:118px;height:8px;border:2px solid var(--cream);background:rgba(0,0,0,.45)}
 .stam i{display:block;height:100%;width:100%;background:var(--cyan);transform-origin:left center}
 .beans{font-family:var(--f-display);font-size:18px;color:var(--rust);text-shadow:0 2px 0 var(--ink);white-space:nowrap}
+.pockets{margin-top:-4px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--cream);text-shadow:0 1px 0 var(--ink);white-space:nowrap}
 #mini{display:block;width:116px;height:116px;padding:0;border-radius:50%;border:2px solid var(--cream);background:#0d0812;box-shadow:0 2px 0 var(--ink),0 0 0 2px var(--ink);pointer-events:auto;overflow:hidden;touch-action:manipulation}
 #mini[hidden]{display:none}
 #mini canvas{display:block;width:100%;height:100%}
@@ -146,6 +147,7 @@ body.talking #mute{visibility:hidden}
     <div class="hearts" id="hearts" hidden>♥♥♥</div>
     <div class="stam" id="stam" hidden><i id="stamFill"></i></div>
     <div class="beans" id="beans" hidden>Beans 0/12</div>
+    <div class="pockets" id="pockets" hidden></div>
     <button id="mute" aria-label="Sound" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.6L12 18.5v-13L7.6 9.5z" fill="currentColor"/><path class="on" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"/><path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
   </div>
   <div class="right">
@@ -1389,7 +1391,7 @@ function breakProp(p, dx = 0, dz = 0) {
   for (const f of p.faces) { f.im.setMatrixAt(f.i, NOWHERE); f.im.instanceMatrix.needsUpdate = true; }
   for (const o of p.hide) o.visible = false;
   // whatever was sitting on it comes down too
-  for (const c of PICKUPS) if (!c.got && c.y > TOWN_Y + .6 && c.x > min.x - 1 && c.x < max.x + 1 && c.z > min.z - 1 && c.z < max.z + 1) c.y = TOWN_Y + .3;
+  for (const c of [...PICKUPS, ...LOOT]) if (!c.got && c.y > TOWN_Y + .6 && c.x > min.x - 1 && c.x < max.x + 1 && c.z > min.z - 1 && c.z < max.z + 1) c.y = TOWN_Y + .3;
   const size = Math.max(max.x - min.x, max.y - min.y, max.z - min.z), n = Math.min(FEW ? 4 : 7, 2 + Math.round(size));
   spray(p.cx, p.rigid ? min.y + .6 : (min.y + max.y) / 2, p.cz, n, Math.min(.42, .1 + size * .04), 3, p.color.r, p.color.g, p.color.b, dirx, dirz);
   p.broke?.(p, dirx, dirz);
@@ -1468,7 +1470,7 @@ function updateThrown(dt) {
   }
 }
 function layOutGas() {
-  const spots = [[...atTrue(-87.85 + 7, -31.1 + 2.4), .3], [...atTrue(-87.85 - 6.5, -31.1 + 2.6), 1.2], [...atTrue(-87.85 + 2, -31.1 + 5), 2.1]];
+  const spots = [[...atTrue(-87.85 + 7, -31.1 + 2.4), .3], [...atTrue(-87.85 - 6.5, -31.1 + 2.6), 1.2], [...atTrue(-87.85 + 2, -31.1 + 5), 2.1], [...gasAt(56.6, 3.7), .7]];
   // and beside the door of a shed or a barn, about one in three
   for (const s of STRUCTURES) {
     if ((s.use !== 'shed' && s.use !== 'farm') || hash2(s.id | 0, 77) > .34 || spots.length >= 48 - GAS_THROWN) continue;
@@ -1526,20 +1528,80 @@ for (const [board, house] of [[hallBoard, HALL_HOUSE], [postBoard, POST_OFFICE]]
 }
 // the gas station's canopy and pumps, in front of the old store they belonged to
 const canopyMat = new THREE.MeshStandardMaterial({ color: '#cfc9bb', roughness: .85 }), canopyPost = new THREE.MeshStandardMaterial({ color: '#a8342a', roughness: .7, metalness: .2 });
+const pumpMat = new THREE.MeshStandardMaterial({ color: '#c8c2b4', roughness: .6, metalness: .25 }), pumpFace = new THREE.MeshStandardMaterial({ color: '#17141c', roughness: .4 }), pumpDial = new THREE.MeshStandardMaterial({ color: '#d8d2c0', roughness: .7 }), hoseMat = new THREE.MeshStandardMaterial({ color: '#141014', roughness: .8 });
+const benchMat = new THREE.MeshStandardMaterial({ color: '#6e5238', roughness: 1 }), counterMat = new THREE.MeshStandardMaterial({ color: '#6b4a32', roughness: .9 }), shelfMat = new THREE.MeshStandardMaterial({ color: '#4a4650', roughness: .7, metalness: .3 }), iceMat = new THREE.MeshStandardMaterial({ color: '#dfe6e6', roughness: .5, metalness: .2 }), coolerMat = new THREE.MeshStandardMaterial({ color: '#b9b5a8', roughness: .6, metalness: .2 });
+// What's left on the shelves, as one picture: the same thing a few times over, then something else, with gaps where it's been taken. There's no writing on any of it.
+const goodsTex = textTex([''], 1024, 205, '#120c12', '#000', '12px sans-serif', { after: (g) => {
+  const tones = ['#b4532a', '#d9c9a0', '#3a7a78', '#c89a3a', '#7a2f3c', '#56507a', '#e0dccf', '#2f4a5c', '#8a8f3c'];
+  for (let row = 0; row < 3; row++) {
+    const top = 8 + row * 66, high = 56;
+    g.fillStyle = '#3a2a24'; g.fillRect(0, top + high + 1, 1024, 4);
+    for (let x = 6, n = 0; x < 1000; n++) {
+      const k = (a) => hash(n, row, a), run = 2 + Math.floor(k(83) * 5), can = k(84) < .4, w = can ? 16 : 22 + k(85) * 18, h = high * (can ? .5 + k(86) * .12 : .55 + k(86) * .4), tone = tones[Math.floor(k(87) * tones.length)];
+      if (k(88) < .3) { x += w * run * .8; continue; }
+      for (let i = 0; i < run && x < 1000; i++, x += w) {
+        g.fillStyle = tone; g.fillRect(x, top + high - h, w - 2, h);
+        g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(x + w - 5, top + high - h, 3, h);
+        if (can) { g.fillStyle = 'rgba(241,230,207,.65)'; g.fillRect(x, top + high - h, w - 2, 3); g.fillRect(x + 2, top + high - h * .62, w - 6, h * .3); }
+        else { g.fillStyle = 'rgba(241,230,207,.42)'; g.fillRect(x + 3, top + high - h * .8, w - 8, h * .22); }
+      }
+    }
+  }
+} });
+// and the coolers, lit from behind: rows of bottles behind three doors
+const coolerTex = textTex([''], 512, 360, '#31555f', '#000', '12px sans-serif', { after: (g) => {
+  const tones = ['#7a2318', '#c89a3a', '#e8843a', '#1f5a3a', '#2f4a7c', '#d9c9a0'];
+  for (let row = 0; row < 4; row++) {
+    const floor = 84 + row * 88;
+    g.fillStyle = '#15242a'; g.fillRect(0, floor, 512, 5);
+    for (let x = 8, n = 0; x < 500; n++) {
+      const k = (a) => hash(n, row, a), run = 3 + Math.floor(k(90) * 6), tone = tones[Math.floor(k(91) * tones.length)];
+      if (k(92) < .35) { x += run * 9; continue; }
+      for (let i = 0; i < run && x < 500; i++, x += 13) {
+        g.fillStyle = tone; g.fillRect(x, floor - 44, 10, 44); g.fillRect(x + 3, floor - 60, 4, 16);
+        g.fillStyle = 'rgba(241,230,207,.55)'; g.fillRect(x + 1, floor - 28, 8, 11);
+      }
+    }
+  }
+  g.fillStyle = '#17141c'; for (const x of [0, 169, 339, 506]) g.fillRect(x, 0, 6, 360);
+  g.fillStyle = 'rgba(241,250,255,.13)'; g.beginPath(); g.moveTo(60, 0); g.lineTo(120, 0); g.lineTo(30, 360); g.lineTo(0, 360); g.lineTo(0, 240); g.fill();
+} });
+const goodsMat = new THREE.MeshStandardMaterial({ map: goodsTex, roughness: .85 }), coolerGlass = new THREE.MeshBasicMaterial({ map: coolerTex, color: new THREE.Color('#c6dde4') });
 // the canopy stands on four posts and doesn't stay up on one, and the pumps still have something in them
 let canopyProp = null, gasPower = 1, canopyPosts = 0;
 const signProp = {};
+const iceSign = (() => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.3, .62), new THREE.MeshStandardMaterial({ map: textTex(['ICE'], 256, 122, '#dfe6e6', '#2f6f9f', '92px Bungee, Impact, sans-serif'), roughness: .5, metalness: .2 })); m.position.set(PLACES.gas.x + 41.8, Y0 + 1.2, PLACES.gas.z + 6.31); scene.add(m); return m; })();
 around(PLACES.gas, () => {
   pad(46, 60, 4, 15, 4);
-  canopyProp = breakable('canopy', 3, () => { addBox(canopyMat, 53, Y0 + 4.6, 10, 10, .35, 8, 1.5); kudzuOn(48, 58, Y0 + 4.9, 6, 14, 8); }, { high: true, broke() { gasPower = 0; gasStrip.visible = false; const i = horde.lights.indexOf(gasSpot); if (i >= 0) horde.lights.splice(i, 1); } });
+  // a deep cream fascia with a red band along the top, as on the real one
+  canopyProp = breakable('canopy', 3, () => { addBox(canopyMat, 53, Y0 + 4.6, 10, 10, .35, 8, 1.5); for (const [x, z, sx, sz] of [[53, 5.97, 10.2, .06], [53, 14.03, 10.2, .06], [47.97, 10, .06, 8.1], [58.03, 10, .06, 8.1]]) { addBox(canopyMat, x, Y0 + 4.55, z, sx, .46, sz, 1.2); addBox(canopyPost, x, Y0 + 4.87, z, sx, .18, sz, 1.2); } kudzuOn(48, 58, Y0 + 4.9, 6, 14, 8); }, { high: true, broke() { gasPower = 0; gasStrip.visible = false; const i = horde.lights.indexOf(gasSpot); if (i >= 0) horde.lights.splice(i, 1); } });
   for (const [x, z] of [[48.6, 6.6], [57.4, 6.6], [48.6, 13.4], [57.4, 13.4]]) breakable('post', 1.5, () => { addBox(canopyPost, x, Y0 + 2.3, z, .3, 4.6, .3, 1.2); solid(x - .25, x + .25, z - .25, z + .25, Y0 + 4.6); }, { rigid: true, broke() { if (++canopyPosts >= 2) breakProp(canopyProp); } });
-  for (const x of [51, 55]) breakable('pump', 2, () => { addBox(railMat, x, Y0 + .8, 10, .7, 1.6, 1, 1.2); solid(x - .45, x + .45, 9.4, 10.6, Y0 + 1.6); }, { broke(p) { after(.1, () => blast(p.cx, Y0 + 1, p.cz, 6, 3)); } });
+  // old cream pumps on a concrete island, with a dial on each face and a hose hung up on the side
+  for (const x of [51, 55]) breakable('pump', 2, () => {
+    addBox(stoneMat, x, Y0 + .09, 10, 1.3, .18, 1.7, 1);
+    addBox(pumpMat, x, Y0 + .88, 10, .66, 1.4, .92, 1.2); addBox(canopyPost, x, Y0 + 1.66, 10, .7, .16, .96, 1); addBox(pumpMat, x, Y0 + 1.9, 10, .6, .32, .86, 1.2);
+    for (const side of [-1, 1]) { addBox(pumpFace, x, Y0 + 1.22, 10 + side * .465, .48, .52, .02, 0); for (const y of [1.36, 1.22, 1.08]) addBox(pumpDial, x - .05, Y0 + y, 10 + side * .48, .26, .05, .01, 0); }
+    const hose = [[.34, 1.45, .26], [.46, .9, .33], [.52, .42, .26], [.54, .3, .02], [.52, .4, -.22], [.46, .82, -.3], [.36, 1.1, -.27]];
+    for (let i = 1; i < hose.length; i++) addBeam([x + hose[i - 1][0], Y0 + hose[i - 1][1], 10 + hose[i - 1][2]], [x + hose[i][0], Y0 + hose[i][1], 10 + hose[i][2]], .065, .065, hoseMat, 0);
+    addBox(hoseMat, x + .37, Y0 + 1.2, 9.73, .09, .24, .1, 0); addBox(pumpDial, x + .37, Y0 + 1.33, 9.7, .05, .05, .22, 0);
+    solid(x - .45, x + .45, 9.4, 10.6, Y0 + 1.6);
+  }, { broke(p) { after(.1, () => blast(p.cx, Y0 + 1, p.cz, 6, 3)); } });
   signProp.gas = breakable('sign', 1.5, () => { addBox(canopyPost, 46.5, Y0 + 3, 13.5, .2, 6, .2, 1); }, { rigid: true });
   flushBuckets();
+  // what's out front of the store: the ice box, a bench against the wall and a picnic table by the pumps
+  breakable('icebox', 3, () => { addBox(iceMat, 41.8, Y0 + .85, 5.75, 1.6, 1.7, 1.1, 1.4); addBox(canopyPost, 41.8, Y0 + 1.74, 5.75, 1.64, .08, 1.14, 1); solid(41, 42.6, 5.2, 6.3, Y0 + 1.7); }, { chip: '#dfe6e6', hide: [iceSign] });
+  breakable('bench', 1, () => { addBox(benchMat, 36.5, Y0 + .46, 5.6, 2.1, .07, .46, 1); addBox(benchMat, 36.5, Y0 + .82, 5.32, 2.1, .3, .05, 1); for (const x of [35.6, 37.4]) addBox(benchMat, x, Y0 + .22, 5.6, .08, .44, .4, 1); solid(35.45, 37.55, 5.3, 5.85, Y0 + .85); }, { chip: '#6e5238' });
+  breakable('bench', 1, () => { addBox(benchMat, 45.5, Y0 + .78, 9.3, 2, .07, .84, 1); for (const z of [8.68, 9.92]) addBox(benchMat, 45.5, Y0 + .46, z, 2, .06, .28, 1); for (const x of [44.8, 46.2]) { addBox(benchMat, x, Y0 + .4, 9.3, .08, .78, .1, 1); addBox(benchMat, x, Y0 + .4, 9.3, .08, .06, 1.5, 1); } solid(44.5, 46.5, 8.55, 10.05, Y0 + .8); }, { chip: '#6e5238' });
+  flushBuckets(120);
+  // and inside: three rows of shelves, a counter by the door and the coolers along the back
+  breakable('counter', 2.5, () => { addBox(counterMat, 55.2, Y0 + .52, 2.4, 5.6, 1.04, .7); addBox(roofMat, 55.2, Y0 + 1.07, 2.4, 5.8, .06, .86); addBox(pumpFace, 53.5, Y0 + 1.26, 2.4, .46, .32, .4, 1); solid(52.4, 58, 2.05, 2.75, Y0 + 1.1); }, { chip: '#6b4a32' });
+  for (const x of [37.5, 41.5, 45.5]) breakable('shelf', 1.5, () => { addBox(goodsMat, x, Y0 + .86, -2, .66, 1.6, 8, 0); addBox(shelfMat, x, Y0 + 1.7, -2, .8, .05, 8.1, 1); addBox(shelfMat, x, Y0 + .06, -2, .8, .12, 8, 1); for (const z of [-6.02, 2.02]) addBox(shelfMat, x, Y0 + .86, z, .8, 1.72, .05, 1); solid(x - .4, x + .4, -6.05, 2.05, Y0 + 1.72); }, { chip: '#4a4650' });
+  for (let i = 0; i < 6; i++) { const x = 42 + i * 3; breakable('cooler', 2, () => { addBox(coolerMat, x, Y0 + 1.1, -9, 2.9, 2.2, .85, 1.2); addBox(coolerGlass, x, Y0 + 1.15, -8.56, 2.6, 1.85, .02, 0); solid(x - 1.45, x + 1.45, -9.42, -8.55, Y0 + 2.2); }, { chip: '#b9b5a8' }); }
+  flushBuckets(60);
 });
 const gasAt = (x, z) => [x + PLACES.gas.x, z + PLACES.gas.z];
 const gasLight = new THREE.PointLight('#9fe3ff', 9, 12, 1.6); gasLight.position.set(gasAt(53, 0)[0], Y0 + 4.1, gasAt(0, 10)[1]); scene.add(gasLight);
-const gasStrip = new THREE.Mesh(boxGeo, lit('#bfefff', 2.2)); gasStrip.scale.set(8, .05, .2); gasStrip.position.set(gasAt(53, 0)[0], Y0 + 4.4, gasAt(0, 10)[1]); scene.add(gasStrip);
+const GAS_STRIP = new THREE.Color('#bfefff').multiplyScalar(2.2), gasStrip = new THREE.Mesh(boxGeo, new THREE.MeshBasicMaterial({ color: GAS_STRIP.clone() })); gasStrip.scale.set(8, .05, .2); gasStrip.position.set(gasAt(53, 0)[0], Y0 + 4.4, gasAt(0, 10)[1]); scene.add(gasStrip);
 const gasSign = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.4), new THREE.MeshBasicMaterial({ map: textTex(['GAS'], 256, 150, '#1b1420', '#ff4a6a', '96px Bungee, Impact, sans-serif'), color: new THREE.Color(1.4, 1.4, 1.4) }));
 gasSign.position.set(gasAt(46.5, 0)[0], Y0 + 6.2, gasAt(0, 13.5)[1]); gasSign.rotation.y = -Math.PI / 4; scene.add(gasSign);
 signProp.gas.objs.push(gasSign);
@@ -1878,12 +1940,43 @@ const wireMat = new THREE.MeshBasicMaterial({ color: '#0c080e' });
   polesAlong(OPENING_ROAD, 26, 254, 12);
   polesAlong('us_80', worldX(-613), worldX(420), 24);
 }
+// The store's door can be barred from inside. It's boards across the doorway, so anything hard enough goes through them, and while they're up and the walls are too
+// nothing out there can tell he's in there.
+const GAS_HOUSE = houseAt(...atTrue(-93.21, -43.55)), GAS_DOOR = wallsOf(GAS_HOUSE, Y0).doors[0];
+const GAS_IN = insideRing(GAS_DOOR.x + GAS_DOOR.nx * .5, GAS_DOOR.z + GAS_DOOR.nz * .5, GAS_HOUSE.pts) ? 1 : -1;
+const gasBarWall = [GAS_DOOR.x - GAS_DOOR.ex * GAS_DOOR.wide / 2, GAS_DOOR.z - GAS_DOOR.ez * GAS_DOOR.wide / 2, GAS_DOOR.x + GAS_DOOR.ex * GAS_DOOR.wide / 2, GAS_DOOR.z + GAS_DOOR.ez * GAS_DOOR.wide / 2, -1e9, .12];
+PROP_WALLS.push(gasBarWall);
+const gasBar = new THREE.Group(); gasBar.visible = false; gasBar.position.set(GAS_DOOR.x, Y0, GAS_DOOR.z); gasBar.rotation.y = Math.atan2(-GAS_DOOR.ez, GAS_DOOR.ex); scene.add(gasBar);
+{
+  const board = new THREE.MeshStandardMaterial({ color: '#7d5c44', roughness: 1 }), rail = new THREE.MeshStandardMaterial({ color: '#3a2a20', roughness: 1 });
+  for (const [y, high, mat, deep, roll] of [[1.07, 2.14, board, .05, 0], [.72, .17, rail, .14, .13], [1.5, .17, rail, .14, -.1]]) {
+    const m = new THREE.Mesh(boxGeo, mat); m.scale.set(GAS_DOOR.wide + (roll ? .42 : 0), high, deep); m.position.y = y; m.rotation.z = roll; outline(m, INK, 1.2); gasBar.add(m);
+  }
+}
+let gasBarred = false, gasBarGone = false;
+const gasBarProp = breakable('bar', 4, null, { rigid: true, objs: [gasBar], walls: [gasBarWall], chip: '#7d5c44', down: true, broke() { gasBarred = false; gasBarGone = true; } });
+const atGasDoor = () => !gasBarGone && Math.hypot(player.pos.x - GAS_DOOR.x, player.pos.z - GAS_DOOR.z) < 2 && insideRing(player.pos.x, player.pos.z, GAS_HOUSE.pts);
+function barGasDoor() {
+  gasBarred = !gasBarred; gasBar.visible = gasBarred; gasBarProp.down = !gasBarred; gasBarWall[4] = gasBarred ? Y0 + 2.6 : -1e9;
+  SFX.play('vehicle.door', { x: GAS_DOOR.x, z: GAS_DOOR.z, rate: .75 }); toast(gasBarred ? 'Door barred' : 'Door unbarred');
+  if (crowdOut) horde.noise(GAS_DOOR.x, GAS_DOOR.z, 12, 2);
+  if (!gasBarred) return;
+  // not left standing in the doorway
+  const P = player.pos, inside = ((P.x - GAS_DOOR.x) * GAS_DOOR.nx + (P.z - GAS_DOOR.z) * GAS_DOOR.nz) * GAS_IN;
+  if (inside < .65) { P.x += GAS_DOOR.nx * GAS_IN * (.65 - inside); P.z += GAS_DOOR.nz * GAS_IN * (.65 - inside); }
+}
+// whether he can't be got at in there: the boards are up, he's inside, and no wall's come down
+function barredIn(P) {
+  if (!gasBarred || !insideRing(P.x, P.z, GAS_HOUSE.pts)) return false;
+  for (const w of GAS_HOUSE.stops.values()) if (w[4] < 0) return false;
+  return true;
+}
 const fires = [];
-for (const [x, z] of [[...gasAt(50, 7.4)], [96, -5.5], [BOX.x - 3, BOX.z - 6]]) {
-  const fl = new THREE.Mesh(new THREE.ConeGeometry(.3, .9, 8), lit('#ffb040', 3)); fl.position.set(x, Y0 + 1.35, z); scene.add(fl);
+for (const [x, z] of [[...gasAt(51.4, 7.2)], [96, -5.5], [BOX.x - 3, BOX.z - 6]]) {
   const pl = new THREE.PointLight('#ff8a30', 12, 11, 1.7); pl.position.set(x, Y0 + 1.8, z); scene.add(pl);
-  const f = { fl, pl, ph: rnd() * 10, out: false, duty: false, home: pl.position.clone(), spot: { x, z, r: 30 } };
-  breakable('barrel', 1, () => { addBox(railMat, x, Y0 + .5, z, .7, 1, .7, 1.2); solid(x - .4, x + .4, z - .4, z + .4, Y0 + 1); }, { broke() { f.out = true; pl.intensity = 0; fl.visible = false; const i = horde.lights.indexOf(f.spot); if (i >= 0) horde.lights.splice(i, 1); burnAt(x, Y0 + .04, z, 1.1, 12 + wreckRand() * 8); for (const q of [[1, .4], [-.7, .9], [.2, -1.1]]) burnAt(x + q[0], Y0 + .04, z + q[1], .7, 7 + wreckRand() * 7); } });
+  const f = { pl, ph: rnd() * 10, out: false, duty: false, burner: null, home: pl.position.clone(), spot: { x, z, r: 30 } };
+  // two boxes at an eighth of a turn make a drum
+  breakable('barrel', 1, () => { addBox(railMat, x, Y0 + .5, z, .62, 1, .62, 1.2); addBox(railMat, x, Y0 + .5, z, .62, 1, .62, 1.2, new THREE.Quaternion().setFromAxisAngle(UP, Math.PI / 4)); solid(x - .4, x + .4, z - .4, z + .4, Y0 + 1); }, { broke() { f.out = true; pl.intensity = 0; if (f.burner) f.burner.dead = true; const i = horde.lights.indexOf(f.spot); if (i >= 0) horde.lights.splice(i, 1); burnAt(x, Y0 + .04, z, 1.1, 12 + wreckRand() * 8); for (const q of [[1, .4], [-.7, .9], [.2, -1.1]]) burnAt(x + q[0], Y0 + .04, z + q[1], .7, 7 + wreckRand() * 7); } });
   fires.push(f);
 }
 {
@@ -2546,6 +2639,9 @@ const SIGNS = [];
 {
   const kz = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: '#3f7a35', roughness: .9, flatShading: true }), kudzuSpots.length);
   kudzuSpots.forEach(([x, y, z, own], i) => { let k = 0; const R = own ? () => hash(Math.floor(x * 16), Math.floor(z * 16), ++k) : rnd, r = .5 + R() * .7; _m.compose(_v.set(x, y, z), _q.setFromEuler(new THREE.Euler(R() * 3, R() * 3, 0)), _s.set(r * 1.3, r * .7, r * 1.3)); kz.setMatrixAt(i, _m); kz.setColorAt(i, new THREE.Color().setHSL(.27 + R() * .06, .45, .22 + R() * .1)); });
+  // the real canopy's clean, and these still have to be drawn from rnd() for the first scene's sake
+  for (const i of canopyProp.kudzu) kz.setMatrixAt(i, NOWHERE);
+  canopyProp.kudzu.length = 0;
   scene.add(kz);
   const ko = new THREE.InstancedMesh(kz.geometry, outlineMat(INK, 1.2, 0), kz.count); ko.instanceMatrix = kz.instanceMatrix; scene.add(ko);
   kudzuMesh = kz;
@@ -3070,6 +3166,29 @@ const PICKUPS = [
   halo.scale.setScalar(.9); m.add(halo);
   return { m, x, y, z, got: false, ph: rnd() * 6 };
 });
+
+// What else is in the store, on the shelves and the counter. No arrow points at any of it: it's there for whoever goes looking. Beans are beans, and he just holds on to the rest for now.
+const LOOT_NAMES = { batteries: 'Batteries', fluid: 'Lighter fluid' };
+const lootGroup = new THREE.Group(); scene.add(lootGroup); DISTANT.push({ obj: lootGroup, x: PLACES.gas.x + 48, z: PLACES.gas.z - 2, r: 90 });
+const LOOT = (() => {
+  const canGeo = new THREE.CylinderGeometry(.11, .11, .26, 18);
+  // a pair of fat cells, copper at the top, and a tin with a spout, the orange warning triangle on yellow
+  const cellTex = textTex([''], 32, 64, '#141216', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#c0703a'; g.fillRect(0, 0, 32, 22); g.fillStyle = '#e6e0d0'; g.fillRect(0, 44, 32, 3); } });
+  const fluidTex = textTex([''], 96, 160, '#d9a826', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#ec803a'; g.beginPath(); g.moveTo(48, 38); g.lineTo(82, 104); g.lineTo(14, 104); g.fill(); g.fillStyle = '#17141c'; g.fillRect(45, 58, 6, 26); g.fillRect(45, 88, 6, 7); } });
+  const looks = {
+    beans: [canGeo, [canMat[0], canMat[1], canMat[1]]],
+    batteries: [mergeGeometries([new THREE.CylinderGeometry(.07, .07, .24, 12).translate(-.08, 0, 0), new THREE.CylinderGeometry(.07, .07, .24, 12).translate(.08, 0, 0)]), new THREE.MeshStandardMaterial({ map: cellTex, roughness: .5, metalness: .3 })],
+    fluid: [mergeGeometries([new THREE.BoxGeometry(.17, .28, .08), new THREE.BoxGeometry(.03, .1, .03).translate(.05, .18, 0)]), new THREE.MeshStandardMaterial({ map: fluidTex, roughness: .5, metalness: .2 })],
+  };
+  const halo = new THREE.SpriteMaterial({ map: radialTex, color: new THREE.Color(1, .55, .2), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: .7 });
+  // on the shelves' aisle sides and the counter, in the store's own coordinates
+  return [['beans', 45.98, 1.05, -1], ['batteries', 53.1, 1.32, 2.4], ['batteries', 41.02, 1.05, -3.6], ['fluid', 37.98, 1.05, .6], ['fluid', 41.98, 1.05, -5]].map(([kind, lx, ly, lz], i) => {
+    const [geo, mat] = looks[kind], m = new THREE.Mesh(geo, mat), x = PLACES.gas.x + lx, z = PLACES.gas.z + lz, y = Y0 + ly;
+    m.position.set(x, y + .2, z); outline(m, INK, 1.5); lootGroup.add(m);
+    const glow = new THREE.Sprite(halo); glow.scale.setScalar(.9); m.add(glow);
+    return { kind, m, x, y, z, got: false, ph: hash(i, 3, 89) * 6 };
+  });
+})();
 
 // ================================================================ the crowd's bodies
 // One body drawn many times: a body and four limbs, each a single mesh whoever's in it, so forty-eight of them cost seven draw calls
@@ -3612,6 +3731,8 @@ function hudVitals() {
   setHidden('mph', S.mode !== 'drive'); if (S.mode === 'drive') setHTML('mph', `${Math.round(speedOf(driving) * 2.237)} MPH`);
   const town = S.mode === 'town' || S.mode === 'drive' || S.mode === 'grabbed' || S.mode === 'dialog' || S.mode === 'sweep' || S.mode === 'end';
   setHidden('beans', !town); setHTML('beans', `Beans ${S.beans}/12`); setHidden('rep', !town);
+  const pockets = Object.keys(LOOT_NAMES).filter((k) => S.items[k] > 0).map((k) => `${LOOT_NAMES[k]} ${S.items[k]}`).join(' · ');
+  setHidden('pockets', !town || !pockets); setHTML('pockets', pockets);
   if (town) drawPeople();
 }
 const pips = (v) => { const n = clamp(Math.round(v), -3, 3); return '■'.repeat(n + 3) + '□'.repeat(3 - n); };
@@ -3908,7 +4029,7 @@ const feel = { x: 0, z: 0, y: 0, noise: 0, light: 0, beans: 0, night: 1, hidden:
 function updateCrowd(dt, M) {
   const P = player.pos; feel.x = P.x; feel.z = P.z; feel.y = P.y; feel.beans = S.beans;
   feel.noise = M === 'town' ? HP.speed / 4.4 * 14 : M === 'drive' && !driving.wrecked && !driving.drowned ? driving.K.noise * (.5 + .5 * Math.abs(driving.f) / driving.K.top) : 0;
-  feel.hidden = (M !== 'town' && M !== 'grabbed' && M !== 'drive') || horde.inSanctuary(P.x, P.z);
+  feel.hidden = (M !== 'town' && M !== 'grabbed' && M !== 'drive') || horde.inSanctuary(P.x, P.z) || barredIn(P);
   feel.canGrab = M === 'town' && player.inv <= 0;
   horde.update(dt, feel);
 }
@@ -4128,6 +4249,14 @@ function arriving() { if (!S.flags.arrived && Math.hypot(player.pos.x - NPCS.coo
 function pickUpCans(reach) {
   for (const c of PICKUPS) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; c.m.visible = false; addBeans(1, 'found'); townObjective(); hudVitals(); }
 }
+function pickUpLoot(reach) {
+  for (const c of LOOT) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) {
+    c.got = true; c.m.visible = false;
+    if (c.kind === 'beans') { addBeans(1, 'found'); townObjective(); }
+    else { S.items[c.kind] = (S.items[c.kind] ?? 0) + 1; SFX.play('can.clink'); toast(`+1 ${LOOT_NAMES[c.kind].toLowerCase()}`); }
+    hudVitals();
+  }
+}
 const DRIVE_WORLD = { blocked: (x, z, y) => blockedInTown(x, z, y) || !!looseAt(x, z, y), floorAt, level: WATER.level, road: onRoad, edge: (x, z) => !MAP.inBounds(x, z), ram };
 let vehPuffT = 0, vehClawT = 0, vehSmokeT = 0;
 function wreckedNow(v) {
@@ -4256,6 +4385,7 @@ function catchTree(t) {
 }
 // What fire does to whatever's close to it. Each is looked at about once a second.
 function heatFrom(b) {
+  if (b.owner?.barrel) return;
   const P = player.pos, d = Math.hypot(P.x - b.x, P.z - b.z), hot = b.size * .75 + .3;
   if (S.mode === 'town' && d < hot && Math.abs(P.y + 1 - b.y) < b.size + 1.4) hurtBy('fire', P.x - b.x, P.z - b.z);
   const low = b.y < b.floor + 2.5;
@@ -4582,6 +4712,8 @@ function startFree() {
   startTown(); bringOutCrowd();
 }
 layOutGas();
+// the barrels burn the way everything else does, except that they don't set light to anything
+for (const f of fires) f.burner = burnAt(f.home.x, Y0 + .95, f.home.z, .58, Infinity, { barrel: true });
 // ================================================================ the map
 const mapData = buildMapData({ roads: MAP.roads, lanes: MAP.lanes, rail: MAP.rail, river: MAP.river, ponds: WATER.ponds.map((p) => p.ring), structures: STRUCTURES, fields: FIELDS });
 const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d') };
@@ -4711,7 +4843,7 @@ let stepT = 0, lastStepIdx = -1;
 // ================================================================ main loop
 const clock = new THREE.Clock();
 // ================================================================ what he hears
-const METAL_PROPS = new Set(['sign', 'pump', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'tower', 'leg', 'trailer', 'boxcar', 'cart', 'bleachers']);
+const METAL_PROPS = new Set(['sign', 'pump', 'icebox', 'cooler', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'tower', 'leg', 'trailer', 'boxcar', 'cart', 'bleachers']);
 const VEHICLE_LOOPS = ['engine.car', 'engine.pickup', 'engine.quad', 'engine.golf', 'vehicle.road', 'vehicle.dirt', 'vehicle.skid'];
 const SCORE = { title: 'title', hang: 'hang', fall: 'fall', land: 'bank', bridge: 'run', bitten: 'bite', dream: 'dream', wake: 'wake', grabbed: 'grabbed', fail: 'failed', end: 'end' };
 const FEVER_QUIET = { bitten: .25, dream: 0, wake: .5 };
@@ -4919,7 +5051,7 @@ function tick(dt, draw = true) {
     }
     if (M === 'town') {
       ghost.position.lerp(new THREE.Vector3(26, -3, 3), Math.min(1, dt * .5));
-      arriving(); pickUpCans(1.15); pickUpGas(1.15);
+      arriving(); pickUpCans(1.15); pickUpGas(1.15); pickUpLoot(1.15);
       // talk
       let near = null, nd = 2.6;
       // Once he's asked, the button by Robby is for the flies: he's said all he's going to, and it's the only button a phone has
@@ -4927,9 +5059,10 @@ function tick(dt, draw = true) {
       for (const [id, n] of Object.entries(NPCS)) { if (id === 'robby' && fliesToDo) continue; const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z); if (d < nd) { nd = d; near = id; } }
       const ride = near ? null : vehicleInReach();
       const meat = !near && !ride && skillet.visible && Math.hypot(HEARTH.x - player.pos.x, HEARTH.z - player.pos.z) < 2.2;
-      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : null;
+      const door = !near && !ride && !meat && atGasDoor();
+      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : null;
       if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (fliesToDo && lot < FLY_REACH) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
-      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else swing(); }
+      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else swing(); }
       if (input.sEdge) swing();
       if (input.cEdge) throwOne();
     }
@@ -5000,8 +5133,9 @@ function tick(dt, draw = true) {
     n.root.visible = Math.hypot(n.root.position.x - camera.position.x, n.root.position.z - camera.position.z) < 95;
   }
   for (const c of PICKUPS) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
-  for (const f of fires) { const k = .8 + .2 * Math.sin(time * 11 + f.ph) * Math.sin(time * 7.3 + f.ph); f.pl.intensity = (f.duty ? 34 : f.out ? 0 : 12) * k; f.fl.scale.set(k, .8 + .4 * k, k); }
-  beacon.visible = beaconLive && Math.floor(time * 1.2) % 2 === 0; gasLight.intensity = (Math.random() < .02 ? 2 : 9) * gasPower;
+  if (lootGroup.visible) for (const c of LOOT) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
+  for (const f of fires) { const k = .8 + .2 * Math.sin(time * 11 + f.ph) * Math.sin(time * 7.3 + f.ph); f.pl.intensity = (f.duty ? 34 : f.out ? 0 : 12) * k; }
+  beacon.visible = beaconLive && Math.floor(time * 1.2) % 2 === 0; { const dip = Math.random() < .02 && !reduceMotion; gasLight.intensity = (dip ? 2 : 9) * gasPower; gasStrip.material.color.copy(GAS_STRIP).multiplyScalar(dip ? .25 : 1); }
   if (!driving && boomLight <= 0) gLight.intensity = 14 * (.8 + .2 * Math.sin(time * 9.7));
 
   // ---------------- camera
@@ -5113,7 +5247,7 @@ if (location.hash === '#signs') openSignBoard();
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far) }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.

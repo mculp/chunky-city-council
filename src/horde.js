@@ -94,7 +94,8 @@ export function createHorde(world, tuning = {}, on = {}) {
       if (s.timer <= 0 || hypot(s.tx - s.x, s.tz - s.z) < .6 || s.stuck > 1) {
         s.stuck = 0; s.timer = 6 + world.rand() * 10;
         const near = lights.find((l) => hypot(l.x - s.x, l.z - s.z) < l.r);
-        if (near && world.rand() < T.lightPull * p.night) { const a = world.rand() * 6.28, r = 2 + world.rand() * 5; s.tx = near.x + Math.cos(a) * r; s.tz = near.z + Math.sin(a) * r; }
+        // and it keeps going until it's there
+        if (near && world.rand() < T.lightPull * p.night) { const a = world.rand() * 6.28, r = 2 + world.rand() * 5; s.tx = near.x + Math.cos(a) * r; s.tz = near.z + Math.sin(a) * r; s.timer = hypot(s.tx - s.x, s.tz - s.z) / T.speed[SHAMBLE] + 2; }
         else [s.tx, s.tz] = world.wander(s);
       }
     } else if (s.state === CURIOUS) {

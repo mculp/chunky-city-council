@@ -72,6 +72,8 @@ Then open http://localhost:8000.
 
 `npm run field` walks onto the ball field from Adams St, runs the bases, and checks that the fence and backstop stop him and that the gates let him through, on foot and in a pickup.
 
+`npm run station` goes round the gas station on a phone-sized page: in through the door, along the shelves and the counter for what's on them, bars the door with the crowd outside, breaks the boards with a hammer, and checks that the crowd gathers under the canopy's light and stops once it's out. It takes `--shots dir`.
+
 `npm run sound` plays the game with the sound on, in real time: nothing until a touch, the mute, a hidden tab, the score through the opening, his feet on each surface, driving, the crowd, and a track and a voice line swapped in with nothing changed but the sheet, and then every real file in `audio/` on a phone-sized page. It can't say whether any of it sounds good. `-- --old` plays it through with the sounds worked out from code.
 
 `npm run sound:make` says what making the music and sounds with ElevenLabs on fal would cost, and `-- --go` makes them. `npm run sound:measure` then measures every file in `audio/` and fails on one that's silent, clipped, cut short, swells or clicks as it loops, or lands late, and `-- --pictures dir` draws their spectrograms. `npm run sound:level` sets `data/sound-new.json`'s levels to match the old sheet's, so run it after making anything over. The budget is a running total, kept in `audio/manifest.json`. `data/sound.md` has the rest.

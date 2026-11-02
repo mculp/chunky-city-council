@@ -18,7 +18,7 @@ export function buttonsFor(mode, { act = null, gas = 0 } = {}) {
   if (mode === 'grabbed') return { a: 'FREE', b: null, run: false };
   if (mode === 'swim') return { a: null, b: 'SWIM FAST', run: false };
   if (mode === 'drive') return { a: 'GET OUT', b: 'BRAKE', run: false };
-  if (ON_FOOT.has(mode)) return { a: act ? (act.startsWith('Get in') ? 'GET IN' : act.startsWith('Eat') ? 'EAT' : 'TALK') : mode === 'town' ? 'SWING' : null, b: 'JUMP', run: true, c: mode === 'town' && gas > 0 ? `THROW ${gas}` : null };
+  if (ON_FOOT.has(mode)) return { a: act ? (act.startsWith('Get in') ? 'GET IN' : act.startsWith('Eat') ? 'EAT' : act.startsWith('Bar') ? 'BAR' : act.startsWith('Unbar') ? 'UNBAR' : 'TALK') : mode === 'town' ? 'SWING' : null, b: 'JUMP', run: true, c: mode === 'town' && gas > 0 ? `THROW ${gas}` : null };
   return { a: null, b: null, run: false };
 }
 
