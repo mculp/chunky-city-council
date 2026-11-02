@@ -110,6 +110,8 @@ body.talking #mini,body.talking #miniName{visibility:hidden}
 #bR[hidden]{display:none}
 #bC{position:absolute;right:94px;bottom:110px;width:60px;height:60px;font-size:13px;background:var(--hot);color:var(--ink)}
 #bC[hidden]{display:none}
+#bN{position:absolute;right:158px;bottom:118px;width:44px;height:44px;font-size:10px;background:var(--dusk);color:var(--ink)}
+#bN[hidden]{display:none}
 .btn{line-height:1}
 #keyStrip{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom, 0px) + 14px);z-index:4;pointer-events:none;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px 14px;width:max-content;max-width:calc(100vw - 32px);background:var(--panel);border:1px solid var(--line);padding:6px 12px;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
 #keyStrip[hidden]{display:none}
@@ -163,7 +165,7 @@ body.talking #mute{visibility:hidden}
 <div class="card" id="card"><div><h2 id="cardH"></h2><p id="cardP"></p></div></div>
 <div id="keyStrip" hidden></div>
 <div id="stick" class="ctl" aria-hidden="true"><div id="knob"></div></div>
-<div id="btns" class="ctl"><button class="btn" id="bB" aria-label="Boost or jump">B</button><button class="btn" id="bA" aria-label="Act">A</button><button class="btn" id="bR" aria-label="Hold to run" hidden>RUN</button><button class="btn" id="bC" aria-label="Throw a gas can" hidden>THROW</button></div>
+<div id="btns" class="ctl"><button class="btn" id="bB" aria-label="Boost or jump">B</button><button class="btn" id="bA" aria-label="Act">A</button><button class="btn" id="bR" aria-label="Hold to run" hidden>RUN</button><button class="btn" id="bC" aria-label="Throw" hidden>THROW</button><button class="btn" id="bN" aria-label="Switch what you're throwing" hidden>SWAP</button></div>
 <div id="map" hidden><canvas id="mapC" aria-label="Map of Chunky"></canvas>
   <div class="map-head"><h2>Chunky,<br><span>Mississippi</span></h2><div class="obj" id="mapObj" hidden></div></div>
   <div class="map-btns"><button id="mapIn" aria-label="Closer">+</button><button id="mapOut" aria-label="Further out">−</button><button id="mapMe" aria-label="Back to where you are">ME</button><button id="mapX" aria-label="Close the map">BACK</button></div>
@@ -210,6 +212,7 @@ import { randomFrom } from './src/soundbank.js';
 import { createPeople } from './src/people.js';
 import { drawPerson, drawRadiation, drawAura, degreeOf, PARTS, AURA_CELLS } from './src/looks.js';
 import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
+import { LURES, ALARM, SWARM as SWARMED, GRAVITY, inHand, nextUp, kindsHeld, rangeOf, throwOf, aimedAt, whoIsSwarmed } from './src/lures.js';
 import { keysFor, buttonsFor, actWord, fastWord } from './src/controls.js';
 import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRim, drawArrow, drawLabel, labelSpace, clampCam, zoomAbout, fitScale, COLORS as MAPC } from './src/mapview.js';
 import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, wallsOf, Sheet, PATTERN, hash2 } from './src/structures.js';
@@ -3168,21 +3171,25 @@ const PICKUPS = [
 });
 
 // What else is in the store, on the shelves and the counter. No arrow points at any of it: it's there for whoever goes looking. Beans are beans, and he just holds on to the rest for now.
-const LOOT_NAMES = { batteries: 'Batteries', fluid: 'Lighter fluid' };
+const LOOT_NAMES = { bottle: 'Bottles', crackers: 'Firecrackers', fluid: 'Lighter fluid', batteries: 'Batteries' };
 const lootGroup = new THREE.Group(); scene.add(lootGroup); DISTANT.push({ obj: lootGroup, x: PLACES.gas.x + 48, z: PLACES.gas.z - 2, r: 90 });
+const LOOT_LOOKS = {};
 const LOOT = (() => {
   const canGeo = new THREE.CylinderGeometry(.11, .11, .26, 18);
   // a pair of fat cells, copper at the top, and a tin with a spout, the orange warning triangle on yellow
   const cellTex = textTex([''], 32, 64, '#141216', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#c0703a'; g.fillRect(0, 0, 32, 22); g.fillStyle = '#e6e0d0'; g.fillRect(0, 44, 32, 3); } });
   const fluidTex = textTex([''], 96, 160, '#d9a826', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#ec803a'; g.beginPath(); g.moveTo(48, 38); g.lineTo(82, 104); g.lineTo(14, 104); g.fill(); g.fillStyle = '#17141c'; g.fillRect(45, 58, 6, 26); g.fillRect(45, 88, 6, 7); } });
-  const looks = {
+  // a brick of firecrackers in red paper, the triangle again, and a fuse out of the top of it
+  const crackerTex = textTex([''], 96, 128, '#b3202a', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#e8c23a'; g.fillRect(0, 12, 96, 8); g.fillRect(0, 108, 96, 8); g.fillStyle = '#ec803a'; g.beginPath(); g.moveTo(48, 34); g.lineTo(76, 90); g.lineTo(20, 90); g.fill(); g.fillStyle = '#17141c'; g.fillRect(45, 50, 6, 22); g.fillRect(45, 76, 6, 6); } });
+  const looks = Object.assign(LOOT_LOOKS, {
     beans: [canGeo, [canMat[0], canMat[1], canMat[1]]],
+    crackers: [mergeGeometries([new THREE.BoxGeometry(.13, .19, .05), new THREE.BoxGeometry(.012, .07, .012).translate(0, .125, 0)]), new THREE.MeshStandardMaterial({ map: crackerTex, roughness: .7, emissive: '#2a0606' })],
     batteries: [mergeGeometries([new THREE.CylinderGeometry(.07, .07, .24, 12).translate(-.08, 0, 0), new THREE.CylinderGeometry(.07, .07, .24, 12).translate(.08, 0, 0)]), new THREE.MeshStandardMaterial({ map: cellTex, roughness: .5, metalness: .3 })],
     fluid: [mergeGeometries([new THREE.BoxGeometry(.17, .28, .08), new THREE.BoxGeometry(.03, .1, .03).translate(.05, .18, 0)]), new THREE.MeshStandardMaterial({ map: fluidTex, roughness: .5, metalness: .2 })],
-  };
+  });
   const halo = new THREE.SpriteMaterial({ map: radialTex, color: new THREE.Color(1, .55, .2), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: .7 });
   // on the shelves' aisle sides and the counter, in the store's own coordinates
-  return [['beans', 45.98, 1.05, -1], ['batteries', 53.1, 1.32, 2.4], ['batteries', 41.02, 1.05, -3.6], ['fluid', 37.98, 1.05, .6], ['fluid', 41.98, 1.05, -5]].map(([kind, lx, ly, lz], i) => {
+  return [['beans', 45.98, 1.05, -1], ['batteries', 53.1, 1.32, 2.4], ['batteries', 41.02, 1.05, -3.6], ['fluid', 37.98, 1.05, .6], ['fluid', 41.98, 1.05, -5], ['crackers', 45.02, 1.05, -2.6], ['crackers', 45.02, 1.05, .9], ['crackers', 41.02, 1.05, 1]].map(([kind, lx, ly, lz], i) => {
     const [geo, mat] = looks[kind], m = new THREE.Mesh(geo, mat), x = PLACES.gas.x + lx, z = PLACES.gas.z + lz, y = Y0 + ly;
     m.position.set(x, y + .2, z); outline(m, INK, 1.5); lootGroup.add(m);
     const glow = new THREE.Sprite(halo); glow.scale.setScalar(.9); m.add(glow);
@@ -3603,11 +3610,11 @@ function renderFrame(dt) {
 }
 
 // ================================================================ input: keyboard, touch stick, buttons, drag to look
-const input = { x: 0, y: 0, a: false, b: false, run: false, aEdge: false, bEdge: false, cEdge: false, sEdge: false };
+const input = { x: 0, y: 0, a: false, b: false, run: false, aEdge: false, bEdge: false, cEdge: false, nEdge: false, sEdge: false };
 const keys = new Set();
 addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
-  const k = e.key.toLowerCase(); if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; if (k === 'f') input.sEdge = true; if (k === 'q') input.cEdge = true; }
+  const k = e.key.toLowerCase(); if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; if (k === 'f') input.sEdge = true; if (k === 'q') input.cEdge = true; if (k === 'r') input.nEdge = true; }
   keys.add(k);
   if (S.mode === 'dialog' && /^[1-4]$/.test(k)) { const b = $('dOpts').children[+k - 1]; if (b) b.click(); }
   if (k === 'm' && !e.repeat) { if (mapOpen) closeMap(); else if (canOpenMap()) openMap(); }
@@ -3627,10 +3634,10 @@ function moveStick(e) {
   touchStick.set(x, -y); knob.style.transform = `translate(${x * 38}px,${y * 38}px)`;
 }
 // RUN stays held a moment after it's let go, so a thumb can slide off it to jump
-const touchBtn = { a: false, b: false, c: false, r: false, rUntil: 0 };
-for (const [id, k] of [['bA', 'a'], ['bB', 'b'], ['bR', 'r'], ['bC', 'c']]) {
+const touchBtn = { a: false, b: false, c: false, n: false, r: false, rUntil: 0 };
+for (const [id, k] of [['bA', 'a'], ['bB', 'b'], ['bR', 'r'], ['bC', 'c'], ['bN', 'n']]) {
   const el = $(id);
-  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); touchBtn[k] = true; el.classList.add('on'); if (k === 'a') input.aEdge = true; else if (k === 'b') input.bEdge = true; else if (k === 'c') input.cEdge = true; });
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); touchBtn[k] = true; el.classList.add('on'); if (k === 'a') input.aEdge = true; else if (k === 'b') input.bEdge = true; else if (k === 'c') input.cEdge = true; else if (k === 'n') input.nEdge = true; });
   const up = () => { touchBtn[k] = false; el.classList.remove('on'); if (k === 'r') touchBtn.rUntil = time + .2; };
   el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up);
 }
@@ -3648,7 +3655,7 @@ function readInput() {
 }
 
 // ================================================================ game state + UI
-const S = { mode: 'title', hp: 3, beans: 0, gas: 0, items: {}, flags: {}, collapse: -99, sweep: 0, talkTo: null, removedNoose: false };
+const S = { mode: 'title', hp: 3, beans: 0, gas: 0, hand: null, items: {}, flags: {}, collapse: -99, sweep: 0, talkTo: null, removedNoose: false };
 // A private window can refuse storage outright, and then nothing's saved
 let saveStore = null; try { saveStore = localStorage; } catch { /* not saved */ }
 const people = createPeople(await (await fetch('data/cast.json')).json(), { store: saveStore });
@@ -3712,11 +3719,11 @@ function setButton(id, label, sizes) {
   el.innerHTML = label.replace(' ', '<br>'); el.style.fontSize = `${sizes[label.includes(' ') ? 2 : label.length < 4 ? 0 : label.length < 5 ? 1 : 2]}px`; el.setAttribute('aria-label', label);
 }
 function updateControls() {
-  const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, gas = S.gas, now = `${S.mode}|${act}|${map}|${gas}`;
+  const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, thrown = thrownNow(), now = `${S.mode}|${act}|${map}|${thrown?.word}|${thrown?.n}|${thrown?.more}`;
   if (hudCache.controls === now) return; hudCache.controls = now;
   $('stam').classList.toggle('veh', S.mode === 'drive');
-  if (touchUI) { const { a, b, run, c } = buttonsFor(S.mode, { act, gas }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); setHidden('bC', !c); if (c) $('bC').innerHTML = c.replace(' ', '<br>'); return; }
-  const list = keysFor(S.mode, { act, map, gas });
+  if (touchUI) { const { a, b, run, c, swap } = buttonsFor(S.mode, { act, thrown }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); setHidden('bC', !c); setHidden('bN', !swap); if (c) { $('bC').innerHTML = c.replace(' ', '<br>'); $('bC').style.fontSize = thrown.word.length > 6 ? '10.5px' : '13px'; $('bC').setAttribute('aria-label', `Throw ${thrown.name}`); } return; }
+  const list = keysFor(S.mode, { act, map, thrown });
   setHidden('keyStrip', !list.length); $('keyStrip').innerHTML = list.map(([key, what]) => `<span class="ks"><span class="kc">${key}</span>${what}</span>`).join('');
 }
 function hudVitals() {
@@ -4004,6 +4011,8 @@ const horde = createHorde({
     if (S.hp <= 0) { fail('They dragged you off.', `Keep moving. Mash ${press('FREE')} to break free.`); return; }
     if (S.beans > 0) { S.beans -= 1; toast('-1 beans · they got a can'); } else toast('Keep moving');
   },
+  // the cottonmouths have got someone who went into the water after something
+  bitten(s) { addRipple(s.x, s.z, .6, 1); spray(s.x, WATER.level(s.x, s.z) + .1, s.z, FEW ? 4 : 8, .07, 2.6, .55, .8, .85); SFX.play('snake.strike', { x: s.x, z: s.z, gain: .8 }); SFX.play('splash.small', { x: s.x, z: s.z }); },
 });
 // where they start: along the streets of town, thickest on US 80
 const CROWD_STREETS = [['us_80', atTrue(-615, -18), atTrue(185, 0), 56], ['church_st', atTrue(-1098, -379), atTrue(-281, -199), 20], ['adams_st', atTrue(-283, -23), atTrue(-285, -338), 20]];
@@ -4253,7 +4262,7 @@ function pickUpLoot(reach) {
   for (const c of LOOT) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) {
     c.got = true; c.m.visible = false;
     if (c.kind === 'beans') { addBeans(1, 'found'); townObjective(); }
-    else { S.items[c.kind] = (S.items[c.kind] ?? 0) + 1; SFX.play('can.clink'); toast(`+1 ${LOOT_NAMES[c.kind].toLowerCase()}`); }
+    else { S.items[c.kind] = (S.items[c.kind] ?? 0) + 1; SFX.play('can.clink'); toast(`+1 ${(LURES[c.kind]?.name ?? LOOT_NAMES[c.kind]).toLowerCase()}`); }
     hudVitals();
   }
 }
@@ -4642,6 +4651,7 @@ function looseAt(x, z, y, self = null) {
 const SHOVE_SPEED = 3, SHOVE_HURT = 20;
 function shove(v, speed, dirx, dirz, mass) {
   const M = v.K.mass, w = v.loose ? v.loose.vx * dirx + v.loose.vz * dirz : 0, closing = speed - w;
+  soundAlarm(v);
   if (!v.loose && closing < SHOVE_SPEED) return null;
   if (closing <= 0) { v.loose.clear = .25; return { energy: 0, gone: true }; }
   const after = (mass * speed + M * w) / (mass + M), heat = .5 * mass * M / (mass + M) * closing * closing;
@@ -4675,29 +4685,208 @@ function updateSwing(dt) {
   swingT += dt;
   if (!swingHit && swingT >= SWING_AT) {
     swingHit = true;
-    const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), P = player.pos, x = P.x + fx * .9, z = P.z + fz * .9, r = strike(x, P.y + 1.1, z, 1.3, 1, fx, fz), n = crowdOut ? horde.knock(x, z, 1.5, 2.4) : 0;
+    const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), P = player.pos, x = P.x + fx * .9, z = P.z + fz * .9, car = parkedAt(x, z, P.y + 1), r = car ? null : strike(x, P.y + 1.1, z, 1.3, 1, fx, fz), n = crowdOut ? horde.knock(x, z, 1.5, 2.4) : 0;
     swatFlies(P.x, P.z);
     if (n) SFX.play('hit.flesh');
+    if (car) { SFX.play('hit.metal'); spray(x, P.y + 1.1, z, FEW ? 2 : 4, .05, 2.4, .8, .75, .65); soundAlarm(car); }
     if (r && !r.gone) SFX.play(r.house ? (r.house.walls === 'metal' || r.house.walls === 'mobile' ? 'hit.metal' : 'hit.wood') : METAL_PROPS.has(r.thing.kind) ? 'hit.metal' : 'hit.wood');
-    if ((r || n) && !reduceMotion) cam.shake = Math.max(cam.shake, .22);
+    if ((r || n || car) && !reduceMotion) cam.shake = Math.max(cam.shake, .22);
     if (crowdOut) horde.noise(P.x, P.z, 14, 1);
   }
   if (swingT >= SWING_T) swingT = -1;
 }
+// ---------------- what he can throw to move the crowd without fighting it. What each one does is in src/lures.js, and what they make of it is in src/horde.js.
+// Near him, what's lying around is drawn with whatever's in the air, one mesh and an outline for each kind that's there to be seen.
+const LURE_SEE = 44, LURES_FLYING = 4, LURE_GLOWS = 6;
+// an empty beer bottle in brown glass, with what's left of its paper label. It's nothing like his.
+const bottleGeo = new THREE.LatheGeometry([[.001, 0], [.038, 0], [.04, .018], [.04, .055], [.04, .135], [.04, .165], [.028, .205], [.015, .24], [.014, .315], [.018, .32], [.018, .335], [.001, .335]].map(([r, y]) => new THREE.Vector2(r, y)), 8).translate(0, -.17, 0);
+const bottleMat = new THREE.MeshStandardMaterial({ map: textTex([''], 8, 64, '#8c5a22', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#d9cfb4'; g.fillRect(0, 41, 8, 6); } }), emissive: '#3a2410', roughness: .22, metalness: .1, side: THREE.DoubleSide });
+const lureMeshes = Object.fromEntries(Object.entries({ bottle: [bottleGeo, bottleMat, 36], crackers: [...LOOT_LOOKS.crackers, 16], fluid: [...LOOT_LOOKS.fluid, LURES_FLYING], can: [...LOOT_LOOKS.beans, LURES_FLYING + 3] }).map(([kind, [geo, mat, cap]]) => {
+  const m = new THREE.InstancedMesh(geo, mat, cap), line = new THREE.InstancedMesh(geo, outlineMat(kind === 'bottle' ? CHALK_WHITE : INK, 1.2, 0), cap);
+  line.instanceMatrix = m.instanceMatrix;
+  for (const o of [m, line]) { o.frustumCulled = false; o.count = 0; o.visible = false; o.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(o); }
+  return [kind, { m, line, cap, n: 0 }];
+}));
+const lureGlows = Array.from({ length: LURE_GLOWS }, () => { const g = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); g.visible = false; scene.add(g); return g; });
+let lureGlowsOn = 0;
+// and a glint on whatever's lying there to be found: all in one draw call
+const glintGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * 52), 3));
+const glints = new THREE.Points(glintGeo, new THREE.PointsMaterial({ map: radialTex, color: '#ffdca6', size: .5, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: .5, fog: false }));
+glints.frustumCulled = false; glintGeo.setDrawRange(0, 0); scene.add(glints);
+const LYING = [], flying = Array.from({ length: LURES_FLYING }, () => ({ on: false, kind: null, x: 0, y: 0, z: 0, px: 0, pz: 0, vx: 0, vy: 0, vz: 0, turn: 0 }));
+const popping = [], opened = [], ALARMS = [], lureSpots = [], swarmedAt = {}, lyingNear = [];
+let lureDirty = true, lyingX = Infinity, lyingZ = Infinity, swarmLook = 0;
+function layOutLying() {
+  // near the end of about one drive in three, off to the side of it
+  for (const r of MAP.lanes) {
+    if (!r.structure) continue;
+    const id = r.structure | 0; if (hash2(id, 91) > .32) continue;
+    const [ax, az] = r.pts.at(-2), [bx, bz] = r.pts.at(-1), l = Math.hypot(bx - ax, bz - az) || 1, off = (hash2(id, 92) < .5 ? -1 : 1) * (r.width / 2 + .5 + hash2(id, 93) * 1.2), back = hash2(id, 94) * 4;
+    LYING.push({ kind: 'bottle', x: bx - (bx - ax) / l * back - (bz - az) / l * off, z: bz - (bz - az) / l * back + (bx - ax) / l * off, yaw: hash2(id, 95) * 6.28, y: null, got: false });
+  }
+  // and on the shoulder along the town's stretch of US 80, which is where he'll want one first
+  const us80 = MAP.roadById.get('us_80'), s0 = MAP.sOn('us_80', ...atTrue(-615, -18)), s1 = MAP.sOn('us_80', ...atTrue(185, 0));
+  for (let i = 0, n = Math.floor(Math.abs(s1 - s0) / 38); i <= n; i++) {
+    if (hash2(i, 96) > .75) continue;
+    const s = s0 + (s1 - s0) * (i + hash2(i, 97) * .6) / n, a = MAP.along('us_80', s), b = MAP.along('us_80', s + 1), side = (hash2(i, 98) < .5 ? -1 : 1) * (us80.width / 2 + .9 + hash2(i, 99) * 1.4);
+    LYING.push({ kind: 'bottle', x: a.x - (b.z - a.z) * side, z: a.z + (b.x - a.x) * side, yaw: hash2(i, 100) * 6.28, y: null, got: false });
+  }
+  // a brick of firecrackers on the step of each shop
+  for (const s of STRUCTURES) {
+    if (s.use !== 'shop') continue;
+    const d = wallsOf(s, TOWN_Y).doors[0]; if (!d) continue;
+    LYING.push({ kind: 'crackers', x: d.x + d.nx * 1 + d.ex * .9, z: d.z + d.nz * 1 + d.ez * .9, yaw: hash2(s.id | 0, 101) * 6.28, y: null, got: false });
+  }
+}
+layOutLying();
+// How many he has of each, and what he'd throw now. Beans only count once there's someone to throw them at, so that nothing changes in Chapter 1.
+const haveNow = () => ({ gas: S.gas, bottle: S.items.bottle ?? 0, crackers: S.items.crackers ?? 0, fluid: S.items.fluid ?? 0, can: crowdOut ? S.beans : 0 });
+function thrownNow() {
+  const have = haveNow(), kind = inHand(have, S.hand);
+  return kind ? { kind, name: LURES[kind].name, word: LURES[kind].word, n: have[kind], more: kindsHeld(have) > 1 } : null;
+}
+// A sound that's only on the new sheet plays nothing with #old, and doesn't make a fuss about it
+const playNew = (name, opts) => { if (SFX.data.cues[name]) SFX.play(name, opts); };
+function throwLure(kind) {
+  const f = flying.find((t) => !t.on); if (!f) return false;
+  const L = LURES[kind], P = player.pos;
+  let fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), dist = null, drop = 1.7;
+  // a car close to where he's facing is what he's throwing at
+  const car = aimedAt(P.x, P.z, fx, fz, VEHICLES.filter(canAlarm), rangeOf(L, .8));
+  if (car) { dist = Math.hypot(car.x - P.x, car.z - P.z); fx = (car.x - P.x) / dist; fz = (car.z - P.z) / dist; drop = .8; }
+  const v = throwOf(L, fx, fz, dist, drop);
+  Object.assign(f, { on: true, kind, x: P.x + fx * .5, y: P.y + 1.7, z: P.z + fz * .5, px: P.x, pz: P.z, vx: v.vx, vy: v.vy, vz: v.vz, turn: 0 });
+  lureDirty = true;
+  return true;
+}
+// It's come down. It's the same wherever it does, except that in the water all it does is splash, and whoever goes in after it doesn't come back.
+function landLure(kind, x, y, z) {
+  const L = LURES[kind], fl = floorAt(x, z), level = WATER.level(x, z), wet = fl < level - .1;
+  if (crowdOut) horde.lure(x, z, L.reach, L.seconds, wet);
+  lureSpots.push({ x, z, until: time + SWARMED.remember });
+  if (wet) { addRipple(x, z, .45, 0); SFX.play('splash.small', { x, z }); return; }
+  if (kind === 'bottle') { spray(x, Math.max(y, fl + .1), z, FEW ? 5 : 10, .055, 3, .62, .4, .16); playNew('lure.bottle', { x, z }); }
+  else if (kind === 'crackers') { popping.push({ x, y: fl + .08, z, until: time + L.seconds, next: time }); }
+  else if (kind === 'fluid') { spray(x, fl + .1, z, FEW ? 3 : 6, .05, 2.2, 1, .7, .25); burnAt(x, fl + .05, z, .58, L.seconds); }
+  else if (kind === 'can') { opened.push({ x, y: fl + .11, z, yaw: wreckRand() * 6.28, until: time + L.seconds, next: time }); SFX.play('can.clink', { x, z }); lureDirty = true; }
+}
+const canAlarm = (v) => ALARM.kinds.has(v.kind) && !v.alarmed && !v.wrecked && !v.drowned && !v.exploded && v.fuse === undefined && v !== driving;
+function parkedAt(x, z, y) {
+  const near = vehCells.get((Math.floor(x / 16) + 32768) * 65536 + Math.floor(z / 16) + 32768);
+  if (near) for (const v of near) if (y < v.y + 1.8 && inVehicle(v, x, z, .3)) return v;
+  return looseAt(x, z, y);
+}
+function soundAlarm(v) {
+  if (!canAlarm(v)) return;
+  v.alarmed = true; ALARMS.push({ v, until: time + ALARM.seconds });
+  if (crowdOut) horde.lure(v.x, v.z, ALARM.reach, ALARM.seconds);
+  lureSpots.push({ x: v.x, z: v.z, until: time + SWARMED.remember });
+}
+function glowAt(x, y, z, size, r, g, b, a) {
+  const o = lureGlows[lureGlowsOn++]; if (!o) return;
+  o.visible = true; o.position.set(x, y, z); o.scale.setScalar(size); o.material.color.setRGB(r, g, b); o.material.opacity = a;
+}
+function updateLures(dt) {
+  for (const f of flying) {
+    if (!f.on) continue;
+    f.px = f.x; f.pz = f.z; f.vy -= GRAVITY * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt; f.turn += dt * 11; lureDirty = true;
+    const fl = floorAt(f.x, f.z), hitSomeone = crowdOut && horde.active.some((s) => s.state !== STUNNED && Math.hypot(s.x - f.x, s.z - f.z) < .6 && f.y < s.y + 2);
+    if (blocked(f.x, f.z, f.y)) { const car = parkedAt(f.x, f.z, f.y); if (car) soundAlarm(car); f.on = false; landLure(f.kind, f.px, f.y, f.pz); }
+    else if (f.y <= Math.max(fl, WATER.level(f.x, f.z)) + .06 || hitSomeone) { f.on = false; landLure(f.kind, f.x, f.y, f.z); }
+  }
+  // firecrackers go off in fits
+  const flash = !reduceMotion, was = lureGlowsOn; lureGlowsOn = 0;
+  for (let i = popping.length - 1; i >= 0; i--) {
+    const p = popping[i]; if (time >= p.until) { popping.splice(i, 1); continue; }
+    if (time >= p.next) { p.next = time + .1 + wreckRand() * wreckRand() * .7; p.lit = time + 1 / 12; spray(p.x, p.y + .05, p.z, FEW ? 3 : 5, .045, 3.4, 1, .82, .35); playNew('lure.pop', { x: p.x, z: p.z }); }
+    if (flash && time < p.lit) glowAt(p.x, p.y + .25, p.z, 1.5, 1, .78, .38, .9);
+  }
+  // the smell comes off an open can
+  for (let i = opened.length - 1; i >= 0; i--) {
+    const c = opened[i]; if (time >= c.until) { opened.splice(i, 1); lureDirty = true; continue; }
+    if (time >= c.next) { c.next = time + .55; puff(c.x, c.y + .12, c.z, .22, 1.3, .7, .3, .27, .13); }
+  }
+  // and a car alarm goes on until it stops, or the car does
+  let loudest = 0;
+  for (let i = ALARMS.length - 1; i >= 0; i--) {
+    const a = ALARMS[i], v = a.v;
+    if (time >= a.until || v === driving || v.wrecked || v.drowned || v.exploded) { ALARMS.splice(i, 1); continue; }
+    loudest = Math.max(loudest, (1 - Math.min(1, Math.hypot(v.x - player.pos.x, v.z - player.pos.z) / 130)) ** 1.5);
+    // its lights go on and off, or just stay on for anyone who'd rather they didn't flash
+    if (!flash || Math.floor(time * 3) % 2 === 0) {
+      const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw), h = v.K.length / 2 + .05, k = flash ? .95 : .5;
+      glowAt(v.x + fx * h, v.y + .75, v.z + fz * h, 2.8, 1, .72, .34, k); glowAt(v.x - fx * h, v.y + .75, v.z - fz * h, 2.6, 1, .26, .14, k);
+    }
+  }
+  SFX.loop('vehicle.alarm', loudest);
+  for (let i = lureGlowsOn; i < was; i++) lureGlows[i].visible = false;
+  // anyone who ends up with them all around because of something he threw isn't going to thank him for it
+  if (crowdOut && lureSpots.length && time >= swarmLook) {
+    swarmLook = time + 1;
+    for (let i = lureSpots.length - 1; i >= 0; i--) if (time >= lureSpots[i].until) lureSpots.splice(i, 1);
+    const folks = people.data.cast.filter((c) => c.id !== 'robby').map((c) => ({ id: c.id, x: NPCS[c.id].root.position.x, z: NPCS[c.id].root.position.z }));
+    for (const id of whoIsSwarmed(lureSpots, folks, horde.active)) {
+      if (time - (swarmedAt[id] ?? -1e9) < SWARMED.again) continue;
+      swarmedAt[id] = time; people.change(id, 'trust', -1); toast(`${NPCS[id].name} trusts you less`);
+    }
+  }
+}
+function drawLures() {
+  const P = player.pos;
+  if (Math.hypot(P.x - lyingX, P.z - lyingZ) > 4) {
+    lyingX = P.x; lyingZ = P.z; lyingNear.length = 0; lureDirty = true;
+    for (const c of LYING) {
+      if (c.got || Math.abs(c.x - P.x) > LURE_SEE || Math.abs(c.z - P.z) > LURE_SEE) continue;
+      if (c.y === null) { c.y = floorAt(c.x, c.z); if (blocked(c.x, c.z, c.y + .3)) { c.got = true; continue; } }
+      lyingNear.push(c);
+    }
+  }
+  if (!lureDirty) return; lureDirty = false;
+  for (const k in lureMeshes) lureMeshes[k].n = 0;
+  const put = (kind) => { const k = lureMeshes[kind]; if (k.n >= k.cap) return; k.m.setMatrixAt(k.n++, _m); };
+  for (const f of flying) if (f.on) { _m.compose(_v.set(f.x, f.y, f.z), _q.setFromEuler(_we.set(f.turn, f.turn * .6, 0)), _s.set(1, 1, 1)); put(f.kind); lureDirty = true; }
+  for (const c of opened) { _m.compose(_v.set(c.x, c.y, c.z), _q.setFromAxisAngle(UP, c.yaw), _s.set(1, 1, 1)); put('can'); }
+  const glint = glintGeo.attributes.position; let shining = 0;
+  for (const c of lyingNear) {
+    if (c.got) continue;
+    // a bottle lies on its side, and a brick of firecrackers on its face
+    const bottled = c.kind === 'bottle';
+    _q.setFromEuler(_we.set(bottled ? 0 : -Math.PI / 2, c.yaw, bottled ? Math.PI / 2 : 0, 'YXZ'));
+    _m.compose(_v.set(c.x, c.y + (bottled ? .04 : .03), c.z), _q, _s.set(1, 1, 1)); put(c.kind);
+    if (shining < glint.count) glint.setXYZ(shining++, c.x, c.y + .12, c.z);
+  }
+  glint.needsUpdate = true; glintGeo.setDrawRange(0, shining);
+  for (const k in lureMeshes) { const { m, line, n } = lureMeshes[k]; m.count = line.count = n; m.visible = line.visible = n > 0; m.instanceMatrix.needsUpdate = true; }
+}
+function pickUpLying(reach) {
+  for (const c of lyingNear) {
+    if (c.got || (S.items[c.kind] ?? 0) >= LURES[c.kind].carry || Math.hypot(c.x - player.pos.x, c.z - player.pos.z) >= reach || Math.abs(c.y - player.pos.y) >= 2) continue;
+    c.got = true; lureDirty = true; S.items[c.kind] = (S.items[c.kind] ?? 0) + 1; SFX.play('can.clink'); toast(`+1 ${LURES[c.kind].name}`);
+  }
+}
 function throwOne() {
-  if (S.mode !== 'town' || !(S.gas > 0) || !throwCan()) return;
-  S.gas--; throwT = .25; SFX.play('swing', { rate: 1.4 });
+  if (S.mode !== 'town') return;
+  const kind = inHand(haveNow(), S.hand); if (!kind) return;
+  if (kind === 'gas' ? !throwCan() : !throwLure(kind)) return;
+  S.hand = kind;
+  if (kind === 'gas') S.gas--; else if (kind === 'can') { S.beans--; townObjective(); } else S.items[kind]--;
+  throwT = .25; SFX.play('swing', { rate: 1.4 });
+}
+function switchThrown() {
+  if (S.mode !== 'town') return;
+  const have = haveNow(), kind = nextUp(have, inHand(have, S.hand));
+  if (kind && kind !== S.hand) { S.hand = kind; SFX.play('ui.tap'); }
 }
 function pickUpGas(reach) {
   for (const c of GAS_CANS) if (!c.got && S.gas < GAS_CARRY && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; gasDirty = true; S.gas++; SFX.play('can.slosh'); toast(`+1 gas can · ${S.gas}`); }
 }
 let wreckStep = -1, wreckDrawn = -1;
 function updateWreck(dt, step) {
-  updateSwing(dt); updateBits(dt); updateThrown(dt); updateBooms(dt); updateFire(dt); updateLoose(dt);
+  updateSwing(dt); updateBits(dt); updateThrown(dt); updateLures(dt); updateBooms(dt); updateFire(dt); updateLoose(dt);
   if (step !== wreckStep) { wreckStep = step; stepFalling(); stepTrees(); }
 }
 function drawWreck(step) {
-  drawGas();
+  drawGas(); drawLures();
   if (step === wreckDrawn) return;
   wreckDrawn = step; drawBits(); drawFire(step);
 }
@@ -4705,7 +4894,7 @@ function drawWreck(step) {
 function startFree() {
   $('title').hidden = true;
   nooseRing.visible = knot.visible = false; S.removedNoose = true; ropeTop.visible = false; lantern.visible = false; bottle.visible = false;
-  S.flags.ended = S.flags.arrived = true; S.gas = 3;
+  S.flags.ended = S.flags.arrived = true; S.gas = 3; Object.assign(S.items, { bottle: 3, crackers: 2, fluid: 1 });
   // on the shoulder of US 80 outside the gas station, with the truck and the cans right there and the town ahead of him
   const [x, z] = gasAt(57, 15.5);
   HP.kind = 'run'; player.pos.set(x, floorAt(x, z), z); player.grounded = true; player.yaw = Math.PI / 2; cam.yaw = player.yaw + Math.PI; cam.snap = true; heroRoot.quaternion.identity();
@@ -5051,7 +5240,7 @@ function tick(dt, draw = true) {
     }
     if (M === 'town') {
       ghost.position.lerp(new THREE.Vector3(26, -3, 3), Math.min(1, dt * .5));
-      arriving(); pickUpCans(1.15); pickUpGas(1.15); pickUpLoot(1.15);
+      arriving(); pickUpCans(1.15); pickUpGas(1.15); pickUpLoot(1.15); pickUpLying(1.15);
       // talk
       let near = null, nd = 2.6;
       // Once he's asked, the button by Robby is for the flies: he's said all he's going to, and it's the only button a phone has
@@ -5065,6 +5254,7 @@ function tick(dt, draw = true) {
       if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else swing(); }
       if (input.sEdge) swing();
       if (input.cEdge) throwOne();
+      if (input.nEdge) switchThrown();
     }
   }
   // ---------------- sweeping Odessa's steps
@@ -5197,7 +5387,7 @@ function tick(dt, draw = true) {
   if (cardT > 0) { cardT -= dt; if (cardT <= 0) $('card').classList.remove('show'); }
   hudVitals();
   soundTick(dt, M);
-  input.aEdge = false; input.bEdge = false; input.cEdge = false; input.sEdge = false;
+  input.aEdge = false; input.bEdge = false; input.cEdge = false; input.nEdge = false; input.sEdge = false;
 
   sky.material.uniforms.uTime.value = time; waterMat.uniforms.uTime.value = time; swayU.uTime.value = time; gifMat.uniforms.uTime.value = time;
   if (S.flags.town && Math.floor(time * 2) !== vehPicked) pickVehicles();
@@ -5248,6 +5438,7 @@ if (location.hash === '#signs') openSignBoard();
 if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    lures: { LYING, lyingNear, flying, popping, opened, ALARMS, lureSpots, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
     horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far) }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
@@ -5310,7 +5501,7 @@ if (TEST) {
     },
     place(x, z, y) { player.pos.set(x, y ?? floorAt(x, z), z); player.grounded = true; player.vy = 0; cam.snap = true; return this.state(); },
     look(yaw, pitch) { cam.yaw = yaw; if (pitch !== undefined) cam.pitch = pitch; cam.snap = true; lastLook = time; },
-    key(k, down = true) { k = k.toLowerCase(); if (down) { if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; if (k === 'f') input.sEdge = true; if (k === 'q') input.cEdge = true; } keys.add(k); } else keys.delete(k); },
+    key(k, down = true) { k = k.toLowerCase(); if (down) { if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; if (k === 'f') input.sEdge = true; if (k === 'q') input.cEdge = true; if (k === 'r') input.nEdge = true; } keys.add(k); } else keys.delete(k); },
     stick(x, y) { touchStick.set(x, y); },
     choose(i) { $('dOpts').children[i].click(); return this.state(); },
     burst(pow = 1, dur = .5, hold = true, fine = true) { triggerBurst(pow, dur, hold, fine); },

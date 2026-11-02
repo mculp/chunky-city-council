@@ -14,7 +14,7 @@ There are two sheets, each saying what every sound and part of the score is and 
 
 To put one sound back, copy its line from `data/sound.json` over its line in `data/sound-new.json`. To put them all back, it's the line in `index.html` that picks the sheet.
 
-A sound that came after the old sheet stopped changing is only on the new one. So far that's `amb.flies`, the flies round Robby. It has no worked-out version to fall back on or to be levelled against, so `#old` plays without it, and without saying so. `tools/make-sound.test.js` checks that the new sheet has everything the old one has, and not the other way round.
+A sound that came after the old sheet stopped changing is only on the new one. So far that's `amb.flies`, the flies round Robby, and `lure.bottle`, `lure.pop` and `vehicle.alarm`, for what he throws. They have no worked-out version to fall back on or to be levelled against, so `#old` plays without them, and without saying so. `tools/make-sound.test.js` checks that the new sheet has everything the old one has, and not the other way round.
 
 ## Swapping a sound
 

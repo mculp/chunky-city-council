@@ -88,6 +88,80 @@ describe('senses', () => {
     assert.ok(s.x > 20, 'and walk towards it');
   });
 
+  test('a lure takes hunters off him, and they go to it quicker than they\'d go to look', () => {
+    const h = createHorde(field()), s = h.add(10, 0), p = { ...still, noise: 20 };
+    run(h, p, 1.5); assert.ok(s.state === HUNTING || s.state === SWARM, `it's ${s.state}`);
+    const x = s.x;
+    h.lure(30, 0, 40, 6); run(h, p, .4);
+    assert.equal(s.state, CURIOUS); assert.equal(s.tx, 30);
+    run(h, p, 2);
+    assert.ok(s.x - x > 2.5, `only got to ${s.x}`);
+    assert.ok(s.moving > TUNING.speed[CURIOUS]);
+  });
+
+  test('a plain noise doesn\'t take a hunter off someone it can still hear', () => {
+    const h = createHorde(field()), s = h.add(10, 0), p = { ...still, noise: 20 };
+    run(h, p, 1.5);
+    h.noise(30, 0, 40, 6); run(h, p, .4);
+    assert.ok(s.state === HUNTING || s.state === SWARM);
+  });
+
+  test('but one still comes for him if he\'s right on top of it', () => {
+    const h = createHorde(field()), s = h.add(2, 0), p = { ...still, noise: 20 };
+    run(h, p, 1.2);
+    h.lure(30, 0, 40, 6); run(h, p, .4);
+    assert.ok(s.state === HUNTING || s.state === SWARM || s.state === GRABBING, `it's ${s.state}`);
+  });
+
+  test('a lure wins over a noise that\'s nearer', () => {
+    const h = createHorde(field()), s = h.add(0, 40);
+    h.noise(0, 45, 20, 6); h.lure(0, 20, 40, 6); run(h, { ...still, x: 100 }, .3);
+    assert.equal(s.tz, 20);
+  });
+
+  test('once it stops they can make him out again', () => {
+    const h = createHorde(field()), s = h.add(10, 0);
+    h.lure(30, 0, 40, 1); run(h, { ...still, noise: 20 }, 4);
+    assert.ok(s.alert > 0, 'it\'s heard him');
+    assert.ok(!s.drawn);
+  });
+
+  test('anywhere else they keep out of the water, however loud it is', () => {
+    const wet = (x) => x > 15, h = createHorde(field({ water: wet })), s = h.add(10, 0);
+    h.noise(25, 0, 40, 8); run(h, { ...still, x: -100 }, 8);
+    assert.ok(!wet(s.x), `it's at ${s.x}`);
+  });
+
+  test('a lure in the water takes them in after it, and they don\'t come out', () => {
+    const wet = (x) => x > 15, bitten = [], h = createHorde(field({ water: wet }), {}, { bitten: (o) => bitten.push(o) }), s = h.add(10, 0), far = h.add(-40, 0);
+    h.lure(25, 0, 40, 8, true);
+    const p = { ...still, x: -100 }; let went = false;
+    for (let t = 0; t < 30 && !bitten.length; t += 1 / 30) { h.update(1 / 30, p); if (wet(s.x)) went = true; }
+    assert.ok(went, 'it went in');
+    assert.deepEqual(bitten, [s]);
+    assert.equal(far.wading, undefined, 'and whoever couldn\'t hear it stays out');
+    const y = s.y; run(h, p, TUNING.goesUnder / 2);
+    assert.ok(s.y < y, 'it goes down');
+    assert.ok(h.all.includes(s));
+    run(h, p, TUNING.goesUnder);
+    assert.ok(!h.all.includes(s), 'and it\'s gone');
+    assert.ok(h.all.includes(far));
+  });
+
+  test('it only takes a moment of hearing it, and they go all the way', () => {
+    const wet = (x) => x > 15, h = createHorde(field({ water: wet })), s = h.add(0, 0);
+    h.lure(25, 0, 40, .5, true); run(h, { ...still, x: -100 }, 25);
+    assert.ok(wet(s.x) || !h.all.includes(s), `it's at ${s.x}`);
+  });
+
+  test('anyone who\'s called off before they get there stays out', () => {
+    const wet = (x) => x > 15, h = createHorde(field({ water: wet, wander: (o) => [o.x - 5, o.z] })), s = h.add(-20, 0);
+    h.lure(25, 0, 50, .5, true); run(h, { ...still, x: -100 }, .4);
+    assert.equal(s.wading, true);
+    run(h, { ...still, x: -100 }, .4); h.calm(); run(h, { ...still, x: -100 }, 1);
+    assert.ok(!s.wading);
+  });
+
   test('they\'re drawn to a light at night', () => {
     const h = createHorde(field({ wander: (s) => [s.x, s.z] }), { lightPull: 1 }), s = h.add(10, 0); h.lights.push({ x: 20, z: 0, r: 30 });
     run(h, { ...still, x: -100 }, 20);

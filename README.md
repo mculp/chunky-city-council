@@ -11,9 +11,9 @@ python3 -m http.server
 Then open http://localhost:8000. It needs a network connection for three.js and the fonts.
 
 - **Touch:** left thumb moves, drag to look, and the buttons say what they do.
-- **Keyboard:** WASD or arrows move, hold Shift to run, Space jumps or swims faster, E uses, F swings, Q throws a gas can, M is the map, drag to look. A strip at the bottom shows the keys that work right now.
+- **Keyboard:** WASD or arrows move, hold Shift to run, Space jumps or swims faster, E uses, F swings, Q throws what's in his hand, R switches it, M is the map, drag to look. A strip at the bottom shows the keys that work right now.
 
-Skip to town on the title card, or `index.html#free`, goes straight to free play: the whole map, the crowd out, three gas cans, and everything in town can be broken.
+Skip to town on the title card, or `index.html#free`, goes straight to free play: the whole map, the crowd out, three gas cans, some bottles, firecrackers and lighter fluid, and everything in town can be broken.
 
 ## What's here
 
@@ -48,6 +48,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/play-lanes.mjs`: drives up a lane and a drive in Chrome, and checks what's on them (`npm run lanes`)
 - `tools/play-drive.mjs`: drives every kind of vehicle in Chrome, on the roads and off them, into walls and through the crowd (`npm run drive`)
 - `tools/play-field.mjs`: walks onto the ball field and tries its fence and gates, on foot and in a pickup (`npm run field`)
+- `tools/play-lures.mjs`: moves the crowd with what he can throw: off US 80, off his back, into the river, and round someone who won't thank him for it (`npm run lures`)
 - `tools/play-station.mjs`: goes round the gas station for what's on its shelves, bars its door with the crowd outside, and checks that the crowd goes for its light (`npm run station`)
 - `tools/play-water.mjs`: swims across a pond, floods a pickup in another and checks what's under them (`npm run water`)
 - `tools/play-sound.mjs`: plays the game with the sound on and checks what it's playing (`npm run sound`)
