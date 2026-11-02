@@ -103,7 +103,8 @@ check('and he can go round it', net.past && net.round.off < 1, net);
 
 // ---------------- keeping it up, with the stick and the button
 const start = await g(() => {
-  const G = __game, Y = G.yard, B = Y.BALL; G.place(B.x + 1, B.z); G.sim(.1, .1);
+  // a frame has to be drawn before what's near him is shown, and the ball's ring only shows if the ball's group does
+  const G = __game, Y = G.yard, B = Y.BALL; G.place(B.x + 1, B.z); G.sim(.1, .1); G.step(1 / 30, 1 / 30);
   return { act: G.S.act, button: buttonSays(), air: B.air, count: B.count };
 });
 check('beside the ball it says to bump it, and the button says BUMP', start.act === 'Bump the ball' && start.button === 'BUMP' && !start.air, start);

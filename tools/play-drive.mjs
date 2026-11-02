@@ -139,7 +139,7 @@ for (const kind of KINDS) {
   const back = await g(() => { const G = __game, P = G.player.pos, x0 = P.x, z0 = P.z; G.key('w', true); G.sim(1, 1 / 30); G.key('w', false); return Math.hypot(P.x - x0, P.z - z0); });
   check(`${kind}: he walks off again`, back > 1, back);
 }
-check(`they don't all handle the same: top speeds ${KINDS.map((k) => lines[k].road.toFixed(0))}`, new Set(KINDS.map((k) => Math.round(lines[k].road))).size === 4, lines);
+check(`they don't all handle the same: top speeds ${KINDS.map((k) => lines[k].road.toFixed(0))}`, new Set(KINDS.map((k) => Math.round(lines[k].road))).size === KINDS.length, lines);
 check('a four-wheeler barely slows off the road, and a car does', lines.quad.off / lines.quad.road > .8 && lines.car.off / lines.car.road < .65, lines);
 
 // ---------------- along every road, both ways, in the fastest one

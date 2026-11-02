@@ -34,7 +34,7 @@ await g(() => {
 
 // ---------------- what's there
 const built = await g(async () => {
-  const measured = (await (await fetch('data/lanes.json')).json()).lanes.filter((l) => l.measured).map((l) => l.id);
+  const measured = (await (await fetch('data/lanes.json')).json()).lanes.filter((l) => l.measured && Math.hypot(l.points[0][0] - 1000, l.points[0][1] - 660) < 400).map((l) => l.id);
   const G = __game, ids = [75099630, 75190940, 900004, 900005, 900006, 900007, 900009, 900010, 900011, 900012, 900013];
   const found = ids.filter((id) => G.structures.some((s) => s.id === id));
   const lanes = G.map.lanes.filter((l) => measured.includes(l.id)).map((l) => l.id); window.measured = measured;
