@@ -87,8 +87,8 @@ const neighbours = await g(() => { const G = __game, V = G.vehicles; let least =
 check(`none parked on top of another: closest ${neighbours.toFixed(1)} m`, neighbours >= 6, neighbours);
 const firstOne = await g(() => { const G = __game, v = G.vehicles[0], c = G.map.crossings.find((q) => q.road === 'griffis_fountain_rd'); return { kind: v.kind, far: Math.hypot(v.x - c.x, v.z - c.z), onRoad: G.onRoad(v.x, v.z) }; });
 check(`the first one's just past where he wakes: a ${firstOne.kind}, ${firstOne.far.toFixed(0)} m from the Chunky River Bridge`, firstOne.far > 20 && firstOne.far < 80 && !firstOne.onRoad, firstOne);
-const station = await g(() => { const G = __game, c = G.npcs.coop; return G.vehicles.filter((v) => Math.hypot(v.x - c.x, v.z - c.z) < 40).map((v) => v.kind); });
-check(`there's something to drive at the gas station and the town hall: ${station}`, station.includes('pickup') && station.includes('car'), station);
+const station = await g(() => { const G = __game, c = G.npcs.coop, near = (x, z, far) => G.vehicles.filter((v) => Math.hypot(v.x - x, v.z - z) < far).map((v) => v.kind); return { pumps: near(c.x, c.z, 40), hall: near(G.places.hall.x + 40, G.places.hall.z - 11, 20) }; });
+check(`there's something to drive at the gas station and the town hall: ${JSON.stringify(station)}`, station.pumps.includes('pickup') && station.hall.includes('car'), station);
 
 // ---------------- a parked one's a solid thing, until he's in it
 const solid = await g(() => { const G = __game, v = G.vehicles[0]; return { body: G.blocked(v.x, v.z, v.y + .2), above: G.blocked(v.x, v.z, v.y + 3) }; });
