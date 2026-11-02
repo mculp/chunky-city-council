@@ -78,7 +78,7 @@ Then open http://localhost:8000.
 
 `npm run lanes` drives up a gravel lane and a dirt drive to somebody's door with the phone's stick, and checks that nothing stands on the lanes, the woods are cleared off them, what's underfoot, and no barricade across a road that carries on. `data/lanes.test.js` checks that they all join up and that every building has a way in.
 
-`npm run lore` goes and looks at what's come from the lore: every church's sign, what it says today and tomorrow, and what happens when it's hit, then Charlie Flake's marker, then Robby's lot, walking there from where he wakes, what Robby says and that he only says it once, the flies, the deer meat, and what a truck does to it. It takes `--shots dir`.
+`npm run lore` goes and looks at what's come from the lore: every church's sign, what it says today and tomorrow, and what happens when it's hit, then Charlie Flake's marker, then Robby's lot, walking there from where he wakes, what Robby says and that he only says it once, the flies, the deer meat, and what a truck does to it, and then the light on Stuckey's Bridge: that it isn't in the opening, that it comes when he goes back on foot or driving, goes through him, and that it all goes quiet while it does. It takes `--shots dir`.
 
 `npm run water` walks into a pond and swims across it, floods a pickup in another, and checks that the crowd keeps out, that nothing real ended up under water, and that the ponds are on the map. The ponds are in `data/water.json`, documented in `data/water.md`.
 

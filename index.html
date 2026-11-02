@@ -215,6 +215,7 @@ import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } fro
 import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, rimHit, placeVehicles, settle, speedOf } from './src/vehicles.js';
 import { vehicleGeometries, PAINTS, LAMPS } from './src/vehiclemodels.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
+import { makeLight, stepLight, lightAt } from './src/light.js';
 
 const $ = (id) => document.getElementById(id);
 await Promise.race([document.fonts.load('40px Bungee').catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
@@ -3308,6 +3309,26 @@ const gOrb = new THREE.Mesh(new THREE.SphereGeometry(.09, 10, 8), lit('#ffb050',
 const gHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color: new THREE.Color(1, .55, .2), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); gHalo.scale.setScalar(2.4); ghost.add(gHalo);
 const gLight = new THREE.PointLight('#ff9a46', 14, 12, 1.8); ghost.add(gLight);
 
+// The light on Stuckey's Bridge. docs/lore.md has what it's from and src/light.js what it does. It isn't the lantern: that one's warm and guides him out of the river.
+const LAMP = makeLight(), lampGroup = new THREE.Group(); lampGroup.visible = false; scene.add(lampGroup);
+const lampSprite = (r, g, b, size) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color: new THREE.Color(r, g, b), transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending })); s.scale.setScalar(size); lampGroup.add(s); return s; };
+const lampCore = lampSprite(2.2, 2.4, 2.8, .7), lampHalo = lampSprite(.55, .68, 1, 4.2);
+let lampQuiet = false, lampLit = false, lampStep = -1;
+function updateLamp(dt, step) {
+  stepLight(LAMP, player.pos, dt, { can: !!S.flags.town && (S.mode === 'town' || S.mode === 'drive' || S.mode === 'swim'), deck: DECK_TOP });
+  // nothing can be heard while it's close
+  if (LAMP.hush !== lampQuiet) { lampQuiet = LAMP.hush; const k = lampQuiet ? 0 : 1; SFX.fade('music', k); SFX.fade('effects', k); SFX.fade('ambience', lampQuiet ? 0 : nightQuiet); }
+  lampGroup.visible = LAMP.shown > 0;
+  if (lampGroup.visible) {
+    if (step !== lampStep) { lampStep = step; lampGroup.position.set(...lightAt(LAMP, step / 12, reduceMotion)); }
+    lampCore.material.opacity = LAMP.shown; lampHalo.material.opacity = .55 * LAMP.shown;
+  }
+  // It borrows the lantern's light, which has nothing to do by now and is the only one to spare, unless that's his headlights or a blast.
+  if (driving || boomLight > 0) return;
+  if (lampGroup.visible) { lampLit = true; gLight.position.copy(lampGroup.position).sub(ghost.position); gLight.color.set('#bcd4ff'); gLight.intensity = 16 * LAMP.shown; }
+  else if (lampLit) { lampLit = false; gLight.position.set(0, 0, 0); gLight.color.set('#ff9a46'); }
+}
+
 // ================================================================ particles: leaves, fireflies, cyan drips, mist. They wrap around the camera, and phones get fewer.
 seedRandom();
 const LOW = matchMedia('(pointer:coarse)').matches;
@@ -4740,7 +4761,7 @@ function soundTick(dt, M) {
   if ((soundSlow -= dt) > 0) return;
   soundSlow = .25;
   const quiet = FEVER_QUIET[M] ?? 1;
-  if (quiet !== nightQuiet) { nightQuiet = quiet; SFX.fade('ambience', quiet); }
+  if (quiet !== nightQuiet) { nightQuiet = quiet; if (!lampQuiet) SFX.fade('ambience', quiet); }
   const rd = riverDist(P.x, P.z), shore = WATER.look(P.x, P.z) ? WATER.d : Infinity, water = 1 - Math.min(sstep(8, 38, rd), sstep(0, 14, shore));
   SFX.loop('amb.wind', 1);
   SFX.loop('amb.crickets', driving ? .5 : 1);
@@ -5046,6 +5067,7 @@ function tick(dt, draw = true) {
 
   sky.material.uniforms.uTime.value = time; waterMat.uniforms.uTime.value = time; swayU.uTime.value = time; gifMat.uniforms.uTime.value = time;
   if (S.flags.town && Math.floor(time * 2) !== vehPicked) pickVehicles();
+  updateLamp(dt, step);
   if (!draw) return;   // a test walking the whole map only needs the physics
   updateMini(step);
   sky.position.copy(camera.position);
@@ -5091,7 +5113,7 @@ if (location.hash === '#signs') openSignBoard();
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far) }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
