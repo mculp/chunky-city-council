@@ -150,6 +150,8 @@ def build(raw, fetched, sha, roads, extras):
         ponds.append(pond)
     for e in extras["ponds"]:
         ponds.append({"id": e["id"], "source": "naip", "area": round(area_of(e["ring"])), "ring": e["ring"], "lonlat": [[round(v, 6) for v in to_lonlat(x, z)] for x, z in e["ring"]]})
+    for e in extras.get("pools", []):
+        ponds.append({"id": e["id"], "source": "naip", "pool": e["pool"], "area": round(area_of(e["ring"])), "ring": e["ring"], "lonlat": [[round(v, 6) for v in to_lonlat(x, z)] for x, z in e["ring"]]})
     ponds.sort(key=lambda p: p["id"])
     return {
         "version": 1,

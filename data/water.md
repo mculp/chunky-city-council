@@ -25,6 +25,8 @@ An outline with an island in it stops the build, since nothing handles one. None
 
 `ponds` in `tools/water_extras.json` are real ones NHD hasn't got, outlined by eye to the nearest few metres. There are five: three small ones west of town, the open water at the south end of the big marsh east of the railroad at about (15450, 4250), and the east arm of a lake at about (8820, -1830). NHD files the last two as swamp, and most of those outlines are forest and floating mat.
 
+`pools` in `tools/water_extras.json` are swimming pools, which NHD wouldn't have, measured on the aerial. A pool isn't a pond with a level from the ground around it. Its water stands 12 cm under the level of the ground, with straight sides and a floor 1.7 m under that, its ground isn't mud and a pad doesn't fill it in. There's one, by the big house on Pine Forest Rd.
+
 ### Corrections to file
 
 Comparing the aerial by eye also found these, which aren't changed here:
@@ -53,6 +55,7 @@ Each of `ponds`:
 | `ring` | [x, z][] | The shore, to 0.1 m. It doesn't repeat its first point |
 | `lonlat` | [lon, lat][] | The same points, as the source had them or as projected back |
 | `name` | string | NHD's name, where it has one |
+| `pool` | string | What sort of swimming pool it is, if it is one. `index.html` has what each looks like |
 
 ## What the game does with it
 

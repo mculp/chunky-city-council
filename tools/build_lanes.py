@@ -37,6 +37,7 @@ OPENING = 280  # World metres from Stuckey's Bridge, on both axes. Nothing new g
 DRIVE_CLEAR = 1.8  # Past the wall of a building that isn't the one it's going to.
 RIVER_GAP = 22  # Past the middle of the river, where the bank has come up to the level of the land.
 OFF_THE_WALL = 3.5  # Where it stops.
+MEASURED_JOIN = 45  # How far the end of a drive measured on the aerial can be from the road it leaves.
 FRONTING = 3  # Past the road's edge. A building this close doesn't need a drive.
 SHED_NEAR = 35  # A shed this close to a building that's been seen to shares its way in.
 LINK_REACH = 300  # How far a piece of track that's been cut off will look for the rest.
@@ -568,6 +569,19 @@ class Drives:
         return None
 
 
+def measured_lanes(roads, lanes, config):
+    """Somebody's real drive, measured on the aerial, where TIGER hasn't got it and a generated one would go through the woods. Each starts at the nearest vertex of what's there, so that it's joined up."""
+    out = []
+    for m in config.get("measured", []):
+        pts = [list(p) for p in m["points"]]
+        others = [p for e in roads["edges"] for p in e["points"]] + [p for lane in lanes + out for p in lane["points"]]
+        near = min(others, key=lambda p: math.dist(p, pts[0]))
+        if math.dist(near, pts[0]) > MEASURED_JOIN:
+            raise SystemExit("a measured drive starts %.0f m from anything: %s" % (math.dist(near, pts[0]), pts[0]))
+        out.append({"name": None, "mtfcc": "S1740", "linearId": None, "width": m["width"], "surface": m["surface"], "measured": True, "points": pts if list(near) == pts[0] else [list(near), *pts]})
+    return out
+
+
 def build_drives(roads, lanes, structures, water, config):
     """A drive up to every building that's not on the road or beside one that has a drive."""
     maker = Drives(roads, lanes, structures, water, config)
@@ -796,7 +810,8 @@ def build():
     structures_file = json.loads(STRUCTURES.read_text())
     structures = structures_file["structures"] + structures_file["extras"]
     water = json.loads(WATER.read_text())
-    lanes, gaps = clear_of_buildings(build_tiger_lanes(roads, read_road_records(), config), structures)
+    tiger = build_tiger_lanes(roads, read_road_records(), config)
+    lanes, gaps = clear_of_buildings(tiger + measured_lanes(roads, tiger, config), structures)
     # the way round a building where a track goes through one
     finder, bypasses = Drives(roads, [], structures, water, config), []
     for a, b, lane in gaps:
@@ -808,6 +823,8 @@ def build():
             bypasses.append({"name": lane["name"], "mtfcc": lane["mtfcc"], "linearId": lane["linearId"], "width": lane["width"], "surface": lane["surface"], "generated": True, "points": pts})
     print("gaps", len(gaps), "ways round", len(bypasses))
     lanes = reconnected(lanes + bypasses, roads, finder)
+    # after TIGER's, so that adding one doesn't renumber them
+    lanes.sort(key=lambda lane: bool(lane.get("measured")))
     for i, lane in enumerate(lanes):
         lane["id"] = "lane_%d" % (i + 1)
         for k in ("id", "name", "mtfcc", "linearId", "width", "surface", "points"):

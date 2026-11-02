@@ -5,22 +5,22 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const PAINT = '#ffffff', DARK = '#17131c', TRIM = '#3a3840', LIGHT = '#f3e8b4', TAIL = '#8a1a14', SEAT = '#4a3a30', CREAM = '#c9bd9e', TIRE = '#0d0b10', HUB = '#6d6a72';
 
-function painted(geo, color) {
+export function painted(geo, color) {
   const g = geo.index ? geo.toNonIndexed() : geo, c = new THREE.Color(color), n = g.attributes.position.count, a = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
   g.setAttribute('color', new THREE.BufferAttribute(a, 3)); g.deleteAttribute('uv');
   g.computeVertexNormals();
   return g;
 }
-const box = (x, y, z, w, h, d, color = PAINT) => painted(new THREE.BoxGeometry(w, h, d).translate(x, y, z), color);
+export const box = (x, y, z, w, h, d, color = PAINT) => painted(new THREE.BoxGeometry(w, h, d).translate(x, y, z), color);
 // a bar from one point to another
-function bar(a, b, w, color = PAINT) {
+export function bar(a, b, w, color = PAINT) {
   const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), L = A.distanceTo(B);
   const g = new THREE.BoxGeometry(w, L, w).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize())).translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
   return painted(g, color);
 }
 // A side view swept across the width: `profile` is [along, up] pairs going clockwise from the back, seen from the driver's side
-function prism(profile, x0, x1, color = PAINT) {
+export function prism(profile, x0, x1, color = PAINT) {
   const pos = [], n = profile.length;
   let cz = 0, cy = 0; for (const [z, y] of profile) { cz += z / n; cy += y / n; }
   for (let i = 0; i < n; i++) {
@@ -32,7 +32,7 @@ function prism(profile, x0, x1, color = PAINT) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
   return painted(g, color);
 }
-const both = (fn) => [fn(1), fn(-1)];
+export const both = (fn) => [fn(1), fn(-1)];
 // the dark shape round a wheel, on each side
 const arches = (z, r, x) => both((s) => prism([[z - r, .32], [z - r, .55], [z - r * .55, r + .4], [z + r * .55, r + .4], [z + r, .55], [z + r, .32]], s * x, s * (x + .012), DARK));
 
@@ -97,7 +97,7 @@ function golf() {
 }
 
 // The outline's hull has to meet at the corners, so its normals are shared wherever two faces touch
-function smoothed(geo) {
+export function smoothed(geo) {
   const p = geo.attributes.position, sum = new Map(), key = (i) => `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`, n = geo.attributes.normal;
   for (let i = 0; i < p.count; i++) { const k = key(i); let s = sum.get(k); if (!s) sum.set(k, s = new THREE.Vector3()); s.x += n.getX(i); s.y += n.getY(i); s.z += n.getZ(i); }
   const out = new Float32Array(p.count * 3);

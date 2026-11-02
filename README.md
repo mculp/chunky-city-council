@@ -49,6 +49,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/play-drive.mjs`: drives every kind of vehicle in Chrome, on the roads and off them, into walls and through the crowd (`npm run drive`)
 - `tools/play-field.mjs`: walks onto the ball field and tries its fence and gates, on foot and in a pickup (`npm run field`)
 - `tools/play-lures.mjs`: moves the crowd with what he can throw: off US 80, off his back, into the river, and round someone who won't thank him for it (`npm run lures`)
+- `tools/play-compound.mjs`: goes round the compound on Pine Forest Rd: up its drive, in every door, plays what's in the shed with the crowd listening, swims the pool and watches the screen.
 - `tools/play-station.mjs`: goes round the gas station for what's on its shelves, bars its door with the crowd outside, and checks that the crowd goes for its light (`npm run station`)
 - `tools/play-water.mjs`: swims across a pond, floods a pickup in another and checks what's under them (`npm run water`)
 - `tools/play-sound.mjs`: plays the game with the sound on and checks what it's playing (`npm run sound`)

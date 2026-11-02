@@ -21,6 +21,15 @@ test('every pond has an id of its own and a closed outline with no repeated poin
   }
 });
 
+test('a pool has straight sides and stays where it was put', () => {
+  const W = buildWater({ ponds: [{ id: 'pool-1', source: 'naip', pool: 'blue', area: 40, ring: square(0, 0, 8) }] }, flat), p = W.ponds[0];
+  W.settle(() => 100, 5.65);
+  assert.equal(p.pool, 'blue');
+  assert.ok(Math.abs(p.level - 6.03) < 1e-9, `${p.level}`);
+  assert.ok(p.deep > 1.4);
+  assert.equal(made(square(0, 0, 8)).ponds[0].pool, null);
+});
+
 test('an outline is its lon/lat, by the map\'s own projection', () => {
   const R = data.projection.radiusM, lat0 = data.origin.lat * Math.PI / 180;
   for (const p of data.ponds) {

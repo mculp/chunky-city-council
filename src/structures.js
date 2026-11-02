@@ -166,7 +166,7 @@ function porchOf(s) {
   const { pts } = s, i = s.door, [ax, az] = pts[i], [bx, bz] = pts[(i + 1) % pts.length], len = Math.hypot(bx - ax, bz - az);
   if (len < 3) return null;
   const ex = (bx - ax) / len, ez = (bz - az) / len, nx = ez, nz = -ex, wide = Math.min(len - .4, s.porch === 'wrap' ? len : Math.max(3.6, len * .5)), mid = len / 2, deep = 2.1;
-  return { ax: ax + ex * (mid - wide / 2), az: az + ez * (mid - wide / 2), ex, ez, nx, nz, wide, deep };
+  return { ax: ax + ex * (mid - wide / 2), az: az + ez * (mid - wide / 2), ex, ez, nx, nz, wide, deep, overDoor: true };
 }
 function carportOf(s) {
   if (!s.carport) return null;
@@ -193,11 +193,13 @@ function openPostsOf(s, base) {
   });
   return out;
 }
+// How many posts along a porch: never an odd number over a door, or there'd be one in the middle of the doorway
+const postCount = (f) => { const n = Math.max(2, Math.ceil(f.wide / 3.2)); return f.overDoor && n % 2 ? n + 1 : n; };
 function postsOf(s, base) {
   const out = openPostsOf(s, base), H = Math.min(eavesOf(s), 2.6);
   for (const f of [porchOf(s), carportOf(s), leanOf(s)]) {
     if (!f) continue;
-    const count = Math.max(2, Math.ceil(f.wide / 3.2));
+    const count = postCount(f);
     for (let k = 0; k < count; k++) { const t = f.wide * k / (count - 1); out.push([f.ax + f.ex * t + f.nx * (f.deep - .15), f.az + f.ez * t + f.nz * (f.deep - .15), base + H]); }
   }
   return out;
@@ -449,7 +451,7 @@ export function writeStructure(sheet, s, base = 0) {
       const t0 = f.wide * i / n, t1 = f.wide * (i + 1) / n;
       sheet.solid([corner(t0, 0, high - .1), corner(t1, 0, high - .1), corner(t1, f.deep, top - .1), corner(t0, f.deep, top - .1), corner(t0, 0, high), corner(t1, 0, high), corner(t1, f.deep, top), corner(t0, f.deep, top)], { ...base0, kind, color: c, side: shade(c, .6), pattern: roofPat, roofOf: -1 });
     }
-    const count = Math.max(2, Math.ceil(f.wide / 3.2));
+    const count = postCount(f);
     for (let k = 0; k < count; k++) {
       const t = f.wide * k / (count - 1), [x, , z] = corner(t, f.deep - .15, 0), r = .07;
       sheet.solid([[x - r, base, z - r], [x + r, base, z - r], [x + r, base, z + r], [x - r, base, z + r], [x - r, top, z - r], [x + r, top, z - r], [x + r, top, z + r], [x - r, top, z + r]], { ...base0, kind: 'post', color: post, pattern: PATTERN.PAINT, noBottom: true });

@@ -88,6 +88,8 @@ Then open http://localhost:8000.
 
 `npm run lures` moves the crowd without fighting it, with real taps: each lure thrown off US 80 and how many are left on the road, through three lots of them with three kinds of lure, hunters taken off him, a car alarm set off from across a lot, into the river after a bottle, and someone who ends up with them all around. What each lure does is in `src/lures.js`.
 
+`npm run compound` goes round the compound on Pine Forest Rd on a phone-sized page: up the measured drive from the road, in through every door, plays the drums, guitar, bass and keyboard with real taps and the crowd listening, swims the pool, watches the screen, and breaks the projector and the propane tank. It takes `--shots dir`. What's in it is under "the compound on Pine Forest Rd" in `index.html`, and `src/things.js` has what things look like that aren't vehicles.
+
 The crowd comes out when Chapter 1 ends. `index.html?horde` brings it out as soon as town starts, which is the quick way to try it. `index.html#free`, or Skip to town on the title card, goes straight to town with the crowd out and something of everything to throw. It's an anchor because that's the only part of an address the shared link passes on.
 
 Chapter 1's bridge run ends in a moccasin bite, a fever dream and waking on the Chunky River Bridge at the edge of town: the modes `bitten`, `dream` and `wake`. `jump('town')` puts him where he wakes.

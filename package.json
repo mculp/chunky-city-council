@@ -12,6 +12,7 @@
     "field": "node tools/play-field.mjs",
     "station": "node tools/play-station.mjs",
     "lures": "node tools/play-lures.mjs",
+    "compound": "node tools/play-compound.mjs",
     "water": "node tools/play-water.mjs",
     "lore": "node tools/play-lore.mjs",
     "lanes": "node tools/play-lanes.mjs",

@@ -218,7 +218,8 @@ import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRi
 import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, wallsOf, Sheet, PATTERN, hash2 } from './src/structures.js';
 import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
 import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, rimHit, placeVehicles, settle, speedOf } from './src/vehicles.js';
-import { vehicleGeometries, PAINTS, LAMPS } from './src/vehiclemodels.js';
+import { vehicleGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
+import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate } from './src/things.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
 import { makeLight, stepLight, lightAt } from './src/light.js';
 
@@ -679,6 +680,8 @@ function landH(x, z) {
 const BANK = 9;
 WATER.settle(landH, TOWN_Y - .5);
 function pondGround(h, x, z) {
+  // a pool has sides
+  if (WATER.pond.pool) return WATER.d > 0 ? h : WATER.pond.level - WATER.pond.deep;
   const p = WATER.pond, d = WATER.d, shore = p.level + .3, low = d > 0 ? shore + (h - shore) * sstep(0, BANK, d) : Math.max(shore + d * .5, p.level - p.deep);
   let keep = 0;
   const rd = MAP.roadGrid.nearest(x, z);
@@ -689,7 +692,7 @@ function pondGround(h, x, z) {
 }
 function groundH(x, z) {
   let h = landH(x, z);
-  if (WATER.look(x, z)) h = pondGround(h, x, z);
+  if (WATER.look(x, z)) { h = pondGround(h, x, z); if (WATER.pond.pool && WATER.d < 0) return h; }
   const pw = padWeight(x, z);
   return pw > 0 ? h + (TOWN_Y - h) * pw : h;
 }
@@ -721,7 +724,7 @@ function groundColor(x, z, h, col, i) {
   const w = fromWake(x, z);
   if (w < 80) c = lerp3(c, hex('#6f6048'), .85 * (1 - sstep(35, 80, w)) * (1 - sstep(3.5, 6, h)));
   // mud round a pond and under it
-  if (WATER.look(x, z) && WATER.d < 4) c = lerp3(c, hex('#2a2019'), .9 * (1 - sstep(.5, 4, WATER.d)));
+  if (WATER.look(x, z) && WATER.d < 4 && !WATER.pond.pool) c = lerp3(c, hex('#2a2019'), .9 * (1 - sstep(.5, 4, WATER.d)));
   // mown grass, where someone kept it
   const lawn = padWeight(x, z, true);
   if (lawn > 0) c = lerp3(c, lerp3(hex('#34452a'), hex('#46583a'), n), lawn * .9);
@@ -1045,9 +1048,9 @@ let time = 0, ripI = 0;
 function addRipple(x, z, a = .25, glow = 0) { rip[ripI].set(x, z, time, a); ripG[ripI] = glow; ripI = (ripI + 1) % rip.length; }
 const waterMat = new THREE.ShaderMaterial({
   uniforms: { uTime: { value: 0 }, uRip: { value: rip }, uRipG: { value: ripG }, uMoon: { value: MOON_DIR }, uFog: { value: FOG }, uFogD: { value: .0105 },
-    uSkyLo: { value: new THREE.Color('#a3306c') }, uSkyHi: { value: new THREE.Color('#2a1640') } },
+    uSkyLo: { value: new THREE.Color('#a3306c') }, uSkyHi: { value: new THREE.Color('#2a1640') }, uDeep: { value: new THREE.Vector3(.012, .035, .045) }, uSheen: { value: .2 } },
   vertexShader: `varying vec3 vW; void main(){ vW=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*viewMatrix*vec4(vW,1.); }`,
-  fragmentShader: `uniform float uTime,uFogD; uniform vec4 uRip[16]; uniform float uRipG[16]; uniform vec3 uMoon,uFog,uSkyLo,uSkyHi; varying vec3 vW;
+  fragmentShader: `uniform float uTime,uFogD; uniform vec4 uRip[16]; uniform float uRipG[16]; uniform vec3 uMoon,uFog,uSkyLo,uSkyHi,uDeep; uniform float uSheen; varying vec3 vW;
     float hh(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
     float nn(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); return mix(mix(hh(i),hh(i+vec2(1,0)),f.x),mix(hh(i+vec2(0,1)),hh(i+vec2(1,1)),f.x),f.y); }
     float W(vec2 p, out float glow){ float t=uTime; glow=0.;
@@ -1060,7 +1063,7 @@ const waterMat = new THREE.ShaderMaterial({
       vec3 V=normalize(cameraPosition-vW); vec3 Rv=reflect(-V,N);
       float fr=.22+.78*pow(1.-max(dot(V,N),0.),4.);
       vec3 refl=mix(uSkyLo,uSkyHi,clamp(Rv.y*2.2,0.,1.))*.55;
-      vec3 c=mix(vec3(.012,.035,.045),refl,clamp(fr+.2,0.,1.));
+      vec3 c=mix(uDeep,refl,clamp(fr+uSheen,0.,1.));
       c+=vec3(1.,.86,.7)*pow(max(dot(Rv,uMoon),0.),500.)*1.6;
       c+=vec3(.12,1.05,.95)*g0*1.8;
       float d=length(vW-cameraPosition); c=mix(c,uFog*.8,1.-exp(-d*d*uFogD*uFogD));
@@ -1070,6 +1073,9 @@ const waterMat = new THREE.ShaderMaterial({
     }`
 });
 const water = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), waterMat); water.rotation.x = -Math.PI / 2; scene.add(water);
+// A swimming pool's the same water with something other than mud under it, so it doesn't take much sky
+const POOL_LOOKS = { blue: { deep: [.03, .26, .46], sheen: -.08 } };
+const poolWater = (look) => { const m = waterMat.clone(), L = POOL_LOOKS[look]; for (const k of Object.keys(waterMat.uniforms)) m.uniforms[k] = waterMat.uniforms[k]; m.uniforms.uDeep = { value: new THREE.Vector3(...L.deep) }; m.uniforms.uSheen = { value: L.sheen }; return m; };
 // Each pond has its own flat sheet of the same water, at its own level. One that's down by the river doesn't need one.
 for (const p of WATER.ponds) if (p.level > 0) {
   const pos = new Float32Array(p.ring.length * 3), idx = [];
@@ -1079,7 +1085,7 @@ for (const p of WATER.ponds) if (p.level > 0) {
     if ((bz - az) * (cx - ax) - (bx - ax) * (cz - az) > 0) idx.push(a, b, c); else idx.push(a, c, b);
   }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx);
-  const sheet = new THREE.Mesh(g, waterMat); scene.add(sheet);
+  const sheet = new THREE.Mesh(g, p.pool ? poolWater(p.pool) : waterMat); scene.add(sheet);
   DISTANT.push({ obj: sheet, x: p.x, z: p.z, r: Math.hypot(p.x1 - p.x0, p.z1 - p.z0) / 2 + 300 });
 }
 
@@ -1369,7 +1375,7 @@ const propDist = (p, x, y, z) => {
 };
 function hitProp(p, power, dx, dz) {
   if (p.down) return;
-  p.hp -= power;
+  p.hp -= power; p.hit?.(p);
   spray(p.cx, Math.min(p.box.max.y, player.pos.y + 1.2), p.cz, FEW ? 1 : 2, .12, 2.4, p.color.r, p.color.g, p.color.b);
   if (p.hp <= 0) breakProp(p, dx, dz);
 }
@@ -2661,6 +2667,206 @@ const SIGNS = [];
   scene.add(kz);
   const ko = new THREE.InstancedMesh(kz.geometry, outlineMat(INK, 1.2, 0), kz.count); ko.instanceMatrix = kz.instanceMatrix; scene.add(ko);
   kudzuMesh = kz;
+}
+// ================================================================ the compound on Pine Forest Rd
+// Its buildings are in data/structures.json. This is what's between them and in them: the deck round the pool, the fenced lawn and its screen, the room in the shed nearest the road and the studio. Where everything goes was measured on the aerial, in true metres.
+const thingMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .8 }), thingLine = outlineMat(INK, 1.1, 0);
+// Somewhere that isn't square to the map: things go in metres along it and across it from a corner. A thing with a yaw of F.yaw faces the way across it.
+function tilted(tx, tz, deg) {
+  const [ox, oz] = atTrue(tx, tz), t = deg * Math.PI / 180, c = Math.cos(t), s = Math.sin(t), q = new THREE.Quaternion().setFromAxisAngle(UP, -t);
+  const at = (u, v) => [ox + u * c - v * s, oz + u * s + v * c];
+  return {
+    at, yaw: -t, q,
+    box(mat, u, y, v, su, sy, sv, ink = 1.2) { const [x, z] = at(u, v); addBox(mat, x, Y0 + y, z, su, sy, sv, ink, q); },
+    beam(a, b, w, h, mat, ink = 1.1) { const [ax, az] = at(a[0], a[2]), [bx, bz] = at(b[0], b[2]); addBeam([ax, Y0 + a[1], az], [bx, Y0 + b[1], bz], w, h, mat, ink); },
+  };
+}
+// What's made in src/things.js: one mesh and its outline, which goes over in one piece. `solid` is how wide, how deep and how high it stops him.
+function thing(into, kind, parts, x, z, yaw, hp, o = {}) {
+  const geo = mergeGeometries(parts), g = new THREE.Group(), [w, d, top] = o.solid ?? [0, 0, 0], c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw)), hx = (w * c + d * s) / 2, hz = (w * s + d * c) / 2;
+  g.add(new THREE.Mesh(geo, thingMat), new THREE.Mesh(smoothed(geo), thingLine));
+  g.position.set(x, Y0 + (o.y ?? 0), z); g.rotation.y = yaw; into.add(g);
+  return breakable(kind, hp, () => { if (top) solid(x - hx, x + hx, z - hz, z + hz, Y0 + top); }, { rigid: true, objs: [g], foot: [x, z], chip: o.chip, broke: o.broke, hit: o.hit });
+}
+const nearHere = (tx, tz, r) => { const g = new THREE.Group(), [x, z] = atTrue(tx, tz); scene.add(g); DISTANT.push({ obj: g, x, z, r }); return g; };
+// A fence that goes over a length at a time
+const rails = (F, a, b, high, mat) => {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / 2.4));
+  for (let i = 0; i < n; i++) {
+    const u0 = a[0] + (b[0] - a[0]) * i / n, v0 = a[1] + (b[1] - a[1]) * i / n, u1 = a[0] + (b[0] - a[0]) * (i + 1) / n, v1 = a[1] + (b[1] - a[1]) * (i + 1) / n, [ax, az] = F.at(u0, v0), [bx, bz] = F.at(u1, v1), l = Math.hypot(bx - ax, bz - az);
+    breakable('fence', 1, () => {
+      F.box(mat, u0, high / 2, v0, .1, high, .1, 1);
+      for (const y of [high * .45, high * .85]) F.beam([u0, y, v0], [u1, y, v1], .03, .09, mat, .9);
+      const w = [ax, az, bx, bz, Y0 + high, .06]; PROP_WALLS.push(w); PROP.walls.push(w);
+    }, { rigid: true, T: .8, line: [ax, az, bx, bz], foot: [(ax + bx) / 2, (az + bz) / 2], falls: [(bz - az) / l, -(bx - ax) / l], chip: '#6e5238' });
+  }
+};
+const clearing = (x0, z0, x1, z1, m, lawn) => { const [ax, az] = atTrue(x0, z0), [bx, bz] = atTrue(x1, z1); pad(ax, bx, az, bz, m, lawn); };
+clearing(1002, 614, 1066, 655, 5); clearing(994, 640, 1014, 662, 4); clearing(1006, 655, 1040, 706, 5); clearing(956, 652, 984, 692, 5); clearing(975, 668, 998, 694, 3); clearing(893, 699, 930, 733, 5);
+// ---- the deck, with the pool in it. The water's in data/water.json.
+const DECK = tilted(1035.6, 644.6, -30.5), [POOL_U0, POOL_U1, POOL_V0, POOL_V1] = [2.72, 12.72, 4.04, 8.44];
+const patioMat = new THREE.MeshStandardMaterial({ color: '#a6a091', roughness: 1 }), copingMat = new THREE.MeshStandardMaterial({ color: '#d9d4c4', roughness: .95 });
+{
+  const F = DECK, top = .06;
+  for (const [u0, u1, v0, v1] of [[0, 15.4, 0, POOL_V0], [0, 15.4, POOL_V1, 9.3], [0, POOL_U0, POOL_V0, POOL_V1], [POOL_U1, 15.4, POOL_V0, POOL_V1]]) F.box(patioMat, (u0 + u1) / 2, top - .05, (v0 + v1) / 2, u1 - u0, .1, v1 - v0, 0);
+  const pool = WATER.ponds.find((p) => p.pool === 'blue');
+  pool.ring.forEach(([ax, az], i) => { const [bx, bz] = pool.ring[(i + 1) % pool.ring.length]; addBeam([ax, Y0 + top - .01, az], [bx, Y0 + top - .01, bz], .56, .1, copingMat, 0); });
+  // the steps out at the deep end
+  breakable('ladder', 1, () => { for (const s of [-1, 1]) { F.beam([POOL_U1 - .2 + s * .22, -.5, POOL_V0 + .2], [POOL_U1 - .2 + s * .22, .95, POOL_V0 - .12], .04, .04, shelfMat, .9); } for (const y of [-.3, -.02]) F.box(shelfMat, POOL_U1 - .2, y, POOL_V0 + .12, .46, .03, .1, 0); }, { rigid: true, chip: '#4a4650' });
+  // planters along the house, and two loungers at the end of the water
+  const pot = new THREE.MeshStandardMaterial({ color: '#7a4a32', roughness: 1 }), leaf = new THREE.MeshStandardMaterial({ color: '#3a5230', roughness: 1 });
+  for (const u of [7, 8.4, 12.4, 14.4]) breakable('planter', .8, () => { F.box(pot, u, .32, .55, .56, .52, .56, 1); F.box(leaf, u, .78, .55, .62, .46, .62, 1); const [x, z] = F.at(u, .55); solid(x - .3, x + .3, z - .3, z + .3, Y0 + .6); }, { chip: '#7a4a32' });
+  for (const v of [4.9, 7.4]) breakable('lounger', .8, () => { F.box(benchMat, 14, .3, v, 1.9, .06, .66, 1); F.beam([13.05, .3, v], [12.75, .78, v], .66, .06, benchMat, 1); for (const u of [13.2, 14.8]) F.box(benchMat, u, .14, v, .06, .28, .6, 0); }, { chip: '#6e5238' });
+  flushBuckets(90);
+  const here = nearHere(1045, 646, 90), [hx, hz] = F.at(4.66, 1.35);
+  thing(here, 'hottub', hotTub(), hx, hz, F.yaw, 2.5, { solid: [2, 2, .95], chip: '#4c3a30' });
+}
+// ---- the lawn with the screen at its open end. It's a guess that this is the outdoor theater.
+const LAWN = tilted(960.4, 659.7, -32);
+let screenOn = true;
+const SCREEN_FRAMES = 7;
+const leaderTex = textTex([''], 256 * SCREEN_FRAMES, 144, '#d8d0bc', '#000', '12px sans-serif', { after: (g) => {
+  // a film's countdown, 8 down to 2: a cross, two rings, and the sweep round to the next number
+  for (let i = 0; i < SCREEN_FRAMES; i++) {
+    const x = 256 * i + 128, y = 72;
+    g.fillStyle = '#d8d0bc'; g.fillRect(x - 128, 0, 256, 144);
+    g.fillStyle = 'rgba(60,50,50,.38)'; g.beginPath(); g.moveTo(x, y); g.arc(x, y, 150, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (i + .5) / SCREEN_FRAMES); g.fill();
+    g.strokeStyle = '#2a2224'; g.lineWidth = 3; g.beginPath(); g.moveTo(x - 128, y); g.lineTo(x + 128, y); g.moveTo(x, 0); g.lineTo(x, 144); g.stroke();
+    for (const r of [64, 52]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.stroke(); }
+    g.fillStyle = '#17121a'; g.font = '88px Impact, "Arial Black", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(8 - i), x, y + 4);
+    for (let k = 0; k < 14; k++) { g.fillStyle = 'rgba(20,16,18,.5)'; g.fillRect(x - 128 + hash(i, k, 301) * 256, hash(i, k, 302) * 144, 1 + hash(i, k, 303) * 2, 2 + hash(i, k, 304) * 14); }
+  }
+} });
+leaderTex.repeat.set(1 / SCREEN_FRAMES, 1);
+const screenMat = new THREE.MeshBasicMaterial({ map: leaderTex, color: new THREE.Color(.62, .6, .52), side: THREE.DoubleSide });
+const beamMat = new THREE.MeshBasicMaterial({ color: '#c8d6ff', transparent: true, opacity: .032, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+const screenAt = LAWN.at(5, .55), screenSpot = { x: LAWN.at(5, 4)[0], z: LAWN.at(5, 4)[1], r: 34 };
+let screenMesh = null, screenBeam = null, screenProjector = null, shedTank = null;
+{
+  const F = LAWN, lawnMat = new THREE.MeshStandardMaterial({ color: '#5d7442', roughness: 1 }), lawn = nearHere(968, 661, 110);
+  F.box(lawnMat, 5, .015, 5.9, 10, .05, 11.8, 0);
+  rails(F, [10, 0], [10, 11.8], .9, benchMat); rails(F, [10, 11.8], [0, 11.8], .9, benchMat); rails(F, [0, 11.8], [0, 0], .9, benchMat);
+  // two rows of lawn chairs, no two quite in line, facing the screen
+  [[1.6, 5.4], [3.5, 5.2], [6.1, 5.5], [8, 5.3], [2.4, 7.8], [4.4, 8], [6.7, 7.7], [8.5, 8]].forEach(([u, v], i) => {
+    const q = F.q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(UP, (hash(i, 3, 305) - .5) * .5)), [x, z] = F.at(u, v), [bx, bz] = F.at(u, v + .24);
+    breakable('chair', .5, () => { addBox(benchMat, x, Y0 + .42, z, .5, .05, .5, .9, q); addBox(benchMat, bx, Y0 + .68, bz, .5, .5, .05, .9, q); for (const a of [-.22, .22]) { const [lx, lz] = F.at(u + a, v); addBox(poleMat, lx, Y0 + .21, lz, .05, .42, .5, 0, q); } }, { chip: '#6e5238' });
+  });
+  const postMat = new THREE.MeshStandardMaterial({ color: '#3c2c20', roughness: 1 });
+  const framed = breakable('screen', 2, () => {
+    for (const u of [1.8, 8.2]) { F.box(postMat, u, 2.3, .4, .16, 4.6, .16, 1); const [x, z] = F.at(u, .4); solid(x - .12, x + .12, z - .12, z + .12, Y0 + 4.6); }
+    F.box(postMat, 5, 4.56, .4, 6.5, .12, .12, 1); F.box(postMat, 5, 1.04, .4, 6.5, .1, .1, 1);
+    for (const u of [1.8, 8.2]) F.beam([u, 4, .4], [u, 0, -1.6], .03, .03, poleMat, 0);
+  }, { rigid: true, T: 1.1, foot: screenAt, line: [...F.at(1.8, .4), ...F.at(8.2, .4)], falls: [Math.sin(F.yaw), Math.cos(F.yaw)], chip: '#d8d0bc', broke() { screenOn = false; screenBeam.visible = false; spotOff(); } });
+  screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(6.1, 3.4), screenMat); screenMesh.position.set(...[screenAt[0], Y0 + 2.8, screenAt[1]]); screenMesh.rotation.y = F.yaw; lawn.add(screenMesh); framed.objs.push(screenMesh);
+  // the projector, at the far corner, throwing it back up the lawn
+  const [px, pz] = F.at(5, 11.1);
+  screenProjector = thing(lawn, 'projector', projector(), px, pz, F.yaw + Math.PI, 1, { solid: [.6, .6, 1.4], chip: '#d8d2bd', broke() { screenOn = false; screenMat.color.setRGB(.05, .05, .05); screenBeam.visible = false; spotOff(); } });
+  // the light on its way there
+  const lens = new THREE.Vector3(px, Y0 + 1, pz), corners = [[-3, 1.1], [3, 1.1], [3, 4.5], [-3, 4.5]].map(([a, y]) => { const [x, z] = F.at(5 + a, .6); return new THREE.Vector3(x, Y0 + y, z); }), pos = [];
+  corners.forEach((c, i) => { const d = corners[(i + 1) % 4]; pos.push(lens.x, lens.y, lens.z, c.x, c.y, c.z, d.x, d.y, d.z); });
+  const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  screenBeam = new THREE.Mesh(bg, beamMat); lawn.add(screenBeam);
+  flushBuckets(110);
+}
+function spotOff() { const i = horde.lights.indexOf(screenSpot); if (i >= 0) horde.lights.splice(i, 1); }
+// It runs at the boil's rate, and a still of it for anyone who's asked for less motion
+function stepScreen() {
+  if (!screenOn || !screenMesh.parent.visible) return;
+  const k = reduceMotion ? 3 : Math.floor(time * 12), flick = reduceMotion ? 1 : .78 + .22 * hash(k, 11, 306);
+  leaderTex.offset.x = (reduceMotion ? 3 : Math.floor(time) % SCREEN_FRAMES) / SCREEN_FRAMES;
+  screenMat.color.setRGB(.62 * flick, .6 * flick, .52 * flick); beamMat.opacity = .032 * flick;
+}
+// ---- the room in the shed nearest the road, where they used to get together and play
+const JAM_SHED = 900011, JAM = [];
+{
+  const F = tilted(907.5, 706.8, -12.5), room = nearHere(913, 708, 70), yaw = F.yaw;
+  const rug = new THREE.MeshStandardMaterial({ color: '#57292c', roughness: 1 }), blanket = new THREE.MeshStandardMaterial({ color: '#6b5f7c', roughness: 1 }), blanket2 = new THREE.MeshStandardMaterial({ color: '#7e6549', roughness: 1 });
+  F.box(rug, 2.7, .03, 2.1, 3.5, .03, 2.9, 0); F.box(rug, 7.2, .03, 1.5, 3.2, .03, 1.9, 0);
+  // moving blankets nailed up along the back wall, for the neighbours, who are a long way off
+  F.box(blanket, 2.5, 1.45, .3, 3.2, 2.1, .04, 0); F.box(blanket2, 6, 1.5, .3, 2.8, 2, .04, 0); F.box(blanket, 9.2, 1.42, .3, 2.6, 2.05, .04, 0);
+  const add = (name, sound, parts, u, v, turn, hp, solidBox, chip) => { const [x, z] = F.at(u, v), j = { name, sound, x, z }; j.prop = thing(room, name, parts, x, z, yaw + turn, hp, { solid: solidBox, chip, hit() { playedJam(j); } }); JAM.push(j); return j; };
+  add('drums', 'jam.drum', drumKit(), 2.7, 2.1, 0, 5, [1.7, 1.2, 1.1], '#7f2c22');
+  add('guitar', 'jam.guitar', guitar('#b5472a'), 4.9, 1, 0, 2, [.4, .4, 1], '#b5472a');
+  add('bass', 'jam.bass', guitar('#2c2a30', '#7a5a38', 1.25), 8.3, 1.05, -.2, 2, [.4, .4, 1], '#2c2a30');
+  add('keyboard', 'jam.keys', keyboard(), 9.7, 3.1, -Math.PI / 2 - .12, 2, [1.4, .5, .95], '#231f26');
+  for (const [parts, u, v, turn, w, d, h] of [[ampStack(), 6.1, .55, 0, .8, .4, 1.1], [amp(), 7.2, .5, -.1, .64, .3, .55], [amp(.82, .68, .34), 3.9, .5, .2, .84, .36, .7]]) { const [x, z] = F.at(u, v); thing(room, 'amp', parts, x, z, yaw + turn, 2, { solid: [w, d, h], chip: '#1d1a1e' }); }
+  for (const [u, v, t] of [[6, 2.6, 2.9], [3.6, 3.4, 3.4]]) { const [x, z] = F.at(u, v); thing(room, 'stand', micStand(), x, z, yaw + t, .5, { chip: '#7c7b80' }); }
+  { const [x, z] = F.at(10, .72); thing(room, 'couch', couch(), x, z, yaw, 2, { solid: [2, .85, .7], chip: '#5a3f33' }); }
+  // cords, every which way
+  const cord = new THREE.MeshStandardMaterial({ color: '#141114', roughness: .8 });
+  for (const path of [[[6.1, .7], [5.6, 1.5], [6, 2.5]], [[6, .75], [5.4, 1.2], [4.9, 1.2]], [[7.2, .7], [7.8, 1.3], [8.3, 1.2]], [[7.2, .7], [8.6, 2.2], [9.5, 3]], [[3.9, .7], [4.4, 2.2], [3.6, 3.3]]]) for (let i = 1; i < path.length; i++) F.beam([path[i - 1][0], .05, path[i - 1][1]], [path[i][0], .05, path[i][1]], .03, .02, cord, 0);
+  // the one bulb
+  F.beam([5.6, 2.72, 2.7], [5.6, 2.32, 2.7], .012, .012, cord, 0);
+  F.box(lit('#ffc98a', 2.4), 5.6, 2.27, 2.7, .08, .11, .08, 0);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(9.5, 5), new THREE.MeshBasicMaterial({ map: radialTex, color: '#6e4a22', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), [gx, gz] = F.at(5.6, 2.7);
+  glow.position.set(gx, Y0 + .07, gz); glow.rotation.set(-Math.PI / 2, 0, yaw); room.add(glow);
+  // outside: the stoop and the walk along the wall, and the propane tank at the end of it
+  const plank = new THREE.MeshStandardMaterial({ color: '#7a6448', roughness: 1 });
+  F.box(plank, 5.6, .07, 6.2, 2.6, .14, 1.6, 1); F.box(plank, 3.2, .04, 5.85, 5.6, .08, .9, 0); F.box(plank, 8.6, .04, 5.85, 4.6, .08, .9, 0);
+  { const [x, z] = F.at(-1.9, 3.2); shedTank = thing(room, 'propane', propaneTank(), x, z, yaw + Math.PI / 2, 1.5, { solid: [2, .9, 1.1], chip: '#d7d4c8', broke(p) { after(.12, () => blast(p.cx, Y0 + .9, p.cz, 7, 4)); } }); }
+  flushBuckets(70);
+}
+// Played, or just hit: it's loud either way, and everything for miles can hear it
+let jamLast = -9;
+function playedJam(j) {
+  const beat = j.sound === 'jam.drum' && time - jamLast < 1.4 ? 'jam.cymbal' : j.sound;
+  jamLast = time;
+  SFX.play(beat, { x: j.x, z: j.z });
+  if (crowdOut) horde.noise(j.x, j.z, 40, 3);
+}
+function jamInReach() {
+  if (houseAt(player.pos.x, player.pos.z)?.id !== JAM_SHED) return null;
+  let best = null, bd = 1.9;
+  for (const j of JAM) { const d = Math.hypot(j.x - player.pos.x, j.z - player.pos.z); if (d < bd && !j.prop.down) { bd = d; best = j; } }
+  return best;
+}
+function playJam(j) { if (swingT >= 0) return; swingT = 0; swingHit = true; playedJam(j); }
+// ---- the white studio, with something on the easel, and what's beside it. Nothing here is of anyone or anything.
+const CANVASES = 5;
+const canvasTex = textTex([''], 256 * CANVASES, 256, '#e4dcc8', '#000', '12px sans-serif', { after: (g) => {
+  const tones = ['#b4532a', '#d9c9a0', '#3a7a78', '#c89a3a', '#7a2f3c', '#56507a', '#e8843a', '#2f4a5c', '#17121a', '#f1e6cf'];
+  for (let i = 0; i < CANVASES; i++) {
+    const x0 = 256 * i, k = (a, b = 0) => hash(i, a, 320 + b);
+    g.save(); g.beginPath(); g.rect(x0, 0, 256, 256); g.clip();
+    g.fillStyle = tones[Math.floor(k(1) * tones.length)]; g.fillRect(x0, 0, 256, 256);
+    // big soft fields, then hard strokes across them, then a few drips
+    for (let n = 0; n < 9; n++) { g.fillStyle = tones[Math.floor(k(n, 2) * tones.length)]; g.globalAlpha = .55 + k(n, 3) * .4; g.save(); g.translate(x0 + k(n, 4) * 256, k(n, 5) * 256); g.rotate((k(n, 6) - .5) * .6); g.fillRect(-20 - k(n, 7) * 90, -14 - k(n, 8) * 70, 50 + k(n, 7) * 180, 30 + k(n, 8) * 140); g.restore(); }
+    g.globalAlpha = 1; g.lineCap = 'round';
+    for (let n = 0; n < 7; n++) { g.strokeStyle = tones[Math.floor(k(n, 9) * tones.length)]; g.lineWidth = 2 + k(n, 10) * 11; g.beginPath(); g.moveTo(x0 + k(n, 11) * 256, k(n, 12) * 256); g.quadraticCurveTo(x0 + k(n, 13) * 256, k(n, 14) * 256, x0 + k(n, 15) * 256, k(n, 16) * 256); g.stroke(); }
+    for (let n = 0; n < 8; n++) { g.fillStyle = tones[Math.floor(k(n, 17) * tones.length)]; const dx = x0 + k(n, 18) * 256, dy = k(n, 19) * 190; g.fillRect(dx, dy, 2 + k(n, 20) * 3, 16 + k(n, 21) * 60); }
+    g.restore();
+  }
+} });
+const canvasMat = new THREE.MeshStandardMaterial({ map: canvasTex, roughness: .9 });
+{
+  const F = tilted(968.2, 676.1, -31), room = nearHere(973, 679, 70), yaw = F.yaw;
+  // a canvas on stretcher bars, a slice of the one picture
+  const hung = (i, u, y, v, w, h, turn, lean = 0) => {
+    const [x, z] = F.at(u, v), geo = new THREE.BoxGeometry(w, h, .05), uv = geo.attributes.uv;
+    for (let n = 0; n < uv.count; n++) uv.setX(n, (i + uv.getX(n)) / CANVASES);
+    const m = new THREE.Mesh(geo, canvasMat); m.position.set(x, Y0 + y, z); m.rotation.set(lean, yaw + turn, 0, 'YXZ'); room.add(m);
+    breakable('canvas', .4, null, { rigid: true, objs: [m], foot: [x, z], chip: '#b4532a' });
+  };
+  const cloth = new THREE.MeshStandardMaterial({ map: textTex([''], 256, 256, '#b7ad97', '#000', '12px sans-serif', { after: (g) => { const tones = ['#b4532a', '#3a7a78', '#c89a3a', '#7a2f3c', '#56507a', '#17121a']; for (let n = 0; n < 90; n++) { g.fillStyle = tones[n % tones.length]; g.globalAlpha = .4 + hash(n, 1, 340) * .5; g.beginPath(); g.arc(hash(n, 2, 340) * 256, hash(n, 3, 340) * 256, 1 + hash(n, 4, 340) ** 3 * 16, 0, 7); g.fill(); } g.globalAlpha = 1; } }), roughness: 1 });
+  F.box(cloth, 2.6, .025, 3.6, 3.6, .02, 3.4, 0);
+  { const [x, z] = F.at(2.6, 3.2); thing(room, 'easel', easel(), x, z, yaw, .6, { solid: [.8, .5, 1.8], chip: '#6e5238' }); }
+  hung(0, 2.6, 1.28, 3.33, 1.3, 1.1, 0, -.12);
+  { const [x, z] = F.at(4.5, 3.6); thing(room, 'bench', workbench(3.2), x, z, yaw - Math.PI / 2, 1.5, { solid: [3.2, .7, 1], chip: '#6a5238' }); }
+  { const [x, z] = F.at(1.9, 4.4); thing(room, 'stool', stool('#6a5238'), x, z, yaw, .4, { chip: '#6a5238' }); }
+  // the ones that are done, or aren't: leaning against the wall, and one big one hung at the end
+  hung(1, .22, .72, 1.6, 1.2, 1.4, Math.PI / 2, -.12); hung(2, .3, .6, 3, 1.5, 1.15, Math.PI / 2, -.16); hung(3, .22, .52, 4.8, .9, 1, Math.PI / 2, -.14); hung(0, .34, .78, 6.4, 1.5, 1.5, Math.PI / 2, -.18);
+  hung(4, 1.5, 1.6, .3, 2.1, 1.7, 0);
+  F.beam([2.6, 2.75, 5], [2.6, 2.4, 5], .012, .012, poleMat, 0); F.box(lit('#e6efff', 1.8), 2.6, 2.34, 5, .08, .1, .08, 0);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 9), new THREE.MeshBasicMaterial({ map: radialTex, color: '#46505c', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), [gx, gz] = F.at(2.6, 5);
+  glow.position.set(gx, Y0 + .06, gz); glow.rotation.set(-Math.PI / 2, 0, yaw); room.add(glow);
+  // the concrete at its door, the clutter under the lean-to, and a boat that isn't going anywhere
+  F.box(concreteMat, 2.6, .03, 12.4, 5.6, .08, 4.8, 0);
+  const G = tilted(964.86, 680.84, -31), out = nearHere(969, 684, 70);
+  [[.9, 1.4, .3, .8], [2.1, 2.9, -.4, .6], [1, 4.7, .9, .9], [2.3, 6.2, .1, .7]].forEach(([u, v, t, k]) => { const [x, z] = G.at(u, v); thing(out, 'crate', crate(.9 * k, .7 * k, .8 * k), x, z, G.yaw + t, 1, { solid: [.8 * k, .7 * k, .7 * k], chip: '#b9ad92' }); });
+  { const [x, z] = atTrue(969.4, 688); thing(out, 'boat', boat(), x, z, 2.47, 1.5, { solid: [1.6, 1.6, .45], chip: '#d3cdb9' }); }
+  // and the yellow digger in the grass by the drive
+  { const [x, z] = atTrue(979.3, 675.5); thing(out, 'digger', excavator(), x, z, -2.41, 6, { solid: [2.2, 2.2, 2], chip: '#d6a321' }); }
+  flushBuckets(70);
 }
 indexProps();
 // Where the town's props leave the random sequence, however many there are, so the lantern and the snakes stay as they were in the opening
@@ -4034,6 +4240,7 @@ function bringOutCrowd() {
   if (!S.flags.churchDown) { churchZone = { x: cx, z: cz, r: 28 }; horde.zones.push(churchZone); }
   for (const f of fires) if (!f.out) horde.lights.push(f.spot);
   if (gasPower) horde.lights.push(gasSpot);
+  if (screenOn) horde.lights.push(screenSpot);
   for (const [id, a, b, n] of CROWD_STREETS) {
     const s0 = MAP.sOn(id, ...a), s1 = MAP.sOn(id, ...b);
     for (let i = 0, tries = 0; i < n && tries < n * 30; tries++) {
@@ -4099,15 +4306,19 @@ function vehicleFits(kind, x, z, yaw) {
   }
   return true;
 }
+// Nothing gets parked at the compound on Pine Forest Rd but what's on the aerial
+const COMPOUND = [...atTrue(880, 600), ...atTrue(1075, 740)];
 const VEH_SET = [
   // the first one you come to, on the shoulder just past the Chunky River Bridge, and pointing into town
   (() => { const r = 'griffis_fountain_rd', [x, z] = atTrue(-336.76, 490.37), p = MAP.along(r, MAP.sOn(r, x, z) - 34); return ['quad', p.x + p.nx * 5, p.z + p.nz * 5, Math.atan2(-p.tx, -p.tz), .12]; })(),
   // a truck by the pumps, pointing at the road, and a car outside the town hall
   ['pickup', ...gasAt(60.8, 9.2), 0, .3], ['car', PLACES.hall.x + 41, PLACES.hall.z - .9, -Math.PI / 2, .2],
+  // at the compound on Pine Forest Rd: a white truck by the deck, a dark car along the drive, and two white trucks by the long building
+  ['pickup', ...atTrue(1034.1, 640.5), .56, .76], ['car', ...atTrue(1000.6, 652.6), 2.6, .635], ['pickup', ...atTrue(1028.6, 669.1), .1, .76], ['pickup', ...atTrue(1031.9, 669.9), .1, .3],
 ].filter(([kind, x, z, yaw]) => vehicleFits(kind, x, z, yaw));
 const VEHICLES = [
   ...VEH_SET.map(([kind, x, z, yaw, tone]) => ({ kind, x, z, yaw, tone })),
-  ...placeVehicles(STRUCTURES, { hash: hash2, road: nearestRoadPoint, free: (kind, x, z, yaw) => !(Math.abs(x) < 150 && Math.abs(z) < 150) && !VEH_SET.some((h) => Math.hypot(h[1] - x, h[2] - z) < 8) && vehicleFits(kind, x, z, yaw) }),
+  ...placeVehicles(STRUCTURES, { hash: hash2, road: nearestRoadPoint, free: (kind, x, z, yaw) => !(Math.abs(x) < 150 && Math.abs(z) < 150) && !(x > COMPOUND[0] && x < COMPOUND[2] && z > COMPOUND[1] && z < COMPOUND[3]) && !VEH_SET.some((h) => Math.hypot(h[1] - x, h[2] - z) < 8) && vehicleFits(kind, x, z, yaw) }),
 ].map(({ kind, x, z, yaw, tone }) => {
   const v = makeVehicle(kind, x, z, yaw, floorAt(x, z)), list = PAINTS[kind];
   v.tone = tone; v.paint = new THREE.Color(list[Math.floor(tone * list.length) % list.length]); v.shownSpin = 0; v.seen = Infinity; settle(v, floorAt);
@@ -5053,6 +5264,7 @@ let soundSlow = 0, lastStride = 0, creakSide = false, sawAt = -9, strokeT = 0, p
 function surfaceUnder() {
   const P = player.pos;
   if ((P.y > DECK_TOP - .4 && Math.abs(P.x) < 20.6 && Math.abs(P.z) < 4) || fromWake(P.x, P.z) < WAKE_SPAN / 2 + .5 || houseAt(P.x, P.z)) return 'wood';
+  if (WATER.look(P.x, P.z) && WATER.pond.pool && WATER.d < 3) return 'road';
   if (P.y < .8 || (WATER.look(P.x, P.z) && WATER.d < 1.5)) return 'mud';
   return pavedAt(P.x, P.z) ? 'road' : 'dirt';
 }
@@ -5260,9 +5472,10 @@ function tick(dt, draw = true) {
       const ride = near ? null : vehicleInReach();
       const meat = !near && !ride && skillet.visible && Math.hypot(HEARTH.x - player.pos.x, HEARTH.z - player.pos.z) < 2.2;
       const door = !near && !ride && !meat && atGasDoor();
-      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : null;
+      const jam = !near && !ride && !meat && !door && jamInReach();
+      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : null;
       if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (fliesToDo && lot < FLY_REACH) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
-      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else swing(); }
+      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else swing(); }
       if (input.sEdge) swing();
       if (input.cEdge) throwOne();
       if (input.nEdge) switchThrown();
@@ -5336,6 +5549,7 @@ function tick(dt, draw = true) {
   for (const c of PICKUPS) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
   if (lootGroup.visible) for (const c of LOOT) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
   for (const f of fires) { const k = .8 + .2 * Math.sin(time * 11 + f.ph) * Math.sin(time * 7.3 + f.ph); f.pl.intensity = (f.duty ? 34 : f.out ? 0 : 12) * k; }
+  stepScreen();
   beacon.visible = beaconLive && Math.floor(time * 1.2) % 2 === 0; { const dip = Math.random() < .02 && !reduceMotion; gasLight.intensity = (dip ? 2 : 9) * gasPower; gasStrip.material.color.copy(GAS_STRIP).multiplyScalar(dip ? .25 : 1); }
   if (!driving && boomLight <= 0) gLight.intensity = 14 * (.8 + .2 * Math.sin(time * 9.7));
 
@@ -5449,6 +5663,7 @@ if (location.hash === '#signs') openSignBoard();
 if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    compound: { JAM, JAM_SHED, DECK, LAWN, spot: screenSpot, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach },
     lures: { LYING, lyingNear, flying, popping, opened, ALARMS, lureSpots, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
     horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far) }),
     objective(t, id) { streetObjective(t, id); },

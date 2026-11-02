@@ -95,6 +95,8 @@ Positions are true metres from town center. `MAP.fromTrue` takes them to the wor
 
 `tools/structure_notes.json` has `structures`, by id, and `extras`. A note can hold any of the look fields above, using a colour name or a hex for `wallColor`, plus these:
 
+The compound on Pine Forest Rd is the most worked over of these, because it's come to matter that its buildings are the right shape. The source has two footprints there, both wrong, and the rest of it isn't in the source at all, so it's all measured on the aerial as rectangles on the one grid they're laid out on. A building with two roofs is two buildings a few centimetres apart, because `wingsOf` would run one ridge through both. One of them, the long tan building in the clearing, is newer than any public aerial, so it's the one thing here placed by eye off the map and rounded off, and it says so in its `what`. Measure it properly when a newer NAIP comes out. What can't be seen from above, which is mostly the walls, is a guess.
+
 | Field | What it does |
 |---|---|
 | `seen` | Must be `true` for the rest of the note to count. |

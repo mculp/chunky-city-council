@@ -64,7 +64,12 @@
     "vehicle.skid": { "gain": 0.245, "file": "audio/sfx/vehicle.skid.1.mp3" },
     "lure.bottle": { "gain": 0.7, "reach": 60, "spread": 0.1, "max": 2, "file": ["audio/sfx/lure.bottle.1.mp3", "audio/sfx/lure.bottle.2.mp3"] },
     "vehicle.alarm": { "gain": 0.5, "loop": true, "file": "audio/sfx/vehicle.alarm.1.mp3" },
-    "lure.pop": { "gain": 0.55, "reach": 90, "spread": 0.14, "max": 4, "gap": 0.03, "file": ["audio/sfx/lure.pop.1.mp3", "audio/sfx/lure.pop.2.mp3", "audio/sfx/lure.pop.3.mp3"] }
+    "lure.pop": { "gain": 0.55, "reach": 90, "spread": 0.14, "max": 4, "gap": 0.03, "file": ["audio/sfx/lure.pop.1.mp3", "audio/sfx/lure.pop.2.mp3", "audio/sfx/lure.pop.3.mp3"] },
+    "jam.cymbal": { "gain": 1.5, "reach": 80, "spread": 0.04, "max": 2, "file": "audio/sfx/jam.cymbal.1.mp3" },
+    "jam.drum": { "gain": 0.85, "reach": 80, "spread": 0.03, "max": 2, "file": ["audio/sfx/jam.drum.1.mp3", "audio/sfx/jam.drum.2.mp3"] },
+    "jam.guitar": { "gain": 0.7, "reach": 80, "spread": 0.02, "max": 2, "file": ["audio/sfx/jam.guitar.1.mp3", "audio/sfx/jam.guitar.2.mp3"] },
+    "jam.bass": { "gain": 0.6, "reach": 80, "spread": 0.02, "max": 2, "file": "audio/sfx/jam.bass.1.mp3" },
+    "jam.keys": { "gain": 0.8, "reach": 80, "spread": 0.02, "max": 2, "file": "audio/sfx/jam.keys.1.mp3" }
   },
   "music": {
     "title": { "bed": 0.55, "air": 0.5, "guitar": 0.6, "file": "audio/music/hang.1.mp3", "gain": 2.712 },

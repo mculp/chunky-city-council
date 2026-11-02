@@ -4,7 +4,8 @@
     "byName": "A road by its TIGER name, for what's been looked at by eye on Street View. paint is for one with lines on it, which the paved ones haven't got otherwise.",
     "leaveOut": "TIGER names that aren't taken.",
     "drive": "What a generated drive is. None of it is surveyed.",
-    "ownDrive": "Buildings with a drive or a forecourt of their own, already built by hand in index.html: the owner's house and barn, the gas station and the town hall."
+    "ownDrive": "Buildings with a drive or a forecourt of their own, already built by hand in index.html or measured below: the owner's house and barn, the gas station and the town hall, and the compound on Pine Forest Rd.",
+    "measured": "Somebody's real drive that TIGER hasn't got and a generated one would miss, measured off the NAIP aerial, in true metres. Each starts from the nearest vertex of a road or a lane, so it's joined up."
   },
   "classes": {
     "S1200": {
@@ -56,10 +57,12 @@
     "width": 3,
     "surface": "dirt"
   },
-  "ownDrive": [
-    75414843,
-    75057300,
-    75177617,
-    75204375
+  "ownDrive": [75414843, 75057300, 75177617, 75204375, 75099630, 75190940, 900004, 900005, 900006, 900007, 900009, 900010, 900011, 900012, 900013],
+  "measured": [
+    { "width": 4.5, "surface": "gravel", "points": [[875, 734], [905, 731.9], [909, 731.6], [940, 718.6], [959, 705.6], [981, 696], [994, 679.6], [997, 668.4], [1003.4, 657.3], [1013.6, 643.4], [1027.6, 632.2], [1037, 625]] },
+    { "width": 8, "surface": "gravel", "points": [[1013.6, 643.4], [1025.8, 636.5], [1035, 626.5]] },
+    { "width": 3.5, "surface": "gravel", "points": [[906, 722], [911, 715]] },
+    { "width": 3.5, "surface": "gravel", "points": [[977, 688]] },
+    { "width": 3.5, "surface": "gravel", "points": [[1025.5, 652], [1027, 662]] }
   ]
 }
