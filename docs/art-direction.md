@@ -67,6 +67,8 @@ They share one body so that dozens can be on a phone's screen at once: `crowdBod
 - They wear the looks in `data/looks.json`. How far gone each of them is comes from a number they already have, by way of `degreeOf`, and most are in the middle.
 - Everything that's lit goes hotter and yellower once they've noticed something, and what's coming off them flares even on someone who's barely started, so you can read who's after you from a distance.
 - Their lines thin out with distance, or a far crowd would be nothing but chalk.
+- You can tell how someone's taking him by how they move. Someone after him leans in with their arms out. Someone keeping away goes quickly with their hands up by their head and leaning forward. Someone following stops upright with their arms down and faces him, glowing the way they do when they've noticed something. `data/folks.md` has who does what.
+- Once he's been around someone a moment, their name's over their head when they're the nearest, in the same panel as the rest of the HUD, with how they are with him in rust if it's anything but the usual. It's one label, however many there are.
 - Limbs that don't bend, swung from the shoulder and hip on the same 12 fps step as everything else. Most of them limp. When they're after him their arms come up and they lean in.
 
 ## The GIF feel
