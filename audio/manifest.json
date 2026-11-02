@@ -129,6 +129,30 @@
       "request": "01a198c1-30b8-79e2-8ca1-869e67fe5198",
       "date": "2026-11-01T20:16:06.806Z"
     },
+    "audio/sfx/ball.bump.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 1,
+      "bytes": 17179,
+      "sha256": "97095ac282f565e16137307a7373e9f5eb1de33cc126bbc2a03ad4833e39c8cb",
+      "request": "01a19b1f-e119-7de1-aa4f-77cdcc11bb72",
+      "date": "2026-11-02T07:18:44.771Z"
+    },
+    "audio/sfx/ball.bump.2.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 1,
+      "bytes": 17179,
+      "sha256": "0d553dde1c764c9ffff0e67a5a225ebc164dc90070dd2c3ef2ccedbb327f96a0",
+      "request": "01a19b20-56bd-79a1-9542-239dbb2d0668",
+      "date": "2026-11-02T07:19:14.229Z"
+    },
+    "audio/sfx/ball.land.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 1,
+      "bytes": 17179,
+      "sha256": "0cf78ab13b60b5917d35100d466955e93ef2acbd70f034d23cff58bc25f783de",
+      "request": "01a19b1f-f471-7452-be1f-0e84372e0d07",
+      "date": "2026-11-02T07:18:49.805Z"
+    },
     "audio/sfx/bite.sting.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
       "seconds": 2,
@@ -913,6 +937,14 @@
       "request": "01a198de-fa0c-74c3-9fd6-3ce48af94242",
       "date": "2026-11-01T20:48:37.297Z"
     },
+    "audio/sfx/tramp.spring.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 1,
+      "bytes": 17179,
+      "sha256": "57b750c5ae0efb447e282a3547a264fb5cca4bdac0dab98f5e11d5ad336445f3",
+      "request": "01a19b20-081b-7e52-bda3-1a13d5b639f4",
+      "date": "2026-11-02T07:18:52.938Z"
+    },
     "audio/sfx/tree.fall.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
       "seconds": 3,
@@ -995,7 +1027,7 @@
     }
   },
   "spent": {
-    "likely": 11.3724,
-    "most": 16.5924
+    "likely": 11.3824,
+    "most": 16.6024
   }
 }

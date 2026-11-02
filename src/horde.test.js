@@ -148,6 +148,22 @@ describe('senses', () => {
     assert.ok(h.all.includes(far));
   });
 
+  test('the town doesn\'t empty: another wanders in for each, in time, from out of sight, and only for those', () => {
+    const wet = (x) => x > 15, h = createHorde(field({ water: wet, comeFrom: () => [500, 500] }, {})), s = h.add(14, 0), p = { ...still, x: -100 };
+    h.lure(25, 0, 40, 30, true);
+    run(h, p, 20);
+    assert.ok(!h.all.includes(s), 'the water had it');
+    assert.equal(h.all.length, 0);
+    run(h, p, TUNING.comeIn - 15);
+    assert.equal(h.all.length, 0, 'not straight away');
+    run(h, p, 16);
+    assert.deepEqual([h.all.length, h.all[0].x, h.all[0].z], [1, 500, 500]);
+    run(h, p, TUNING.comeIn * 3);
+    assert.equal(h.all.length, 1, 'one for one');
+    h.all.length = 0; run(h, p, TUNING.comeIn * 2);
+    assert.equal(h.all.length, 0, 'and nobody comes for those it didn\'t have');
+  });
+
   test('it only takes a moment of hearing it, and they go all the way', () => {
     const wet = (x) => x > 15, h = createHorde(field({ water: wet })), s = h.add(0, 0);
     h.lure(25, 0, 40, .5, true); run(h, { ...still, x: -100 }, 25);

@@ -45,6 +45,8 @@ test('a phone\'s act button says what it does, and it\'s gone when it does nothi
   assert.equal(buttonsFor('bridge').a, null);
   assert.equal(buttonsFor('town', { act: 'Talk to Coop' }).a, 'TALK');
   assert.equal(buttonsFor('town', { act: 'Play the drums' }).a, 'PLAY');
+  assert.equal(buttonsFor('town', { act: 'Bump the ball' }).a, 'BUMP');
+  assert.equal(buttonsFor('town', { act: 'Take the bat' }).a, 'TAKE');
 });
 
 test('near something to drive, the button says so, and driving has its own controls', () => {

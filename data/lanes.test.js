@@ -108,6 +108,10 @@ test('the map reaches as far as the lanes do', () => {
   for (const r of map.lanes) for (const [x, z] of r.pts) assert.ok(map.inBounds(x, z), `${r.id} runs off the map at ${x}, ${z}`);
 });
 
+test("a road isn't barricaded from itself over a short gap", () => {
+  assert.equal(lanes.lanes.filter((l) => l.name === 'True Light Rd').length, 1);
+});
+
 test('data/lanes.md has the numbers', () => {
   const doc = readFileSync(new URL('./lanes.md', import.meta.url), 'utf8');
   const km = (list) => list.reduce((n, r) => n + r.points.slice(1).reduce((m, p, i) => m + Math.hypot(p[0] - r.points[i][0], p[1] - r.points[i][1]), 0), 0) / 1000;

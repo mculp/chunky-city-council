@@ -219,7 +219,8 @@ import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boun
 import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
 import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, rimHit, placeVehicles, settle, speedOf } from './src/vehicles.js';
 import { vehicleGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
-import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate } from './src/things.js';
+import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap } from './src/things.js';
+import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/volley.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
 import { makeLight, stepLight, lightAt } from './src/light.js';
 
@@ -2681,12 +2682,12 @@ function tilted(tx, tz, deg) {
     beam(a, b, w, h, mat, ink = 1.1) { const [ax, az] = at(a[0], a[2]), [bx, bz] = at(b[0], b[2]); addBeam([ax, Y0 + a[1], az], [bx, Y0 + b[1], bz], w, h, mat, ink); },
   };
 }
-// What's made in src/things.js: one mesh and its outline, which goes over in one piece. `solid` is how wide, how deep and how high it stops him.
+// What's made in src/things.js: one mesh and its outline, which goes over in one piece. `solid` is how wide, how deep and how high it stops him, and `walls` are any that aren't square to the map.
 function thing(into, kind, parts, x, z, yaw, hp, o = {}) {
   const geo = mergeGeometries(parts), g = new THREE.Group(), [w, d, top] = o.solid ?? [0, 0, 0], c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw)), hx = (w * c + d * s) / 2, hz = (w * s + d * c) / 2;
   g.add(new THREE.Mesh(geo, thingMat), new THREE.Mesh(smoothed(geo), thingLine));
   g.position.set(x, Y0 + (o.y ?? 0), z); g.rotation.y = yaw; into.add(g);
-  return breakable(kind, hp, () => { if (top) solid(x - hx, x + hx, z - hz, z + hz, Y0 + top); }, { rigid: true, objs: [g], foot: [x, z], chip: o.chip, broke: o.broke, hit: o.hit });
+  return breakable(kind, hp, () => { if (top) solid(x - hx, x + hx, z - hz, z + hz, Y0 + top); for (const w of o.walls ?? []) { PROP_WALLS.push(w); PROP.walls.push(w); } }, { rigid: true, objs: [g], foot: [x, z], chip: o.chip, broke: o.broke, hit: o.hit });
 }
 const nearHere = (tx, tz, r) => { const g = new THREE.Group(), [x, z] = atTrue(tx, tz); scene.add(g); DISTANT.push({ obj: g, x, z, r }); return g; };
 // A fence that goes over a length at a time
@@ -2709,7 +2710,7 @@ const patioMat = new THREE.MeshStandardMaterial({ color: '#a6a091', roughness: 1
 {
   const F = DECK, top = .06;
   for (const [u0, u1, v0, v1] of [[0, 15.4, 0, POOL_V0], [0, 15.4, POOL_V1, 9.3], [0, POOL_U0, POOL_V0, POOL_V1], [POOL_U1, 15.4, POOL_V0, POOL_V1]]) F.box(patioMat, (u0 + u1) / 2, top - .05, (v0 + v1) / 2, u1 - u0, .1, v1 - v0, 0);
-  const pool = WATER.ponds.find((p) => p.pool === 'blue');
+  const pool = WATER.ponds.find((p) => p.id === 'pool-1');
   pool.ring.forEach(([ax, az], i) => { const [bx, bz] = pool.ring[(i + 1) % pool.ring.length]; addBeam([ax, Y0 + top - .01, az], [bx, Y0 + top - .01, bz], .56, .1, copingMat, 0); });
   // the steps out at the deep end
   breakable('ladder', 1, () => { for (const s of [-1, 1]) { F.beam([POOL_U1 - .2 + s * .22, -.5, POOL_V0 + .2], [POOL_U1 - .2 + s * .22, .95, POOL_V0 - .12], .04, .04, shelfMat, .9); } for (const y of [-.3, -.02]) F.box(shelfMat, POOL_U1 - .2, y, POOL_V0 + .12, .46, .03, .1, 0); }, { rigid: true, chip: '#4a4650' });
@@ -2868,6 +2869,133 @@ const canvasMat = new THREE.MeshStandardMaterial({ map: canvasTex, roughness: .9
   { const [x, z] = atTrue(979.3, 675.5); thing(out, 'digger', excavator(), x, z, -2.41, 6, { solid: [2.2, 2.2, 2], chip: '#d6a321' }); }
   flushBuckets(70);
 }
+// ================================================================ the yard off True Light Rd
+// Its buildings are in data/structures.json and its pool's in data/water.json. This is what's round them: the oval of concrete, the trampoline, the yard light, the net and the gear in the little shed. Where everything but the net goes was measured on the aerial, in true metres.
+clearing(-1545, -828, -1494, -745, 5, true); clearing(-1568, -790, -1530, -750, 5, true); clearing(-1558, -812, -1535, -785, 4, true); clearing(-1560, -745, -1494, -690, 6, true); clearing(-1590, -690, -1494, -640, 6, true);
+const apronMat = new THREE.MeshStandardMaterial({ color: '#bdb39c', roughness: 1 });
+{
+  const [cx, cz] = atTrue(-1531.2, -773.4), pool = WATER.ponds.find((p) => p.id === 'pool-2'), t = 14 * Math.PI / 180, oval = new THREE.Shape();
+  for (let i = 0; i < 40; i++) { const a = i / 40 * Math.PI * 2, u = 7.3 * Math.cos(a), v = 8.9 * Math.sin(a), x = u * Math.cos(t) - v * Math.sin(t), z = u * Math.sin(t) + v * Math.cos(t); if (i) oval.lineTo(x, -z); else oval.moveTo(x, -z); }
+  oval.holes.push(new THREE.Path(pool.ring.map(([x, z]) => new THREE.Vector2(x - cx, cz - z))));
+  const here = nearHere(-1531, -773, 120), mesh = new THREE.Mesh(new THREE.ShapeGeometry(oval).rotateX(-Math.PI / 2), apronMat);
+  mesh.position.set(cx, Y0 + .05, cz); here.add(mesh);
+  pool.ring.forEach(([ax, az], i) => { const [bx, bz] = pool.ring[(i + 1) % pool.ring.length]; addBeam([ax, Y0 + .05, az], [bx, Y0 + .05, bz], .46, .1, copingMat, 0); });
+  // the steps out at the deep end
+  const F = tilted(-1532.2, -779.3, 14.9);
+  breakable('ladder', 1, () => { for (const s of [-1, 1]) F.beam([1.4 + s * .22, -.5, .2], [1.4 + s * .22, .95, -.12], .04, .04, shelfMat, .9); for (const y of [-.3, -.02]) F.box(shelfMat, 1.4, y, .12, .46, .03, .1, 0); }, { rigid: true, chip: '#4a4650' });
+  // the white walk over to the trampoline
+  const W = tilted(-1525.85, -766.35, 23.4); W.box(concreteMat, 3.65, .03, 0, 7.3, .07, 1.2, 0);
+  flushBuckets(90);
+}
+const TRAMP = { x: atTrue(-1516, -763)[0], z: atTrue(-1516, -763)[1], r: 2.15, top: .85, prop: null };
+TRAMP.prop = thing(nearHere(-1516, -763, 90), 'trampoline', trampoline(), TRAMP.x, TRAMP.z, 0, 3, { solid: [3, 3, TRAMP.top], chip: '#34506e' });
+// Coming down on it sends him back up, from wherever he was a moment ago, as long as that was over it
+function onTrampoline(was) {
+  const top = Y0 + TRAMP.top;
+  if (TRAMP.prop.down || player.vy > 0 || was < top || player.pos.y > top || Math.hypot(player.pos.x - TRAMP.x, player.pos.z - TRAMP.z) > TRAMP.r) return false;
+  player.pos.y = top; player.vy = 8.4; playNew('tramp.spring', { x: TRAMP.x, z: TRAMP.z });
+  return true;
+}
+// ---- the net, in a worn patch of the yard, and a ball to keep up. What it does is in src/volley.js. Where the net stands is a guess from the worn patch.
+const COURT = makeCourt(...atTrue(-1512.5, -783.5), -10), BALL = makeBall(COURT, -4, 1);
+BALL.y += Y0;
+const ballMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(VOLLEY.r, 1), new THREE.MeshStandardMaterial({ color: '#efe7d2', roughness: .7, flatShading: true }));
+outline(ballMesh, INK, 1.3);
+const ballRing = new THREE.Mesh(new THREE.RingGeometry(.84, 1, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#f1e6cf', transparent: true, opacity: .55, depthWrite: false }));
+const NET_YAW = (() => {
+  const F = tilted(-1512.5, -783.5, -10), here = nearHere(-1512, -783, 110), worn = new THREE.MeshStandardMaterial({ map: radialTex, color: '#8a7650', roughness: 1, transparent: true, depthWrite: false });
+  // where they stood, worn down to the dirt either side of the net
+  for (const [u, v, su, sv] of [[-4.6, 0, 11, 7.5], [4.4, -.2, 11, 7], [0, 0, 7, 9.5]]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(su, sv), worn), [x, z] = F.at(u, v); m.position.set(x, Y0 + .025, z); m.rotation.set(-Math.PI / 2, 0, F.yaw, 'YXZ'); here.add(m); }
+  const rope = new THREE.MeshStandardMaterial({ color: '#d9d4c4', roughness: 1 });
+  for (const v of [-4.5, 4.5]) F.box(rope, 0, .02, v, 18, .025, .05, 0);
+  for (const u of [-9, 9]) F.box(rope, u, .02, 0, .05, .025, 9, 0);
+  flushBuckets(90);
+  const [ax, az] = F.at(0, -4.8), [bx, bz] = F.at(0, 4.8), [x, z] = F.at(0, 0);
+  thing(here, 'net', volleyNet(9.6, 2.35), x, z, F.yaw + Math.PI / 2, 2, { walls: [[ax, az, bx, bz, Y0 + 2.35, .06]], chip: '#7c7b80' });
+  here.add(ballMesh, ballRing); ballRing.visible = false;
+  return F.yaw;
+})();
+let bumpT = 0, ballN = 0;
+const ballRand = () => hash(ballN++, 7, 311);
+function stepYard(dt) {
+  bumpT = Math.max(0, bumpT - dt);
+  const land = stepBall(BALL, dt, Y0);
+  if (land) playNew('ball.land', { x: BALL.x, z: BALL.z, gain: Math.min(1, land.hit / 6) });
+  if (!ballMesh.parent.visible) return;
+  ballMesh.position.set(BALL.x, BALL.y, BALL.z); if (!reduceMotion) ballMesh.rotation.x += BALL.spin * dt;
+  // where it's coming down, closing in as it does
+  ballRing.visible = BALL.air && BALL.count > 0;
+  if (ballRing.visible) { ballRing.position.set(BALL.landX, Y0 + .05, BALL.landZ); ballRing.scale.setScalar(.2 + Math.min(1, (BALL.y - Y0) / 3) * .9); }
+}
+// The button's for the ball all the time it's up and he's anywhere near it, so that a press that's too early doesn't swing a hammer at nothing
+const ballWants = () => { const d = Math.hypot(BALL.x - player.pos.x, BALL.z - player.pos.z); return BALL.air && BALL.count > 0 ? d < 7 : d < VOLLEY.reach; };
+function hitBall() {
+  bumpT = .3;
+  const P = player.pos, n = bump(BALL, P.x, P.z, floorAt(P.x, P.z), ballRand);
+  if (n === null) return;
+  playNew('ball.bump', { x: P.x, z: P.z });
+  if (crowdOut) horde.noise(P.x, P.z, 18, 1);
+  if (n >= VOLLEY.goal) toast(`${n} in a row.`); else if (n > 1) toast(String(n));
+  if (n >= VOLLEY.goal) S.flags.sixInARow = true;
+}
+// ---- the yard light, on a pole between the net and the big building. Its light brings the crowd, the same as the gas station's canopy.
+const yardSpot = { x: atTrue(-1518, -784)[0], z: atTrue(-1518, -784)[1], r: 34 };
+let yardOn = true, yardPole = null;
+{
+  const F = tilted(-1520, -789.5, -10), here = nearHere(-1518, -786, 110), [gx, gz] = atTrue(-1517, -782);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(26, 20), new THREE.MeshBasicMaterial({ map: radialTex, color: '#39424e', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  glow.position.set(gx, Y0 + .06, gz); glow.rotation.set(-Math.PI / 2, 0, F.yaw, 'YXZ'); here.add(glow);
+  yardPole = breakable('pole', 3, () => {
+    F.box(poleMat, 0, 3.4, 0, .2, 6.8, .2, 1.2);
+    F.beam([0, 6.3, 0], [.5, 6.5, 1.2], .07, .07, poleMat, 1);
+    F.box(shelfMat, .5, 6.42, 1.28, .3, .16, .42, 1); F.box(lit('#dfe8ff', 1.8), .5, 6.32, 1.28, .2, .06, .3, 0);
+    const [x, z] = F.at(0, 0); solid(x - .12, x + .12, z - .12, z + .12, Y0 + 6.8);
+  }, { rigid: true, foot: F.at(0, 0), chip: '#5a4632', broke() { yardOn = false; glow.visible = false; const i = horde.lights.indexOf(yardSpot); if (i >= 0) horde.lights.splice(i, 1); } });
+  flushBuckets(110);
+}
+// ---- the little shed: red gear with no name on it, and a bat. The bird's just a bird.
+const drawBird = (g, x, y, k, color = '#f1e6cf') => {
+  g.save(); g.translate(x, y); g.scale(k, k); g.fillStyle = color;
+  g.beginPath(); g.ellipse(0, 6, 30, 18, -.3, 0, 7); g.fill();
+  g.beginPath(); g.arc(24, -12, 13, 0, 7); g.fill();
+  for (const pts of [[16, -20, 28, -38, 34, -18], [36, -14, 50, -9, 36, -4], [-24, 14, -56, 28, -48, 10]]) { g.beginPath(); g.moveTo(pts[0], pts[1]); g.lineTo(pts[2], pts[3]); g.lineTo(pts[4], pts[5]); g.fill(); }
+  g.restore();
+};
+const pennantTex = textTex([''], 256, 128, 'rgba(0,0,0,0)', '#000', '12px sans-serif', { after: (g) => {
+  g.clearRect(0, 0, 256, 128); g.fillStyle = '#a82a2a'; g.beginPath(); g.moveTo(0, 2); g.lineTo(254, 64); g.lineTo(0, 126); g.fill();
+  g.fillStyle = '#f1e6cf'; g.fillRect(0, 2, 14, 124); drawBird(g, 76, 64, .72);
+} });
+const jerseyTex = textTex([''], 128, 128, 'rgba(0,0,0,0)', '#000', '12px sans-serif', { after: (g) => {
+  g.clearRect(0, 0, 128, 128); g.fillStyle = '#a82a2a'; g.beginPath(); for (const [i, [x, y]] of [[46, 8], [82, 8], [118, 34], [104, 56], [92, 46], [92, 124], [36, 124], [36, 46], [24, 56], [10, 34]].entries()) { if (i) g.lineTo(x, y); else g.moveTo(x, y); } g.fill();
+  g.strokeStyle = '#f1e6cf'; g.lineWidth = 3; g.beginPath(); g.moveTo(46, 8); g.lineTo(64, 28); g.lineTo(82, 8); g.moveTo(64, 28); g.lineTo(64, 124); g.moveTo(118, 34); g.lineTo(104, 56); g.moveTo(10, 34); g.lineTo(24, 56); g.stroke();
+  drawBird(g, 80, 54, .22);
+} });
+const flatOn = (into, map, F, u, y, v, w, h, turn = 0) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map, roughness: 1, alphaTest: .4, side: THREE.DoubleSide })), [x, z] = F.at(u, v); m.position.set(x, Y0 + y, z); m.rotation.y = F.yaw + turn; into.add(m); return m; };
+const GEAR_SHED = 75175622, BAT_AT = (() => {
+  const F = tilted(-1507.4, -810.9, 6.5), room = nearHere(-1505, -806, 70), yaw = F.yaw;
+  flatOn(room, pennantTex, F, 3.1, 2.3, .28, 1.5, .75); flatOn(room, jerseyTex, F, 1.3, 1.5, .28, 1.2, 1.2);
+  flatOn(room, textTex(['6 IN A ROW', 'TAKES THE BAT'], 256, 128, '#b9a27c', '#2a2226', '34px Impact, "Arial Black", sans-serif'), F, 4.75, 1.72, .28, .8, .4);
+  { const [x, z] = F.at(3.1, .36); thing(room, 'cap', cap(), x, z, yaw, .3, { y: 1.5, chip: '#a82a2a' }); }
+  { const [x, z] = F.at(5.2, 4.4); thing(room, 'bench', workbench(3), x, z, yaw - Math.PI / 2, 1.5, { solid: [3, .7, 1], chip: '#6a5238' }); }
+  [[.6, 6.4, .3, 1], [.6, 7.6, -.2, .8]].forEach(([u, v, t, k]) => { const [x, z] = F.at(u, v); thing(room, 'crate', crate(.9 * k, .7 * k, .8 * k), x, z, yaw + t, 1, { solid: [.8 * k, .7 * k, .7 * k], chip: '#b9ad92' }); });
+  F.beam([3, 2.75, 3.4], [3, 2.4, 3.4], .012, .012, poleMat, 0); F.box(lit('#ffe9c8', 1.7), 3, 2.34, 3.4, .08, .1, .08, 0);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 7.6), new THREE.MeshBasicMaterial({ map: radialTex, color: '#574a38', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), [gx, gz] = F.at(3, 3.4);
+  glow.position.set(gx, Y0 + .06, gz); glow.rotation.set(-Math.PI / 2, 0, yaw, 'YXZ'); room.add(glow);
+  // the concrete at its door
+  F.box(concreteMat, 3, .03, 11, 5.6, .07, 2.4, 0);
+  flushBuckets(70);
+  const [x, z] = F.at(4.75, .5);
+  const p = thing(room, 'bat', bat(), x, z, yaw, .4, { y: .84, chip: '#a9793f' });
+  p.objs[0].rotation.set(Math.PI + .14, yaw, 0, 'YXZ');
+  // and on the big building's wall, where it can be seen from the net: the same pennant, bigger
+  const W = tilted(-1540.7, -794.4, 7.2), out = nearHere(-1528, -791, 110);
+  flatOn(out, pennantTex, W, 12, 3.1, .12, 2.6, 1.3);
+  { const [tx, tz] = atTrue(-1520, -816); thing(out, 'propane', propaneTank(), tx, tz, 1.45, 1.5, { solid: [2, .9, 1.1], chip: '#d7d4c8', broke(q) { after(.12, () => blast(q.cx, Y0 + .9, q.cz, 7, 4)); } }); }
+  flushBuckets(90);
+  return { x, z, prop: p };
+})();
+const batInReach = () => !S.flags.bat && !BAT_AT.prop.down && houseAt(player.pos.x, player.pos.z)?.id === GEAR_SHED && Math.hypot(BAT_AT.x - player.pos.x, BAT_AT.z - player.pos.z) < 2;
+function takeBat() { S.flags.bat = true; BAT_AT.prop.objs[0].visible = false; BAT_AT.prop.down = true; SFX.play('can.clink'); toast('The bat, with tape on the grip'); }
 indexProps();
 // Where the town's props leave the random sequence, however many there are, so the lantern and the snakes stay as they were in the opening
 rs = 426193737;
@@ -3222,6 +3350,8 @@ const lanternFlame = new THREE.Mesh(new THREE.SphereGeometry(.035, 10, 8), lit('
 }
 const hammer = new THREE.Group(); hero.body.add(hammer); hammer.visible = false;
 { const steel = new THREE.MeshStandardMaterial({ color: '#7f868e', metalness: .7, roughness: .45 }), stick = new THREE.Mesh(new THREE.CylinderGeometry(.02, .024, .98, 6), new THREE.MeshStandardMaterial({ color: '#6b4a2c', roughness: .9 })); stick.position.y = .25; hammer.add(outline(stick, INK, 1)); const head = new THREE.Mesh(boxGeo, steel); head.scale.set(.15, .15, .34); head.position.y = .74; hammer.add(outline(head, INK, 1.3)); }
+const batTool = new THREE.Group(); hero.body.add(batTool); batTool.visible = false;
+{ const wood = new THREE.Mesh(new THREE.CylinderGeometry(.046, .022, .92, 7), new THREE.MeshStandardMaterial({ color: '#a9793f', roughness: .7 })), tape = new THREE.Mesh(new THREE.CylinderGeometry(.027, .027, .22, 6), new THREE.MeshStandardMaterial({ color: '#a82a2a', roughness: .9 })); wood.position.y = .32; tape.position.y = -.02; batTool.add(outline(wood, INK, 1.1), outline(tape, INK, 1)); }
 const broom = new THREE.Group(); hero.body.add(broom); broom.visible = false;
 { const stick = new THREE.Mesh(new THREE.CylinderGeometry(.02, .02, 1.3, 6), new THREE.MeshStandardMaterial({ color: '#8a6a40' })); stick.position.y = -.3; broom.add(outline(stick, INK, 1)); const bristle = new THREE.Mesh(new THREE.ConeGeometry(.14, .3, 8), new THREE.MeshStandardMaterial({ color: '#d4b060' })); bristle.position.y = -.95; broom.add(outline(bristle, INK, 1)); }
 
@@ -3304,13 +3434,15 @@ function poseHero(tq) {
     }
   }
   // the arms are busy with the hammer whatever the rest of him's doing
-  hammer.visible = swingT >= 0 && (k === 'run' || k === 'air');
-  if (hammer.visible) {
+  const tool = S.flags.bat ? batTool : hammer; (S.flags.bat ? hammer : batTool).visible = false;
+  tool.visible = swingT >= 0 && (k === 'run' || k === 'air');
+  if (tool.visible) {
     const [x, y, z, turn] = SWING_POSES[Math.min(SWING_POSES.length - 1, Math.floor(swingT * 12))];
     const g = R.arm(1, V3(x, y, z), V3(.7, -.3, -.25), V3(0, 1, .25));
     R.arm(0, V3(x - .05, y - Math.cos(turn) * .24, z - Math.sin(turn) * .24), V3(-.7, -.3, -.25), V3(0, 1, .25));
-    hammer.position.copy(g); hammer.quaternion.setFromEuler(new THREE.Euler(turn, 0, 0));
+    tool.position.copy(g); tool.quaternion.setFromEuler(new THREE.Euler(turn, 0, 0));
   } else if (throwT > 0 && k === 'run') R.arm(1, V3(.3, .28, .42), V3(.8, -.1, -.2));
+  else if (bumpT > 0 && k === 'run') { R.arm(1, V3(.08, -.2, .46), V3(.7, -.3, -.25)); R.arm(0, V3(-.08, -.2, .46), V3(-.7, -.3, -.25)); }
   R.strings(tq, k === 'hang' ? HP.lag : Math.sin(ph) * .1 * Math.min(1, HP.speed / 4.2));
 }
 
@@ -4214,6 +4346,14 @@ const horde = createHorde({
   water: (x, z) => floorOnce(x, z) < WATER.level(x, z) - .1,
   floorAt: floorOnce,
   rand: crowdRand,
+  // along the streets they first came out on, too far off for him to see it happen
+  comeFrom(p) {
+    for (let tries = 0; tries < 30; tries++) {
+      const [id, a, b] = CROWD_STREETS[Math.floor(crowdRand() * CROWD_STREETS.length)], s0 = MAP.sOn(id, ...a), s1 = MAP.sOn(id, ...b), q = MAP.along(id, s0 + (s1 - s0) * crowdRand());
+      if (Math.hypot(q.x - p.x, q.z - p.z) > horde.T.active) return [q.x, q.z];
+    }
+    return null;
+  },
   // on down whichever street they're nearest
   wander(s) {
     if (MAP.roadGrid.nearest(s.x, s.z) === Infinity) return [s.x + (crowdRand() - .5) * 20, s.z + (crowdRand() - .5) * 20];
@@ -4241,6 +4381,7 @@ function bringOutCrowd() {
   for (const f of fires) if (!f.out) horde.lights.push(f.spot);
   if (gasPower) horde.lights.push(gasSpot);
   if (screenOn) horde.lights.push(screenSpot);
+  if (yardOn) horde.lights.push(yardSpot);
   for (const [id, a, b, n] of CROWD_STREETS) {
     const s0 = MAP.sOn(id, ...a), s1 = MAP.sOn(id, ...b);
     for (let i = 0, tries = 0; i < n && tries < n * 30; tries++) {
@@ -4263,18 +4404,18 @@ function updateCrowd(dt, M) {
 // ================================================================ vehicles
 // How they handle and where they're parked is in src/vehicles.js, and what they're built from is in src/vehiclemodels.js.
 // One mesh for each kind and one for every wheel, with their outlines: ten draw calls, however many are about.
-const VEH_CAP = { car: 8, pickup: 8, quad: 5, golf: 3 }, VEH_SEE = 170, VEH_BURNT = new THREE.Color('#1c1618');
+const VEH_CAP = { car: 8, pickup: 8, quad: 5, golf: 3, coupe: 1 }, VEH_SEE = 170, VEH_BURNT = new THREE.Color('#1c1618');
 const vehGroup = new THREE.Group(); vehGroup.visible = false; scene.add(vehGroup);
 const vehMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .72, metalness: .18 });
-// Paint is the only pure white in the vertices, so that's what takes each one's colour. It's rusting through in patches, each its own way.
+// Paint is the only pure white in the vertices, so that's what takes each one's colour. It's rusting through in patches, each its own way, except where its seed's below zero.
 vehMat.onBeforeCompile = (sh) => {
   sh.uniforms.uRoadN = { value: roadNoise };
-  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float iSeed; varying vec2 vRust; varying float vPaint;')
-    .replace('#include <color_vertex>', 'vPaint=step(.99,min(color.r,min(color.g,color.b))); vColor=color*mix(vec3(1.),instanceColor,vPaint); vRust=vec2(position.z+position.x*.71,position.y+position.x*.31)+iSeed*37.;');
-  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D uRoadN; varying vec2 vRust; varying float vPaint;')
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float iSeed; varying vec2 vRust; varying float vPaint; varying float vRusts;')
+    .replace('#include <color_vertex>', 'vPaint=step(.99,min(color.r,min(color.g,color.b))); vColor=color*mix(vec3(1.),instanceColor,vPaint); vRust=vec2(position.z+position.x*.71,position.y+position.x*.31)+iSeed*37.; vRusts=step(0.,iSeed);');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D uRoadN; varying vec2 vRust; varying float vPaint; varying float vRusts;')
     .replace('#include <color_fragment>', `#include <color_fragment>
       if(vPaint>.5){ float low=texture2D(uRoadN,vRust*.035).r*.6+texture2D(uRoadN,vRust*.12).g*.4, fine=textureLod(uRoadN,(floor(vRust*26.)+.5)/64.,0.).b;
-        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.2,.075,.03),.86*step(.585,low+(fine-.5)*.14))*(.9+.2*fine); }`)
+        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.2,.075,.03),.86*vRusts*step(.585,low+(fine-.5)*.14))*(.9+.2*fine); }`)
     .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nif(vPaint<.5) roughnessFactor=1.;')
     .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nif(vPaint<.5) metalnessFactor=0.;');
 };
@@ -4307,7 +4448,7 @@ function vehicleFits(kind, x, z, yaw) {
   return true;
 }
 // Nothing gets parked at the compound on Pine Forest Rd but what's on the aerial
-const COMPOUND = [...atTrue(880, 600), ...atTrue(1075, 740)];
+const SET_ASIDE = [[...atTrue(880, 600), ...atTrue(1075, 740)], [...atTrue(-1600, -830), ...atTrue(-1490, -745)]];
 const VEH_SET = [
   // the first one you come to, on the shoulder just past the Chunky River Bridge, and pointing into town
   (() => { const r = 'griffis_fountain_rd', [x, z] = atTrue(-336.76, 490.37), p = MAP.along(r, MAP.sOn(r, x, z) - 34); return ['quad', p.x + p.nx * 5, p.z + p.nz * 5, Math.atan2(-p.tx, -p.tz), .12]; })(),
@@ -4315,10 +4456,12 @@ const VEH_SET = [
   ['pickup', ...gasAt(60.8, 9.2), 0, .3], ['car', PLACES.hall.x + 41, PLACES.hall.z - .9, -Math.PI / 2, .2],
   // at the compound on Pine Forest Rd: a white truck by the deck, a dark car along the drive, and two white trucks by the long building
   ['pickup', ...atTrue(1034.1, 640.5), .56, .76], ['car', ...atTrue(1000.6, 652.6), 2.6, .635], ['pickup', ...atTrue(1028.6, 669.1), .1, .76], ['pickup', ...atTrue(1031.9, 669.9), .1, .3],
+  // off True Light Rd: the white coupe where you come round the house, nose out and with no rust on it, and a white truck and a white car by the little shed
+  ['coupe', ...atTrue(-1541, -787), -1.84, -1], ['pickup', ...atTrue(-1506.9, -796.7), 3.05, .76], ['car', ...atTrue(-1503.6, -797.2), 3.05, .3],
 ].filter(([kind, x, z, yaw]) => vehicleFits(kind, x, z, yaw));
 const VEHICLES = [
   ...VEH_SET.map(([kind, x, z, yaw, tone]) => ({ kind, x, z, yaw, tone })),
-  ...placeVehicles(STRUCTURES, { hash: hash2, road: nearestRoadPoint, free: (kind, x, z, yaw) => !(Math.abs(x) < 150 && Math.abs(z) < 150) && !(x > COMPOUND[0] && x < COMPOUND[2] && z > COMPOUND[1] && z < COMPOUND[3]) && !VEH_SET.some((h) => Math.hypot(h[1] - x, h[2] - z) < 8) && vehicleFits(kind, x, z, yaw) }),
+  ...placeVehicles(STRUCTURES, { hash: hash2, road: nearestRoadPoint, free: (kind, x, z, yaw) => !(Math.abs(x) < 150 && Math.abs(z) < 150) && !SET_ASIDE.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1) && !VEH_SET.some((h) => Math.hypot(h[1] - x, h[2] - z) < 8) && vehicleFits(kind, x, z, yaw) }),
 ].map(({ kind, x, z, yaw, tone }) => {
   const v = makeVehicle(kind, x, z, yaw, floorAt(x, z)), list = PAINTS[kind];
   v.tone = tone; v.paint = new THREE.Color(list[Math.floor(tone * list.length) % list.length]); v.shownSpin = 0; v.seen = Infinity; settle(v, floorAt);
@@ -4558,7 +4701,7 @@ function updateDrive(dt) {
   arriving(); pickUpCans(2.4); pickUpGas(2.4);
   // what it sounds like
   const running = !v.wrecked && !v.drowned, k = speed / K.top, tar = pavedAt(v.x, v.z);
-  SFX.loop(`engine.${v.kind}`, running ? .7 + .3 * Math.abs(gas) : 0, .72 + 1.5 * k + .12 * Math.abs(gas));
+  SFX.loop(`engine.${v.K.sound ?? v.kind}`, running ? .7 + .3 * Math.abs(gas) : 0, .72 + 1.5 * k + .12 * Math.abs(gas));
   SFX.loop('vehicle.road', v.grounded && tar ? Math.min(1, k * 1.4) : 0, .8 + k * .5);
   SFX.loop('vehicle.dirt', v.grounded && !tar ? Math.min(1, k * 1.8) : 0, .8 + k * .5);
   SFX.loop('vehicle.skid', v.grounded && ((braking && speed > 6) || Math.abs(v.s) > 3.5) ? Math.min(1, speed / 14) : 0);
@@ -4907,7 +5050,7 @@ function updateSwing(dt) {
   swingT += dt;
   if (!swingHit && swingT >= SWING_AT) {
     swingHit = true;
-    const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), P = player.pos, x = P.x + fx * .9, z = P.z + fz * .9, car = parkedAt(x, z, P.y + 1), r = car ? null : strike(x, P.y + 1.1, z, 1.3, 1, fx, fz), n = crowdOut ? horde.knock(x, z, 1.5, 2.4) : 0;
+    const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), P = player.pos, x = P.x + fx * .9, z = P.z + fz * .9, car = parkedAt(x, z, P.y + 1), r = car ? null : strike(x, P.y + 1.1, z, 1.3, 1, fx, fz), n = crowdOut ? horde.knock(x, z, S.flags.bat ? 1.9 : 1.5, 2.4) : 0;
     swatFlies(P.x, P.z);
     if (n) SFX.play('hit.flesh');
     if (car) { SFX.play('hit.metal'); spray(x, P.y + 1.1, z, FEW ? 2 : 4, .05, 2.4, .8, .75, .65); soundAlarm(car); }
@@ -5104,7 +5247,7 @@ function pickUpGas(reach) {
 }
 let wreckStep = -1, wreckDrawn = -1;
 function updateWreck(dt, step) {
-  updateSwing(dt); updateBits(dt); updateThrown(dt); updateLures(dt); updateBooms(dt); updateFire(dt); updateLoose(dt);
+  updateSwing(dt); updateBits(dt); updateThrown(dt); updateLures(dt); updateBooms(dt); updateFire(dt); updateLoose(dt); stepYard(dt);
   if (step !== wreckStep) { wreckStep = step; stepFalling(); stepTrees(); }
 }
 function drawWreck(step) {
@@ -5254,7 +5397,7 @@ let stepT = 0, lastStepIdx = -1;
 // ================================================================ main loop
 const clock = new THREE.Clock();
 // ================================================================ what he hears
-const METAL_PROPS = new Set(['sign', 'pump', 'icebox', 'cooler', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'tower', 'leg', 'trailer', 'boxcar', 'cart', 'bleachers']);
+const METAL_PROPS = new Set(['sign', 'pump', 'icebox', 'cooler', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'tower', 'leg', 'trailer', 'boxcar', 'cart', 'bleachers', 'net', 'trampoline', 'propane']);
 const VEHICLE_LOOPS = ['engine.car', 'engine.pickup', 'engine.quad', 'engine.golf', 'vehicle.road', 'vehicle.dirt', 'vehicle.skid'];
 const SCORE = { title: 'title', hang: 'hang', fall: 'fall', land: 'bank', bridge: 'run', bitten: 'bite', dream: 'dream', wake: 'wake', grabbed: 'grabbed', fail: 'failed', end: 'end' };
 const FEVER_QUIET = { bitten: .25, dream: 0, wake: .5 };
@@ -5442,7 +5585,7 @@ function tick(dt, draw = true) {
     const f2 = floorAt(player.pos.x, player.pos.z);
     if (player.grounded && f2 < player.pos.y - .5) player.grounded = false;
     if (player.grounded) { player.pos.y += (f2 - player.pos.y) * Math.min(1, dt * 18); player.vy = 0; }
-    else { player.vy -= 15 * dt; player.pos.y += player.vy * dt; if (player.pos.y <= f2 && player.vy <= 0) { player.pos.y = f2; player.grounded = true; footstep(1.5); if (crowdOut) horde.noise(player.pos.x, player.pos.z, 16, .6); } }
+    else { const was = player.pos.y; player.vy -= 15 * dt; player.pos.y += player.vy * dt; if (!onTrampoline(was) && player.pos.y <= f2 && player.vy <= 0) { player.pos.y = f2; player.grounded = true; footstep(1.5); if (crowdOut) horde.noise(player.pos.x, player.pos.z, 16, .6); } }
     HP.kind = player.grounded ? 'run' : 'air'; HP.speed = sp * (player.grounded ? 1 : 0); HP.phase += dt * (Math.min(sp, 4.4) * 2.4 + Math.max(0, sp - 4.4) * 1.3);
     // into the water from the bank or bridge
     const lv = WATER.level(player.pos.x, player.pos.z);
@@ -5473,9 +5616,10 @@ function tick(dt, draw = true) {
       const meat = !near && !ride && skillet.visible && Math.hypot(HEARTH.x - player.pos.x, HEARTH.z - player.pos.z) < 2.2;
       const door = !near && !ride && !meat && atGasDoor();
       const jam = !near && !ride && !meat && !door && jamInReach();
-      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : null;
-      if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (fliesToDo && lot < FLY_REACH) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
-      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else swing(); }
+      const ball = !near && !ride && !meat && !door && !jam && ballWants(), gear = !near && !ride && !meat && !door && !jam && !ball && batInReach();
+      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : gear && S.flags.sixInARow ? 'Take the bat' : null;
+      if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
+      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (gear && S.flags.sixInARow) takeBat(); else swing(); }
       if (input.sEdge) swing();
       if (input.cEdge) throwOne();
       if (input.nEdge) switchThrown();
@@ -5663,6 +5807,7 @@ if (location.hash === '#signs') openSignBoard();
 if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },
     compound: { JAM, JAM_SHED, DECK, LAWN, spot: screenSpot, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach },
     lures: { LYING, lyingNear, flying, popping, opened, ALARMS, lureSpots, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
     horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far) }),

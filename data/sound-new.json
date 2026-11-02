@@ -69,7 +69,10 @@
     "jam.drum": { "gain": 0.85, "reach": 80, "spread": 0.03, "max": 2, "file": ["audio/sfx/jam.drum.1.mp3", "audio/sfx/jam.drum.2.mp3"] },
     "jam.guitar": { "gain": 0.7, "reach": 80, "spread": 0.02, "max": 2, "file": ["audio/sfx/jam.guitar.1.mp3", "audio/sfx/jam.guitar.2.mp3"] },
     "jam.bass": { "gain": 0.6, "reach": 80, "spread": 0.02, "max": 2, "file": "audio/sfx/jam.bass.1.mp3" },
-    "jam.keys": { "gain": 0.8, "reach": 80, "spread": 0.02, "max": 2, "file": "audio/sfx/jam.keys.1.mp3" }
+    "jam.keys": { "gain": 0.8, "reach": 80, "spread": 0.02, "max": 2, "file": "audio/sfx/jam.keys.1.mp3" },
+    "ball.bump": { "gain": 0.8, "reach": 40, "spread": 0.06, "max": 2, "file": ["audio/sfx/ball.bump.1.mp3", "audio/sfx/ball.bump.2.mp3"] },
+    "ball.land": { "gain": 0.7, "reach": 40, "spread": 0.08, "max": 2, "file": "audio/sfx/ball.land.1.mp3" },
+    "tramp.spring": { "gain": 0.7, "reach": 40, "spread": 0.08, "max": 2, "file": "audio/sfx/tramp.spring.1.mp3" }
   },
   "music": {
     "title": { "bed": 0.55, "air": 0.5, "guitar": 0.6, "file": "audio/music/hang.1.mp3", "gain": 2.712 },

@@ -159,6 +159,9 @@
     "jam.cymbal": { "seconds": 3, "prompt": "one loud crash cymbal hit with a bass drum under it in a small wooden shed, ringing out and dying away, nothing else playing" },
     "jam.guitar": { "takes": 2, "seconds": 3, "influence": 0.7, "prompt": "one thick low power chord on an overdriven electric guitar through a big speaker cabinet, warm chunky midrange, the pick hits right at the very start, rings for two seconds and stops, no feedback, no squeal, no high whine, no drums, no melody" },
     "jam.bass": { "seconds": 2.5, "prompt": "two low electric bass guitar notes through a small amp in a small room, thick and slightly buzzy, no drums, no melody" },
-    "jam.keys": { "seconds": 3, "prompt": "one big held chord on an old electric organ keyboard through a small amp in a small room, warbly and slightly out of tune, one chord only, no drums, no melody" }
+    "jam.keys": { "seconds": 3, "prompt": "one big held chord on an old electric organ keyboard through a small amp in a small room, warbly and slightly out of tune, one chord only, no drums, no melody" },
+    "ball.bump": { "takes": 2, "seconds": 1, "prompt": "one firm bump of a volleyball off a person's forearms outdoors, a short hollow leather thud, nothing else" },
+    "ball.land": { "seconds": 1, "prompt": "one volleyball dropping on hard packed dirt and bouncing once, short and hollow, outdoors at night, nothing else" },
+    "tramp.spring": { "seconds": 1, "prompt": "one bounce on a backyard trampoline, a quick creak of steel springs and a soft thump of the mat, nothing else" }
   }
 }

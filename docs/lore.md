@@ -84,6 +84,17 @@ Word for word, with the street addresses taken out, as everywhere in this file, 
 >
 > jesse died younger at 18 i think, he lived in the first row of trailers nearest the ballfield, second from the left. there is also a community pool directly west of the trailer park. it'd be funny if you could go in his trailer and see an old computer with CRT monitor with AIM on the screen. he was always on AIM
 
+**In the game:** the compound's there, shaped from the public aerial, with the real track in. Nothing in the game says whose it is, and where it is isn't written next to their names here. Decided around it:
+
+- The net stands in the yard where the picture shows the grass worn, which is a guess. There's a ball and nobody on the other side of the net. The stick gets him under it, a ring shows where it's coming down, and the button bumps it up again, each one coming down a bit further off.
+- Six in a row is the side quest, because they played six on six. It takes the bat.
+- The gear's red with a plain bird on it and no name, so that it isn't anybody's logo: a pennant and a jersey on the wall of the little shed, a cap, a bat with red tape on the grip, a bigger pennant on the big building where it can be seen from the net, and somebody's cap on a post of the net. He doesn't wear any of it, because how he looks is the owner's own. The sign over the bat is mine.
+- The bat reaches a bit further than a hammer, and that's all it does.
+- The coupe's white, long and low with a fastback, with the bar left over the seats and the two panels out of the roof, and no make or badge on it. There's only one, it's the one thing in the game that isn't rusting, and it's the fastest thing on the road. His head comes up through the roof.
+- The light on a pole isn't on the picture. It's there so that the net can be seen at night, and its light brings the crowd, the same as the gas station's canopy.
+- The trampoline's on the picture, and it works.
+- The walls can't be seen from above, so their colors are guesses.
+
 ## The gas station
 
 > it's funny the kid's name is randomly coop - that's jesse's older brother (joe) son's name, about 20 y/o now. he is really good at sports and all the girls like him. my mom used to work at the gas station for years. idk what the name of it is. pretty sure it's shut down 10 years now. so the ice box is probably in disrepair

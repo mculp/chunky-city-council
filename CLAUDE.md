@@ -90,6 +90,8 @@ Then open http://localhost:8000.
 
 `npm run compound` goes round the compound on Pine Forest Rd on a phone-sized page: up the measured drive from the road, in through every door, plays the drums, guitar, bass and keyboard with real taps and the crowd listening, swims the pool, watches the screen, and breaks the projector and the propane tank. It takes `--shots dir`. What's in it is under "the compound on Pine Forest Rd" in `index.html`, and `src/things.js` has what things look like that aren't vehicles.
 
+`npm run yard` goes round the yard off True Light Rd on a phone-sized page: up the measured drive from the road, across the pool, gets stopped by the net and goes round it, keeps the ball up six times in a row with the stick and real taps, takes the bat that gets him, bounces on the trampoline, and gets in the coupe and drives it. What keeping the ball up does is in `src/volley.js`.
+
 The crowd comes out when Chapter 1 ends. `index.html?horde` brings it out as soon as town starts, which is the quick way to try it. `index.html#free`, or Skip to town on the title card, goes straight to town with the crowd out and something of everything to throw. It's an anchor because that's the only part of an address the shared link passes on.
 
 Chapter 1's bridge run ends in a moccasin bite, a fever dream and waking on the Chunky River Bridge at the edge of town: the modes `bitten`, `dream` and `wake`. `jump('town')` puts him where he wakes.

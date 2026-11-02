@@ -134,6 +134,33 @@ export function boat(long = 4.2, wide = .9, color = '#d3cdb9') {
   g.index = null;
   return [painted(g, color), box(0, .43, -.5, wide * .8, .03, .22, WOOD), box(0, .43, .6, wide * .78, .03, .22, WOOD), box(0, .434, 0, wide * .3, .012, long * .6, '#2a2620')];
 }
+// A net with nothing but a post at each end, `wide` between them, and a guy rope off each, and somebody's cap on one post. The net's along x.
+export function volleyNet(wide = 9.6, high = 2.35) {
+  const top = high - .03, bottom = high - .95, cord = '#26222a', W = wide / 2 - .05, parts = [];
+  for (const s of [-1, 1]) parts.push(cyl(s * wide / 2, high / 2 + .05, 0, .045, high + .1, STEEL, 8), bar([s * wide / 2, high - .1, 0], [s * (wide / 2 + 1.5), 0, 0], .018, PALE));
+  parts.push(...moved(cap(), { x: -wide / 2, y: high + .1 }));
+  parts.push(box(0, top, 0, wide, .06, .012, CREAM), box(0, bottom, 0, wide, .05, .012, CREAM));
+  for (let y = bottom + .19; y < top - .05; y += .19) parts.push(box(0, y, 0, wide, .012, .008, cord));
+  for (let x = -W; x <= W; x += .32) parts.push(box(x, (top + bottom) / 2, 0, .012, top - bottom, .008, cord));
+  return parts;
+}
+// One you can really jump on. It's round, with a pad round the edge, and legs.
+export function trampoline(r = 2.3, high = .85) {
+  const PAD = '#34506e', parts = [cyl(0, high - .02, 0, r - .16, .03, '#18151b', 18), cyl(0, high - .05, 0, r, .07, PAD, 18)];
+  for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3, c = Math.cos(a) * (r - .1), s = Math.sin(a) * (r - .1); parts.push(bar([c, high - .08, s], [c * 1.04, 0, s * 1.04], .05, STEEL)); }
+  return parts;
+}
+// It stands on its knob. There's tape on the grip.
+export function bat(color = '#a9793f', tape = '#a82a2a') {
+  return [
+    cyl(0, .02, 0, .03, .04, color, 8), cyl(0, .16, 0, .02, .24, tape, 6, .021), cyl(0, .42, 0, .027, .28, color, 6, .02), cyl(0, .68, 0, .034, .26, color, 8, .027), cyl(0, .82, 0, .03, .03, color, 8, .034),
+  ];
+}
+// A low red cap for the top of a post
+export function cap(color = '#a82a2a') {
+  return [cyl(0, .06, 0, .075, .1, color, 8, .1), cyl(0, .115, 0, .018, .012, color, 6), box(0, .018, .13, .17, .014, .12, color)];
+}
+
 export function crate(w = .8, h = .6, d = .6, color = PALE) {
   return [box(0, h / 2, 0, w, h, d, color), box(0, h, 0, w + .03, .03, d + .03, '#8a7f66'), ...both((s) => box(s * (w / 2 + .004), h / 2, 0, .012, h, .06, '#8a7f66'))];
 }

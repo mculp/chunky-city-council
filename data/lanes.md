@@ -2,7 +2,7 @@
 
 `data/lanes.json` holds the smaller roads that `data/roads.json` leaves out, and a drive to every building that needs one, so that nobody has to go through the woods to get to a house. `tools/build_lanes.py` generates it. `src/map.js` loads it into `MAP.lanes`.
 
-There are 220 lanes, 81.1 km of them, and 908 drives, 37.2 km.
+There are 209 lanes, 82.3 km of them, and 903 drives, 36.9 km.
 
 ## Where it comes from
 
@@ -12,7 +12,9 @@ There are 220 lanes, 81.1 km of them, and 908 drives, 37.2 km.
 | Drives | Generated from where the road and the building are | Ours |
 | Measured drives | Measured on USDA's [NAIP aerial](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer), `measured` in `tools/lane_config.json` | Public domain |
 
-Every vertex of a lane is where TIGER has it, apart from the few that say `measured`. Those are somebody's real drive that TIGER hasn't got and a generated one would miss, like the one into the compound on Pine Forest Rd, measured off NAIP in true metres. They come after TIGER's in the file, so adding one doesn't renumber anything, and each starts from the nearest vertex of a road or a lane so that it's joined up. Nothing comes from Google's imagery.
+Every vertex of a lane is where TIGER has it, apart from the few that say `measured`. Those are somebody's real drive that TIGER hasn't got and a generated one would miss, like the ones into the compound on Pine Forest Rd and the yard off True Light Rd, measured off NAIP in true metres. They come after TIGER's in the file, so adding one doesn't renumber anything, and each starts from the nearest vertex of a road or a lane so that it's joined up. Nothing comes from Google's imagery.
+
+A road doesn't stop for a stretch just because nothing on that stretch needed it. Where one of TIGER's roads is in the game on both sides of a gap of up to 350 m, the gap comes in too, so that True Light Rd isn't barricaded from itself. Two longer gaps stay out, on Point Wanita Lake Rd and Pauldin Rd.
 
 A drive isn't anybody's survey. It goes from the nearest road to beside the door by the shortest way that misses everything, and it bows a little by a hash of whose it is, so that it isn't ruled. It says `generated`, and so does a stretch of track that's had to find its way round a building TIGER has it going through.
 

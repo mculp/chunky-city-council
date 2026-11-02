@@ -25,6 +25,7 @@ export const TUNING = {
   personalSpace: .95,
   feelAlong: 8,                    // seconds along a wall before trying the other way
   lightPull: .35,                  // the chance a shambler heads for a light it's near, at full night
+  comeIn: 40,                      // seconds between new ones wandering in, while the water's had some that haven't been replaced
   drowned: 3.5,                    // metres. While a lure's going they can't make out anything further off than this
   lured: 2,                        // m/s, going to one, which is quicker than going to look
   wading: .55,                     // how much of that they keep in the water
@@ -35,12 +36,13 @@ export const TUNING = {
 const hypot = Math.hypot, TRY = [0, .8, 1.6, 2.4, 3.1];
 function turn(from, to, k) { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return from + d * k; }
 
-// world: { blocked(x, z, y), water(x, z), floorAt(x, z), wander(s) -> [x, z], rand() }
+// world: { blocked(x, z, y), water(x, z), floorAt(x, z), wander(s) -> [x, z], rand(), comeFrom(p) -> [x, z] or nothing }
 // on: { grab(grab), free(), overrun() }
 export function createHorde(world, tuning = {}, on = {}) {
   const T = { ...TUNING, ...tuning }, all = [], active = [], noises = [], lights = [], zones = [];
   let clock = 0, bellUntil = -1, mercy = 0;
   const h = { all, active, noises, lights, zones, T, grab: null, on };
+  let owed = 0, comeIn = T.comeIn;
 
   h.inSanctuary = (x, z) => zones.some((a) => hypot(x - a.x, z - a.z) < a.r);
   // Off limits unless the bell's ringing. Anyone caught inside when it stops can still walk out.
@@ -200,7 +202,9 @@ export function createHorde(world, tuning = {}, on = {}) {
         if (s.soaked >= s.biteAt) { s.under = T.goesUnder; h.on.bitten?.(s); }
       }
     }
-    for (let i = all.length - 1; i >= 0; i--) if (all[i].under <= 0) all.splice(i, 1);
+    for (let i = all.length - 1; i >= 0; i--) if (all[i].under <= 0) { all.splice(i, 1); owed++; }
+    // The water can have as many as it likes and the town doesn't empty: another wanders in for each, in time, from somewhere he isn't
+    if (owed && (comeIn -= dt) <= 0) { const at = world.comeFrom?.(p); if (at) { h.add(at[0], at[1]); owed--; } comeIn = T.comeIn; }
     if (h.grab) { h.grab.x = p.x; h.grab.z = p.z; holdOn(dt, p); return; }
     if (mercy > 0 || !p.canGrab) return;
     for (const s of active) {
