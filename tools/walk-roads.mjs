@@ -57,6 +57,22 @@ for (const road of roads) {
   }
   console.log(`     (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
 }
+// from the end of the bridge into town: the road the whole way, no stops, to Adams Street
+const entry = await page.evaluate(() => {
+  const m = __game.map, g = __game, adams = m.nodes.find((n) => n.id === 'n2'); g.place(24, 0);
+  const start = m.sOn('us_80', 24, 0), goal = m.sOn('us_80', adams.x, adams.z); let s = start, t = 0, off = 0; g.key('w', true);
+  while (s < goal - 2 && t < 300) {
+    const q = m.along('us_80', s + 6), P = g.player.pos; g.look(Math.atan2(-(q.x - P.x), -(q.z - P.z))); g.sim(.1, 1 / 30); t += .1;
+    s = m.sOn('us_80', P.x, P.z); if (!g.onRoad(P.x, P.z)) off++;
+  }
+  g.key('w', false);
+  return { t, off, s, goal, metres: goal - start };
+});
+{
+  const ok = entry.off === 0 && entry.s >= entry.goal - 2.5;
+  console.log(`${ok ? 'ok  ' : 'FAIL'} bridge to Adams Street on US 80: ${entry.metres.toFixed(0)} m in ${entry.t.toFixed(0)} s, ${entry.off} samples off the road`);
+  if (!ok) failed++;
+}
 if (errors.length) { console.log('console errors', errors.slice(0, 5)); failed++; }
 await close();
 console.log(failed ? `${failed} failed` : 'all passed');
