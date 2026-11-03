@@ -58,4 +58,12 @@ They sent three photos of real signs for how they look. The photos stay out of t
 
 The clip is someone else's footage, so it stays out of the repo. What it says, briefly: in 2005 Jason and his best friend Jesse were out on the back roads and stopped at Stuckey's Bridge, which was closed by then. They saw a light out there, swinging. It came along the bridge, went through Jesse and through Jason and on out the other way, still swinging, and they never heard a thing. They called home. Dana didn't believe it until she saw Jason, white and shaking. Within five years both of them had died, suddenly.
 
-**In the game:** nothing of it yet except a road to the house. The house isn't marked, and which one it is isn't written down here, because it's someone's home.
+**In the game:** two things. There's a road to the house. The house isn't marked, and which one it is isn't written down here, because it's someone's home.
+
+And there's the light. When he comes back to Stuckey's Bridge after the first chapter it's out at the far end, swinging. It comes along at a walk, goes through him and carries on out the other way, and it does nothing to him. The music, the night and his own feet all stop while it's close, and come back after. `src/light.js` has what it does. Decided around it:
+
+- It's cold and pale, which is how the clip's reconstruction has it, and so it can't be taken for the warm lantern that guides him out of the river in the opening.
+- It only comes after the first chapter, so that the opening stays as it was.
+- It comes when he's about 60 m from the bridge. If he stays put it gets him, and if he gets 140 m away it gives up. It comes again after he's been 300 m away.
+- There are no words. Nothing on the screen, the map or a sign says what it is or who saw it, and their names aren't anywhere in the game. Whether they should be is the owner's to say.
+- It has no sound of its own, because they never heard a thing.

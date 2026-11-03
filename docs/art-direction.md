@@ -105,6 +105,7 @@ Night in an abandoned Mississippi town.
 - **The river:** it takes glowing rings where things hit it. Cottonmouths open white mouths before striking.
 - **The ponds:** the same water as the river, with the sky and the moon in it, each at its own height just under its lowest bank. Dark mud at the edge, and the far bank and its trees black against the sky.
 - **The lantern:** the one from the local legend, a guide light with nobody holding it that leads him across the river.
+- **The light on Stuckey's Bridge:** a cold, pale point with a soft blue halo and no lamp around it, which only comes after the first chapter. It steps on the twelves like everything else, and it borrows the lantern's light, because one more in the scene would cost every material on a phone. `docs/lore.md` has what it's from.
 
 The brief is a "perfectly 3d modeled city": the real layout and landmarks of Chunky on real street geometry, rendered in this hand-drawn style. Accuracy applies to where things are and what they are. It doesn't mean photorealism. The roads, the railroad and the river come from the road graph, and the buildings from `data/structures.json`.
 

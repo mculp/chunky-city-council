@@ -25,7 +25,8 @@ export async function serveAndOpen({ touch = false, viewport, query = '?test', r
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`http://localhost:${server.address().port}/${query}`, { waitUntil: 'load' });
+  // three.js comes from a CDN, which is sometimes slow enough to take most of a minute
+  await page.goto(`http://localhost:${server.address().port}/${query}`, { waitUntil: 'load', timeout: 120000 });
   await page.waitForFunction(() => window.__game, null, { timeout: 30000 });
   return { page, errors, close: async () => { await browser.close(); server.close(); } };
 }
