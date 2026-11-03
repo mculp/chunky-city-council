@@ -27,11 +27,12 @@ await g(() => {
 const homes = await g(() => {
   const G = __game, H = G.homes, count = (f) => H.filter((h) => G.folks.person(h.id).family === f).length;
   // everyone's door, worked out for all of them this once
-  return { n: H.length, alexander: count('Alexander'), clark: count('Clark'), sample: H.slice(0, 6).map((h) => G.folks.person(h.id).name) };
+  return { n: H.length, alexander: count('Alexander'), clark: count('Clark'), gressett: count('Gressett'), sample: H.slice(0, 6).map((h) => G.folks.person(h.id).name) };
 });
 console.log(`     ${homes.n} people at home, such as ${homes.sample.join(', ')}`);
 check('most of the houses have someone at home', homes.n > 600 && homes.n < 1000, homes);
 check('half of them are Alexanders or Clarks', Math.abs(homes.alexander + homes.clark - homes.n / 2) <= 2, homes);
+check('and an eighth are Gressetts', Math.abs(homes.gressett - homes.n / 8) <= 2, homes);
 
 // A walk down a street in town: who's there, and that they leave him be
 const walk = await g(() => {

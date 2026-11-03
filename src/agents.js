@@ -39,8 +39,8 @@ export function personOf(id, data, looks = []) {
   const firsts = data[dressed ?? (roll(id, 2) < .5 ? 'women' : 'men')];
   // Taking turns through the names means nobody in a family shares one until they've all been used
   const first = firsts[(Math.floor(id / 4) * 17 + (id % 4) * 5) % firsts.length];
-  // Half of everybody's one family or the other
-  const family = id % 4 < 2 ? data.families[id % 4] : data.others[Math.floor(roll(id, 4) * data.others.length)];
+  // Half of everybody's an Alexander or a Clark, and an eighth are Gressetts, out of the other half
+  const family = id % 4 < 2 ? data.families[id % 4] : id % 8 === 2 ? data.families[2] : data.others[Math.floor(roll(id, 4) * data.others.length)];
   return {
     id, first, family, name: `${first} ${family}`,
     temper: roll(id, 5), nerve: roll(id, 6), nosy: roll(id, 7), homebody: roll(id, 8), tagalong: roll(id, 9),

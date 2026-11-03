@@ -33,6 +33,14 @@ describe('who they are', () => {
     assert.ok(data.others.every((n) => !data.families.includes(n)));
   });
 
+  test('and an eighth are Gressetts, out of the other half', () => {
+    const gressetts = list.filter((w) => w.family === 'Gressett');
+    assert.equal(gressetts.length, 50);
+    assert.ok(gressetts.every((w) => w.id % 4 >= 2));
+    // each of them has a first name of their own until there've been more of them than names
+    assert.equal(new Set(gressetts.map((w) => w.first)).size, 50);
+  });
+
   test('hardly anyone in the first couple of hundred shares a whole name', () => {
     const names = list.slice(0, 200).map((w) => w.name), repeats = names.filter((n, i) => names.indexOf(n) !== i);
     assert.ok(repeats.length <= 2, `${repeats}`);

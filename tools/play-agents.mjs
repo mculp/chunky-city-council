@@ -48,10 +48,11 @@ const swingAt = async (js) => {
 // ---- who they are
 const census = await g(() => {
   const G = __game, all = G.horde.all, n = (f) => all.filter((s) => s.who.family === f).length;
-  return { all: all.length, alexander: n('Alexander'), clark: n('Clark'), named: all.every((s) => s.who.first && s.who.family), names: new Set(all.map((s) => s.who.name)).size, hoods: 0, looks: new Set(all.map((s) => s.look % 8)).size, sample: all.slice(0, 8).map((s) => s.who.name) };
+  return { all: all.length, alexander: n('Alexander'), clark: n('Clark'), gressett: n('Gressett'), named: all.every((s) => s.who.first && s.who.family), names: new Set(all.map((s) => s.who.name)).size, hoods: 0, looks: new Set(all.map((s) => s.look % 8)).size, sample: all.slice(0, 8).map((s) => s.who.name) };
 });
 console.log(`     ${census.all} of them, such as ${census.sample.join(', ')}`);
 check('half of them are Alexanders or Clarks', census.alexander === census.all / 4 && census.clark === census.all / 4, census);
+check('and an eighth are Gressetts', Math.abs(census.gressett - census.all / 8) <= 1, census);
 check('and everyone has a name of their own', census.named && census.names === census.all, census);
 check('in all the looks', census.looks === 8, census);
 

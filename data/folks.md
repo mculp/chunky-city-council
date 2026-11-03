@@ -17,7 +17,7 @@ There are four kinds of people, and they're all the same people underneath, with
 
 Everyone has a number, starting from 0, and everything about who they are comes from that number. Nothing's saved for this, and it never changes:
 
-- Their name. Half of everybody's an Alexander or a Clark, which is the owner's, and `id % 4` says which. The first names are made up, and a test fails if one of them is ever in `docs/lore.md` or `data/cast.json`.
+- Their name. Half of everybody's an Alexander or a Clark, and an eighth are Gressetts, which is the owner's. `id % 4` says which of the first two, and out of the other half, everybody whose `id % 8` is 2 is a Gressett. The first names are made up, and a test fails if one of them is ever in `docs/lore.md` or `data/cast.json`.
 - What they look like: which of `data/looks.json`'s looks, how far gone, how big, which leg they limp on.
 - What they're like.
 

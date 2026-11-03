@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "families": ["Alexander", "Clark"],
+  "families": ["Alexander", "Clark", "Gressett"],
   "others": [
     "Tate", "Rainey", "Dubose", "Lott", "Sims", "Todd", "Ware", "Yates", "Pace", "Graham", "Moore", "Walker", "Harris",
     "Bounds", "Eaves", "Knight", "McElroy", "Hodges", "Pruitt", "Boyd", "Ferrell", "Gandy", "Sumrall", "Tullos", "Weems",
@@ -17,7 +17,7 @@
   "men": [
     "Dale", "Wendell", "Lamar", "Hoyt", "Cecil", "Travis", "Darrell", "Vernon", "Otis", "Floyd", "Roy", "Buford", "Clyde",
     "Harlan", "Lonnie", "Rusty", "Dwight", "Elbert", "Grady", "Hollis", "Ira", "Jimmy", "Kermit", "Leon", "Marvin", "Nolan",
-    "Orville", "Percy", "Ronnie", "Sonny", "Terrell", "Virgil", "Waylon", "Wade", "Alvin", "Bobby", "Curtis", "Donnie",
+    "Orville", "Percy", "Ronnie", "Sonny", "Terrell", "Virgil", "Waylon", "Wade", "Alvin", "Royce", "Curtis", "Donnie",
     "Eugene", "Gene", "Homer", "Jerry", "Lester", "Mack", "Ned", "Odell", "Ricky", "Tommy", "Wesley", "Woodrow", "Amos",
     "Burl", "Cloyce", "Doyle", "Ervin", "Foy", "Garland", "Horace", "Jesper"
   ]
