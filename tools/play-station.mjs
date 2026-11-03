@@ -126,21 +126,22 @@ check(`a hammer goes through the boards: ${smashed.swings} swings`, smashed.up &
 check('and there\'s nothing left to bar it with', smashed.act !== 'Bar the door', smashed);
 
 // ---- it brings them in at night, until it's broken. A shambler goes for a light it's near about one time in three, and they're shuffling, so it takes a while to show.
+// One round comes to about 6 of 24 with the light and 1 without, give or take 1 either way, by whatever's been rolled before. So it's three of each, taken in turns.
 const light = await g(() => {
   const G = __game, H = G.horde, S = G.station, spot = S.spot; G.place(...loc(53, 40));
   const round = () => {
     H.calm(); H.all.slice(0, 24).forEach((s, i) => { const a = i / 24 * 6.283; s.x = s.homeX = spot.x + Math.cos(a) * 26; s.z = s.homeZ = spot.z + Math.sin(a) * 26; s.y = G.floorAt(s.x, s.z); s.lead = null; s.state = 0; s.alert = 0; s.timer = 0; s.tx = s.x; s.tz = s.z; });
-    let close = 0; const secs = 70; for (let t = 0; t < secs; t += 1 / 5) { G.sim(1 / 5, 1 / 30); for (const s of H.all.slice(0, 24)) if (Math.hypot(s.x - spot.x, s.z - spot.z) < 10) close++; } return Math.round(close / (secs * 5));
+    let close = 0; const secs = 70; for (let t = 0; t < secs; t += 1 / 5) { G.sim(1 / 5, 1 / 30); for (const s of H.all.slice(0, 24)) if (Math.hypot(s.x - spot.x, s.z - spot.z) < 10) close++; } return close / (secs * 5);
   };
   // where they live is where they're put, or some of them only head home, wherever that happened to be
   // the barrel by the pumps is a light too, so it's the canopy's on its own against none at all
   const on = H.lights.includes(spot), all = [...H.lights];
-  H.lights.length = 0; H.lights.push(spot); const withLight = round();
-  H.lights.length = 0; const without = round();
+  let withLight = 0, without = 0;
+  for (let n = 0; n < 3; n++) { H.lights.length = 0; H.lights.push(spot); withLight += round() / 3; H.lights.length = 0; without += round() / 3; }
   H.lights.push(...all); G.wreck.breakProp(S.canopy, 1, 0); G.sim(.5, 1 / 30);
-  return { on, withLight, without, off: !H.lights.includes(spot), strip: S.strip.visible, power: S.light.intensity };
+  return { on, withLight: +withLight.toFixed(1), without: +without.toFixed(1), off: !H.lights.includes(spot), strip: S.strip.visible, power: S.light.intensity };
 });
-check(`the crowd gathers under the canopy's light: ${light.withLight} of 24 on average`, light.on && light.withLight >= 6, light);
+check(`the crowd gathers under the canopy's light: ${light.withLight} of 24 on average`, light.on && light.withLight >= 4.5, light);
 check(`and with no light they don't: ${light.without} of 24`, light.without < light.withLight / 2, light);
 check('and it goes out when the canopy comes down', light.off && !light.strip && light.power === 0, light);
 
