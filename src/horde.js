@@ -49,6 +49,18 @@ export function createHorde(world, tuning = {}, on = {}) {
   // Something loud: anyone in reach goes to look, and at a bell they forget the church is off limits
   h.noise = (x, z, r, seconds) => { noises.push({ x, z, r, until: clock + seconds }); };
   h.bell = (x, z, r, seconds) => { h.noise(x, z, r, seconds); bellUntil = clock + seconds; };
+  // Knocked flat: anyone within r goes over, thrown clear, and lies there a while. It says how many.
+  h.knock = (x, z, r, seconds) => {
+    let n = 0;
+    for (const s of active) {
+      const dx = s.x - x, dz = s.z - z, d = hypot(dx, dz);
+      if (d >= r || s.flat > 0) continue;
+      s.state = STUNNED; s.timer = seconds; s.alert = 1; s.moving = 0; s.flat = s.flatFor = seconds; n++;
+      const k = 1 + (1 - d / r) * 2.4, nx = s.x + dx / (d || 1) * k, nz = s.z + dz / (d || 1) * k;
+      if (open(s, nx, nz)) { s.x = nx; s.z = nz; s.y = world.floorAt(nx, nz); }
+    }
+    return n;
+  };
   h.calm = () => {
     if (h.grab) h.grab = null;
     for (const s of all) { s.state = SHAMBLE; s.alert = 0; s.timer = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; s.moving = 0; }
@@ -167,6 +179,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     for (const s of all) if (hypot(s.x - p.x, s.z - p.z) < T.active) active.push(s);
     for (const s of active) {
       s.next -= dt;
+      if (s.flat > 0) s.flat -= dt;
       if (s.next <= 0) { s.next += T.thinkEvery; think(s, p); }
       walk(s, dt);
     }

@@ -18,7 +18,7 @@ body{background:var(--night);color:var(--cream);overflow:hidden;padding-block:0;
   padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));
   font-family:var(--f-mono);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
-button{font:inherit;color:inherit;cursor:pointer}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
 button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 
 .hud{position:fixed;left:0;right:0;top:0;z-index:4;pointer-events:none;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
@@ -33,6 +33,9 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 #mini canvas{display:block;width:100%;height:100%}
 #miniName{align-self:flex-start;max-width:116px;margin-top:-2px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);padding:2px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #miniName[hidden]{display:none}
+#mph{font-family:var(--f-display);font-size:18px;color:var(--cream);text-shadow:0 2px 0 var(--ink);white-space:nowrap}
+#mph[hidden]{display:none}
+.stam.veh i{background:var(--rust)}
 body.talking #mini,body.talking #miniName{visibility:hidden}
 #map{position:fixed;inset:0;z-index:9;background:#0d0812;touch-action:none}
 #map[hidden]{display:none}
@@ -122,6 +125,7 @@ body.talking .ctl{visibility:hidden}
   <div class="vitals">
     <button id="mini" aria-label="Open the map" hidden><canvas id="miniC" width="232" height="232"></canvas></button>
     <div id="miniName" hidden></div>
+    <div id="mph" hidden></div>
     <div class="hearts" id="hearts" hidden>♥♥♥</div>
     <div class="stam" id="stam" hidden><i id="stamFill"></i></div>
     <div class="beans" id="beans" hidden>Beans 0/12</div>
@@ -180,7 +184,9 @@ import { drawCloth, drawSkull } from './src/looks.js';
 import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
 import { keysFor, buttonsFor, actWord, fastWord } from './src/controls.js';
 import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRim, drawArrow, drawLabel, labelSpace, clampCam, zoomAbout, fitScale, COLORS as MAPC } from './src/mapview.js';
-import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, Sheet } from './src/structures.js';
+import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, Sheet, hash2 } from './src/structures.js';
+import { KINDS, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, placeVehicles, settle, speedOf } from './src/vehicles.js';
+import { vehicleGeometries, PAINTS, LAMPS } from './src/vehiclemodels.js';
 
 const $ = (id) => document.getElementById(id);
 await Promise.race([document.fonts.load('40px Bungee').catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
@@ -1852,6 +1858,13 @@ function poseHero(tq) {
   } else if (k === 'air') {
     R.arm(0, V3(-.42, -.2, .2), V3(-.7, -.2, -.2)); R.arm(1, V3(.42, -.2, .2), V3(.7, -.2, -.2));
     R.leg(0, V3(-.14, -1.12, .22), V3(-.1, -1, .8), .2); R.leg(1, V3(.14, -1.18, .05), V3(.1, -1, .8), .2);
+  } else if (k === 'drive') {
+    const K = driving.K, turn = driving.steer / K.lock;
+    for (let i = 0; i < 2; i++) {
+      const s = i ? 1 : -1;
+      R.arm(i, V3(s * K.hands[0], K.hands[1] + s * turn * .05, K.hands[2] - s * turn * .03), V3(s * .8, -.5, -.1), V3(0, 1, 0));
+      R.leg(i, V3(s * K.feet[0], K.feet[1], K.feet[2]), V3(s * .14, .1, 1), -.2);
+    }
   } else if (k === 'sweep') {
     const sw = Math.sin(tq * 9) * .14;
     const g = R.arm(1, V3(.1 + sw, -.42, .36), V3(.7, -.4, -.2), V3(0, 1, .25)); R.arm(0, V3(-.06 + sw, -.18, .3), V3(-.7, -.3, -.2), V3(0, 1, .25));
@@ -1973,7 +1986,10 @@ function drawCrowd(step) {
     s.gait += GAIT[st] / 12 * (still ? .2 : 1);
     const p = s.gait, stride = still ? 0 : after ? .62 : .36;
     const look = s.look % CROWD_LOOKS.length, size = s.size * TOWN_SCALE;
-    _cb.compose(_cp.set(s.x, s.y + 1.43 * size + Math.abs(Math.sin(p)) * .03, s.z), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(size));
+    // knocked over: flat on his back, going down quickly and getting up slowly
+    const lie = s.flat > 0 ? Math.min(1, (s.flatFor - s.flat) * 7, s.flat * 2.2) : 0;
+    _cb.compose(_cp.set(s.x, s.y + 1.43 * size * (1 - lie) + .28 * lie + Math.abs(Math.sin(p)) * .03, s.z), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(size));
+    if (lie) _cb.multiply(_cl.makeRotationX(-1.45 * lie));
     // the top half leans from the hips, so the feet stay on the ground
     _cl.makeRotationFromEuler(_ce.set(st === STUNNED ? -.25 : after ? .34 : .14, 0, st === STUNNED ? Math.sin(step * .9) * .12 : Math.sin(p) * (after ? .05 : .1)));
     const e = _cl.elements; _cl.setPosition(.7 * e[4], -.7 + .7 * e[5], .7 * e[6]);
@@ -2111,7 +2127,7 @@ let partY = 0, lastDrip = 0;
 function updateParticles(dt, M) {
   const cx = camera.position.x, cz = camera.position.z;
   // on foot they drift around him; at the river they hang over the water
-  partY += ((M === 'land' || M === 'bridge' || M === 'town' || M === 'sweep' || M === 'dialog' ? player.pos.y : 0) - partY) * Math.min(1, dt * .8);
+  partY += ((M === 'land' || M === 'bridge' || M === 'town' || M === 'drive' || M === 'sweep' || M === 'dialog' ? player.pos.y : 0) - partY) * Math.min(1, dt * .8);
   // cyan: a stray drop from the bottle while he still has it, and a ring where it lands
   if (bottle.parent === hero.body && bottle.visible && time - lastDrip > 3.1) {
     const d = drips.find(x => !x.on);
@@ -2306,7 +2322,7 @@ function objectivePoint() {
 }
 function pointAtObjective() {
   const at = objectivePoint(), x = at?.x, z = at?.z, near = at?.near ?? 3;
-  const onFoot = S.mode === 'town' || S.mode === 'swim';
+  const onFoot = S.mode === 'town' || S.mode === 'swim' || S.mode === 'drive';
   const dx = x - player.pos.x, dz = z - player.pos.z, dist = objTarget ? Math.hypot(dx, dz) : 0, on = !!objTarget && onFoot && dist > near;
   if (hudCache.point !== on) { hudCache.point = on; $('objPoint').hidden = !on; }
   pointer.on = on;
@@ -2339,6 +2355,7 @@ function setButton(id, label, sizes) {
 function updateControls() {
   const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, now = `${S.mode}|${act}|${map}`;
   if (hudCache.controls === now) return; hudCache.controls = now;
+  $('stam').classList.toggle('veh', S.mode === 'drive');
   if (touchUI) { const { a, b, run } = buttonsFor(S.mode, { act }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); return; }
   const list = keysFor(S.mode, { act, map });
   setHidden('keyStrip', !list.length); $('keyStrip').innerHTML = list.map(([key, what]) => `<span class="ks"><span class="kc">${key}</span>${what}</span>`).join('');
@@ -2347,10 +2364,13 @@ function hudVitals() {
   updateControls();
   const talk = S.mode === 'dialog' || S.mode === 'end' || S.mode === 'fail' || S.mode === 'title';
   if (hudCache.talk !== talk) { hudCache.talk = talk; document.body.classList.toggle('talking', talk); }
-  setHidden('hearts', !(S.mode === 'swim' || S.mode === 'bridge' || S.mode === 'land' || S.mode === 'grabbed' || (crowdOut && S.mode === 'town')));
+  setHidden('hearts', !(S.mode === 'swim' || S.mode === 'bridge' || S.mode === 'land' || S.mode === 'grabbed' || (crowdOut && (S.mode === 'town' || S.mode === 'drive'))));
   setHTML('hearts', '♥'.repeat(Math.max(0, S.hp)) + '♡'.repeat(Math.max(0, 3 - S.hp)));
-  setHidden('stam', S.mode !== 'swim' && !player.ran); $('stamFill').style.transform = `scaleX(${player.stamina.toFixed(2)})`;
-  const town = S.mode === 'town' || S.mode === 'grabbed' || S.mode === 'dialog' || S.mode === 'sweep' || S.mode === 'end';
+  // driving, the bar's what the vehicle has left
+  const left = S.mode === 'drive' ? driving.hp / driving.K.hp : player.stamina;
+  setHidden('stam', S.mode !== 'swim' && S.mode !== 'drive' && !player.ran); $('stamFill').style.transform = `scaleX(${left.toFixed(2)})`;
+  setHidden('mph', S.mode !== 'drive'); if (S.mode === 'drive') setHTML('mph', `${Math.round(speedOf(driving) * 2.237)} MPH`);
+  const town = S.mode === 'town' || S.mode === 'drive' || S.mode === 'grabbed' || S.mode === 'dialog' || S.mode === 'sweep' || S.mode === 'end';
   setHidden('beans', !town); setHTML('beans', `Beans ${S.beans}/12`); setHidden('rep', !town);
   if (town) drawPeople();
 }
@@ -2445,6 +2465,7 @@ function townObjective() {
 }
 function startSweep() { S.mode = 'sweep'; S.sweep = 0; HP.kind = 'sweep'; player.pos.set(68.5 + PLACES.church.x, Y0 + .3, -6.9 + PLACES.church.z); player.yaw = 0; }
 function endChapter() {
+  if (driving) getOut(true);
   S.mode = 'end'; prompt(null); $('dialog').hidden = true;
   const known = people.known().map((c) => ({ c, trust: Math.round(people.get(c.id, 'trust')) })), best = [...known].sort((a, b) => b.trust - a.trust)[0];
   $('endP').textContent = `${known.map(({ c, trust }) => `${c.short} ${trust >= 0 ? '+' : ''}${trust}`).join(' · ')}. ${best.trust > 0 ? best.c.name + ' has your back.' : 'Nobody trusts you yet.'}`;
@@ -2497,7 +2518,7 @@ function startBridge() {
   deckSnake.reset();
 }
 function startTown() {
-  S.mode = 'town'; S.collapse = 99; S.flags.town = true;
+  S.mode = 'town'; S.collapse = 99; S.flags.town = true; vehGroup.visible = true;
   card('Chunky, <span>Mississippi</span>', '2026', 3.4);
   if (touchUI) after(5, () => { if (S.mode === 'town') toast('Tap the map to open it'); });
   if (HORDE_EARLY) bringOutCrowd();
@@ -2533,6 +2554,8 @@ for (const s of STRUCTURES) for (const w of collidersOf(s, TOWN_Y)) {
     const k = (cx + 32768) * 65536 + cz + 32768; if (!wallCells.has(k)) wallCells.set(k, []); wallCells.get(k).push(w);
   }
 }
+// parked vehicles by cell, the same way. One being driven isn't in here, and looks after itself.
+const vehCells = new Map();
 function hitsWall(x, z, y, list) {
   for (let i = 0; i < list.length; i++) {
     const w = list[i];
@@ -2550,6 +2573,8 @@ function blocked(x, z, y) {
   if (list) for (const [x0, x1, z0, z1, top] of list) if (x > x0 - .3 && x < x1 + .3 && z > z0 - .3 && z < z1 + .3 && y < top - .25) return true;
   const walls = wallCells.get(cell);
   if (walls && hitsWall(x, z, y, walls)) return true;
+  const parked = vehCells.get(cell);
+  if (parked) for (let i = 0; i < parked.length; i++) if (y < parked[i].y + 1.4 && inVehicle(parked[i], x, z, .3)) return true;
   // the rails on a road bridge
   if (SPANS.length && y > ROAD_TOP - 1) { const s = spanAt(x, z); if (s && MAP.roadGrid.nearest(x, z) > s.road.width / 2 && MAP.roadGrid.d < s.road.width / 2 + 1) return true; }
   return false;
@@ -2562,7 +2587,7 @@ const crowdRand = (() => { let s = 20260214; return () => (s = (s * 16807) % 214
 let floorX = NaN, floorZ = NaN, floorY = 0;
 const floorOnce = (x, z) => { if (x !== floorX || z !== floorZ) { floorX = x; floorZ = z; floorY = floorAt(x, z); } return floorY; };
 const horde = createHorde({
-  blocked: (x, z, y) => blocked(x, z, y) || floorOnce(x, z) - y > .7,
+  blocked: (x, z, y) => blocked(x, z, y) || floorOnce(x, z) - y > .7 || (driving !== null && inVehicle(driving, x, z, .3)),
   water: (x, z) => floorOnce(x, z) < -.1,
   floorAt: floorOnce,
   rand: crowdRand,
@@ -2604,10 +2629,279 @@ function bringOutCrowd() {
 const feel = { x: 0, z: 0, y: 0, noise: 0, light: 0, beans: 0, night: 1, hidden: false, canGrab: false };
 function updateCrowd(dt, M) {
   const P = player.pos; feel.x = P.x; feel.z = P.z; feel.y = P.y; feel.beans = S.beans;
-  feel.noise = M === 'town' ? HP.speed / 4.4 * 14 : 0;
-  feel.hidden = (M !== 'town' && M !== 'grabbed') || horde.inSanctuary(P.x, P.z);
+  feel.noise = M === 'town' ? HP.speed / 4.4 * 14 : M === 'drive' && !driving.wrecked && !driving.drowned ? driving.K.noise * (.5 + .5 * Math.abs(driving.f) / driving.K.top) : 0;
+  feel.hidden = (M !== 'town' && M !== 'grabbed' && M !== 'drive') || horde.inSanctuary(P.x, P.z);
   feel.canGrab = M === 'town' && player.inv <= 0;
   horde.update(dt, feel);
+}
+// ================================================================ vehicles
+// How they handle and where they're parked is in src/vehicles.js, and what they're built from is in src/vehiclemodels.js.
+// One mesh for each kind and one for every wheel, with their outlines: ten draw calls, however many are about.
+const VEH_CAP = { car: 8, pickup: 8, quad: 5, golf: 3 }, VEH_SEE = 170, VEH_BURNT = new THREE.Color('#1c1618');
+const vehGroup = new THREE.Group(); vehGroup.visible = false; scene.add(vehGroup);
+const vehMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .72, metalness: .18 });
+// Paint is the only pure white in the vertices, so that's what takes each one's colour. It's rusting through in patches, each its own way.
+vehMat.onBeforeCompile = (sh) => {
+  sh.uniforms.uRoadN = { value: roadNoise };
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float iSeed; varying vec2 vRust; varying float vPaint;')
+    .replace('#include <color_vertex>', 'vPaint=step(.99,min(color.r,min(color.g,color.b))); vColor=color*mix(vec3(1.),instanceColor,vPaint); vRust=vec2(position.z+position.x*.71,position.y+position.x*.31)+iSeed*37.;');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D uRoadN; varying vec2 vRust; varying float vPaint;')
+    .replace('#include <color_fragment>', `#include <color_fragment>
+      if(vPaint>.5){ float low=texture2D(uRoadN,vRust*.035).r*.6+texture2D(uRoadN,vRust*.12).g*.4, fine=textureLod(uRoadN,(floor(vRust*26.)+.5)/64.,0.).b;
+        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.2,.075,.03),.86*step(.585,low+(fine-.5)*.14))*(.9+.2*fine); }`)
+    .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nif(vPaint<.5) roughnessFactor=1.;')
+    .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nif(vPaint<.5) metalnessFactor=0.;');
+};
+const vehGeos = vehicleGeometries();
+function vehMesh(geo, mat, n, share) {
+  const m = new THREE.InstancedMesh(geo, mat, n); m.frustumCulled = false; m.count = 0; m.visible = false;
+  if (share) m.instanceMatrix = share.instanceMatrix; else m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  vehGroup.add(m); return m;
+}
+const vehBodies = {}, vehLines = {}, vehSeeds = {};
+for (const [kind, n] of Object.entries(VEH_CAP)) {
+  vehSeeds[kind] = new THREE.InstancedBufferAttribute(new Float32Array(n), 1).setUsage(THREE.DynamicDrawUsage); vehGeos[kind].geo.setAttribute('iSeed', vehSeeds[kind]);
+  vehBodies[kind] = vehMesh(vehGeos[kind].geo, vehMat, n); vehBodies[kind].instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage);
+  vehLines[kind] = vehMesh(vehGeos[kind].line, outlineMat(INK, 1.7), n, vehBodies[kind]);
+}
+const VEH_WHEELS = Object.values(VEH_CAP).reduce((a, b) => a + b, 0) * 4;
+const vehWheels = vehMesh(vehGeos.wheel.geo, vehMat, VEH_WHEELS); vehWheels.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(VEH_WHEELS * 3).fill(1), 3);
+const vehWheelLines = vehMesh(vehGeos.wheel.line, outlineMat(INK, 1.4), VEH_WHEELS, vehWheels);
+
+// Where they are: where the real buildings say, and a few where the game needs one
+const nearestRoadPoint = (x, z) => { if (MAP.roadGrid.nearest(x, z) === Infinity) return null; const id = MAP.roadGrid.seg.owner.id, p = MAP.along(id, MAP.sOn(id, x, z)); return { x: p.x, z: p.z }; };
+function vehicleFits(kind, x, z, yaw) {
+  const K = KINDS[kind], fx = Math.sin(yaw), fz = Math.cos(yaw), y = floorAt(x, z), L = K.length / 2 + .35, W = K.width / 2 + .35;
+  if (y < .5) return false;
+  for (let along = -L; along <= L + .01; along += L / 4) for (let across = -W; across <= W + .01; across += W / 2) {
+    const px = x + fx * along - fz * across, pz = z + fz * along + fx * across;
+    if (!MAP.inBounds(px, pz) || Math.abs(floorAt(px, pz) - y) > .35 || onRoad(px, pz) || houseAt(px, pz) || blocked(px, pz, y + .6)) return false;
+  }
+  return true;
+}
+const VEH_SET = [
+  // the first one you come to, on the shoulder just past the bridge, and pointing into town
+  ['quad', onRoadAt('us_80', 128).x, onRoadAt('us_80', 128).z + 5.6, Math.PI / 2, .12],
+  // a truck by the pumps, pointing at the road, and a car outside the store
+  ['pickup', ...gasAt(60.8, 9.2), 0, .3], ['car', PLACES.store.x + 41, PLACES.store.z - .9, -Math.PI / 2, .2],
+].filter(([kind, x, z, yaw]) => vehicleFits(kind, x, z, yaw));
+const VEHICLES = [
+  ...VEH_SET.map(([kind, x, z, yaw, tone]) => ({ kind, x, z, yaw, tone })),
+  ...placeVehicles(STRUCTURES, { hash: hash2, road: nearestRoadPoint, free: (kind, x, z, yaw) => !(Math.abs(x) < 150 && Math.abs(z) < 150) && !VEH_SET.some((h) => Math.hypot(h[1] - x, h[2] - z) < 8) && vehicleFits(kind, x, z, yaw) }),
+].map(({ kind, x, z, yaw, tone }) => {
+  const v = makeVehicle(kind, x, z, yaw, floorAt(x, z)), list = PAINTS[kind];
+  v.tone = tone; v.paint = new THREE.Color(list[Math.floor(tone * list.length) % list.length]); v.shownSpin = 0; v.seen = Infinity; settle(v, floorAt);
+  return v;
+});
+function markVehicle(v, on) {
+  const r = Math.hypot(v.K.length, v.K.width) / 2 + .4;
+  for (let cx = Math.floor((v.x - r) / 16); cx <= Math.floor((v.x + r) / 16); cx++) for (let cz = Math.floor((v.z - r) / 16); cz <= Math.floor((v.z + r) / 16); cz++) {
+    const k = (cx + 32768) * 65536 + cz + 32768; let list = vehCells.get(k);
+    if (on) { if (!list) vehCells.set(k, list = []); list.push(v); }
+    else if (list) { list.splice(list.indexOf(v), 1); if (!list.length) vehCells.delete(k); }
+  }
+}
+for (const v of VEHICLES) markVehicle(v, true);
+
+// Which are drawn, nearest first, twice a second. Whoever's being driven is always one of them, in slot 0 so that its rust stays put.
+const vehShown = []; let vehPicked = -1, vehDirty = true, vehStep = -1, driving = null;
+function pickVehicles() {
+  vehPicked = Math.floor(time * 2); vehShown.length = 0;
+  const P = player.pos;
+  for (const v of VEHICLES) { v.seen = v === driving ? -1 : Math.hypot(v.x - P.x, v.z - P.z); if (v.seen < VEH_SEE) vehShown.push(v); }
+  vehShown.sort((a, b) => a.seen - b.seen); vehDirty = true;
+}
+const _vb = new THREE.Matrix4(), _vl = new THREE.Matrix4(), _vm = new THREE.Matrix4(), _ve = new THREE.Euler(0, 0, 0, 'YXZ'), _vs = new THREE.Vector3(), _vc = new THREE.Color(), vehUsed = {};
+const toBody = (v) => _vb.makeRotationFromEuler(_ve.set(v.pitch, v.yaw, v.roll)).setPosition(v.x, v.y, v.z);
+// Redrawn every frame while he's driving, because a vehicle stepping along at twelve frames a second at thirty metres a second would be two metres at a time.
+// The wheels still turn on the game's own step.
+function drawVehicles(step) {
+  if (step !== vehStep) { if (driving) driving.shownSpin = driving.spin; drawPuffs(); }
+  if (vehTag.visible && S.mode !== 'town') vehTag.visible = false;
+  vehStep = step;
+  if (!driving && !vehDirty) return;
+  for (const k in VEH_CAP) vehUsed[k] = 0;
+  let w = 0;
+  for (const v of vehShown) {
+    const K = v.K, i = vehUsed[v.kind]; if (i >= VEH_CAP[v.kind]) continue;
+    vehUsed[v.kind]++;
+    toBody(v).toArray(vehBodies[v.kind].instanceMatrix.array, i * 16);
+    if (vehDirty) { _vc.copy(v.paint).lerp(VEH_BURNT, v.wrecked ? .94 : (1 - v.hp / K.hp) * .55); vehBodies[v.kind].setColorAt(i, _vc); vehSeeds[v.kind].array[i] = v.tone; }
+    for (let a = 0; a < 2; a++) for (const s of [-1, 1]) {
+      _ve.set(v.shownSpin, a ? 0 : -v.steer, 0);
+      _vl.makeRotationFromEuler(_ve).scale(_vs.set(K.tread, K.wheel, K.wheel)).setPosition(s * K.track, K.wheel - (v.wrecked ? .1 : 0), K.axles[a]);
+      _vm.multiplyMatrices(_vb, _vl).toArray(vehWheels.instanceMatrix.array, w++ * 16);
+    }
+  }
+  for (const k in VEH_CAP) {
+    const n = vehUsed[k], b = vehBodies[k], l = vehLines[k];
+    b.count = l.count = n; b.visible = l.visible = n > 0; b.instanceMatrix.needsUpdate = true;
+    if (vehDirty) { b.instanceColor.needsUpdate = true; vehSeeds[k].needsUpdate = true; }
+  }
+  vehWheels.count = vehWheelLines.count = w; vehWheels.visible = vehWheelLines.visible = w > 0; vehWheels.instanceMatrix.needsUpdate = true;
+  vehDirty = false;
+}
+// A little car, seen from above, for the maps
+function drawVehicleMark(g, view, o, size) {
+  const [x, y] = toScreen(view, o.x, o.z), [nx, ny] = toScreen(view, o.x + Math.sin(o.yaw), o.z + Math.cos(o.yaw));
+  if (x < -9 || y < -9 || x > g.canvas.width + 9 || y > g.canvas.height + 9) return;
+  const a = Math.atan2(ny - y, nx - x);
+  g.save(); g.translate(x, y); g.rotate(a); g.fillStyle = MAPC.cream; g.strokeStyle = MAPC.ink; g.lineWidth = 1.5; g.beginPath(); g.rect(-size, -size * .6, size * 2, size * 1.2); g.stroke(); g.fill(); g.restore();
+}
+
+// What it's called, floating over the nearest one
+const vehTag = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false, fog: false })); vehTag.visible = false; vehTag.renderOrder = 10; vehGroup.add(vehTag);
+const vehTags = {};
+function tagFor(kind) { return vehTags[kind] ??= textTex([KINDS[kind].name.toUpperCase()], 384, 64, 'rgba(0,0,0,0)', '#f1e6cf', '34px Bungee, Impact, sans-serif'); }
+
+// Close enough to get in?
+function vehicleInReach() {
+  const P = player.pos;
+  let best = null, tag = null, td = 14;
+  for (const v of vehShown) {
+    if (v.wrecked || v.drowned) continue;
+    if (v.seen < td) { td = v.seen; tag = v; }
+    if (!best && inVehicle(v, P.x, P.z, 1.5)) best = v;
+  }
+  vehTag.visible = !!tag;
+  if (tag) { vehTag.material.map = tagFor(tag.kind); vehTag.material.needsUpdate = true; vehTag.position.set(tag.x, tag.y + 3, tag.z); vehTag.scale.set(2.1, .35, 1); }
+  return best;
+}
+function getIn(v) {
+  driving = v; markVehicle(v, false); vehTag.visible = false; vehPicked = -1;
+  S.mode = 'drive'; HP.kind = 'drive'; HP.speed = 0; prompt(null);
+  heroRoot.rotation.order = 'YXZ'; hero.body.scale.setScalar(HERO_SCALE * v.K.size);
+  player.running = false; player.runK = 0; player.yaw = v.yaw;
+  // the ghost's light has nothing to do once he's in town, and one more light in the scene would cost every material on every phone
+  scene.add(gLight); gLight.color.set('#ffe6b0'); gLight.distance = 34; gLight.decay = 1.5; headlights.visible = true;
+}
+// The way out: his own side first, then the other, then behind and in front
+function getOut(force = false) {
+  const v = driving, K = v.K, fx = Math.sin(v.yaw), fz = Math.cos(v.yaw);
+  if (!force && speedOf(v) > 7) { toast('Slow down first'); return false; }
+  const sx = K.width / 2 + .8, sz = K.length / 2 + .8;
+  let spot = null;
+  for (const [along, across] of [[0, sx], [0, -sx], [-sz, 0], [sz, 0]]) {
+    const x = v.x + fx * along + fz * across, z = v.z + fz * along - fx * across;
+    if (MAP.inBounds(x, z) && !blocked(x, z, v.y + .2) && floorAt(x, z) - v.y < .7) { spot = [x, z]; break; }
+  }
+  if (!spot && !force) { toast('No room to get out'); return false; }
+  const [x, z] = spot ?? [v.x, v.z], y = floorAt(x, z);
+  driving = null; v.f = v.s = v.steer = 0; markVehicle(v, true); vehPicked = -1;
+  heroRoot.rotation.set(0, v.yaw, 0); heroRoot.rotation.order = 'XYZ'; hero.body.scale.setScalar(HERO_SCALE);
+  ghost.add(gLight); gLight.position.set(0, 0, 0); gLight.color.set('#ff9a46'); gLight.distance = 12; gLight.decay = 1.8; headlights.visible = false;
+  player.pos.set(x, y, z); player.yaw = v.yaw; player.grounded = true; player.vy = 0; player.kb.set(0, 0);
+  if (y < -.3) { player.pos.y = 0; S.mode = 'swim'; HP.kind = 'swim'; objective('Swim to the bank.'); }
+  else { S.mode = 'town'; HP.kind = 'run'; }
+  return true;
+}
+// Dust, in the same flat-shaded lumps as the leaves, swelling and gone in a second
+const VEH_PUFFS = matchMedia('(pointer:coarse)').matches ? 18 : 30, VEH_NOWHERE = new THREE.Matrix4().makeScale(0, 0, 0), vehRand = (() => { let s = 20261101; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+const puffMat = new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true });
+// it's a dark night, and they still have to show against it
+puffMat.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance+=diffuseColor.rgb*.8;'); };
+const puffMesh = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), puffMat, VEH_PUFFS);
+puffMesh.setColorAt(0, _vc.set(0)); puffMesh.frustumCulled = false; puffMesh.visible = false; scene.add(puffMesh);
+for (let i = 0; i < VEH_PUFFS; i++) puffMesh.setMatrixAt(i, VEH_NOWHERE);
+const puffs = Array.from({ length: VEH_PUFFS }, () => ({ on: false, t: 0, T: 1, x: 0, y: 0, z: 0, size: 0, rise: 0, turn: 0 }));
+let puffNext = 0, puffsOn = 0;
+function puff(x, y, z, size, T = .6, rise = .7, r = .13, g = .105, b = .08) {
+  const i = puffNext, p = puffs[i]; puffNext = (i + 1) % VEH_PUFFS;
+  if (!p.on) puffsOn++;
+  p.on = true; p.t = 0; p.T = T; p.x = x; p.y = y; p.z = z; p.size = size; p.rise = rise; p.turn = vehRand() * 6;
+  puffMesh.setColorAt(i, _vc.setRGB(r, g, b)); puffMesh.instanceColor.needsUpdate = true; puffMesh.visible = true;
+}
+function drawPuffs() {
+  if (!puffsOn) return;
+  puffs.forEach((p, i) => {
+    if (!p.on) return;
+    p.t += 1 / 12; const k = p.t / p.T;
+    if (k >= 1) { p.on = false; puffsOn--; puffMesh.setMatrixAt(i, VEH_NOWHERE); return; }
+    const w = p.size * (.45 + Math.sqrt(k) * .75) * (1 - k * k * k);
+    _m.compose(_v.set(p.x, p.y + p.rise * Math.sqrt(k), p.z), _q.setFromEuler(_ve.set(p.turn, p.turn + k, 0)), _s.set(w, w * .8, w)); puffMesh.setMatrixAt(i, _m);
+  });
+  puffMesh.instanceMatrix.needsUpdate = true; if (!puffsOn) puffMesh.visible = false;
+}
+// Headlights and tail lights: four points in one draw call
+const headlights = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(12), 3).setUsage(THREE.DynamicDrawUsage)).setAttribute('color', new THREE.BufferAttribute(new Float32Array(12), 3).setUsage(THREE.DynamicDrawUsage)),
+  new THREE.PointsMaterial({ map: radialTex, vertexColors: true, size: 1.5, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+headlights.frustumCulled = false; headlights.visible = false; scene.add(headlights);
+function drawHeadlights(v, braking) {
+  const L = LAMPS[v.kind], dead = v.wrecked || v.drowned, on = dead ? 0 : 1, pos = headlights.geometry.attributes.position, col = headlights.geometry.attributes.color;
+  const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw), away = Math.hypot(camera.position.x - v.x, camera.position.z - v.z) || 1, front = ((camera.position.x - v.x) * fx + (camera.position.z - v.z) * fz) / away;
+  // a lamp's only seen from the end it's on, or they'd shine through the cab at whoever's behind it
+  const head = sstep(0, .5, front) * 1.5 * on, tail = sstep(0, .5, -front) * (braking ? 1.4 : .45) * on;
+  toBody(v);
+  [[L.head, 1, 1, .78, .5, head], [L.head, -1, 1, .78, .5, head], [L.tail, 1, 1, .08, .05, tail], [L.tail, -1, 1, .08, .05, tail]].forEach(([p, s, r, g, b, k], i) => {
+    _v.set(p[0] * s, p[1], p[2]).applyMatrix4(_vb); pos.setXYZ(i, _v.x, _v.y, _v.z); col.setXYZ(i, r * k, g * k, b * k);
+  });
+  pos.needsUpdate = col.needsUpdate = true;
+  // and what they light up, on the road ahead
+  const reach = v.K.length / 2 + 10;
+  gLight.position.set(v.x + fx * reach, v.y + 1.9, v.z + fz * reach); gLight.intensity = 52 * on * (v.hp / v.K.hp < .25 && Math.floor(time * 12) % 5 === 0 ? .5 : 1);
+}
+function arriving() { if (!S.flags.arrived && player.pos.x > NPCS.coop.root.position.x - 70) { S.flags.arrived = true; townObjective(); } }
+function pickUpCans(reach) {
+  for (const c of PICKUPS) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; c.m.visible = false; addBeans(1, 'found'); townObjective(); hudVitals(); }
+}
+const DRIVE_WORLD = { blocked, floorAt, road: onRoad, edge: (x, z) => !MAP.inBounds(x, z) };
+let vehPuffT = 0, vehClawT = 0, vehSmokeT = 0;
+function wreckedNow(v) {
+  vehDirty = true; toast(v.drowned ? 'Flooded' : 'Wrecked');
+  if (!reduceMotion) cam.shake = .6; glitch(.9, .35);
+  for (let i = 0; i < 7; i++) puff(v.x + (vehRand() - .5) * 2.4, v.y + .6 + vehRand(), v.z + (vehRand() - .5) * 2.4, .8 + vehRand() * .6, 1 + vehRand() * .5, 3, .09, .08, .095);
+  if (crowdOut) horde.noise(v.x, v.z, 60, 2);
+}
+function updateDrive(dt) {
+  const v = driving, K = v.K, was = v.drowned;
+  // On a phone one thumb does it all: pushing the stick off to the side keeps the gas on. Pull it back to brake.
+  const thumb = touchStick.length(), gas = thumb > .2 && touchStick.y > -.35 ? Math.max(input.y, thumb * .85) : input.y, braking = touchBtn.b || keys.has(' ');
+  const r = stepVehicle(v, { gas, steer: input.x, brake: braking }, dt, DRIVE_WORLD), speed = speedOf(v), fx = Math.sin(v.yaw), fz = Math.cos(v.yaw);
+  player.pos.set(v.x, v.y, v.z); player.yaw = v.yaw; player.grounded = true;
+  // getting his breath back in the seat
+  if (player.ran) { player.stamina = Math.min(1, player.stamina + RUN.rest * dt); if (player.stamina > RUN.recover) player.winded = false; if (player.stamina >= 1) player.ran = false; }
+  if (r.edge && !S.flags.toldEdge) { S.flags.toldEdge = true; toast('Nothing that way.'); after(12, () => { S.flags.toldEdge = false; }); }
+  // what it hit
+  if (r.hit > 1.5) {
+    for (const o of vehShown) {
+      if (o === v || Math.hypot(o.x - v.x, o.z - v.z) > (o.K.length + K.length) / 2 + 1.2) continue;
+      // another vehicle takes it too, and shoves along if there's room
+      const dx = o.x - v.x, dz = o.z - v.z, L = Math.hypot(dx, dz) || 1, push = Math.min(2.4, r.hit * .12 * K.mass / o.K.mass);
+      markVehicle(o, false);
+      hurtVehicle(o, damageFrom(o.K, r.hit)); vehDirty = true;
+      const nx = o.x + dx / L * push, nz = o.z + dz / L * push;
+      if (!blocked(nx, nz, o.y + .6) && floorAt(nx, nz) > .3) { o.x = nx; o.z = nz; o.y = floorAt(nx, nz); o.yaw += (vehRand() - .5) * push * .3; settle(o, floorAt); }
+      markVehicle(o, true);
+      break;
+    }
+  }
+  if (r.hit > 7 && !reduceMotion) cam.shake = Math.min(.6, r.hit * .03);
+  if (r.hit > 14) glitch(.7, .25);
+  if (r.hit > 7 && crowdOut) horde.noise(v.x, v.z, 40, 1.5);
+  if (r.landed > 6 && !reduceMotion) cam.shake = Math.min(.5, r.landed * .04);
+  if (r.damage > 0) vehDirty = true;
+  let done = r.wrecked || (v.drowned && !was);
+  // the crowd: anyone in front goes over, and it costs a little. Sitting still, they get at it.
+  if (crowdOut) {
+    if (speed > 3) {
+      const dir = v.f < 0 ? -1 : 1, n = horde.knock(v.x + fx * dir * K.length * .35, v.z + fz * dir * K.length * .35, K.width / 2 + .8, 2.6 + speed * .12) + horde.knock(v.x, v.z, K.width / 2 + .6, 2.6 + speed * .12);
+      if (n) { v.f *= Math.pow(.97, n); if (hurtVehicle(v, .5 * n)) done = true; vehDirty = true; if (!reduceMotion) cam.shake = Math.max(cam.shake, .18); }
+    } else if ((vehClawT -= dt) <= 0) {
+      vehClawT = .5;
+      let n = 0; for (const s of horde.active) if (s.state >= HUNTING && s.state <= SWARM && inVehicle(v, s.x, s.z, 1)) n++;
+      if (n) { if (hurtVehicle(v, .4 * n)) done = true; vehDirty = true; if (!reduceMotion) cam.shake = Math.max(cam.shake, .1); }
+    }
+  }
+  if (done) wreckedNow(v);
+  // dust off the road, and smoke when it's hurting
+  if ((vehPuffT -= dt) <= 0 && speed > 4 && v.grounded && !r.wet && !onRoad(v.x, v.z)) {
+    vehPuffT = .05 + .4 / speed;
+    const side = vehRand() < .5 ? -1 : 1; puff(v.x - fx * K.length * .42 + fz * side * K.track + (vehRand() - .5) * .4, v.y + .12, v.z - fz * K.length * .42 - fx * side * K.track + (vehRand() - .5) * .4, .1 + speed * .012);
+  }
+  if ((vehSmokeT -= dt) <= 0 && v.hp / K.hp < .4) { vehSmokeT = v.wrecked ? .13 : .26; puff(v.x + fx * K.length * .3 + (vehRand() - .5) * .5, v.y + 1.1, v.z + fz * K.length * .3 + (vehRand() - .5) * .5, .16 + vehRand() * .16, 1.1, 3, .07, .062, .075); }
+  arriving(); pickUpCans(2.4);
+  drawHeadlights(v, braking || gas < -.1);
+  if (input.aEdge) getOut();
 }
 // ================================================================ the map
 const mapData = buildMapData({ roads: MAP.roads, rail: MAP.rail, river: MAP.river, structures: STRUCTURES });
@@ -2625,18 +2919,21 @@ const mapPaper = (() => {
   for (let i = 0; i < 180; i++) { const px = r() * 256, py = r() * 256, L = 6 + r() * 26, a = 2.2 + r() * .35; g.strokeStyle = `rgba(169,155,192,${(.03 + r() * .06).toFixed(3)})`; g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(a) * L, py + Math.sin(a) * L); g.stroke(); }
   return c;
 })();
-const canOpenMap = () => S.flags.town && (S.mode === 'town' || S.mode === 'swim');
+const canOpenMap = () => S.flags.town && (S.mode === 'town' || S.mode === 'swim' || S.mode === 'drive');
 // The small one, turning with the camera, at most at the game's own 12 frames a second
 function updateMini(step) {
   const show = !!S.flags.town;
   setHidden('mini', !show);
   if (!show || step === MINI.step) { if (!show) setHidden('miniName', true); return; }
   MINI.step = step;
+  // it looks further ahead the faster he's going
+  MINI.scale += (.42 - .2 * Math.min(1, (driving ? speedOf(driving) : 0) / 22) - MINI.scale) * .1;
   const P = player.pos, g = MINI.ctx, n = MINI.size, dpr = g.canvas.width / n, v = makeView(P.x, P.z, MINI.scale, cam.yaw, n, n);
   g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = MAPC.ground; g.fillRect(0, 0, g.canvas.width, g.canvas.height);
   drawWorld(g, mapData, v, dpr, worldBox(v, n, n), { road: [3.4, 2.4] });
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const c = n / 2, at = objectivePoint();
+  for (const o of vehShown) if (o !== driving && !o.wrecked && !o.drowned) drawVehicleMark(g, v, o, 3);
   // north, on the rim
   const [nx, ny] = toScreen(v, P.x, P.z - 1000), N = toRim(c, c, nx, ny, c - 9);
   drawLabel(g, 'N', N[0], N[1], '10px Bungee, Impact, sans-serif', MAPC.dusk);
@@ -2671,6 +2968,7 @@ function drawFullMap() {
     const [x, y] = toScreen(v, at.x, at.z);
     if (on(x, y)) { free(x, y, 20, 20); g.beginPath(); g.arc(x, y, 9, 0, 7); g.strokeStyle = MAPC.ink; g.lineWidth = 5; g.stroke(); g.strokeStyle = MAPC.hot; g.lineWidth = 3; g.stroke(); g.beginPath(); g.arc(x, y, 3, 0, 7); g.fillStyle = MAPC.hot; g.fill(); }
   }
+  if (mapCam.scale > .2) for (const o of VEHICLES) if (o !== driving && !o.wrecked && !o.drowned) drawVehicleMark(g, v, o, 2 + mapCam.scale * 1.6);
   const known = new Set(people.known().map((p) => p.id));
   for (const [id, n] of Object.entries(NPCS)) {
     const [x, y] = toScreen(v, n.root.position.x, n.root.position.z); if (!on(x, y)) continue;
@@ -2840,15 +3138,14 @@ function tick(dt, draw = true) {
     }
     if (M === 'town') {
       ghost.position.lerp(new THREE.Vector3(26, -3, 3), Math.min(1, dt * .5));
-      if (!S.flags.arrived && player.pos.x > NPCS.coop.root.position.x - 70) { S.flags.arrived = true; townObjective(); }
-      // pick up cans
-      for (const c of PICKUPS) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < 1.15 && Math.abs(c.y - player.pos.y) < 2) { c.got = true; c.m.visible = false; addBeans(1, 'found'); townObjective(); hudVitals(); }
+      arriving(); pickUpCans(1.15);
       // talk
       let near = null, nd = 2.6;
       for (const [id, n] of Object.entries(NPCS)) { const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z); if (d < nd) { nd = d; near = id; } }
-      S.act = near ? `Talk to ${NPCS[near].name}` : null;
-      if (near) { prompt(touchUI ? S.act : `E · ${S.act}`); if (input.aEdge) openDialog(near); }
-      else prompt(null);
+      const ride = near ? null : vehicleInReach();
+      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : null;
+      if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else prompt(null);
+      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); }
     }
   }
   // ---------------- sweeping Odessa's steps
@@ -2866,9 +3163,13 @@ function tick(dt, draw = true) {
     if (input.aEdge) horde.mash();
     if (horde.grab) prompt(`Mash ${press('FREE')} to break free`, g.progress);
   }
-  if (crowdOut) updateCrowd(dt, M);
+  if (M === 'drive') updateDrive(dt);
+  if (crowdOut) updateCrowd(dt, S.mode);
   // ---------------- hero placement
-  if (M === 'swim' || M === 'land' || M === 'bridge' || M === 'town' || M === 'grabbed' || M === 'sweep' || M === 'dialog' || M === 'end' || (M === 'fail' && !S.flags.bridgeStarted)) {
+  if (S.mode === 'drive') {
+    _v.set(driving.K.seat[0], driving.K.seat[1], driving.K.seat[2]).applyMatrix4(toBody(driving)); heroRoot.position.copy(_v);
+    heroRoot.rotation.set(driving.pitch, driving.yaw, driving.roll); hero.body.position.set(0, 0, 0); hero.body.rotation.set(0, 0, 0);
+  } else if (M === 'drive' || M === 'swim' || M === 'land' || M === 'bridge' || M === 'town' || M === 'grabbed' || M === 'sweep' || M === 'dialog' || M === 'end' || (M === 'fail' && !S.flags.bridgeStarted)) {
     heroRoot.position.copy(player.pos); heroRoot.rotation.set(0, player.yaw, 0);
     if (HP.kind === 'swim') { hero.body.position.set(0, .2, 0); hero.body.rotation.set(.95, 0, Math.sin(HP.phase) * .08); }
     else { const bob = Math.abs(Math.sin(HP.phase)) * .05 * Math.min(1, HP.speed / 4); hero.body.position.set(0, HERO_HIPS + bob, 0); hero.body.rotation.set(HP.kind === 'struggle' ? .32 : .1 * Math.min(1, HP.speed / 4) + .22 * player.runK, 0, 0); }
@@ -2883,7 +3184,7 @@ function tick(dt, draw = true) {
   for (const n of Object.values(NPCS)) {
     n.ph += dt; n.rig.body.position.y = TOWN_HIPS + Math.sin(n.ph * 1.6) * .012;
     const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z);
-    const want = d < 7 && (M === 'town' || M === 'dialog') ? Math.atan2(player.pos.x - n.root.position.x, player.pos.z - n.root.position.z) : n.yaw;
+    const want = d < 7 && (M === 'town' || M === 'dialog' || M === 'drive') ? Math.atan2(player.pos.x - n.root.position.x, player.pos.z - n.root.position.z) : n.yaw;
     n.root.rotation.y += angDiff(n.root.rotation.y, want) * Math.min(1, dt * 3); n.tag.visible = d < 14 && M !== 'title' && M !== 'dialog';
     // their limbs never frustum-cull, so someone across town costs forty draw calls for a few pixels in the fog
     n.root.visible = Math.hypot(n.root.position.x - camera.position.x, n.root.position.z - camera.position.z) < 95;
@@ -2891,17 +3192,20 @@ function tick(dt, draw = true) {
   for (const c of PICKUPS) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
   for (const f of fires) { const k = .8 + .2 * Math.sin(time * 11 + f.ph) * Math.sin(time * 7.3 + f.ph); f.pl.intensity = 12 * k; f.fl.scale.set(k, .8 + .4 * k, k); }
   beacon.visible = Math.floor(time * 1.2) % 2 === 0; gasLight.intensity = Math.random() < .02 ? 2 : 9;
-  gLight.intensity = 14 * (.8 + .2 * Math.sin(time * 9.7));
+  if (!driving) gLight.intensity = 14 * (.8 + .2 * Math.sin(time * 9.7));
 
   // ---------------- camera
   if (M === 'title' || M === 'hang') {
     camera.position.set(-4.4 + Math.sin(time * .2) * .4, 3.5, 9.8); camera.lookAt(0, 3.55, 3.1); camera.fov = 48; camera.updateProjectionMatrix();
   } else {
     const swim = M === 'swim' || (M === 'fail' && !S.flags.bridgeStarted) || M === 'fall';
-    const tgt = heroRoot.position.clone().add(new THREE.Vector3(0, swim ? .55 : 1.55, 0));
+    const car = S.mode === 'drive' ? driving : null, carSpeed = car ? speedOf(car) : 0;
+    const tgt = car ? new THREE.Vector3(car.x, car.y + car.K.camLook, car.z) : heroRoot.position.clone().add(new THREE.Vector3(0, swim ? .55 : 1.55, 0));
     const moving = Math.hypot(input.x, input.y) > .1;
-    if (moving && time - lastLook > 1.2 && M !== 'fall') cam.yaw += angDiff(cam.yaw, player.yaw + Math.PI) * Math.min(1, dt * 1.6);
-    const dist = swim ? 4.6 : 5.4;
+    // In something with an engine it swings round behind it by itself, once it's moving
+    if (car) { if (carSpeed > 1.5 && time - lastLook > 1.2) cam.yaw += angDiff(cam.yaw, car.yaw + Math.PI) * Math.min(1, dt * 2.6); }
+    else if (moving && time - lastLook > 1.2 && M !== 'fall') cam.yaw += angDiff(cam.yaw, player.yaw + Math.PI) * Math.min(1, dt * 1.6);
+    const dist = car ? car.K.camDist + carSpeed * .04 : swim ? 4.6 : 5.4;
     // looking down on him when he's held, or whoever's holding him is all you'd see
     const pitch = M === 'grabbed' ? Math.max(cam.pitch, .9) : cam.pitch;
     V.set(Math.sin(cam.yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(cam.yaw) * Math.cos(pitch)).multiplyScalar(dist).add(tgt);
@@ -2915,9 +3219,9 @@ function tick(dt, draw = true) {
       V.lerp(_talk.set(A.x + k * (-ux * TALK.back - uz * side * TALK.out), H.y + TALK.up, A.z + k * (-uz * TALK.back + ux * side * TALK.out)), w);
       tgt.lerp(_talk.set(A.x + ux * L * TALK.along, H.y + TALK.look, A.z + uz * L * TALK.along), w);
     }
-    if (cam.snap) { camera.position.copy(V); cam.snap = false; } else camera.position.lerp(V, 1 - Math.exp(-dt * (M === 'fall' ? 3 : 7)));
+    if (cam.snap) { camera.position.copy(V); cam.snap = false; } else camera.position.lerp(V, 1 - Math.exp(-dt * (M === 'fall' ? 3 : car ? 12 : 7)));
     if (cam.shake > 0) { cam.shake -= dt; camera.position.x += (Math.random() - .5) * cam.shake * .3; camera.position.y += (Math.random() - .5) * cam.shake * .3; }
-    camera.lookAt(tgt); { const fov = 55 + (reduceMotion ? 0 : 5 * player.runK); if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); } }
+    camera.lookAt(tgt); { const fov = 55 + (reduceMotion ? 0 : 5 * player.runK + 12 * Math.min(1, Math.abs(car ? car.f : 0) / 30)); if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); } }
     if (S.flags.town) {
       // Indoors the roof's out of the way, and so is the roof of whatever the camera's backed into, or that'd be all you'd see.
       // Anything else between the camera and him opens up around him, down to his knees.
@@ -2935,11 +3239,13 @@ function tick(dt, draw = true) {
   input.aEdge = false; input.bEdge = false;
 
   sky.material.uniforms.uTime.value = time; waterMat.uniforms.uTime.value = time; swayU.uTime.value = time; gifMat.uniforms.uTime.value = time;
+  if (S.flags.town && Math.floor(time * 2) !== vehPicked) pickVehicles();
   if (!draw) return;   // a test walking the whole map only needs the physics
   updateMini(step);
   sky.position.copy(camera.position);
   updateWorld();
   if (crowdOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
+  if (S.flags.town) drawVehicles(step);
   updateParticles(dt, M);
   if (bottle.visible) levelLiquid();
   renderFrame(dt);
@@ -3009,6 +3315,7 @@ if (TEST) {
       return cv;
     },
     npcs: Object.fromEntries(Object.entries(NPCS).map(([k, n]) => [k, { x: n.root.position.x, z: n.root.position.z }])), pickups: PICKUPS,
+    vehicles: VEHICLES, vehShown, driving: () => driving, getIn, getOut, kinds: KINDS, vehicleFits, vehicleInReach,
     openMap, closeMap, updateMini, mapState: () => ({ open: mapOpen, cam: mapCam, mini: !$('mini').hidden, name: $('miniName').hidden ? '' : $('miniName').textContent }), mapCamTo(c) { mapCam = { ...mapCam, ...c }; drawFullMap(); },
     pause() { paused = true; },
     resume() { if (paused) { paused = false; clock.getDelta(); requestAnimationFrame(loop); } },
@@ -3016,7 +3323,7 @@ if (TEST) {
     // the same as step without drawing, for walking long distances
     sim(seconds = 1 / 60, dt = 1 / 60) { paused = true; for (let i = 0, n = Math.max(1, Math.round(seconds / dt)); i < n; i++) tick(dt, false); return this.state(); },
     state() {
-      return { mode: S.mode, time, hp: S.hp, beans: S.beans, people: people.snapshot(), items: { ...S.items }, flags: { ...S.flags }, kind: HP.kind, cut: HP.cut, pos: player.pos.toArray(), yaw: player.yaw, stamina: player.stamina, grounded: player.grounded, hero: heroRoot.position.toArray(), cam: camera.position.toArray(), burst: burstOn, uBurst: G.uBurst.value, obj: $('obj').textContent, toast: $('toast').classList.contains('show') ? $('toast').textContent : '', card: $('card').classList.contains('show') ? $('cardH').textContent : '', prompt: $('prompt').hidden ? '' : $('prompt').textContent, dialog: $('dialog').hidden ? null : { who: $('dWho').textContent, say: $('dSay').textContent, opts: [...$('dOpts').children].map(b => b.textContent) } };
+      return { mode: S.mode, time, hp: S.hp, beans: S.beans, people: people.snapshot(), items: { ...S.items }, flags: { ...S.flags }, kind: HP.kind, cut: HP.cut, pos: player.pos.toArray(), yaw: player.yaw, stamina: player.stamina, grounded: player.grounded, hero: heroRoot.position.toArray(), cam: camera.position.toArray(), burst: burstOn, uBurst: G.uBurst.value, obj: $('obj').textContent, toast: $('toast').classList.contains('show') ? $('toast').textContent : '', card: $('card').classList.contains('show') ? $('cardH').textContent : '', prompt: $('prompt').hidden ? '' : $('prompt').textContent, drive: driving ? { kind: driving.kind, x: driving.x, y: driving.y, z: driving.z, yaw: driving.yaw, f: driving.f, s: driving.s, speed: speedOf(driving), hp: driving.hp, wrecked: driving.wrecked, drowned: driving.drowned, grounded: driving.grounded } : null, dialog: $('dialog').hidden ? null : { who: $('dWho').textContent, say: $('dSay').textContent, opts: [...$('dOpts').children].map(b => b.textContent) } };
     },
     // phases by name, set up the way play reaches them
     jump(phase) {

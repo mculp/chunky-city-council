@@ -9,6 +9,34 @@ const field = (extra = {}) => ({ blocked: () => false, water: () => false, floor
 const still = { x: 0, z: 0, y: 0, noise: 0, light: 0, beans: 0, night: 1, hidden: false, canGrab: true };
 const run = (h, p, seconds, dt = 1 / 30) => { for (let t = 0; t < seconds; t += dt) h.update(dt, p); };
 
+describe('knocked over', () => {
+  test('anyone in reach goes flat, thrown clear, and it says how many', () => {
+    const h = createHorde(field()), near = h.add(1, 0), far = h.add(9, 0);
+    run(h, still, .05);
+    assert.equal(h.knock(0, 0, 3, 2), 1);
+    assert.equal(near.state, STUNNED); assert.ok(near.flat > 0); assert.ok(near.x > 1.5); assert.ok(!(far.flat > 0));
+  });
+
+  test('hit again while they\'re down, they don\'t count twice', () => {
+    const h = createHorde(field()); h.add(1, 0);
+    run(h, still, .05);
+    assert.equal(h.knock(0, 0, 3, 2), 1); assert.equal(h.knock(0, 0, 3, 2), 0);
+  });
+
+  test('a wall stops them being thrown through it', () => {
+    const h = createHorde(field({ blocked: (x) => x > 2 })), s = h.add(1, 0);
+    run(h, still, .05); h.knock(0, 0, 3, 2);
+    assert.equal(s.x, 1); assert.ok(s.flat > 0);
+  });
+
+  test('they get up and come for you', () => {
+    const h = createHorde(field()), s = h.add(1, 0);
+    run(h, still, .05); h.knock(0, 0, 3, 1);
+    run(h, still, 1.5);
+    assert.ok(!(s.flat > 0)); assert.ok(s.state === HUNTING || s.state === SWARM || s.state === GRABBING, `state ${s.state}`);
+  });
+});
+
 describe('senses', () => {
   test('a still player with nothing on them goes unnoticed past arm\'s reach', () => {
     const h = createHorde(field()), s = h.add(6, 0);

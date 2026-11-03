@@ -17,6 +17,7 @@ Everything is procedural three.js. The game has no image, model or texture files
 | `clothMat`, `skullMat` | Putting those on a body, one at a time or a whole crowd at once |
 | `outlineMat`, `outline` | Screen-space outlines. A `chalk` value above 0 adds the boil and the broken chalk texture |
 | `pixelTex`, `triplanar`, `textTex` | Surface textures and painted signage |
+| `vehicleGeometries`, `vehMat` | Everything with an engine: low-poly boxes in `src/vehiclemodels.js`, with paint that takes each one's colour and rusts through in patches |
 | `writeStructure`, `houseMat` | Every real building: `src/structures.js` writes its pieces, and one material draws the siding, brick, block, ribs, shingle, windows and doors from what's in the vertices |
 | `swayMat` | Foliage that moves |
 | `gifMat`, `renderFrame` | The final look: dither, grain, vignette and glitches |
@@ -82,6 +83,7 @@ Night in an abandoned Mississippi town.
 - **The town:** the real one. Every building is at its real position, with its real footprint, in siding, brick, block or ribbed metal, and with kudzu on it. See `data/structures.md`. The store is the little block one, the gas station's canopy stands in front of the old store it belonged to, and Miss Odessa's church is the brick one at Adams and Church St. Real businesses go under invented names.
 - **The roads:** asphalt lighter than the ground, with patches, cracks and polished wheel paths. Double yellow down US 80 and Adams St, dashed yellow on the smaller roads, white edge lines on all of them, worn away in long stretches and speckled up close. A gravel shoulder thins out into the dirt. Paint stops short of junctions and railroad crossings. By the bridge, it's still the first scene's dark road.
 - **The map:** drawn from the same data as the world, on a dark scratched page: cream roads, a rust railroad, a teal river, dusk buildings, cyan people, rust arrows. The small one turns with the camera and only appears once he's in town.
+- **Vehicles:** old and rusting, in faded paint, with no real makes or badges. Cars and pickups by the houses and shops, four-wheelers by the trailers, a golf cart at every church. Their windows are open, so he's always in view at the wheel. Only the one he's driving has its lights on.
 - **Props that aren't real:** the water tower, and the rusted boxcar on a railroad with dark ties (`#2a1d18`).
 - **Doors stand open.** Any building can be walked into, and its roof comes off while he's inside. Anything between the camera and him opens up around him in a dither, and the roof of whatever the camera backs into comes off too.
 - **Street signs:** green blades with cream Bungee, the colours of the town sign, reading the names in the road graph. Each corner blade runs along the road it names, as real ones do, and the roadside ones face whoever's walking that way. A phone in portrait sees a narrow slice of the road, so they're big enough to read before they slide off screen.
@@ -112,7 +114,7 @@ The game has the reference's clean character, holds, timed bursts, full bottle, 
 
 ## Controls
 
-Touch comes first, because the game is played on a phone. The left thumb moves and dragging looks around. The buttons say what they do right now, like CUT, TALK, JUMP, RUN and SWIM FAST, and a button with nothing to do isn't there. On a keyboard, WASD or arrows move, Shift runs, Space jumps or swims faster, E uses and M is the map, and a strip at the bottom shows the keys that work right now. `src/controls.js` has the lists.
+Touch comes first, because the game is played on a phone. The left thumb moves and dragging looks around. The buttons say what they do right now, like CUT, TALK, GET IN, JUMP, RUN, BRAKE and SWIM FAST, and a button with nothing to do isn't there. Driving takes one thumb: forward on the stick is the gas, off to the side steers and keeps the gas on, and back brakes and reverses. On a keyboard, WASD or arrows move, Shift runs, Space jumps, swims faster or is the handbrake, E uses and M is the map, and a strip at the bottom shows the keys that work right now. `src/controls.js` has the lists.
 
 ## What stays out of this repo
 
