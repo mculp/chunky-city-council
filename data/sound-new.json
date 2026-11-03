@@ -61,7 +61,10 @@
     "engine.golf": { "gain": 0.297, "file": "audio/sfx/engine.golf.1.mp3" },
     "vehicle.road": { "gain": 0.285, "file": "audio/sfx/vehicle.road.1.mp3" },
     "vehicle.dirt": { "gain": 0.705, "file": "audio/sfx/vehicle.dirt.1.mp3" },
-    "vehicle.skid": { "gain": 0.245, "file": "audio/sfx/vehicle.skid.1.mp3" }
+    "vehicle.skid": { "gain": 0.245, "file": "audio/sfx/vehicle.skid.1.mp3" },
+    "lure.bottle": { "gain": 0.7, "reach": 60, "spread": 0.1, "max": 2, "file": ["audio/sfx/lure.bottle.1.mp3", "audio/sfx/lure.bottle.2.mp3"] },
+    "vehicle.alarm": { "gain": 0.5, "loop": true, "file": "audio/sfx/vehicle.alarm.1.mp3" },
+    "lure.pop": { "gain": 0.55, "reach": 90, "spread": 0.14, "max": 4, "gap": 0.03, "file": ["audio/sfx/lure.pop.1.mp3", "audio/sfx/lure.pop.2.mp3", "audio/sfx/lure.pop.3.mp3"] }
   },
   "music": {
     "title": { "bed": 0.55, "air": 0.5, "guitar": 0.6, "file": "audio/music/hang.1.mp3", "gain": 2.712 },

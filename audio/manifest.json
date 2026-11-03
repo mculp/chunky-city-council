@@ -537,6 +537,46 @@
       "request": "01a198c4-8284-7683-860a-7931843a10a0",
       "date": "2026-11-01T20:19:42.164Z"
     },
+    "audio/sfx/lure.bottle.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 1.2,
+      "bytes": 20105,
+      "sha256": "4fd2fa06543fdacbfef9455d69db9ddcd2410dd8b43a16afbb21c454f607e00f",
+      "request": "01a199df-4482-7022-91b5-e47a06069fef",
+      "date": "2026-11-02T01:28:32.788Z"
+    },
+    "audio/sfx/lure.bottle.2.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 1.2,
+      "bytes": 20105,
+      "sha256": "e0221dd535d94ce14a63ae44ef95a986b166e79aa8c3a1bc911c96f1d2f5f51b",
+      "request": "01a199df-4485-7243-ba93-faad5f57d3a4",
+      "date": "2026-11-02T01:28:30.998Z"
+    },
+    "audio/sfx/lure.pop.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 0.5,
+      "bytes": 8820,
+      "sha256": "32908587a616919b56798118613db78d419d3957d4de3a78b68473f01b298e4f",
+      "request": "01a199e0-87df-7b80-9a87-081e40f9fd38",
+      "date": "2026-11-02T01:29:55.838Z"
+    },
+    "audio/sfx/lure.pop.2.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 0.5,
+      "bytes": 8820,
+      "sha256": "b626cd57a537cfd909b17dd90977a46beade15b52e54e42333da33c780fab929",
+      "request": "01a199e1-e80f-7a62-ae4f-144b23e99e6a",
+      "date": "2026-11-02T01:31:26.709Z"
+    },
+    "audio/sfx/lure.pop.3.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 0.5,
+      "bytes": 8820,
+      "sha256": "8e9195097efbdbc3e5afe25d6f395ad99b50d566628855558caea2f38d5c6c34",
+      "request": "01a199e0-87df-7b72-916e-b31e65e7446d",
+      "date": "2026-11-02T01:29:55.918Z"
+    },
     "audio/sfx/plank.crack.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
       "seconds": 1,
@@ -841,6 +881,14 @@
       "request": "01a198b8-7f09-7253-a63b-c18ad45e121e",
       "date": "2026-11-01T20:06:34.776Z"
     },
+    "audio/sfx/vehicle.alarm.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 6,
+      "bytes": 97009,
+      "sha256": "5f4e1b78da317703465b75dafd97d59051674d5803040326b5962cf5b0d5cb2d",
+      "request": "01a199df-4e96-7362-b5ee-4fce371bd39a",
+      "date": "2026-11-02T01:28:35.618Z"
+    },
     "audio/sfx/vehicle.dirt.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
       "seconds": 6,
@@ -891,7 +939,7 @@
     }
   },
   "spent": {
-    "likely": 11.2796,
-    "most": 16.4996
+    "likely": 11.3164,
+    "most": 16.5364
   }
 }

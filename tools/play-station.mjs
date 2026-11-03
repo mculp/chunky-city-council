@@ -52,10 +52,10 @@ await g(() => { __game.place(...loc(49, 3.5)); __game.look(0, .4); __game.step(.
 const items0 = await g(() => __game.state());
 check('nothing in his pockets yet', !items0.items.batteries && !items0.items.fluid && (await page.locator('#pockets').isHidden()), items0.items);
 // along the aisles and round the ends of the shelves
-for (const way of [[[46.8, 3], [46.8, -1]], [[46.8, 1.6], [53.1, 1.6]], [[47.5, 3], [42.6, 3], [42.6, -5]], [[42.6, 3], [40.4, 3], [40.4, -3.6]], [[40.4, 3], [38.6, 3], [38.6, .6]]]) r = await g((way) => walk(way, .35), way);
+for (const way of [[[46.8, 3], [46.8, -1]], [[46.8, 1.6], [53.1, 1.6]], [[47.5, 3], [44.1, 3], [44.1, -2.6]], [[44.1, 3], [42.6, 3], [42.6, -5]], [[42.6, 3], [40.4, 3], [40.4, -3.6]], [[40.4, 3], [38.6, 3], [38.6, .6]]]) r = await g((way) => walk(way, .35), way);
 const got = await g(() => { const G = __game, { items, beans } = G.state(); return { items, beans, left: G.station.loot.filter((c) => !c.got).map((c) => c.kind), words: document.getElementById('pockets').textContent, shown: !document.getElementById('pockets').hidden, chapter: G.pickups.filter((c) => c.got).length }; });
 check('he finds it all, on foot, off the shelves and the counter', !got.left.length, got);
-check('two lots of batteries and two of lighter fluid', got.items.batteries === 2 && got.items.fluid === 2, got);
+check('two lots of batteries, two of lighter fluid and three of firecrackers', got.items.batteries === 2 && got.items.fluid === 2 && got.items.crackers === 3, got);
 check('and a can of beans', got.beans === items0.beans + 1, got);
 check('and it says what he\'s carrying', got.shown && /Batteries 2/.test(got.words) && /Lighter fluid 2/.test(got.words), got);
 check('none of the chapter\'s own cans has gone', got.chapter === 0, got);

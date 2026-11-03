@@ -2,11 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { actWord, buttonsFor, fastWord, keysFor } from './controls.js';
 
-const REAL_KEYS = new Set(['WASD', 'W', 'S', 'A D', 'SHIFT', 'SPACE', 'E', 'F', 'Q', 'M', 'DRAG']);
+const REAL_KEYS = new Set(['WASD', 'W', 'S', 'A D', 'SHIFT', 'SPACE', 'E', 'F', 'Q', 'R', 'M', 'DRAG']);
 const MODES = ['title', 'hang', 'fall', 'swim', 'land', 'bridge', 'town', 'drive', 'grabbed', 'sweep', 'dialog', 'fail', 'end'];
 
 test('a keyboard is only ever told about keys it has', () => {
-  for (const mode of MODES) for (const [key] of keysFor(mode, { act: 'Talk to Coop', map: true })) assert.ok(REAL_KEYS.has(key), `${mode}: ${key}`);
+  for (const mode of MODES) for (const [key] of keysFor(mode, { act: 'Talk to Coop', map: true, thrown: { name: 'bottle', word: 'BOTTLE', n: 2, more: true } })) assert.ok(REAL_KEYS.has(key), `${mode}: ${key}`);
 });
 
 test('a prompt never asks a keyboard for a button', () => {
@@ -67,8 +67,18 @@ test('he swings in town, and only has something to throw once he\'s carrying it'
   assert.ok(keysFor('town').some(([k, what]) => k === 'F' && what === 'Swing'));
   assert.ok(!keysFor('bridge').some(([k]) => k === 'F'));
   assert.ok(!keysFor('town').some(([k]) => k === 'Q'));
-  assert.ok(keysFor('town', { gas: 2 }).some(([k, what]) => k === 'Q' && what.includes('2')));
+  const gas = { name: 'gas', word: 'GAS', n: 2 };
+  assert.ok(keysFor('town', { thrown: gas }).some(([k, what]) => k === 'Q' && what === 'Throw gas (2)'));
   assert.equal(buttonsFor('town').c, null);
-  assert.equal(buttonsFor('town', { gas: 2 }).c, 'THROW 2');
-  assert.equal(buttonsFor('bridge', { gas: 2 }).c, null);
+  assert.equal(buttonsFor('town', { thrown: gas }).c, 'GAS 2');
+  assert.equal(buttonsFor('bridge', { thrown: gas }).c, null);
+});
+
+test('he can only switch what he\'s throwing if there\'s something to switch to', () => {
+  const one = { name: 'gas', word: 'GAS', n: 2 }, two = { ...one, more: true };
+  assert.ok(!keysFor('town', { thrown: one }).some(([k]) => k === 'R'));
+  assert.ok(keysFor('town', { thrown: two }).some(([k, what]) => k === 'R' && what === 'Switch'));
+  assert.ok(!buttonsFor('town', { thrown: one }).swap);
+  assert.ok(buttonsFor('town', { thrown: two }).swap);
+  assert.ok(!buttonsFor('bridge', { thrown: two }).swap);
 });

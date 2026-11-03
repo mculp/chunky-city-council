@@ -25,6 +25,11 @@ export const TUNING = {
   personalSpace: .95,
   feelAlong: 8,                    // seconds along a wall before trying the other way
   lightPull: .35,                  // the chance a shambler heads for a light it's near, at full night
+  drowned: 3.5,                    // metres. While a lure's going they can't make out anything further off than this
+  lured: 2,                        // m/s, going to one, which is quicker than going to look
+  wading: .55,                     // how much of that they keep in the water
+  bite: [3, 7],                    // seconds in the water before the cottonmouths have them
+  goesUnder: 1.2,                  // seconds to go down after that
 };
 
 const hypot = Math.hypot, TRY = [0, .8, 1.6, 2.4, 3.1];
@@ -40,7 +45,7 @@ export function createHorde(world, tuning = {}, on = {}) {
   h.inSanctuary = (x, z) => zones.some((a) => hypot(x - a.x, z - a.z) < a.r);
   // Off limits unless the bell's ringing. Anyone caught inside when it stops can still walk out.
   const offLimits = (s, x, z) => clock >= bellUntil && zones.some((a) => { const d = hypot(x - a.x, z - a.z); return d < a.r && d <= hypot(s.x - a.x, s.z - a.z); });
-  const open = (s, x, z) => !world.blocked(x, z, s.y) && !world.water(x, z) && !offLimits(s, x, z);
+  const open = (s, x, z) => !world.blocked(x, z, s.y) && (s.wading || !world.water(x, z)) && !offLimits(s, x, z);
 
   h.add = (x, z, extra = {}) => {
     const s = { x, z, y: world.floorAt(x, z), yaw: world.rand() * 6.28, state: SHAMBLE, tx: x, tz: z, alert: 0, timer: 0, lost: 0, moving: 0, stuck: 0, side: 0, clear: 0, next: world.rand() * T.thinkEvery, phase: world.rand() * 6.28, gait: world.rand() * 6.28, limp: world.rand() < .5 ? 0 : 1, look: Math.floor(world.rand() * 1000), size: .94 + world.rand() * .12, ...extra };
@@ -49,6 +54,9 @@ export function createHorde(world, tuning = {}, on = {}) {
   // Something loud: anyone in reach goes to look, and at a bell they forget the church is off limits
   h.noise = (x, z, r, seconds) => { noises.push({ x, z, r, until: clock + seconds }); };
   h.bell = (x, z, r, seconds) => { h.noise(x, z, r, seconds); bellUntil = clock + seconds; };
+  // Something thrown to draw them. While it's going it's all they can make out, unless he's right on top of them, and they go to it quicker than they'd go to look.
+  // One that's landed in the water takes them in after it, and that's the last anyone sees of them.
+  h.lure = (x, z, r, seconds, wet = false) => { noises.push({ x, z, r, until: clock + seconds, lure: true, wet }); };
   // Knocked flat: anyone within r goes over, thrown clear, and lies there a while. It says how many.
   h.knock = (x, z, r, seconds) => {
     let n = 0;
@@ -70,16 +78,19 @@ export function createHorde(world, tuning = {}, on = {}) {
 
   function nearestNoise(s) {
     let best = null, bd = Infinity;
-    for (const n of noises) { const d = hypot(n.x - s.x, n.z - s.z); if (d < n.r && d < bd) { bd = d; best = n; } }
+    // the nearest, and a lure over anything that isn't one
+    for (const n of noises) { const d = hypot(n.x - s.x, n.z - s.z), k = n.lure ? d - 1e4 : d; if (d < n.r && k < bd) { bd = k; best = n; } }
     return best;
   }
   function think(s, p) {
-    const d = hypot(s.x - p.x, s.z - p.z), sharp = 1 + (T.nightSense - 1) * p.night;
-    const reach = p.hidden ? 0 : Math.max(p.noise * sharp, (T.smellBase + T.smellPerBean * p.beans) * sharp, p.light * sharp, T.touch);
+    const d = hypot(s.x - p.x, s.z - p.z), sharp = 1 + (T.nightSense - 1) * p.night, loud = nearestNoise(s);
+    const reach = p.hidden ? 0 : Math.min(Math.max(p.noise * sharp, (T.smellBase + T.smellPerBean * p.beans) * sharp, p.light * sharp, T.touch), loud?.lure ? T.drowned : Infinity);
     const sensed = d < reach;
     if (sensed) s.alert = Math.min(1, s.alert + T.thinkEvery * (T.alertRate[0] + (T.alertRate[1] - T.alertRate[0]) * (1 - d / reach)));
     else s.alert = Math.max(0, s.alert - T.thinkEvery * T.alertFade);
-    const loud = nearestNoise(s);
+    s.drawn = !!loud?.lure;
+    // once they've set off after one in the water they go all the way, and anyone who hasn't got there by the time something else comes up stays out
+    if (loud?.wet) s.wading = true; else if (s.wading && s.state !== CURIOUS && !world.water(s.x, s.z)) s.wading = false;
 
     if (s.state === STUNNED) { s.timer -= T.thinkEvery; if (s.timer <= 0) { s.state = HUNTING; s.lost = 0; s.tx = p.x; s.tz = p.z; } return; }
     // caught inside the church when the bell stopped: out they go
@@ -119,7 +130,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     }
   }
   function walk(s, dt) {
-    const sp = T.speed[s.state];
+    const sp = (s.drawn && s.state === CURIOUS ? T.lured : T.speed[s.state]) * (s.soaked > 0 ? T.wading : 1);
     s.moving = 0; if (!sp) return;
     let dx = s.tx - s.x, dz = s.tz - s.z, l = hypot(dx, dz);
     if (l < .35) return;
@@ -179,11 +190,17 @@ export function createHorde(world, tuning = {}, on = {}) {
     active.length = 0;
     for (const s of all) if (hypot(s.x - p.x, s.z - p.z) < T.active) active.push(s);
     for (const s of active) {
+      if (s.under !== undefined) { s.under -= dt; s.y -= dt * 1.5; s.moving = 0; continue; }
       s.next -= dt;
       if (s.flat > 0) s.flat -= dt;
       if (s.next <= 0) { s.next += T.thinkEvery; think(s, p); }
       walk(s, dt);
+      if (s.wading && s.state !== GRABBING && world.water(s.x, s.z)) {
+        s.soaked = (s.soaked ?? 0) + dt; s.biteAt ??= T.bite[0] + world.rand() * (T.bite[1] - T.bite[0]);
+        if (s.soaked >= s.biteAt) { s.under = T.goesUnder; h.on.bitten?.(s); }
+      }
     }
+    for (let i = all.length - 1; i >= 0; i--) if (all[i].under <= 0) all.splice(i, 1);
     if (h.grab) { h.grab.x = p.x; h.grab.z = p.z; holdOn(dt, p); return; }
     if (mercy > 0 || !p.canGrab) return;
     for (const s of active) {
