@@ -10,6 +10,7 @@
     "horde": "node tools/play-horde.mjs",
     "drive": "node tools/play-drive.mjs",
     "field": "node tools/play-field.mjs",
+    "station": "node tools/play-station.mjs",
     "water": "node tools/play-water.mjs",
     "lore": "node tools/play-lore.mjs",
     "lanes": "node tools/play-lanes.mjs",
