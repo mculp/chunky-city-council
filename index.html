@@ -1873,7 +1873,7 @@ const DLG = {
   },
   coopBeans: () => ({ who: 'Coop', say: 'Beans ain\'t free. Nothing\'s been free since the grid went down. Three cans for a favor.', opts: [['What favor?', 'coopFavor'], ['I\'ll find my own.', null]] }),
   coopFavor: () => ({ who: 'Coop', say: 'Walk this bag to Tre at the boxcar by the tracks. Don\'t open it. Don\'t ask what\'s in it.', opts: [['Give me the bag.', 'coopBag'], ['Nah. I\'m good.', 'coopNah']] }),
-  coopBag: () => ({ who: 'Coop', say: 'Smart. Tracks are east, past the church. Tre bites, so don\'t.', fx: () => { S.flags.bag = true; rep('coop', 1); }, opts: [['On it.', null]] }),
+  coopBag: () => ({ who: 'Coop', say: 'Smart. Tracks are south, across the road. Tre bites, so don\'t.', fx: () => { S.flags.bag = true; rep('coop', 1); }, opts: [['On it.', null]] }),
   coopNah: () => ({ who: 'Coop', say: 'Your funeral. Again.', fx: () => rep('coop', -1), opts: [['...', null]] }),
   coopWho: () => ({ who: 'Coop', say: 'Odessa runs the church. Tre runs the tracks. I run the gas. Gas runs everything.', opts: [['Back', 'coop']] }),
   coopChain: () => ({ who: 'Coop', say: 'Appreciate you. Real recognize real. Still ain\'t giving you beans.', fx: () => { S.flags.chain = true; rep('coop', 1); }, opts: [['Back', 'coop']] }),
@@ -1913,12 +1913,23 @@ function openDialog(id) {
   setTimeout(() => { const f = box.querySelector('button'); if (f && !touchUI) f.focus(); }, 30);
 }
 function closeDialog() { $('dialog').hidden = true; if (S.mode === 'dialog') S.mode = 'town'; townObjective(); }
+const street = (id) => MAP.roadById.get(id).name;
+const standing = (npc) => ({ x: npc.root.position.x, z: npc.root.position.z });
+// Where the next beans are: whoever or whatever's nearest. Someone you're standing next to has already had their say.
+function nextBeans() {
+  const left = PICKUPS.filter((c) => !c.got).map((c) => ({ x: c.x, z: c.z, hint: '' }));
+  if (!S.flags.bag && !S.flags.delivered && !S.flags.opened) left.push({ ...standing(NPCS.coop), hint: `Coop is at the gas station on ${street('us_80')}` });
+  if (!S.flags.swept) left.push({ ...standing(NPCS.odessa), hint: `Miss Odessa is at the church on ${street('church_st')}` });
+  const away = (o) => Math.hypot(o.x - player.pos.x, o.z - player.pos.z), far = left.filter((o) => away(o) > 6);
+  return (far.length ? far : left).sort((a, b) => away(a) - away(b))[0];
+}
 function townObjective() {
   if (S.flags.ended) { objective('Chunky is yours. For now.'); return; }
-  let t = `Stock up on beans (${S.beans}/12)`;
-  if (S.flags.bag) t += ' · Take Coop\'s bag to Tre at the boxcar';
-  else if (S.flags.delivered && !S.flags.paid) t += ' · Go get paid by Coop';
-  objective(t);
+  if (!S.flags.arrived) { objective(`Follow ${street('us_80')} into town`, standing(NPCS.coop)); return; }
+  const count = `Stock up on beans (${S.beans}/12)`;
+  if (S.flags.bag) objective(`${count} · Take Coop's bag to Tre at the boxcar, south of ${street('us_80')}`, standing(NPCS.tre));
+  else if (S.flags.delivered && !S.flags.paid) objective(`${count} · Go get paid by Coop at the gas station on ${street('us_80')}`, standing(NPCS.coop));
+  else { const next = nextBeans(); objective(next.hint ? `${count} · ${next.hint}` : count, next); }
 }
 function startSweep() { S.mode = 'sweep'; S.sweep = 0; HP.kind = 'sweep'; player.pos.set(68.5 + PLACES.church.x, Y0 + .3, -6.9 + PLACES.church.z); player.yaw = 0; }
 function endChapter() {
@@ -2121,6 +2132,7 @@ function tick(dt, draw = true) {
     }
     if (M === 'town') {
       ghost.position.lerp(new THREE.Vector3(26, -3, 3), Math.min(1, dt * .5));
+      if (!S.flags.arrived && player.pos.x > NPCS.coop.root.position.x - 70) { S.flags.arrived = true; townObjective(); }
       // pick up cans
       for (const c of PICKUPS) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < 1.15 && Math.abs(c.y - player.pos.y) < 2) { c.got = true; c.m.visible = false; addBeans(1, 'found'); townObjective(); hudVitals(); }
       // talk

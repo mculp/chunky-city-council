@@ -6,6 +6,7 @@
     "test": "node --test",
     "smoke": "node tools/smoke.mjs",
     "walk": "node tools/walk-roads.mjs",
+    "play": "node tools/play-chapter1.mjs",
     "overlay": "node tools/map-overlay.mjs"
   },
   "devDependencies": {
