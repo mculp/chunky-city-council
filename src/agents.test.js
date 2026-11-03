@@ -225,6 +225,16 @@ describe('what it does in the crowd', () => {
     assert.ok(s(hit).state === HUNTING || s(hit).state === SWARM, `state ${s(hit).state}`); assert.equal(s(not).state === HUNTING || s(not).state === SWARM, false);
   });
 
+  test('shambling along with them fools anyone but someone with a grudge', () => {
+    const F = folks(), hit = someone(F, (w) => w.nerve > .7 && w.temper > .3 && w.temper < .7), not = someone(F, (w) => w.nosy < .5, hit.id), order = hit.id < not.id ? [hit, not] : [not, hit];
+    const h = createHorde(field(F)), ss = order.map((w, i) => bring(h, F, w, 2, i ? 30 : -30)), s = (w) => ss[order.indexOf(w)];
+    F.hurt(hit, 0, 0, 'hit');
+    run(h, { ...still, canGrab: false, acting: true, x: 0, z: -30 }, 1);
+    run(h, { ...still, canGrab: false, acting: true, x: 0, z: 30 }, 1);
+    assert.ok(s(hit).state === HUNTING || s(hit).state === SWARM, `state ${s(hit).state}`);
+    assert.equal(s(not).state, SHAMBLE); assert.ok(s(not).sus > 0, 'though they looked twice');
+  });
+
   test('someone who keeps away doesn\'t answer the swarm\'s call', () => {
     const F = folks(), timid = someone(F, (w) => w.nerve < .15), h = createHorde(field(F)), s = bring(h, F, timid, 30, 0);
     F.hurt(timid, 0, 0, 'hit');

@@ -305,8 +305,71 @@ test('far from the player they wait', () => {
   assert.equal(h.active.length, 0); assert.equal(s.x, 500);
 });
 
+describe('shambling with them', () => {
+  const act = (over = {}) => ({ ...still, acting: true, ...over });
+  // along x, at the pace, past whoever's there
+  const walkPast = (h, p, to, pace = TUNING.actPace, dt = 1 / 30) => { for (; p.x < to; p.x += pace * dt) h.update(dt, p); };
+  const line = (h, off) => [-20, -12, -4, 4, 12, 20].flatMap((x) => [h.add(x, off), h.add(x + 2, -off)]);
+
+  test('he walks between them a few metres off, and nobody comes for him', () => {
+    const h = createHorde(field()), crowd = line(h, 2.6), p = act({ x: -30 });
+    walkPast(h, p, 30);
+    assert.equal(h.grab, null);
+    assert.ok(crowd.every((s) => s.state === SHAMBLE || s.state === CURIOUS), crowd.map((s) => s.state).join());
+    assert.ok(crowd.some((s) => s.sus > .15), 'though they looked twice');
+  });
+
+  test('walking it the usual way, they come for him', () => {
+    const h = createHorde(field()), crowd = line(h, 2.6), p = { ...still, x: -30, noise: 14 };
+    walkPast(h, p, 30, 4.4);
+    assert.ok(h.grab || crowd.some((s) => s.state === HUNTING || s.state === SWARM || s.state === GRABBING));
+  });
+
+  test('right up against one, it doesn\'t last, and they say so', () => {
+    let spotted = 0;
+    const h = createHorde(field(), {}, { spotted: () => spotted++ }), s = h.add(1, 0);
+    run(h, act(), 3);
+    assert.equal(s.state, SHAMBLE, 'not yet'); assert.ok(s.sus > .4);
+    run(h, act(), 3);
+    assert.equal(spotted, 1); assert.ok(s.state === HUNTING || s.state === SWARM || s.state === GRABBING, `state ${s.state}`);
+  });
+
+  test('beans make it quicker, since they can smell them', () => {
+    const until = (beans) => { const h = createHorde(field()), s = h.add(1.5, 0); let t = 0; while (s.state === SHAMBLE && t < 30) { h.update(.1, act({ beans })); t += .1; } return t; };
+    const none = until(0), full = until(12);
+    assert.ok(full < none / 2, `${full} s with twelve, ${none} s with none`);
+  });
+
+  test('out of reach it wears off', () => {
+    const h = createHorde(field()), s = h.add(1, 0);
+    run(h, act(), 2.5);
+    const was = s.sus;
+    run(h, act({ x: -20 }), 3);
+    assert.ok(s.sus < was - .25, `${was} to ${s.sus}`);
+  });
+
+  test('anyone already after him isn\'t taken in', () => {
+    const h = createHorde(field()), s = h.add(1.5, 0);
+    s.state = HUNTING;
+    run(h, act(), 2);
+    assert.ok(h.grab, 'they get him anyway');
+  });
+
+  test('giving himself away gives him away to everyone close, and it says how many', () => {
+    const h = createHorde(field()), near = [h.add(3, 0), h.add(-6, 4), h.add(0, -9)], far = h.add(30, 0);
+    run(h, act(), .3);
+    assert.equal(h.unmask(act()), 3);
+    assert.ok(near.every((s) => s.state === HUNTING)); assert.equal(far.state, SHAMBLE);
+    // standing still and quiet, out of reach of their senses, with a noise of his own going: they still know where he is, for a while
+    h.noise(0, 0, 14, 1);
+    run(h, { ...still, canGrab: false }, 2);
+    assert.ok(near.every((s) => s.state === HUNTING || s.state === SWARM), near.map((s) => s.state).join());
+    assert.ok(near.every((s) => Math.hypot(s.x, s.z) < 3), 'and they come right to him');
+  });
+});
+
 describe('run over', () => {
-  const hit = (over = {}) => ({ x: 3, z: 0, vx: 10, vz: 0, vy: 6, kills: true, seconds: 30, spin: 8, ...over });
+  const hit =(over = {}) => ({ x: 3, z: 0, vx: 10, vz: 0, vy: 6, kills: true, seconds: 30, spin: 8, ...over });
 
   test('whoever it finds is thrown, and it says how many', () => {
     const h = createHorde(field()), near = h.add(1, 0), far = h.add(9, 0);

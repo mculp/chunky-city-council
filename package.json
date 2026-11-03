@@ -21,6 +21,7 @@
     "agents": "node tools/play-agents.mjs",
     "town": "node tools/play-town.mjs",
     "trains": "node tools/play-trains.mjs",
+    "blend": "node tools/play-blend.mjs",
     "water": "node tools/play-water.mjs",
     "lore": "node tools/play-lore.mjs",
     "lanes": "node tools/play-lanes.mjs",

@@ -2,11 +2,19 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { actWord, buttonsFor, edgeTurn, fastWord, keysFor, lookBy, MOUSE, mouseLooks, needsCursor } from './controls.js';
 
-const REAL_KEYS = new Set(['WASD', 'W', 'S', 'A D', 'SHIFT', 'SPACE', 'E', 'F', 'Q', 'R', 'M', 'CLICK', 'RIGHT CLICK', 'WHEEL', 'MOUSE']);
+const REAL_KEYS = new Set(['WASD', 'W', 'S', 'A D', 'SHIFT', 'SPACE', 'E', 'F', 'Q', 'R', 'C', 'M', 'CLICK', 'RIGHT CLICK', 'WHEEL', 'MOUSE']);
 const MODES = ['title', 'hang', 'fall', 'swim', 'land', 'bridge', 'town', 'drive', 'grabbed', 'sweep', 'dialog', 'fail', 'end'];
 
 test('a keyboard is only ever told about keys it has', () => {
   for (const mouse of [false, true]) for (const mode of MODES) for (const [key] of keysFor(mode, { act: 'Talk to Coop', map: true, mouse, thrown: { name: 'bottle', word: 'BOTTLE', n: 2, more: true } })) assert.ok(REAL_KEYS.has(key), `${mode}: ${key}`);
+});
+
+test('in town he can shamble along with them, and stop, and only on foot', () => {
+  assert.ok(keysFor('town').some(([k, what]) => k === 'C' && what === 'Shamble'));
+  assert.ok(keysFor('town', { shambling: true }).some(([k, what]) => k === 'C' && what === 'Stop shambling'));
+  for (const mode of ['land', 'bridge', 'swim', 'drive', 'grabbed']) assert.ok(!keysFor(mode).some(([k]) => k === 'C'), mode);
+  assert.equal(buttonsFor('town').shamble, true);
+  for (const mode of ['land', 'swim', 'drive', 'grabbed']) assert.ok(!buttonsFor(mode).shamble, mode);
 });
 
 test('a prompt never asks a keyboard for a button', () => {
