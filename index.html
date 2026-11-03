@@ -185,7 +185,7 @@ import { drawCloth, drawSkull } from './src/looks.js';
 import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
 import { keysFor, buttonsFor, actWord, fastWord } from './src/controls.js';
 import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRim, drawArrow, drawLabel, labelSpace, clampCam, zoomAbout, fitScale, COLORS as MAPC } from './src/mapview.js';
-import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, Sheet, hash2 } from './src/structures.js';
+import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, Sheet, PATTERN, hash2 } from './src/structures.js';
 import { KINDS, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, placeVehicles, settle, speedOf } from './src/vehicles.js';
 import { vehicleGeometries, PAINTS, LAMPS } from './src/vehiclemodels.js';
 
@@ -963,13 +963,17 @@ houseMat.onBeforeCompile = (sh) => {
 };
 const HOUSE_CELL = 128, HOUSE_RANGE = matchMedia('(pointer:coarse)').matches ? 200 : 240;
 const houseCells = cellsOf(STRUCTURES, HOUSE_CELL);
-function buildHouses(cell) {
-  const sheet = new Sheet();
-  for (const s of cell.list) writeStructure(sheet, s, TOWN_Y);
-  const a = sheet.arrays(), g = new THREE.BufferGeometry();
+function sheetGeometry(a) {
+  const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(a.position, 3)); g.setAttribute('normal', new THREE.BufferAttribute(a.normal, 3));
   g.setAttribute('color', new THREE.BufferAttribute(a.color, 3)); g.setAttribute('uv', new THREE.BufferAttribute(a.uv, 2)); g.setAttribute('aMat', new THREE.BufferAttribute(a.mat, 3));
   g.setIndex(new THREE.BufferAttribute(a.index, 1));
+  return g;
+}
+function buildHouses(cell) {
+  const sheet = new Sheet();
+  for (const s of cell.list) writeStructure(sheet, s, TOWN_Y);
+  const a = sheet.arrays(), g = sheetGeometry(a);
   const m = new THREE.Mesh(g, houseMat); outline(m, INK, 1.5, 0, { cut: true }); scene.add(m);
   cell.mesh = m; cell.pieces = a.pieces;
 }
@@ -1074,7 +1078,21 @@ const churchLight = new THREE.PointLight('#ffb347', 10, 13, 1.7); churchLight.po
 }
 // the white house on the north side of Commerce St's bend and its barn: what's around them, from the public aerial
 const PROP_WALLS = [];   // [ax, az, bx, bz, top, radius], the same as a building's walls
+const FIELDS = [];       // what the map draws under the buildings: { grass, dirt }, as lists of world points
 const leafGeo = new THREE.DodecahedronGeometry(1, 0);
+// One big tree that stands where it really does: clumps over a dome, one draw call and its ink. The leaves stop above where
+// the camera rides, because from inside one all you'd see is the ink.
+function bigTree(tx, tz, { y0, y1, R, count, size, colors, trunk, also = [] }) {
+  const leaves = [...also], top = (y0 + y1) / 2 - 2.5;
+  for (let i = 0; i < count; i++) { const y = y0 + (i + .5) / count * (y1 - y0), k = (y - top) / (y > top ? y1 + .5 - top : top - y0 + 1.2), r = R * Math.sqrt(Math.max(0, 1 - k * k)), a = i * 2.39996; leaves.push([tx + Math.cos(a) * r * (.9 + hash(i, count, 41) * .2), Y0 + y, tz + Math.sin(a) * r * (.9 + hash(i, count, 42) * .2), size + hash(i, count, 43) * .9]); }
+  for (const k of [.3, .55, .8]) leaves.push([tx, Y0 + y0 + (y1 - y0) * k, tz, R * (.62 - k * .2)]);
+  const greens = colors.map((c) => new THREE.Color(c)), leaf = new THREE.InstancedMesh(leafGeo, swayMat({ roughness: .85, flatShading: true }), leaves.length), M = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler();
+  leaves.forEach(([x, y, z, r], i) => { M.compose(new THREE.Vector3(x, y, z), Q.setFromEuler(E.set(hash(i, 7, 44) * 3, hash(i, 7, 45) * 3, hash(i, 7, 46) * 3)), new THREE.Vector3(r, r * .86, r)); leaf.setMatrixAt(i, M); leaf.setColorAt(i, greens[Math.floor(hash(i, 7, 47) * greens.length)]); });
+  const ink = new THREE.InstancedMesh(leafGeo, outlineMat(INK, 1.3, 0), leaves.length); ink.instanceMatrix = leaf.instanceMatrix;
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(.34, .52, trunk, 7), new THREE.MeshStandardMaterial({ color: '#2a2026', roughness: 1 })); stem.position.set(tx, Y0 + trunk / 2, tz); outline(stem, INK, 1.4);
+  solid(tx - .55, tx + .55, tz - .55, tz + .55, Y0 + trunk);
+  const tree = new THREE.Group(); tree.add(leaf, ink, stem); scene.add(tree); DISTANT.push({ obj: tree, x: tx, z: tz, r: 310 });
+}
 {
   const concrete = new THREE.MeshStandardMaterial({ color: '#a9a69c', roughness: .95 }), whiteMat = new THREE.MeshStandardMaterial({ color: '#c9c5b8', roughness: .9 }), darkMat = new THREE.MeshStandardMaterial({ color: '#17171b', roughness: .7, metalness: .3 }), cartMat = new THREE.MeshStandardMaterial({ color: '#1d2b2a', roughness: .8 });
   const flat = (x0, z0, x1, z1, w, h = .06, y = .01, mat = concrete, ink = 0) => { const [ax, az] = atTrue(x0, z0), [bx, bz] = atTrue(x1, z1); addBeam([ax, Y0 + y + h / 2, az], [bx, Y0 + y + h / 2, bz], w, h, mat, ink); };
@@ -1097,19 +1115,110 @@ const leafGeo = new THREE.DodecahedronGeometry(1, 0);
   for (const [x, z] of [[14.2, -480.2], [15.3, -479.8]]) { box(cartMat, x, .52, z, .62, 1.04, .7); box(cartMat, x, 1.08, z, .68, .06, .76, 0); }
   { const [x0, z0] = atTrue(-8, -522), [x1, z1] = atTrue(32, -482); pad(x0, x1, z0, z1, 6, true); }
   flushBuckets();
-  // the big magnolia between the house and the road: dark, glossy and low-branching
-  const [tx, tz] = atTrue(8, -483), leaves = [];
-  for (let i = 0; i < 64; i++) { const t = (i + .5) / 64, y = 5.2 + t * 10.8, k = (y - 8) / (y > 8 ? 8.5 : 4.4), R = 7.3 * Math.sqrt(Math.max(0, 1 - k * k)), a = i * 2.39996; leaves.push([tx + Math.cos(a) * R * (.9 + hash(i, 3, 41) * .2), Y0 + y, tz + Math.sin(a) * R * (.9 + hash(i, 3, 42) * .2), 1.3 + hash(i, 3, 43) * .9]); }
-  // the leaves stop above where the camera rides, because from inside one all you'd see is its ink
-  for (const [y, r] of [[8.2, 4.2], [10.5, 4.6], [13, 3.2]]) leaves.push([tx, Y0 + y, tz, r]);
-  const bushes = [[-3.7, -493.4, .72], [-2.4, -493.4, .6], [1, -493.3, .7], [2.4, -493.4, .72]];
-  for (const [x, z, r] of bushes) { const [bx, bz] = atTrue(x, z); leaves.push([bx, Y0 + .32 + r * .72, bz, r]); }
-  const greens = ['#1f5a3e', '#27694a', '#1a4d35', '#2f7452'].map((c) => new THREE.Color(c)), leaf = new THREE.InstancedMesh(leafGeo, swayMat({ roughness: .85, flatShading: true }), leaves.length), _lm = new THREE.Matrix4(), _lq = new THREE.Quaternion(), _le = new THREE.Euler();
-  leaves.forEach(([x, y, z, r], i) => { _lm.compose(new THREE.Vector3(x, y, z), _lq.setFromEuler(_le.set(hash(i, 7, 44) * 3, hash(i, 7, 45) * 3, hash(i, 7, 46) * 3)), new THREE.Vector3(r, r * .86, r)); leaf.setMatrixAt(i, _lm); leaf.setColorAt(i, greens[Math.floor(hash(i, 7, 47) * greens.length)]); });
-  const leafInk = new THREE.InstancedMesh(leafGeo, outlineMat(INK, 1.3, 0), leaves.length); leafInk.instanceMatrix = leaf.instanceMatrix;
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(.34, .52, 7, 7), new THREE.MeshStandardMaterial({ color: '#2a2026', roughness: 1 })); trunk.position.set(tx, Y0 + 3.5, tz); outline(trunk, INK, 1.4);
-  solid(tx - .55, tx + .55, tz - .55, tz + .55, Y0 + 6);
-  const magnolia = new THREE.Group(); magnolia.add(leaf, leafInk, trunk); scene.add(magnolia); DISTANT.push({ obj: magnolia, x: tx, z: tz, r: 310 });
+  // the big magnolia between the house and the road, dark and glossy, and the boxwoods
+  bigTree(...atTrue(8, -483), { y0: 5.2, y1: 16, R: 7.3, count: 64, size: 1.3, colors: ['#1f5a3e', '#27694a', '#1a4d35', '#2f7452'], trunk: 7, also: [[-3.7, -493.4, .72], [-2.4, -493.4, .6], [1, -493.3, .7], [2.4, -493.4, .72]].map(([x, z, r]) => { const [bx, bz] = atTrue(x, z); return [bx, Y0 + .32 + r * .72, bz, r]; }) });
+}
+// ---------------- Chunky's ball field, in the block between School St, Jones St and Adams St. Where it all stands is
+// measured on the public aerial, in true metres, and what it looks like is from looking at it.
+{
+  const H = [-378.4, -463.5], U = [.986, .167], V = [.167, -.986], D = [.815, -.579];   // home plate, and the ways to first, third and second
+  const on = (t, s) => [H[0] + U[0] * t + V[0] * s, H[1] + U[1] * t + V[1] * s];
+  const postMat = new THREE.MeshStandardMaterial({ color: '#868c91', metalness: .4, roughness: .6 }), chalk = new THREE.MeshStandardMaterial({ color: '#d8d4c8', roughness: 1 }), blue = new THREE.MeshStandardMaterial({ color: '#2f55b0', roughness: .85 }), tin = new THREE.MeshStandardMaterial({ color: '#8f9396', roughness: .6, metalness: .3 }), silver = new THREE.MeshStandardMaterial({ color: '#a4aaaf', roughness: .5, metalness: .5 }), poleMat = new THREE.MeshStandardMaterial({ color: '#4a3a2e', roughness: 1 }), lamp = new THREE.MeshStandardMaterial({ color: '#c3c6c9', roughness: .5 }), bin = new THREE.MeshStandardMaterial({ color: '#27503c', roughness: .8 });
+  const line = (a, b, w = .1) => { const [ax, az] = atTrue(...a), [bx, bz] = atTrue(...b); addBeam([ax, Y0 + .06, az], [bx, Y0 + .06, bz], w, .02, chalk, 0); };
+  const beam = (a, b, y, w, h, mat, ink = mat === silver ? .9 : mat === postMat ? 1 : mat === chalk ? 0 : 1.2) => { const [ax, az] = atTrue(...a), [bx, bz] = atTrue(...b); addBeam([ax, Y0 + y, az], [bx, Y0 + y, bz], w, h, mat, ink); };
+  const wall = (a, b, top, r = .06) => { const [ax, az] = atTrue(...a), [bx, bz] = atTrue(...b); PROP_WALLS.push([ax, az, bx, bz, Y0 + top, r]); };
+  // the skinned infield: a ring of clay and the corner behind home, a little ragged at the edge
+  const apex = [-383.1, -460.8], mid = [-363, -475.2], R = 15, away = Math.atan2(apex[1] - mid[1], apex[0] - mid[0]), wrap = Math.acos(R / Math.hypot(apex[0] - mid[0], apex[1] - mid[1])), rim = [apex];
+  for (let i = 0; i <= 30; i++) { const a = away + wrap + (6.2832 - 2 * wrap) * i / 30, r = R + (hash(i, 5, 61) - .5) * .5; rim.push([mid[0] + Math.cos(a) * r, mid[1] + Math.sin(a) * r]); }
+  const ground = (pts, y, color) => {
+    const [cx, cz] = atTrue(...mid), at = pts.map((p) => atTrue(...p)), pos = [];
+    at.forEach(([ax, az], i) => { const [bx, bz] = at[(i + 1) % at.length], up = (bz - az) * (cx - ax) - (bx - ax) * (cz - az) > 0; pos.push(cx, y, cz, ...(up ? [ax, y, az, bx, y, bz] : [bx, y, bz, ax, y, az])); });
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+    return new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+  };
+  const dirt = ground(rim, Y0 + .035, '#c9752f');
+  FIELDS.push({ dirt: rim.map((p) => atTrue(...p)), grass: [[-304.4, -450.6], [-295.6, -471.3], [-299.4, -500.6], [-319.4, -527.2], [-345, -540.6], [-370.6, -537.8], [-378.2, -500], [-381.5, -478.6], [-384.4, -469], [-384.4, -462], [-380.6, -458.4], [-372, -456.2], [-358.9, -453.7], [-343.7, -451.7]].map((p) => atTrue(...p)) });
+  // the chalk: the foul lines out to the fence, the batter's boxes, the circle, the rubber and the bases
+  line(H, on(75, 0)); line(H, on(0, 75));
+  const P = [-D[1], D[0]], [hx, hz] = H;
+  for (const side of [-1, 1]) {
+    const c = [hx + P[0] * side * .95, hz + P[1] * side * .95], corner = (a, b) => [c[0] + P[0] * a + D[0] * b, c[1] + P[1] * a + D[1] * b];
+    line(corner(-.5, -1), corner(.5, -1), .07); line(corner(.5, -1), corner(.5, 1), .07); line(corner(.5, 1), corner(-.5, 1), .07); line(corner(-.5, 1), corner(-.5, -1), .07);
+  }
+  const mound = [hx + D[0] * 14, hz + D[1] * 14];
+  for (let i = 0; i < 18; i++) { const a = i / 18 * 6.2832, b = (i + 1) / 18 * 6.2832; line([mound[0] + Math.cos(a) * 2.4, mound[1] + Math.sin(a) * 2.4], [mound[0] + Math.cos(b) * 2.4, mound[1] + Math.sin(b) * 2.4], .07); }
+  beam([mound[0] - P[0] * .3, mound[1] - P[1] * .3], [mound[0] + P[0] * .3, mound[1] + P[1] * .3], .08, .15, .05, chalk);
+  for (const [t, s] of [[0, 0], [18.3, 0], [18.3, 18.3], [0, 18.3]]) { const [bx, bz] = on(t, s); beam([bx - U[0] * .21, bz - U[1] * .21], [bx + U[0] * .21, bz + U[1] * .21], .09, .42, .08, chalk); }
+  // the soccer lines someone left in the outfield
+  for (const [a, b] of [[[-334.8, -495.3], [-318.6, -495.3]], [[-334.8, -495.3], [-334.4, -455]], [[-318.6, -495.3], [-318.4, -480]], [[-318.4, -480], [-308.3, -479.8]], [[-308.3, -479.8], [-308.1, -469.4]]]) line(a, b, .09);
+  // chain-link on galvanised posts, with breaks where the gates are
+  const links = [];
+  const fence = (pts, high, spacing = 3) => {
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / spacing));
+      links.push([...atTrue(...a), ...atTrue(...b), high]);
+      wall(a, b, high);
+      beam(a, b, high, .06, .06, postMat);
+      for (let k = 0; k <= n; k++) { const [x, z] = atTrue(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n); addBox(postMat, x, Y0 + high / 2, z, .09, high, .09, 1); }
+    }
+  };
+  const LF = [-370.6, -537.8], RF = [-304.4, -450.6];
+  fence([[-358, -453.55], [-343.7, -451.7], RF], 1.6);                                                                  // from the first base gate to the corner
+  fence([[-302.05, -456.1], [-295.6, -471.3], [-299.4, -500.6], [-319.4, -527.2], [-345, -540.6], LF, [-378.2, -500], [-380, -488.4]], 1.6);  // past the wide gate, all around the outfield to the third base gate
+  fence([[-381.5, -478.6], [-384.4, -469]], 1.6); fence([[-375.5, -457.1], [-372, -456.2], [-365.8, -455]], 1.6);
+  fence([[-384.4, -469], [-384.4, -462], [-380.6, -458.4], [-375.5, -457.1]], 5.5, 2.4);                                // the backstop
+  beam([-319.3, -527], [-299.5, -500.5], .78, .05, 1.4, blue);                                                      // the blue windscreen across right center
+  // the dugouts, each looking out through a gap in the fence
+  const dugout = (a, b, deep, outward) => {
+    const off = (p, d) => [p[0] + outward[0] * d, p[1] + outward[1] * d], a1 = off(a, deep), b1 = off(b, deep);
+    for (const [p, q] of [[a1, b1], [a, a1], [b, b1]]) { beam(p, q, 1.1, .16, 2.2, blue); wall(p, q, 2.2, .1); }
+    beam(off(a, deep / 2), off(b, deep / 2), 2.26, deep + .5, .1, tin);
+    beam(off(a, deep - .55), off(b, deep - .55), .46, .4, .07, silver);
+  };
+  dugout([-380.3, -486.8], [-381.5, -478.6], 3, [-.986, -.167]);
+  dugout([-365.8, -455], [-359.6, -453.85], 3, [-.186, .983]);
+  // the aluminium bleachers, one behind each side
+  const bleachers = (c, along, up, wide, rows) => {
+    const row = (r, off, y, w, h) => { const p = [c[0] + up[0] * off, c[1] + up[1] * off]; beam([p[0] - along[0] * wide / 2, p[1] - along[1] * wide / 2], [p[0] + along[0] * wide / 2, p[1] + along[1] * wide / 2], y, w, h, silver); };
+    for (let r = 0; r < rows; r++) { row(r, r * .62, .44 + r * .36, .3, .05); row(r, r * .62 - .32, .2 + r * .36, .22, .04); }
+    for (const e of [-.5, .5]) { const p0 = [c[0] + along[0] * wide * e - up[0] * .5, c[1] + along[1] * wide * e - up[1] * .5], p1 = [p0[0] + up[0] * (rows * .62 + .3), p0[1] + up[1] * (rows * .62 + .3)]; const [ax, az] = atTrue(...p0), [bx, bz] = atTrue(...p1); addBeam([ax, Y0 + .08, az], [bx, Y0 + .28 + rows * .36, bz], .08, .1, silver, .9); }
+    const corner = (e, off) => [c[0] + along[0] * wide * e + up[0] * off, c[1] + along[1] * wide * e + up[1] * off], A = corner(-.5, -.5), B = corner(.5, -.5), C = corner(.5, rows * .62), E = corner(-.5, rows * .62);
+    for (const [p, q] of [[A, B], [B, C], [C, E], [E, A]]) wall(p, q, 1.3, .08);
+  };
+  bleachers([-374.6, -453.2], U, [-V[0], -V[1]], 6.9, 5);
+  bleachers([-386.8, -470.5], V, [-U[0], -U[1]], 5.4, 4);
+  // the light poles, which have been dark a while
+  for (const p of [[-370.6, -537.8], [-345, -540.6], [-319.4, -527.2], [-299.4, -500.6], [-295.6, -471.3], [-343.7, -451.7], [-379.4, -500.6], [-385.6, -465.2], [-377.7, -454.6]]) {
+    const [x, z] = atTrue(p[0] + (p[0] < -380 ? -.5 : 0), p[1] + (p[1] > -455 ? .6 : 0)), [ax, az] = [mound[0] - p[0], mound[1] - p[1]], l = Math.hypot(ax, az), sx = -az / l, sz = ax / l;
+    addBox(poleMat, x, Y0 + 9, z, .34, 18, .34, 1.3); solid(x - .25, x + .25, z - .25, z + .25, Y0 + 18);
+    addBeam([x - sx * 1.3, Y0 + 17.5, z - sz * 1.3], [x + sx * 1.3, Y0 + 17.5, z + sz * 1.3], .12, .12, postMat, 1);
+    for (const k of [-1.1, -.37, .37, 1.1]) addBox(lamp, x + sx * k + ax / l * .25, Y0 + 17.85, z + sz * k + az / l * .25, .5, .5, .3, 1);
+  }
+  { const [x, z] = atTrue(-379.6, -448.5); addBox(bin, x, Y0 + .75, z, 2.1, 1.5, 1.3, 1.4); solid(x - 1.05, x + 1.05, z - .65, z + .65, Y0 + 1.5); }
+  // ground: mown inside and around the fence, and bare dirt in the lot along Jones St and behind third
+  const box = (x0, z0, x1, z1, m, lawn) => { const [ax, az] = atTrue(x0, z0), [bx, bz] = atTrue(x1, z1); pad(ax, bx, az, bz, m, lawn); };
+  box(-384, -552, -289, -449, 4, true); box(-400, -447, -290, -432, 4, false); box(-400, -490, -384, -447, 3, false);
+  flushBuckets(340);
+  // the mesh of the chain-link, all of it one draw call
+  const tex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); g.strokeStyle = '#fff'; g.lineWidth = 7; g.beginPath(); g.moveTo(0, 32); g.lineTo(32, 0); g.lineTo(64, 32); g.lineTo(32, 64); g.closePath(); g.stroke(); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; })();
+  const pos = [], uvs = [], idx = [];
+  for (const [ax, az, bx, bz, high] of links) { const n = pos.length / 3, L = Math.hypot(bx - ax, bz - az) / .32, Vt = high / .32; pos.push(ax, Y0, az, bx, Y0, bz, bx, Y0 + high, bz, ax, Y0 + high, az); uvs.push(0, 0, L, 0, L, Vt, 0, Vt); idx.push(n, n + 1, n + 2, n, n + 2, n + 3); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: '#8d9398', map: tex, alphaTest: .3, side: THREE.DoubleSide, metalness: .3, roughness: .6 }));
+  // and the kudzu getting up it, on both sides
+  const vines = new Sheet(), leafy = { origin: [0, Y0, 0], axis: [1, 0], pattern: PATTERN.LEAF };
+  links.forEach(([ax, az, bx, bz, high], i) => {
+    const L = Math.hypot(bx - ax, bz - az), ex = (bx - ax) / L, ez = (bz - az) / L;
+    for (let k = 0; k < Math.round(L / 11); k++) {
+      const wide = Math.min(L - .2, 2 + hash(i, k, 71) * 3), t = wide / 2 + hash(i, k, 72) * (L - wide), reach = Math.min(high - .25, .8 + hash(i, k, 73) * 2.4), x = ax + ex * t, z = az + ez * t, c = [.05 + hash(i, k, 74) * .05, .16 + hash(i, k, 75) * .13, .035];
+      for (const side of [-1, 1]) vines.drape(x, Y0 + .02, z, ex, ez, ez * side, -ex * side, wide, reach, c, i * 40 + k * 2 + (side > 0 ? 1 : 0), leafy);
+    }
+  });
+  const vine = new THREE.Mesh(sheetGeometry(vines.arrays()), houseMat);
+  const field = new THREE.Group(); field.add(dirt, mesh, vine); scene.add(field); const [fx, fz] = atTrue(-345, -495); DISTANT.push({ obj: field, x: fx, z: fz, r: 420 });
+  // the oaks
+  bigTree(...atTrue(-312, -448), { y0: 3.6, y1: 15, R: 9, count: 46, size: 1.8, colors: ['#b8691f', '#c9802c', '#a4561c', '#8f6a24'], trunk: 8 });
+  bigTree(...atTrue(-383, -437), { y0: 3.6, y1: 14, R: 8, count: 40, size: 1.8, colors: ['#8f6a24', '#a4561c', '#6f6a2a', '#b8691f'], trunk: 8 });
 }
 // the railroad, on the graph's lines. One tie pool moves with the camera.
 {
@@ -2962,10 +3071,10 @@ function updateDrive(dt) {
   if (input.aEdge) getOut();
 }
 // ================================================================ the map
-const mapData = buildMapData({ roads: MAP.roads, rail: MAP.rail, river: MAP.river, structures: STRUCTURES });
+const mapData = buildMapData({ roads: MAP.roads, rail: MAP.rail, river: MAP.river, structures: STRUCTURES, fields: FIELDS });
 const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d') };
 const MAP_PLACES = [
-  ["Stuckey's Bridge", 0, 0, 3], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-64.5, -39.5), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
+  ["Stuckey's Bridge", 0, 0, 3], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-64.5, -39.5), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Ball field', ...atTrue(-345, -495), 3], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
   ...STRUCTURES.filter((s) => s.use === 'church').map((s) => ['Church', s.wx, s.wz, 2]),
 ].sort((a, b) => b[3] - a[3]);
 let mapOpen = false, mapDirty = false, mapCam = { x: 0, z: 0, scale: .4 };

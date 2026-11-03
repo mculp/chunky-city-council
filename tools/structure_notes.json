@@ -114,7 +114,7 @@
     "75411012": { "seen": true, "walls": "mobile", "wallColor": "cream", "floors": 1 },
     "75411801": { "seen": true, "walls": "siding", "wallColor": "white", "floors": 1, "condition": "worn" },
     "75411863": { "seen": true, "wallColor": "white", "roof": "gable", "floors": 1 },
-    "75411940": { "seen": true, "wallColor": "blue", "roofMat": "metal", "floors": 1, "what": "blue utility building with antenna masts, beside the ball field" },
+    "75411940": { "seen": true, "walls": "block", "wallColor": "#2f55b0", "roofMat": "metal", "roofColor": "#7c3026", "doorColor": "#8a2d22", "doorFaces": "north", "pitch": 0.16, "floors": 1, "what": "long low block building with blue walls, a red door and a rust red tin roof, beside the ball field" },
     "75411972": { "seen": true, "walls": "mobile", "wallColor": "tan", "floors": 1 },
     "75415011": { "seen": true, "walls": "mobile", "wallColor": "tan", "roof": "gable", "floors": 1, "porch": "front" },
     "75415114": { "seen": true, "walls": "mobile", "wallColor": "white", "floors": 1 },
@@ -145,6 +145,8 @@
     "76108683": { "seen": true, "walls": "siding", "wallColor": "grey", "roof": "gable", "roofMat": "shingle", "floors": 2, "porch": "front" }
   },
   "extras": [
-    { "id": 900001, "x": 17.3, "z": -513.5, "ring": [[-2.2, -2.2], [2.2, -2.2], [2.2, 2.2], [-2.2, 2.2]], "sqm": 19, "use": "shed", "walls": "siding", "roof": "gable", "roofMat": "metal", "floors": 1, "wallColor": "#d6d2c6", "roofColor": "#34383d", "door": 2, "doorColor": "#26231f", "seen": true, "what": "small white shed with a dark door" }
+    { "id": 900001, "x": 17.3, "z": -513.5, "ring": [[-2.2, -2.2], [2.2, -2.2], [2.2, 2.2], [-2.2, 2.2]], "sqm": 19, "use": "shed", "walls": "siding", "roof": "gable", "roofMat": "metal", "floors": 1, "wallColor": "#d6d2c6", "roofColor": "#34383d", "door": 2, "doorColor": "#26231f", "seen": true, "condition": "sound", "what": "small white shed with a dark door" },
+    { "id": 900002, "x": -394.1, "z": -482.4, "ring": [[-3.5, -3], [3.5, -3], [3.5, 3], [-3.5, 3]], "sqm": 42, "use": "shed", "walls": "block", "roof": "gable", "roofMat": "metal", "floors": 1, "wallColor": "#2f55b0", "roofColor": "#8f9396", "door": 3, "doorColor": "#c9c5b8", "pitch": 0.22, "seen": true, "what": "small blue block building with a grey tin roof, beside the ball field" },
+    { "id": 900003, "x": -392.5, "z": -474, "ring": [[-2.2, -2.2], [2.2, -2.2], [2.2, 2.2], [-2.2, 2.2]], "sqm": 19, "use": "shed", "walls": "plank", "roof": "gable", "roofMat": "metal", "floors": 1, "wallColor": "#3a2a20", "roofColor": "#6e2a24", "door": 0, "open": true, "seen": true, "what": "picnic shelter on posts with a maroon tin roof, beside the ball field" }
   ]
 }
