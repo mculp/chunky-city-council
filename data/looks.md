@@ -1,10 +1,10 @@
 # Looks
 
-`data/looks.json` holds what everyone but the hero wears. `src/looks.js` draws it onto canvases when the game loads, and `index.html` puts those on the cast and the crowd. `npm test` checks the file.
+`data/looks.json` holds what everyone but the hero had on, and how far gone each of the cast is. `src/looks.js` draws it onto canvases when the game loads, and `index.html` puts those on the cast and the crowd. `npm test` checks the file.
 
-The hero isn't in here. His hoodie and his taped head are his alone, and nobody else in the game gets them. See `docs/art-direction.md`.
+The hero isn't in here. His hoodie and his taped head are his alone, and nobody else in the game gets them or wears a hood. See `docs/art-direction.md`.
 
-The looks are our own reading of ten of the owner's references, chosen at random. They keep what those have in common: a chalk line, a crayon fill rather than scribble, and a skull drawn in the dark of the hood. Lettering on the references is left out.
+Everyone in here is a radiating zombie of some degree, which is the owner's word for it, in `docs/lore.md`. What they're wearing is invented, as ordinary clothes for around here. There's no lettering on anything.
 
 ## Top level
 
@@ -18,40 +18,28 @@ The looks are our own reading of ten of the owner's references, chosen at random
 | Field | Type | What it is |
 |---|---|---|
 | `id` | string | Unique. Seeds the drawing, so a look comes out the same every time. |
-| `hood` | object | The cloth. See below. |
-| `line` | object | The outline, and the ring around the opening. See below. |
-| `skull` | object | What's in the hood. See below. Empty means the plain one. |
-| `tassels` | object | `color`, and `tied` for a bow rather than two loose cords. |
+| `degree` | number | The cast only. How far gone they are, from 0, which is not at all, to 1. The crowd's are worked out person by person (`degreeOf`). |
+| `skin` | string | The colour of their skin. They've all gone a little grey. |
+| `hair` | string | Optional. Without it they're bald. |
+| `top` | object | What's on top. See below. |
+| `bottom` | object | `kind` is `trousers`, `shorts` or `skirt`, and `color` is its colour. |
+| `shoes` | string | The colour of their shoes. |
 | `mark` | object | Optional. A patch on the chest. See below. |
+| `line` | string | Optional. The colour of their outline, for someone it isn't burning in, like a ghost. Otherwise it goes by how far gone they are. |
 
-### `hood`
+### `top`
 
-`pattern` is one of these, and `colors` is listed in the order shown.
+`kind` is one of these, and `colors` is listed in the order shown.
 
-| Pattern | Colors | What it looks like |
+| Kind | Colors | What it looks like |
 |---|---|---|
-| `plain` | fill | Crayon in one colour. |
-| `stripes` | base, stripe | Soft stripes running up the body and over the hood. |
-| `bolts` | base, shard, shard | Broken shards scattered over a dark fill. |
-| `ribs` | base, rib, spark | Ribs and a spine on a dark fill, with stray sparks. |
-
-### `line`
-
-| Field | Type | What it is |
-|---|---|---|
-| `color` | string | The colour. Also the skull's, unless `skull.line` says otherwise. |
-| `style` | string | Optional. `glow` burns bright enough to bloom. `spikes` grows stiff hairs, and only works on the cast, whose bodies have the vertices for it. |
-
-### `skull`
-
-All of these are optional.
-
-| Field | Type | What it is |
-|---|---|---|
-| `line` | string | Its colour, if it isn't the outline's. |
-| `eyes` | string | `hollow` by default, `rings`, `x` or `shades`. |
-| `accent` | string | The colour of an `x`. |
-| `teeth` | string | `plain` by default, or `bloody`. |
+| `tee` | shirt, and optionally stripes | A T-shirt. |
+| `flannel` | shirt, bands, and optionally a thin line | A big plaid, with long sleeves and buttons. |
+| `overalls` | shirt, denim | A T-shirt under a bib and straps. Their legs are the denim. |
+| `camo` | base, and up to three blotches | A long-sleeved jacket. `vest` is optional, and it's the colour of a hunter's vest over it. |
+| `coveralls` | cloth | One piece, with a zip and two chest pockets. Their legs are the cloth too. |
+| `dress` | cloth, and optionally flowers and a collar | A short-sleeved dress. |
+| `none` | nothing | No shirt, and ribs. |
 
 ### `mark`
 

@@ -188,6 +188,8 @@ await g(() => { __game.horde.all.forEach((z) => { z.x -= 400; }); __game.step(.5
 check(`${c.drawn} drawn, ${onScreen} on screen`, c.drawn === 48 && onScreen >= 30, { c, onScreen });
 console.log(`     the crowd adds ${calm.calls - empty.calls} draw calls and ${calm.triangles - empty.triangles} triangles, to ${calm.calls} and ${calm.triangles}`);
 check('in at most eight draw calls', calm.calls - empty.calls <= 8, { calm, empty });
+const far = c.degrees.slice().sort((a, b) => a - b);
+check(`they're all at different stages, from ${far[0].toFixed(2)} to ${far[far.length - 1].toFixed(2)}`, far.length === 48 && far.every((d) => d >= 0 && d <= 1) && new Set(far).size > 40 && far[0] < .3 && far[47] > .7, far);
 const cost = async (rate) => {
   const client = await page.context().newCDPSession(page);
   await client.send('Emulation.setCPUThrottlingRate', { rate });

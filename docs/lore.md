@@ -8,7 +8,14 @@ Real places are by structure id, never an address. Most of these are someone's h
 
 > npcs should not be rektguys. I may put an nft gate on this and allow people to play as their own rektguys or other PFP. npcs should be radiating zombies of varying degrees
 
-**In the game:** not yet.
+**In the game:** everyone but the player is one, and nobody else wears a hood. `docs/art-direction.md` says what that looks like. Decided around it:
+
+- "Radiating" is read as radium green: cracks that spread from the breastbone, clothes burning through to char, eyes that go from pinpricks to full sockets, and chalk strokes coming off them. The green is a guess, and so is the rest of how it looks.
+- "Varying degrees" is one number for each of them, from nearly a person to not much but char and light. Most are in the middle.
+- How far gone they are only changes how they look, for now. It doesn't change what they do.
+- Coop, Tre and Miss Odessa are the least far gone, because they still talk. Nothing's been written about what that means for them.
+- What they're wearing is invented, as ordinary clothes for around here.
+- The gate isn't built, since that's a "may". The hero's the only thing wearing a hood now, so when it comes, only his look has to change.
 
 ## Charlie Flake
 
@@ -27,7 +34,7 @@ Real places are by structure id, never an address. Most of these are someone's h
 - "The bridge" is read as the Griffis Fountain bridge, because that's where you wake and how you first come into town. If it's the US 80 bridge, the first house on the right heading west is structure 75204065.
 - He says the line once, ever, and that's saved. After that he says "...", and so does the only reply, because nobody's written anything for the hero to say back.
 - The quest is a guess at "could probably be a quest", and it's small enough to take out. Swinging at the flies before he's asked just scatters them. After he's asked, four swings clear them, a fire lights in the hearth with deer meat on it, and eating it fills your hearts.
-- What he looks like is invented: `pale-ghost` in `data/looks.json`, a plain pale hood and a skull, going in and out like static. It's nothing of the hero's.
+- What he looks like is invented: `pale-ghost` in `data/looks.json`, a pale man in a T-shirt, going in and out like static. He's built like everyone else, but with nothing burning in him, because he didn't die. It's nothing of the hero's.
 
 ## The church signs
 
