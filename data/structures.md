@@ -10,7 +10,7 @@
 | Roof colours | [National Agriculture Imagery Program](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer), USDA | Public domain |
 | Walls, roof shape, floors, porches | Written down in `tools/structure_notes.json` from looking at Street View | Our own notes |
 
-**Credit.** The footprints are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Anything shipping this data has to keep the credit above and say that we've changed it: we clip a few footprints, move them along compressed road and add what they look like.
+**Credit.** The footprints are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Anything shipping this data has to keep the credit above and say that we've changed it: we clip a few footprints, move a few off the roads and add what they look like.
 
 **Street View is looked at, not copied.** Nothing is traced or measured from it and no imagery is committed. The notes are words, such as "brick" or "front porch". They hold no business names, people's names or street addresses, because most of these are someone's home.
 
@@ -26,9 +26,9 @@ Downloads are cached in `data/raw/structures/`, which is gitignored. `--refresh`
 
 ## What's kept
 
-Everything within 280 m of a road or the railroad, in game coordinates, which is the reach of `MAP.inBounds`. What's further out is counted in `outsideTheMap`.
+Everything within 280 m of a road or the railroad, which is the reach of `MAP.inBounds`. What's further out is counted in `outsideTheMap`.
 
-A footprint never changes shape or size. Where the map compresses a stretch of road, a building's middle moves with the road and the rest of it stays rigid, so buildings there can end up in each other's way. They're placed in this order, and whatever doesn't fit goes in `dropped` with the reason:
+A footprint never changes shape or size, and it stands where the source has it. They're placed in this order, and whatever doesn't fit goes in `dropped` with the reason:
 
 1. What's been looked at.
 2. What isn't a house, a mobile home or a shed.
@@ -36,10 +36,10 @@ A footprint never changes shape or size. Where the map compresses a stretch of r
 
 | `why` | What it means |
 |---|---|
-| `crowded` | A compressed stretch of road pushed it into another building. |
+| `crowded` | It overlaps another building in the source. |
 | `road` | It stands on a road, and moving it 8 m wasn't enough to clear it. A building closer than that is moved straight off, because a TIGER line and a footprint are each a few metres out and a real building beside a road shouldn't be lost over it. |
 | `track` | It would stand on the railroad. |
-| `river` | It would stand in the river, on a bend the map has moved. |
+| `river` | It would stand in the river. |
 | `opening` | Within 150 m of Stuckey's Bridge in both directions, which has to stay as it was for the opening. |
 | `gone` | Someone looked and it isn't there any more. |
 
@@ -57,7 +57,7 @@ A footprint never changes shape or size. Where the map compresses a stretch of r
 
 ### A structure
 
-Positions are metres from town center, true metres, before compression. `MAP.fromTrue` takes them to the world.
+Positions are true metres from town center. `MAP.fromTrue` takes them to the world.
 
 | Field | Type | What it is |
 |---|---|---|

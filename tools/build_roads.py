@@ -889,6 +889,7 @@ def build_road_graph(records, config, source_files):
             "datum": "NAD83, used as-is with no datum shift",
         },
         "compression": [],  # apply_compression fills this in, last of all.
+        "opening": {key: config["opening"][key] for key in ("road", "west", "east", "joinWest", "joinEast")},
         "source": {"vintage": VINTAGE, "baseUrl": BASE_URL, "files": source_files},
         "roadClasses": config["mtfcc"],
         "nodes": list(node_rows.values()),

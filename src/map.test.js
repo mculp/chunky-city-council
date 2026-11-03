@@ -10,23 +10,58 @@ const map = buildMap(data, { riverAtBridge: sine });
 const near = (a, b, tol = .01, msg = '') => assert.ok(Math.abs(a - b) <= tol, `${msg} ${a} isn't within ${tol} of ${b}`);
 
 describe('the world frame', () => {
-  test('Stuckey\'s Bridge is the origin', () => {
-    const c = map.crossings.find((x) => x.road === 'us_80' && x.with === 'river');
+  test('Stuckey\'s Bridge is the origin, where TIGER has its road cross the river', () => {
+    const c = map.crossings.find((x) => x.road === map.opening.road && x.with === 'river');
     near(c.x, 0); near(c.z, 0);
+    near(c.lon, -88.855232, 1e-6); near(c.lat, 32.255706, 1e-6);
   });
 
-  test('US 80 runs dead straight from its west end to the edge of town', () => {
-    const us80 = map.roadById.get('us_80');
-    const [edgeX] = map.toWorld(map.leanEnd, 0);
-    for (const [x, z] of us80.pts) if (x <= edgeX) near(z, 0, .002, `at x ${x}`);
+  test('it\'s a true map moved over, with one shift for everything', () => {
+    for (const n of data.nodes) { const w = map.nodes.find((o) => o.id === n.id); near(w.x - n.x, -map.bridge.x, .002, n.id); near(w.z - n.z, -map.bridge.z, .002, n.id); }
+    assert.deepEqual(data.compression, []);
   });
 
-  test('east of the edge of town it keeps true distances', () => {
-    const meet = (list, a, b) => list.find((n) => n.roads.includes(a) && n.roads.includes(b));
-    const adams = meet(map.nodes, 'us_80', 'adams_st'), church = meet(map.nodes, 'adams_st', 'church_st');
-    const a = meet(data.nodes, 'us_80', 'adams_st'), c = meet(data.nodes, 'adams_st', 'church_st');
-    near(Math.hypot(adams.x - church.x, adams.z - church.z), Math.hypot(a.x - c.x, a.z - c.z), .002);
-    near(adams.x - a.x, meet(map.nodes, 'us_80', 'meehan_savoy_rd').x - meet(data.nodes, 'us_80', 'meehan_savoy_rd').x, .002, 'one shift');
+  test('town is 6.45 miles from Stuckey\'s as the crow flies and about ten by road, all of it connected', () => {
+    const [x, z] = map.fromTrue(0, 0), mile = 1609.344;
+    near(Math.hypot(x, z) / mile, 6.45, .01);
+    const node = (a, b) => map.nodes.find((n) => n.roads.includes(a) && n.roads.includes(b)), span = (id, a, b) => Math.abs(map.sOn(id, a.x, a.z) - map.sOn(id, b.x, b.z));
+    const center = { x, z }, turn = node('us_80', 'meehan_savoy_rd'), fork = node('meehan_savoy_rd', map.opening.road);
+    const road = span('us_80', center, turn) + span('meehan_savoy_rd', turn, fork) + span(map.opening.road, fork, { x: 0, z: 0 });
+    assert.ok(road / mile > 9 && road / mile < 11, `${(road / mile).toFixed(2)} miles`);
+  });
+
+  test('he wakes on the real Chunky River Bridge, on Griffis Fountain Rd', () => {
+    const c = map.crossings.find((x) => x.road === 'griffis_fountain_rd' && x.with === 'river');
+    near(c.lon, -88.931644, 1e-6); near(c.lat, 32.32142, 1e-6);
+    const road = map.roadById.get('griffis_fountain_rd');
+    assert.ok(map.sOn(road.id, c.x, c.z) > 100 && map.sOn(road.id, c.x, c.z) < road.length - 100);
+  });
+
+  test('the road through the opening runs dead straight along z 0, west to east', () => {
+    const { west, east, road } = map.opening, r = map.roadById.get(road);
+    const at = r.pts.findIndex(([x, z]) => x === west && z === 0);
+    assert.deepEqual(r.pts.slice(at, at + 3), [[west, 0], [0, 0], [east, 0]]);
+    for (let s = r.s[at]; s < r.s[at + 2]; s += 20) { const p = map.along(road, s); near(p.z, 0, 1e-9); near(p.tx, 1, 1e-9); }
+    assert.ok(r.pts[0][0] < r.pts.at(-1)[0], 'it walks west to east');
+  });
+
+  test('past the joins it\'s TIGER\'s own line, and nothing else was bent', () => {
+    const { joinWest, joinEast, road } = map.opening, r = map.roadById.get(road);
+    const real = data.edges.filter((e) => e.road === road).flatMap((e) => e.points).map(([x, z]) => map.toWorld(x, z));
+    const out = real.filter(([x, z]) => x < joinWest[0] - 1 || z > joinWest[1] + 1 || x > joinEast[0] + 1 || z < joinEast[1] - 1);
+    assert.ok(out.length > 40);
+    for (const [x, z] of out) assert.ok(r.pts.some((p) => p[0] === x && p[1] === z), `${x},${z} isn't on the road`);
+    for (const o of map.roads) if (o.id !== road) { const e = data.edges.filter((d) => d.road === o.id)[0]; const [x, z] = map.toWorld(...e.points[0]); near(o.pts[0][0], x, 1e-9, o.id); near(o.pts[0][1], z, 1e-9, o.id); }
+  });
+
+  test('the curves on and off it are gentle enough to drive', () => {
+    const { road, joinWest, joinEast } = map.opening, r = map.roadById.get(road);
+    for (let i = 2; i < r.pts.length; i++) {
+      const [ax, az] = r.pts[i - 2], [bx, bz] = r.pts[i - 1], [cx, cz] = r.pts[i];
+      if (bx < joinWest[0] || bx > joinEast[0] || bz > joinWest[1] || bz < joinEast[1]) continue;
+      const turn = Math.abs(Math.atan2(Math.sin(Math.atan2(cx - bx, cz - bz) - Math.atan2(bx - ax, bz - az)), Math.cos(Math.atan2(cx - bx, cz - bz) - Math.atan2(bx - ax, bz - az))));
+      assert.ok(turn < .5, `${turn.toFixed(2)} rad at ${bx.toFixed(0)},${bz.toFixed(0)}`);
+    }
   });
 
   test('world x keeps the map\'s order, so nothing crosses that didn\'t', () => {
@@ -49,12 +84,10 @@ describe('the world frame', () => {
     }
   });
 
-  test('compressX matches every written band edge', () => {
-    for (const b of data.compression) {
-      near(compressX(b.trueFrom, data.compression), b.gameFrom, 1e-6);
-      near(compressX(b.trueTo, data.compression), b.gameTo, 1e-6);
-    }
-    assert.equal(compressX(0, data.compression), 0);
+  test('compressX leaves x alone with no bands, and follows any it\'s given', () => {
+    assert.equal(compressX(1234, data.compression), 1234);
+    const bands = [{ trueFrom: 100, trueTo: 200, gameFrom: 100, gameTo: 150, factor: .5 }];
+    near(compressX(50, bands), 50, 1e-9); near(compressX(150, bands), 125, 1e-9); near(compressX(300, bands), 250, 1e-9);
   });
 });
 

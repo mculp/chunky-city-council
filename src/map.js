@@ -1,8 +1,8 @@
 // The road graph as the game walks on it. There's no three.js in here, so tools and node tests load it too.
 //
 // data/roads.json holds game x and z, with town center at 0. The world is the same map with two changes:
-// its origin is Stuckey's Bridge, so the opening scene never moves, and US 80 is laid straight from the
-// bridge to the edge of town. data/roads.md has the formulas.
+// its origin is Stuckey's Bridge, so the opening scene never moves, and the road through it is laid straight
+// for as far as the opening can see. data/roads.md has the formulas.
 
 export const R = 6371000;
 
@@ -77,29 +77,37 @@ export function compressX(x, bands) {
   return last ? x + last.gameTo - last.trueTo : x;
 }
 
+// The opening looks straight down Stuckey Bridge Rd, and the real road turns away 60 m past the river. So in the world it runs along
+// z 0 as far as the fog lets you see and curves back onto its real line on either side. It's the one road that isn't where TIGER has it,
+// and nothing else moves with it. pts are world metres, and it comes back running west to east, as the opening does.
+export function bendOpeningRoad(pts, { west, east, joinWest, joinEast }) {
+  if (pts[0][0] > pts.at(-1)[0]) pts = [...pts].reverse();
+  const nearest = ([x, z]) => { let at = 0, best = Infinity; pts.forEach(([px, pz], i) => { const d = Math.hypot(px - x, pz - z); if (d < best) { best = d; at = i; } }); return at; };
+  const a = nearest(joinWest), b = nearest(joinEast);
+  const heading = (i, j) => { const dx = pts[j][0] - pts[i][0], dz = pts[j][1] - pts[i][1], l = Math.hypot(dx, dz) || 1; return [dx / l, dz / l]; };
+  const curve = (p, tp, q, tq) => {
+    const l = Math.hypot(q[0] - p[0], q[1] - p[1]) * .35, c0 = [p[0] + tp[0] * l, p[1] + tp[1] * l], c1 = [q[0] - tq[0] * l, q[1] - tq[1] * l], out = [];
+    for (let i = 1; i < 24; i++) {
+      const t = i / 24, u = 1 - t, b0 = u * u * u, b1 = 3 * u * u * t, b2 = 3 * u * t * t, b3 = t * t * t;
+      out.push([b0 * p[0] + b1 * c0[0] + b2 * c1[0] + b3 * q[0], b0 * p[1] + b1 * c0[1] + b2 * c1[1] + b3 * q[1]]);
+    }
+    return out;
+  };
+  return [
+    ...pts.slice(0, a + 1), ...curve(pts[a], heading(a - 1, a), [west, 0], [1, 0]),
+    [west, 0], [0, 0], [east, 0],
+    ...curve([east, 0], [1, 0], pts[b], heading(b, b + 1)), ...pts.slice(b),
+  ];
+}
+
 export function buildMap(data, { riverAtBridge = null } = {}) {
   const edges = new Map(data.edges.map((e) => [e.id, e]));
   const lat0 = data.origin.lat * Math.PI / 180, lon0 = data.origin.lon * Math.PI / 180;
-  const bridge = data.reference.crossings.find((c) => c.road === 'us_80' && c.with === 'river');   // the first along the road, the west one
-  const us80 = walk(data.roads.find((r) => r.id === 'us_80'), edges);
-  const west = data.compression.filter((b) => b.trueTo <= 0).at(-1);
-  const leanEnd = west ? west.gameTo : bridge.x;
+  const opening = data.opening, bridge = data.reference.crossings.find((c) => c.road === opening.road && c.with === 'river');
 
-  // z of US 80 at a game x, held constant past the edge of town and past the road's west end
-  const knots = us80.filter(([x]) => x <= leanEnd);
-  function leanAt(x) {
-    if (x >= leanEnd) return leanEndZ;
-    if (x <= knots[0][0]) return knots[0][1];
-    let lo = 0, hi = knots.length - 1;
-    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (knots[m][0] <= x) lo = m; else hi = m; }
-    const a = knots[lo], b = knots[hi];
-    return a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]);
-  }
-  const edgeIdx = us80.findIndex(([x]) => x > leanEnd), ea = us80[edgeIdx - 1], eb = us80[edgeIdx];
-  const leanEndZ = ea[1] + (eb[1] - ea[1]) * (leanEnd - ea[0]) / (eb[0] - ea[0]);
-
-  const toWorld = (x, z) => [x - bridge.x, z - leanAt(x)];
-  const toGame = (wx, wz) => { const x = wx + bridge.x; return [x, wz + leanAt(x)]; };
+  // the true map, moved over so the bridge is the origin
+  const toWorld = (x, z) => [x - bridge.x, z - bridge.z];
+  const toGame = (wx, wz) => [wx + bridge.x, wz + bridge.z];
   // a position in true metres from town center, which is how landmarks are placed
   const fromTrue = (x, z) => toWorld(compressX(x, data.compression), z);
   const trueOf = (lon, lat) => [R * (lon * Math.PI / 180 - lon0) * Math.cos(lat0), -R * (lat * Math.PI / 180 - lat0)];
@@ -109,7 +117,7 @@ export function buildMap(data, { riverAtBridge = null } = {}) {
   const measure = (pts) => { const s = [0]; for (let i = 1; i < pts.length; i++) s.push(s[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])); return s; };
 
   const roads = data.roads.map((r) => {
-    const pts = line(walk(r, edges));
+    const real = line(walk(r, edges)), pts = r.id === opening.road ? bendOpeningRoad(real, opening) : real;
     const s = measure(pts);
     return { id: r.id, name: r.name, width: r.width, surface: r.surface, pts, s, length: s.at(-1), nodes: r.nodes };
   });
@@ -174,7 +182,7 @@ export function buildMap(data, { riverAtBridge = null } = {}) {
   }
   const inBounds = (x, z) => inside.has((Math.floor(x / BC) + 32768) * 65536 + (Math.floor(z / BC) + 32768));
 
-  return { bridge, leanEnd, leanEndZ, compression: data.compression, toWorld, toGame, fromTrue, trueOf, fromLonLat, roads, roadById, nodes, rail, river, trestles, crossings, roadGrid, riverGrid, railGrid, along, zAt, sOn, inBounds };
+  return { bridge, opening, compression: data.compression, toWorld, toGame, fromTrue, trueOf, fromLonLat, roads, roadById, nodes, rail, river, trestles, crossings, roadGrid, riverGrid, railGrid, along, zAt, sOn, inBounds };
 }
 
 export async function loadMap(url, opts) {

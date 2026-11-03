@@ -1,4 +1,4 @@
-// Plays Chapter 1 on foot in real Chrome, from stepping off the bridge to its final objective, and fails on
+// Plays Chapter 1 on foot in real Chrome, from waking on the Chunky River Bridge to its final objective, and fails on
 // anything blocked or unreachable. Unlike tools/smoke.mjs nothing's teleported: it holds forward with the game's
 // own movement, and gets to Tre, back to Coop and to Miss Odessa by following the objective's arrow.
 //
@@ -20,8 +20,10 @@ await g(() => {
   G.pause();
   // The way from one place to another on foot, over a half-metre grid, or null if there's no way. It only looks as far as it has to.
   const CELL = .5;
+  // what stops him on foot in town: anything standing, and tree trunks
+  const stops = (x, z, y) => G.blocked(x, z, y) || G.wreck.treeBlocks(x, z);
   const pathTo = (x0, z0, x1, z1, reach) => {
-    const pass = (i, j) => { const x = i * CELL, z = j * CELL, f = G.floorAt(x, z); return f > 2.2 && !G.blocked(x, z, f); };
+    const pass = (i, j) => { const x = i * CELL, z = j * CELL, f = G.floorAt(x, z); return f > 2.2 && !stops(x, z, f); };
     const key = (i, j) => (i + 32768) * 65536 + j + 32768, S0 = [Math.round(x0 / CELL), Math.round(z0 / CELL)], T = [Math.round(x1 / CELL), Math.round(z1 / CELL)];
     const came = new Map([[key(...S0), null]]);
     let now = [S0], found = null;
@@ -42,7 +44,7 @@ await g(() => {
     for (let c = found; c; c = came.get(key(...c))) path.push([c[0] * CELL, c[1] * CELL]);
     return path.reverse();
   };
-  const clearLine = (x0, z0, x1, z1) => { const l = Math.hypot(x1 - x0, z1 - z0); for (let t = 0; t <= l; t += .5) { const x = x0 + (x1 - x0) * t / l, z = z0 + (z1 - z0) * t / l, f = G.floorAt(x, z); if (f < 2.2 || G.blocked(x, z, f)) return false; } return true; };
+  const clearLine = (x0, z0, x1, z1) => { const l = Math.hypot(x1 - x0, z1 - z0); for (let t = 0; t <= l; t += .5) { const x = x0 + (x1 - x0) * t / l, z = z0 + (z1 - z0) * t / l, f = G.floorAt(x, z); if (f < 2.2 || stops(x, z, f)) return false; } return true; };
   // Heads for `next()`, a world position or null when it's done. A wall in the way gets walked around, and it only
   // counts as blocked if there's no way round it, or it runs out of time.
   window.walk = (next, seconds = 500) => {
@@ -106,13 +108,18 @@ const placed = await g(() => ({ npcs: __game.npcs, cans: __game.pickups.map((c) 
 for (const [id, at] of Object.entries(PROTOTYPE)) { const d = Math.hypot(placed.npcs[id].x - at[0], placed.npcs[id].z - at[1]); check(`${id} has moved from the prototype's spot, by ${d.toFixed(0)} m`, d > 50, placed.npcs[id]); }
 placed.cans.forEach((c, i) => { const d = Math.min(...PROTOTYPE_CANS.map((p) => Math.hypot(c[0] - p[0], c[1] - p[1]))); check(`can ${i + 1} has moved, by ${d.toFixed(0)} m`, d > 50, c); });
 
-// stepping off the bridge
-await g(() => { __game.jump('town'); __game.place(24, 0); __game.step(.1); });
+// where he wakes
+await g(() => { __game.jump('town'); __game.step(.1); });
 let s = await st();
-check('town begins with the road', /^Follow US 80 into town$/.test(s.obj), s.obj);
+check('town begins with the road', /^Follow Griffis Fountain Rd into town$/.test(s.obj), s.obj);
 let arrow = await g(() => __game.pointer);
 check(`the arrow points down the road, ${arrow.dist.toFixed(0)} m to the gas station`, arrow.on && arrow.dist > 200, arrow); await snap('01-off-the-bridge');
-let r = await g(() => walk(() => (__game.state().flags.arrived ? null : [__game.npcs.coop.x, 0]))); blockedCheck('along US 80 to the edge of town', r);
+// up the road, as anyone would, until the game says he's arrived
+let r = await g(() => walk(() => {
+  const G = __game, M = G.map, P = G.player.pos; if (G.state().flags.arrived) return null;
+  const on = M.sOn('griffis_fountain_rd', P.x, P.z), id = on > 10 ? 'griffis_fountain_rd' : 'chestnut_st', q = M.along(id, M.sOn(id, P.x, P.z) - 10);
+  return [q.x, q.z];
+})); blockedCheck('up Griffis Fountain Rd to the edge of town', r);
 s = await st(); check('arriving points at Coop', /Stock up on beans \(0\/12\) · Coop is at the gas station on US 80/.test(s.obj), s.obj); await snap('02-arrived');
 
 // Coop's bag

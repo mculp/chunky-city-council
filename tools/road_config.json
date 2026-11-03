@@ -3,8 +3,8 @@
     "selection": "nearest_component: group the features carrying the road's tigerNames into components by shared vertices, take the one nearest the origin, and fail unless it is under maxDistanceM away and contains every name in tigerNames.",
     "clip": "Bounds are true metres, before any compression. Keep the whole TIGER vertices with xMinM <= x <= xMaxM. Never interpolate an end vertex, so every vertex keeps its TIGER lon/lat.",
     "mtfcc": "width is paved width in metres. Widths and surfaces are assumed defaults by road class, not surveyed: TIGER records neither.",
-    "overrides": "Road id to {width, surface, reason}. Empty because there is no evidence for any override yet.",
-    "compressionBands": "One global remap of x, f: the identity on the stretch holding town center, scaled by factor inside a band, a constant shift past it towards town. trueFrom and trueTo are true metres, west to east, with no overlap. z and lon/lat never change. The build fails if a graph node or trestle is inside a band or a band edge is within 1 mm of a kept TIGER vertex, and adds a vertex wherever a kept segment crosses a band edge."
+    "overrides": "Road id to {width, surface, reason}.",
+    "compressionBands": "Empty: the map is true scale. Should a road ever need shortening, a band is one global remap of x, f: the identity on the stretch holding town center, scaled by factor inside a band, a constant shift past it towards town. trueFrom and trueTo are true metres, west to east, with no overlap. z and lon/lat never change. The build fails if a graph node or trestle is inside a band or a band edge is within 1 mm of a kept TIGER vertex, and adds a vertex wherever a kept segment crosses a band edge."
   },
   "roads": [
     {
@@ -35,6 +35,13 @@
       "name": "Church St",
       "tigerNames": ["Church St"],
       "selection": { "rule": "nearest_component", "maxDistanceM": 1000 }
+    },
+    {
+      "id": "stuckey_bridge_rd",
+      "name": "Stuckey Bridge Rd",
+      "tigerNames": ["Stucky Bridge Rd"],
+      "selection": { "rule": "nearest_component", "maxDistanceM": 12000 },
+      "clip": { "xMinM": 6200, "xMaxM": 7500, "basis": "From Meehan-Savoy Rd over Stuckey's Bridge at true x 6843 and about 1 km past it. TIGER spells it Stucky; the bridge is Stuckey's, and so is TIGER's own Stuckey Bridge Cutoff Rd beside it." }
     },
     {
       "id": "meehan_savoy_rd",
@@ -127,18 +134,18 @@
       "selection": { "rule": "nearest_component", "maxDistanceM": 1600 }
     },
     {
-      "id": "grifis_fountain_rd",
-      "name": "Grifis-Fountain Rd",
+      "id": "griffis_fountain_rd",
+      "name": "Griffis Fountain Rd",
       "tigerNames": ["Grifis-Fountain Rd"],
       "selection": { "rule": "nearest_component", "maxDistanceM": 1600 },
-      "clip": { "xMinM": -650, "xMaxM": 0, "basis": "Stops at the last whole vertex east of x -650, the edge of the compressed stretch west of town. A node can't sit in a band." }
+      "clip": { "xMinM": -650, "xMaxM": 0, "basis": "Takes it over the Chunky River Bridge, where he wakes up, and about 430 m past it. Further on it's just woods. TIGER spells it Grifis-Fountain; the sign goes by what the road is called on the map." }
     },
     {
       "id": "pine_forest_rd",
       "name": "Pine Forest Rd",
       "tigerNames": ["Pine Forest Rd"],
       "selection": { "rule": "nearest_component", "maxDistanceM": 1600 },
-      "clip": { "xMinM": 0, "xMaxM": 1223, "basis": "Stops at the last whole vertex west of x 1223, the edge of the compressed stretch east of town. A node can't sit in a band." }
+      "clip": { "xMinM": 0, "xMaxM": 1223, "basis": "Takes it over the tracks and out of town, about 1.2 km." }
     },
     {
       "id": "clarence_culpepper_rd",
@@ -158,39 +165,16 @@
     "S1740": { "label": "Private road for service vehicles", "width": 3.5, "surface": "gravel" },
     "S1780": { "label": "Parking lot road", "width": 6.0, "surface": "asphalt" }
   },
-  "overrides": {},
-  "compressionBands": [
-    {
-      "axis": "x",
-      "trueFrom": -4440,
-      "trueTo": -4180,
-      "factor": 0.1,
-      "reason": "US 80 from just past Stuckey's Bridge to the west trestle: 260 m with no junction, on the run the game opens with.",
-      "basis": "The game's bridge is US 80's crossing of the river at true x -4505.3, and the player runs east from it into town, 4.2 km at 4.4 m/s or 16 minutes. These first three bands bring the edge of town to about a minute. x -4440 leaves the 65 m past the crossing true, for the bridge's ground. x -4180 stops 20 m short of the west trestle (x -4160.2), which a band can't hold."
-    },
-    {
-      "axis": "x",
-      "trueFrom": -4140,
-      "trueTo": -1112,
-      "factor": 0.02,
-      "reason": "US 80 from the west trestle towards town: 3.03 km with no junction, the longest empty stretch on the map, and the railroad and river run beside it.",
-      "basis": "20 m east of the west trestle to 15 m west of Church St's end (x -1097.1), which a band can't hold either. It becomes 61 m long. A factor this small turns every gentle line in it nearly north-south. The game lays US 80 straight here, so the road doesn't show it."
-    },
-    {
-      "axis": "x",
-      "trueFrom": -1082,
-      "trueTo": -650,
-      "factor": 0.1,
-      "reason": "US 80 coming into town, and the far end of Church St: 432 m with no junction.",
-      "basis": "15 m east of Church St's end to 367 m west of Adams Street. x -650 leaves Church St's first 370 m true, and it's the west edge of the stretch the town is built on. Church St's last 432 m become 43 m, so that end runs well north of its true bearing."
-    },
-    {
-      "axis": "x",
-      "trueFrom": 1223,
-      "trueTo": 5063,
-      "factor": 0.25,
-      "reason": "US 80 between the far east trestle and Meehan-Savoy Rd: 3.84 km with no junction or trestle, over four times the camera's 900 m far plane. It still holds one river crossing, and the railroad and river run through it. Their order is kept, but bearings inside the band change.",
-      "basis": "150 m east of trestle-east-far (x 1072.95) and 150 m west of Meehan-Savoy Rd's minimum x (x 5213.20), to the nearest metre. The band becomes 960 m long, about one far plane. x 1220 was rejected because it's 3 mm from a river vertex: the nearest kept vertices to these edges are 0.855 m and 1.647 m away."
-    }
-  ]
+  "overrides": {
+    "stuckey_bridge_rd": { "width": 7.3, "surface": "asphalt", "reason": "The opening was drawn with a road this wide, and it has to stay as it was." }
+  },
+  "opening": {
+    "road": "stuckey_bridge_rd",
+    "west": -160,
+    "east": 260,
+    "joinWest": [-226, 224],
+    "joinEast": [402, -526],
+    "basis": "World metres from the bridge. The road really turns north 60 m past the river and south-west 50 m before it, and the opening looks straight down it. So in the world it runs along z 0 from west to east, which is as far as the fog lets you see, and curves back onto its real line at the TIGER vertices nearest joinWest and joinEast. Nothing else moves."
+  },
+  "compressionBands": []
 }
