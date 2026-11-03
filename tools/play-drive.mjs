@@ -264,6 +264,31 @@ check('a can in reach of the seat gets picked up', can.none || (can.got && can.b
 const ending = await g(() => { const G = __game; G.S.beans = 11; G.S.flags.ended = false; const c = G.pickups.find((p) => !p.got); const v = G.driving(); move(c.x, c.z, 0); v.y = c.y; G.sim(3, 1 / 30); return { mode: G.S.mode, driving: !!G.driving() }; });
 check('the chapter can end with him in it, and it gets him out first', ending.mode === 'end' && !ending.driving, ending);
 
+// ---------------- into the woods, steering, the way you do, and it always backs out. The owner: "I keep getting stuck on trees and things when i drive into them. can't reverse."
+{
+  const woods = await g((kinds) => {
+    const G = __game, T = 1 / 30, W = G.wreck, big = [], seen = new Set();
+    for (const [tx, tz] of [[-300, 200], [-500, -100], [200, -300], [600, 50], [-900, 100]]) { const [x, z] = G.map.fromTrue(tx, tz); for (const t of W.trees(x, z, 120)) { if (!t.down && t.size > 1.25 && !seen.has(t) && big.length < 14) { seen.add(t); big.push(t); } } }
+    let tried = 0; const stuck = [];
+    for (const kind of kinds) {
+      const v = G.vehicles.find((o) => o.kind === kind && !o.wrecked && !o.drowned && !o.loose); if (G.driving()) G.getOut(true); G.getIn(v);
+      for (const t of big) for (const a of [0, 2.1, 4.2]) for (const steer of [-1, 0, 1]) {
+        if (t.down) continue;
+        const x = t.x + Math.sin(a) * 9, z = t.z + Math.cos(a) * 9;
+        v.hp = v.K.hp; v.wrecked = false; v.x = x; v.z = z; v.y = G.floorAt(x, z); v.yaw = Math.atan2(t.x - x, t.z - z) + .2 * (steer || 1); v.f = 0; v.s = 0; v.steer = 0; v.grounded = true; v.vy = 0; v.getOut = 0;
+        G.key('w', true); if (steer > 0) G.key('d', true); if (steer < 0) G.key('a', true);
+        G.sim(3, T); G.key('w', false); G.key('a', false); G.key('d', false);
+        const at = [v.x, v.z]; G.key('s', true); G.sim(3, T); G.key('s', false); tried++;
+        // if something's behind it as well, you'd rock it: forward and back again, and that gets it out
+        if (Math.hypot(v.x - at[0], v.z - at[1]) < 1) { G.key('w', true); G.sim(1.5, T); G.key('w', false); G.key('s', true); G.sim(3, T); G.key('s', false); }
+        if (Math.hypot(v.x - at[0], v.z - at[1]) < 1 && !v.wrecked) stuck.push([kind, a, steer, Math.hypot(v.x - at[0], v.z - at[1])]);
+      }
+    }
+    if (G.driving()) G.getOut(true);
+    return { tried, stuck: stuck.slice(0, 6), n: stuck.length };
+  }, KINDS);
+  check(`it can always back out of the woods: ${woods.tried} runs at big trees, steering`, woods.tried > 80 && woods.n === 0, woods);
+}
 check(`no console errors`, errors.length === 0, errors);
 await close();
 console.log(failed ? `${failed} failed` : 'all ok');

@@ -2540,15 +2540,17 @@ function hoodMat(hatchTex, emiss) {
   const m = new THREE.MeshToonMaterial({ map: hatchTex, emissiveMap: hatchTex, emissive: 0xffffff, emissiveIntensity: emiss, gradientMap: toonGrad });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uStep = G.uStep; sh.uniforms.uPxScale = G.uPxScale;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 aSurf; varying vec2 vSurf;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvSurf=aSurf;');
+    // How far round he it is jumps from one side to the other at the middle of his back, and worked out across that it would pass through his front,
+    // and draw his pocket there in a slit. So it goes across as its sine and cosine, which don't jump.
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 aSurf; varying vec3 vSurf;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvSurf=vec3(sin(aSurf.x),cos(aSurf.x),aSurf.y);');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      varying vec2 vSurf; uniform float uStep, uPxScale;
+      varying vec3 vSurf; uniform float uStep, uPxScale;
       float hhs(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
       float sdTrap(vec2 p, float r1, float r2, float he){ vec2 k1=vec2(r2,he); vec2 k2=vec2(r2-r1,2.*he); p.x=abs(p.x);
         vec2 ca=vec2(p.x-min(p.x,(p.y<0.)?r1:r2),abs(p.y)-he); vec2 cb=p-k1+k2*clamp(dot(k1-p,k2)/dot(k2,k2),0.,1.);
         float s=(cb.x<0.&&ca.y<0.)?-1.:1.; return s*sqrt(min(dot(ca,ca),dot(cb,cb))); }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        { vec2 q=vec2(vSurf.x*.33,vSurf.y); float d=min(abs(sdTrap(q-vec2(0.,-.6),.19,.15,.12)),abs(q.y+.79));
+        { vec2 q=vec2(atan(vSurf.x,vSurf.y)*.33,vSurf.z); float d=min(abs(sdTrap(q-vec2(0.,-.6),.19,.15,.12)),abs(q.y+.79));
           float ln=1.-smoothstep(.006,.006+(fwidth(d)+1e-4)*1.5,d); ln*=step(.15,hhs(floor(gl_FragCoord.xy/(1.5*uPxScale))+uStep*13.));
           diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.95,.38,.1),ln); totalEmissiveRadiance=mix(totalEmissiveRadiance,vec3(.42,.15,.03),ln); }`);
   };

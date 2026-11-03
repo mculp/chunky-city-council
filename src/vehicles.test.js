@@ -102,6 +102,76 @@ test('a post can\'t get between the points round its edge, head on or down its s
   assert.ok(v.x > -3 + KINDS.car.width / 2 - .1, `${v.x}`);
 });
 
+test('steering into a post doesn\'t get it stuck: it can always back out, whichever way it was turning', () => {
+  for (const kind of Object.keys(KINDS)) for (const steer of [-1, 0, 1]) for (const side of [-.9, -.4, 0, .4, .9]) {
+    const K = KINDS[kind], px = side * K.width / 2, pz = K.length / 2 + 3, post = (x, z) => Math.hypot(x - px, z - pz) < .6, world = { ...open, blocked: post };
+    const v = makeVehicle(kind, 0, 0, 0, 6);
+    drive(v, { gas: .5, steer }, 3, world);
+    const at = [v.x, v.z];
+    drive(v, { gas: -1, steer: 0 }, 2, world);
+    assert.ok(Math.hypot(v.x - at[0], v.z - at[1]) > 1, `${kind} steering ${steer}, ${side} across, moved ${Math.hypot(v.x - at[0], v.z - at[1])}`);
+  }
+});
+
+test('steering can\'t swing it into something', () => {
+  const v = makeVehicle('pickup', 0, 0, 0, 6), world = { ...open, blocked: (x, z) => Math.hypot(x - 1.2, z - 3.1) < .3 };
+  for (let t = 0; t < 4; t += 1 / 30) {
+    stepVehicle(v, { gas: .5, steer: 1 }, 1 / 30, world);
+    const [a, c] = toLocal(v, 1.2, 3.1), { length, width } = v.K;
+    assert.ok(!(Math.abs(a) < length / 2 - .1 && Math.abs(c) < width / 2 - .1), `it's on top of the post at ${a}, ${c}`);
+  }
+});
+
+test('something already inside its outline doesn\'t hold it there, in either direction', () => {
+  for (const gas of [1, -1]) {
+    const v = makeVehicle('pickup', 0, 0, 0, 6), world = { ...open, blocked: (x, z) => Math.hypot(x - .3, z - .4) < .4 };
+    drive(v, { gas, steer: 0 }, 3, world);
+    assert.ok(Math.abs(v.z) > 6, `gas ${gas}, it got to ${v.z}`);
+  }
+});
+
+test('once it\'s out of something, that something stops it again', () => {
+  const v = makeVehicle('pickup', 0, 0, 0, 6), world = { ...open, blocked: (x, z) => Math.hypot(x - .3, z - .4) < .4 };
+  drive(v, { gas: -1, steer: 0 }, 3, world);
+  drive(v, { gas: 1, steer: 0 }, 5, world);
+  assert.ok(v.z < 0, `it went back through, to ${v.z}`);
+});
+
+test('wedged with something in front and something behind, rocking it gets it out', () => {
+  const v = makeVehicle('pickup', 0, 0, 0, 6), L = v.K.length / 2, world = { ...open, blocked: (x, z) => Math.hypot(x, z - (L + .5)) < .3 || Math.hypot(x, z + (L + .5)) < .3 };
+  drive(v, { gas: 1, steer: 0 }, 2, world);
+  const z = v.z;
+  drive(v, { gas: -1, steer: 0 }, 1, world);
+  drive(v, { gas: -1, steer: 0 }, 3, world);
+  assert.ok(v.z < z - 3, `it stayed at ${v.z}`);
+});
+
+test('backing into something and then driving off is not being wedged', () => {
+  const v = makeVehicle('pickup', 0, 0, 0, 6), world = { ...open, blocked: (x, z) => z < -5 };
+  drive(v, { gas: -1, steer: 0 }, 4, world);
+  const z = v.z; assert.ok(z > -5, `it went through at ${z}`);
+  drive(v, { gas: 1, steer: 0 }, 2, world);
+  assert.ok(v.z > z + 2);
+  drive(v, { gas: -1, steer: 0 }, 6, world);
+  assert.ok(v.z > -5, `it went through at ${v.z}`);
+});
+
+test('with its nose already in a wall it can back out, and it can\'t carry on through', () => {
+  for (const kind of Object.keys(KINDS)) {
+    const v = makeVehicle(kind, 0, 0, 0, 6), nose = v.K.length / 2, world = { ...open, blocked: (x, z) => z > nose - .4 && z < nose + 8 };
+    drive(v, { gas: 1, steer: 0 }, 6, world);
+    assert.ok(v.z < 1, `${kind} went on through, to ${v.z}`);
+    drive(v, { gas: -1, steer: 0 }, 2, world);
+    assert.ok(v.z < -.5, `${kind} couldn't back out, it's at ${v.z}`);
+  }
+});
+
+test('holding it against a wall doesn\'t get it through the wall', () => {
+  const v = makeVehicle('pickup', 0, 0, 0, 6), world = { ...open, blocked: (x, z) => z > 10 };
+  drive(v, { gas: 1, steer: 0 }, 12, world);
+  assert.ok(v.z < 10, `it's through, at ${v.z}`);
+});
+
 test('a glancing hit slides along the wall and keeps most of its speed', () => {
   const wall = { ...open, blocked: (x, z) => x > 2 };
   const v = makeVehicle('car', 0, 0, .35, 6); v.f = 20;
