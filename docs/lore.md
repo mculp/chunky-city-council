@@ -146,7 +146,7 @@ They sent a picture of this from above too, and it stays out of the repo.
 
 **In the game:** it's there, shaped from the public aerial, and the real drive in with it, which the road data hadn't got. Nothing in the game says whose it is, and where it is isn't written next to the name here. Decided around it:
 
-- Which building's which is read off the picture. The big one with the pool is the mom and dad's, the long one across the gravel from it is the cabin, the white one by the fenced lawn is the art studio, and the lawn is the outdoor theater. The cabin's more to the west of the big house than north of it, so that's waiting on a yes.
+- Which building's which is read off the picture. The big one with the pool is the mom and dad's, the long one across the gravel from it is the cabin, the white one by the fenced lawn is the art studio, and the lawn is the outdoor theater. The cabin's more to the west of the big house than north of it, so that's waiting on a yes. Since then the owner's said it's missing a cabin and the cinema and art studio are in the wrong spots, under David and ETB2k4 below, so which building's which is being asked again.
 - The theater has a screen at the lawn's open end and two rows of lawn chairs, and a projector at the far end runs a film's countdown over and over, because any film would be somebody's. Its light brings the crowd, the same as the gas station's canopy, so they end up standing on the lawn. Breaking the projector ends it.
 - The studio has an easel, a bench of paint and canvases against the wall. The paintings are invented, and they aren't of anything.
 - The room in the shed has drums, a guitar, a bass, a keyboard, amps, mic stands, a couch and moving blankets on the back wall. The button plays whichever one he's by, one hit at a time, and it's loud enough for the crowd to come. There aren't any songs in it.
@@ -204,3 +204,13 @@ They sent a picture of this from above too, and it stays out of the repo.
 ## Dogs
 
 > Animals, there should be dogs everywhere. Mostly nice. They will follow you. Occasionally one will chase you.
+
+## David and ETB2k4
+
+Asked who David and ETB2004 are:
+
+> David is a vagrant who wanders around town, you can find him stripping copper from buildings and trading it for beans. Or you can trade beans for copper.
+
+> ETB2k4 drives a 99 green [make of car] and has spiky hair and lives on the murphey compound (he's from 2004 so he's just an astral projection) he always has a lot of beans and chemistry equipment set up in his cabin. we need to fix the layout of the murphey compound also. it's missing a cabin and the cinema and art studio are in the wrong spots
+
+**In the game:** neither of them is in it yet. What's wrong with the compound is being asked, under A compound above.
