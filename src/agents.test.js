@@ -2,7 +2,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createFolks, personOf, burntDown, BE, AFTER, AWAY, TAILING, HOW, WORDS } from './agents.js';
+import { createFolks, personOf, burntDown, hipsOf, flickering, BE, AFTER, AWAY, TAILING, HOW, WORDS } from './agents.js';
 import { createHorde, SHAMBLE, HUNTING, SWARM, GRABBING, AVOIDING, TRAILING, STUNNED, TUNING } from './horde.js';
 
 const data = JSON.parse(readFileSync(new URL('../data/folks.json', import.meta.url)));
@@ -92,9 +92,38 @@ describe('who they are', () => {
     assert.ok(!many.some((w) => burntDown({ ...w, calm: true }, 4000)), 'and nobody at home has');
   });
 
-  test('some of them come after him folded over', () => {
-    const low = many.filter((w) => w.looks.scuttle).length / many.length;
-    assert.ok(Math.abs(low - HOW.scuttles) < .03, `${low}`);
+  test('how far over they stand goes with how far gone they are, the burnt-down ones furthest, and the quiet ones spread evenly between', () => {
+    for (const out of [0, 4000]) {
+      const burnt = many.filter((w) => burntDown(w, out)).map((w) => hipsOf(w, out)), quiet = many.filter((w) => !burntDown(w, out)).map((w) => hipsOf(w, out));
+      assert.ok(burnt.every((h) => h >= 0 && h <= 30) && quiet.every((h) => h >= 30 && h <= 150), 'burnt down 0° to 30°, gone quiet 30° to 150°');
+      assert.ok(Math.min(...burnt) < 2 && Math.max(...quiet) > 148, 'and the whole of each');
+      assert.ok(Math.max(...burnt) <= Math.min(...quiet), 'nobody quiet is as far over as anyone burnt down');
+      // a quarter of the quiet ones in each quarter of their range
+      for (const [lo, hi] of [[30, 60], [60, 90], [90, 120], [120, 150]]) assert.ok(Math.abs(quiet.filter((h) => h >= lo && h < hi).length / quiet.length - .25) < .03, `${lo}° to ${hi}°`);
+    }
+    // further gone, further over
+    const sorted = [...many].sort((a, b) => a.looks.phase - b.looks.phase).map((w) => hipsOf(w, 0));
+    assert.ok(sorted.every((h, i) => i === 0 || h <= sorted[i - 1]));
+    // the same person stands the same way anywhere in town
+    assert.ok(many.every((w) => hipsOf(w, 0) === hipsOf(w, HOW.burntOut[0] - 1)));
+    // and nobody at home has burnt down, so they're all on the quiet ones' range
+    assert.ok(many.every((w) => { const h = hipsOf({ ...w, calm: true }, 4000); return h >= 30 && h <= 150; }));
+  });
+
+  test('anyone folded further over than a table comes after him low and quick, and that\'s every one who\'s burnt down', () => {
+    const h = createHorde(field(folks(), { hips: (s) => hipsOf(s.who, 0), quiet: (s) => !burntDown(s.who, 0) }));
+    const all = Array.from({ length: 400 }, (_, i) => h.add(i % 20, Math.floor(i / 20)));
+    assert.ok(all.every((s) => s.scuttle === s.hips < 90));
+    assert.ok(all.filter((s) => !s.quiet).every((s) => s.scuttle));
+    const low = all.filter((s) => s.scuttle).length / all.length;
+    assert.ok(low > .4 && low < .65, `${low} of them`);
+  });
+
+  test('the cast who\'ve only quit a little stand a little over, the further gone the further over', () => {
+    const cast = JSON.parse(readFileSync(new URL('../data/looks.json', import.meta.url))).cast;
+    const hips = ['bobby', 'coop', 'rocky'].map((id) => flickering(cast[id].degree));
+    assert.ok(hips.every((h) => h >= 150 && h <= 170), `${hips}`);
+    assert.ok(hips[0] > hips[1] && hips[1] > hips[2], 'Miss Bobby least, then Coop, then Rocky');
   });
 
   test('everyone has something to mutter, by their number, and between them it\'s all of it', () => {

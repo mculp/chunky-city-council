@@ -23,6 +23,7 @@
     "trains": "node tools/play-trains.mjs",
     "blend": "node tools/play-blend.mjs",
     "quiet": "node tools/play-quiet.mjs",
+    "fold": "node tools/play-fold.mjs",
     "swing": "node tools/play-swing.mjs",
     "church": "node tools/play-church.mjs",
     "water": "node tools/play-water.mjs",

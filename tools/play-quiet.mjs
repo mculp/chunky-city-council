@@ -98,9 +98,11 @@ await g(() => {
   };
   G.step(.6, T);
 });
-const idle = await g(() => lot.filter((s) => s.quiet && s.state === 0 && s.lean !== undefined).map((s) => ({ lean: s.lean, arm: s.arm })));
+// as drawn: the angle at their hips, which their steps tip a few degrees either way with a limp, and how far off the ground their heads and hands are
+const idle = await g(() => lot.filter((s) => s.quiet && s.state === 0 && G.stance(s)).map((s) => ({ number: Math.round(s.hips), ...G.stance(s), arm: s.arm })));
 await snap('2-folded-on-us-80');
-check(`the ones who've gone quiet stand folded over at the waist with their arms hanging: ${idle.length} of them, leaning ${Math.min(...idle.map((r) => r.lean)).toFixed(2)} or more`, idle.length >= 8 && idle.every((r) => r.lean > 1.1 && Math.abs(r.arm) < .35), idle);
+const bent = idle.map((r) => r.hips);
+check(`the ones who've gone quiet stand folded over at the waist, each their own way, from ${Math.min(...bent).toFixed(0)}° to ${Math.max(...bent).toFixed(0)}° at the hips, with their arms hanging or their hands on the ground: ${idle.length} of them`, idle.length >= 8 && Math.max(...bent) - Math.min(...bent) > 30 && idle.every((r) => r.hips > 38 && r.hips < 156 && r.head > 0 && r.hands > 0 && r.arm < .35), idle);
 let through;
 for (let i = 0; i < 12; i++) {
   through = await g(() => { const r = cross(4); G.step(.05, T); return r; });

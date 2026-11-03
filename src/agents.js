@@ -27,7 +27,11 @@ export const HOW = {
   // Out of the crowd, the furthest gone have burnt down, and they're the ones who come for him on sight. The rest have gone quiet.
   burnt: [1 / 15, 1 / 5],     // how many have burnt down in town, and from out past...
   burntOut: [1000, 3000],     // ...this far from the middle of town, in true metres, going from one to the other between
-  scuttles: .4,               // how many come after him folded over, low and quick, and not stood up
+  // How far over they stand, as the angle at the hips between their legs and their back: 180° stood up straight, 90° flat like a table and 0°
+  // folded right over. It goes with how far gone they are, from the least gone to the furthest of each, and anyone folded further over than
+  // `scuttles` comes after him low and quick like that, where everyone else stands up to run.
+  hips: { quiet: [150, 30], burnt: [30, 0], flickering: [170, 150], scuttles: 90 },
+  flickers: .4,               // how far gone the cast's looks go, in data/looks.json, while they've only quit a little
 };
 
 const smooth = (t) => { const k = Math.max(0, Math.min(1, t)); return k * k * (3 - 2 * k); };
@@ -35,6 +39,14 @@ const smooth = (t) => { const k = Math.max(0, Math.min(1, t)); return k * k * (3
 export const burntShare = (fromTown) => HOW.burnt[0] + (HOW.burnt[1] - HOW.burnt[0]) * smooth((fromTown - HOW.burntOut[0]) / (HOW.burntOut[1] - HOW.burntOut[0]));
 // Whether someone has, by how far gone their number says they are. It's the top of it, so it's the ones it shows on most. Nobody at home has.
 export const burntDown = (w, fromTown) => !w.calm && w.looks.phase / 6.28 > 1 - burntShare(fromTown);
+// How far over someone stands, in degrees at the hips, by how far gone their number says they are. The ones who've burnt down are over the same
+// line as burntDown's, so they're all folded further over than anyone who hasn't, and the rest are spread evenly over the quiet ones' range.
+export const hipsOf = (w, fromTown) => {
+  const t = w.looks.phase / 6.28, line = w.calm ? 1 : 1 - burntShare(fromTown), [a, b] = t > line ? HOW.hips.burnt : HOW.hips.quiet;
+  return t > line ? a + (b - a) * (t - line) / (1 - line) : a + (b - a) * t / line;
+};
+// And one of the cast who's only quit a little, by how far gone their look is
+export const flickering = (degree) => { const [a, b] = HOW.hips.flickering; return a + (b - a) * Math.min(1, degree / HOW.flickers); };
 
 // The same every time for the same number and salt, and nothing to do with crowdRand, which would change what everyone does after it
 const roll = (id, salt) => {
@@ -56,7 +68,7 @@ export function personOf(id, data, looks = []) {
   return {
     id, first, family, name: `${first} ${family}`, says,
     temper: roll(id, 5), nerve: roll(id, 6), nosy: roll(id, 7), homebody: roll(id, 8), tagalong: roll(id, 9),
-    looks: { look, phase: roll(id, 10) * 6.28, limp: roll(id, 11) < .5 ? 0 : 1, size: .94 + roll(id, 12) * .12, scuttle: roll(id, 14) < HOW.scuttles },
+    looks: { look, phase: roll(id, 10) * 6.28, limp: roll(id, 11) < .5 ? 0 : 1, size: .94 + roll(id, 12) * .12 },
     hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, fooled: {}, when: 0, seen: 0, met: false, gone: false, shun: null, where: null,
   };
 }

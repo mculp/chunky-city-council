@@ -98,11 +98,27 @@ He **starts something** with one who's gone quiet when he:
 
 Then that one comes for him, and so does anyone gone quiet within 10 m of it. They know where he is for 5 seconds, the same as when he gives himself away. Anyone he knocks down comes for him when they get up. Being hit, or seeing it, changes how they are with him the same as it would anyone, so anyone it makes the kind to keep away does that instead. Once they've lost him they go quiet again, unless it's left them **after you** or **keeping away**, which nobody gone quiet gets over.
 
-Two in five who come for him come folded over, low and quick, with their arms dragging, 8% quicker than the ones who stand up: 3.2 m/s hunting and 4 m/s in a swarm, against 3 and 3.7. Running, at 4.4, he still gets away from either.
+Anyone folded further over than a table, under 90° at the hips, comes for him folded over like that, low and quick, with their arms dragging or their hands going on the ground, 8% quicker than the ones who stand up: 3.2 m/s hunting and 4 m/s in a swarm, against 3 and 3.7. That's about half of the ones who've gone quiet and every one who's burnt down. Running, at 4.4, he still gets away from either.
 
 **Muttering.** Within 7 m of him, someone gone quiet who's on the screen says their line over their head, small and faint. It's one of the twenty in `mutters`, picked by their number, which the Creative Director wrote. It lasts 3.2 seconds, drifting up a little as it fades, and the same person doesn't say it again for 9 to 16 seconds. It's two at once at most, with someone new twice a second. With reduced motion it's there at once and fades out without moving. That's all anyone in the crowd says, and nothing new is made up for them. Whether they should say more, with a real AI model, is the owner's call.
 
-The numbers are `HOW.burnt`, `HOW.burntOut` and `HOW.scuttles` in `src/agents.js`, `riled`, `snatch` and `scuttle` in `src/horde.js`, and `MUTTER` in `index.html`. `npm run quiet` plays it in Chrome.
+The numbers are `HOW.burnt`, `HOW.burntOut` and `HOW.hips` in `src/agents.js`, `riled`, `snatch` and `scuttle` in `src/horde.js`, and `MUTTER` in `index.html`. `npm run quiet` plays it in Chrome.
+
+## How far over
+
+Everyone stands as far over as how far gone they are, as the angle at the hips between their legs and their back: 180° is stood up straight, 90° is the back flat like a table and 0° is folded right over. It comes from their number, so the same person always stands the same way, anywhere in town, and a player can read a crowd:
+
+| How far gone | At the hips |
+| -- | -- |
+| Burnt down | 0° to 30°, the furthest gone the furthest over |
+| Gone quiet, and the people at home | 30° to 150°, spread evenly by their numbers, so no two in a crowd stand quite alike |
+| Coop, Rocky and Miss Bobby | 150° to 170°, by how far gone their looks are: Rocky 151°, Coop 159° and Miss Bobby 164° |
+
+The kids on four-wheelers and anyone driving sit up straight. Robby's a ghost and isn't on it, and neither is the hero. Nobody in town stands at 180° yet: that's for anyone holding out.
+
+The arms hang straight down, so the further over someone is the nearer their hands are to the ground, and anyone further over than about 80° has them resting on the ground in front of them. From the hips to the top of the head is longer than the legs, so a body folded right over would have its head in the ground. Nobody's drawn further over than 34°, which leaves the head 6 cm off the ground at their feet, and anyone under 60° is eased into the 34° to 60° there's room for, so whoever's further over by their number is still drawn further over. Someone who's burnt down is drawn at 34° to 47°.
+
+It's only a pose, so reduced motion doesn't change it. The numbers are `HOW.hips` and `HOW.flickers` in `src/agents.js` and `HIPS_LEAST` in `index.html`. `npm run fold` looks at all of it in Chrome.
 
 ## Knocked down
 

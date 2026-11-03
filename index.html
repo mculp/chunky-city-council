@@ -234,7 +234,7 @@ import { randomFrom } from './src/soundbank.js';
 import { createPeople } from './src/people.js';
 import { drawPerson, drawRadiation, drawAura, degreeOf, farOf, PARTS, AURA_CELLS } from './src/looks.js';
 import { createHorde, SHAMBLE, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED, AVOIDING, TRAILING } from './src/horde.js';
-import { createFolks, burntDown, AFTER, HOW } from './src/agents.js';
+import { createFolks, burntDown, hipsOf, flickering, AFTER, HOW } from './src/agents.js';
 import { createTraffic } from './src/traffic.js';
 import { LURES, ALARM, SWARM as SWARMED, GRAVITY, inHand, nextUp, kindsHeld, rangeOf, throwOf, aimedAt, whoIsSwarmed } from './src/lures.js';
 import { keysFor, buttonsFor, actWord, fastWord, lookBy, edgeTurn, needsCursor, mouseLooks, MOUSE } from './src/controls.js';
@@ -4211,10 +4211,18 @@ function makeNPC({ id, name, x, z, y = Y0, yaw, extra, ghost = false, ph = null 
   const rig = makeRig({ hood: townBody, hoodM: wear('body'), sleeveM: wear('arm'), pantsM: wear('leg'), handM, ol: look.line ?? `#${zombieLine(far).getHexString()}`, lineK: .85, strip: true, shoulder: [.205, .06], reach: [.39, .39], thick: .62, legSize: .74, hip: [.1, ZOMBIE_HIP], shin: .41, shoe: look.shoes });
   rig.setHood(townBody);
   const root = new THREE.Group(); root.add(rig.body); rig.body.scale.setScalar(TOWN_SCALE); rig.body.position.y = TOWN_HIPS; root.position.set(x, y, z); root.rotation.y = yaw; scene.add(root);
-  const V3 = (a, b, c) => new THREE.Vector3(a, b, c);
-  rig.arm(0, V3(-.25, -.68, .09), V3(-.7, -.3, -.3)); rig.arm(1, V3(.25, -.68, .09), V3(.7, -.3, -.3));
-  rig.leg(0, V3(-.11, -1.36, 0), V3(-.1, -1, .8)); rig.leg(1, V3(.11, -1.36, 0), V3(.1, -1, .8));
+  const V3 = (a, b, c) => new THREE.Vector3(a, b, c), bare = new Set(rig.body.children);
   if (extra) extra(rig.body);
+  // Having only quit a little, they stand a little over: the top half and whatever's on it turned forward about the hips, and their arms hung from
+  // wherever that puts their shoulders. Robby's not one of them.
+  if (!ghost) {
+    const pivot = V3(0, ZOMBIE_HIP, 0), turn = new THREE.Quaternion().setFromAxisAngle(V3(1, 0, 0), Math.PI * (1 - flickering(far) / 180));
+    for (const o of [rig.hm, ...rig.body.children.filter((o) => !bare.has(o) && o.position.y > ZOMBIE_HIP)]) { o.position.sub(pivot).applyQuaternion(turn).add(pivot); o.quaternion.premultiply(turn); }
+    for (const S of rig.S) S.sub(pivot).applyQuaternion(turn).add(pivot);
+  }
+  const [L, R] = rig.S;
+  rig.arm(0, L.clone().add(V3(-.045, -.74, .09)), L.clone().add(V3(-.495, -.36, -.3))); rig.arm(1, R.clone().add(V3(.045, -.74, .09)), R.clone().add(V3(.495, -.36, -.3)));
+  rig.leg(0, V3(-.11, -1.36, 0), V3(-.1, -1, .8)); rig.leg(1, V3(.11, -1.36, 0), V3(.1, -1, .8));
   if (ghost) makeGhost(rig.body);
   const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTex([name.toUpperCase()], 256, 64, 'rgba(0,0,0,0)', '#f1e6cf', '34px Bungee, Impact, sans-serif'), transparent: true, depthTest: false, fog: false }));
   tag.scale.set(1.4, .35, 1); tag.position.set(0, 2.15, 0); tag.renderOrder = 10; root.add(tag);
@@ -4355,9 +4363,25 @@ const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
 const crowdParts = [crowdBodies, crowdLines(crowdBodies, 2.8, crowdLine), crowdArms, crowdLines(crowdArms, 2.2, crowdLimbLine), crowdLegs, crowdLines(crowdLegs, 2, crowdLimbLine), crowdAura];
 const _cc = new THREE.Color(), _cb = new THREE.Matrix4(), _cu = new THREE.Matrix4(), _cl = new THREE.Matrix4(), _cm = new THREE.Matrix4(), _cp = new THREE.Vector3(), _cq = new THREE.Quaternion(), _cs = new THREE.Vector3(), _ce = new THREE.Euler();
 const GAIT = [3.6, 4.6, 9, 11, 16, 0, 10, 4.6];   // how quickly their limbs go, by state
-// Standing about they're folded over at the waist, and going to look they come up some. The ones after him stand up, unless they're the kind who come low and quick,
-// folded over with their arms dragging. In radians from upright, by state. It's only ever a pose, so whatever stands them up for good can undo it.
-const FOLD = [1.3, .6, 0, 0, 0, 0, 0, 0], SCUTTLE = 1.05, FOLD_LEG = .83;
+// How far over someone stands is their own, the angle at the hips in src/agents.js, and the pose gets there by leaning the top half forward and putting
+// the hips back so they don't topple, which tips the legs. Going to look or following him about they come up some, and coming after him or getting out
+// of his way they stand up, unless they're folded further over than a table, who stay that low with their arms dragging, or their hands on the ground
+// once they're far enough over to reach it. Getting up off their knees they're as far over as the quiet all stood before there was a range. It's only
+// ever a pose, so whatever stands them up for good can undo it.
+const COME_UP = .46, KNEEL_FOLD = 1.3, FOLD_LEG = .83, HIPS_BACK = .17, CROWD_ARM = .9, CRAWL = .35;
+// From the hips to the top of the head is longer than the legs, so a body folded all the way over would have its head in the ground. Nobody's drawn
+// further over at the hips than the first of these, which leaves the head 6 cm off the ground at their feet, and anyone under the second is eased
+// into what's left, so whoever's further over by their number is still drawn further over.
+const HIPS_LEAST = [34, 60];
+// how far the top half leans, in radians from upright, for someone with this angle at their hips, once their legs have tipped as far as that puts the hips back
+function leanFor(hips) {
+  const [least, eased] = HIPS_LEAST, drawn = hips < eased ? least + (eased - least) * Math.max(0, hips) / eased : hips;
+  const want = Math.PI * (1 - drawn / 180), k = HIPS_BACK / FOLD_LEG;
+  let l = want * .8;
+  for (let i = 0; i < 6; i++) { const t = Math.min(.99, k * l); l -= (l + Math.asin(t) - want) / (1 + k / Math.sqrt(1 - t * t)); }
+  return Math.max(0, l);
+}
+const leanOf = (s) => (s.bentFor === s.hips ? s.bend : (s.bentFor = s.hips, s.bend = leanFor(s.hips ?? 180)));
 // Knocked down: held a step as they were, gone over in a third of a second, and getting up at the end of it, which takes at most this long, with their legs this far back on their knees
 const HIT_HOLD = 1 / 12, HIT_FALL = .3, GET_UP = 2.4, KNEEL = 1.05, SMOOTH = (t) => THREE.MathUtils.smoothstep(t, 0, 1);
 const crowdShown = [];
@@ -4440,6 +4464,19 @@ function drawCrowd(step) {
 }
 // Whoever's driving goes with the vehicle, which moves every frame
 function drawSeated(step) { if (!crowdSeated) return; for (let i = 0; i < crowdSeated; i++) poseCrowd(crowdShown[i], i, step); crowdWritten(); }
+// For the tests: how someone in the crowd is drawn, from what went to the graphics card. The angle at their hips, and how far over the ground the
+// lowest of their head and of their hands are, in metres.
+function stanceOf(s) {
+  const i = crowdShown.indexOf(s); if (i < 0) return null;
+  const at = (mesh, n) => new THREE.Matrix4().fromArray(mesh.instanceMatrix.array, n * 16), B = at(crowdBodies, i), up = new THREE.Vector3().setFromMatrixColumn(B, 1).normalize();
+  const lowest = (geo, M, from = -Infinity) => { const P = geo.attributes.position, v = new THREE.Vector3(); let y = Infinity; for (let k = 0; k < P.count; k++) if (P.getY(k) > from) y = Math.min(y, v.fromBufferAttribute(P, k).applyMatrix4(M).y); return y - s.y; };
+  let hips = 0, hands = Infinity;
+  for (let a = 0; a < 2; a++) {
+    hips += THREE.MathUtils.radToDeg(up.angleTo(new THREE.Vector3().setFromMatrixColumn(at(crowdLegs, i * 2 + a), 1).normalize().negate())) / 2;
+    hands = Math.min(hands, lowest(crowdArms.geometry, at(crowdArms, i * 2 + a)));
+  }
+  return { hips, head: lowest(crowdBodies.geometry, B, .2), hands };
+}
 function crowdWritten() { crowdBodies.instanceMatrix.needsUpdate = crowdArms.instanceMatrix.needsUpdate = crowdLegs.instanceMatrix.needsUpdate = crowdAura.instanceMatrix.needsUpdate = crowdZ.needsUpdate = crowdLimbZ.needsUpdate = crowdLine.needsUpdate = crowdLimbLine.needsUpdate = crowdAuraZ.needsUpdate = true; }
 function poseCrowd(s, i, step) {
   const bodies = crowdBodies.instanceMatrix.array, arms = crowdArms.instanceMatrix.array, legs = crowdLegs.instanceMatrix.array, auras = crowdAura.instanceMatrix.array;
@@ -4453,13 +4490,14 @@ function poseCrowd(s, i, step) {
     const fell = !downed ? 0 : struck ? Math.min(1, Math.max(0, since - HIT_HOLD) / HIT_FALL) : Math.min(1, since * 7);
     const getUp = downed && !s.thrown && s.dead === undefined ? Math.min(GET_UP, s.flatFor * .4) : 0, rise = getUp ? Math.max(0, 1 - s.flat / getUp) : 0;
     const lie = downed ? Math.min(SMOOTH(fell), 1 - SMOOTH(rise * 2)) : 0, kneel = rise < .5 ? SMOOTH(rise * 2) : 1 - SMOOTH(rise * 2 - 1);
-    const st = held ? s.hitAs : s.state, after = st === HUNTING || st === SWARM || st === GRABBING, away = st === AVOIDING, still = !s.moving && st !== GRABBING, low = after && s.scuttle;
+    const st = held ? s.hitAs : s.state, after = st === HUNTING || st === SWARM || st === GRABBING, away = st === AVOIDING, still = !s.moving && st !== GRABBING, low = (after || away) && s.scuttle;
     s.gait += held ? 0 : GAIT[st] / 12 * (still ? .2 : 1) * (low ? 1.4 : 1);
     // reaching for him, with their hands coming up over their heads, until they've got hold or something stops them
     const grip = after && s.reaching > 0 ? Math.min(1, s.reaching / horde.T.windUp) : 0;
-    // folded over, or coming up out of it, a few steps at a time. The hips go back so they don't topple, which tips the legs, and that takes them down a little.
-    const want = seat || lie > .5 ? 0 : kneel > 0 ? FOLD[SHAMBLE] : low ? SCUTTLE : FOLD[st], fold = s.fold = s.fold === undefined ? want : s.fold + (want - s.fold) * .34;
-    const back = fold * .17, tilt = Math.asin(back / FOLD_LEG), legs0 = kneel * KNEEL - tilt, drop = FOLD_LEG * (1 - Math.cos(legs0));
+    // folded over as far as they stand, or coming up out of it some, a few steps at a time. The hips go back so they don't topple, which tips the legs, and that takes them down a little.
+    const keep = after || away ? +low : st === CURIOUS || st === TRAILING ? (s.scuttle ? 1 : COME_UP) : st === SHAMBLE ? 1 : 0;
+    const want = seat || lie > .5 ? 0 : kneel > 0 ? KNEEL_FOLD : leanOf(s) * keep, fold = s.fold = s.fold === undefined ? want : s.fold + (want - s.fold) * .34;
+    const back = fold * HIPS_BACK, tilt = Math.asin(back / FOLD_LEG), legs0 = kneel * KNEEL - tilt, drop = FOLD_LEG * (1 - Math.cos(legs0));
     const p = s.gait, stride = still ? 0 : low ? .44 : after || away ? .62 : .36 - fold * .05;
     const look = s.look % CROWD_LOOKS.length, size = s.size * TOWN_SCALE;
     // and drawn where they were struck until they've gone over, sliding to where they were thrown as they do
@@ -4482,6 +4520,12 @@ function poseCrowd(s, i, step) {
       // folded over, their arms hang straight down from the shoulder, swinging a little, and drag behind them coming after him like that
       if (!seat && fold > .05) { const hang = -lean + (after ? (st === GRABBING ? -.6 : .3 + Math.sin(p * 1.3 + a * 2) * .1) : st === CURIOUS ? -.25 - a * .15 : swing * .14 - (a === s.limp ? .06 : 0)); reach += (hang - reach) * Math.min(1, fold / .6); }
       if (grip) reach += (-2.3 + a * .15 - reach) * grip;
+      // and however far over they are, their hands come no further down than the ground, where they rest in front of them, and when they're going
+      // anywhere like that each hand goes forward with the other foot, the way something crawls
+      if (!seat && !lie) {
+        const room = (1.43 + ZOMBIE_HIP - drop + (.06 - ZOMBIE_HIP) * Math.cos(lean) - .04) / CROWD_ARM;
+        if (room < 1) reach = Math.min(lean + reach, -Math.acos(Math.max(-1, room)) - (still ? 0 : CRAWL * (1 - swing) / 2)) - lean;
+      }
       if (a === 0) s.arm = lean + reach;
       _cl.makeRotationFromEuler(_ce.set(reach, 0, side * (after ? .03 : .07))).setPosition(side * .205, .06, 0);
       _cm.multiplyMatrices(_cu, _cl).toArray(arms, (i * 2 + a) * 16);
@@ -4492,9 +4536,9 @@ function poseCrowd(s, i, step) {
     const far = s.far ??= farOf(s.phase / 6.28, !!s.who && s.quiet === false, BURNT_LINE), hot = after ? 1 : st === CURIOUS || st === TRAILING ? .42 : st === STUNNED ? .2 : 0, flip = s.limp;
     crowdZ.setXYZW(i, look, far, hot, flip); zombieLine(far, hot, _cc).toArray(crowdLine.array, i * 3);
     for (let a = 0; a < 2; a++) { crowdLimbZ.setXYZW(i * 2 + a, look, far, hot, flip); _cc.toArray(crowdLimbLine.array, (i * 2 + a) * 3); }
-    // what's coming off them goes down with them, out of the middle of them as they lie or kneel, with the glow on the ground under that
-    if (downed) { _cp.set(0, AURA_UP / TOWN_SCALE - 1.43, 0).applyMatrix4(_cb); _cm.makeScale(1, Math.max(.1, (_cp.y - s.y) / AURA_UP), 1).setPosition(_cp.x, s.y, _cp.z); }
-    else _cm.makeTranslation(px, seat ? seat.y : s.y, pz);
+    // what's coming off them goes down with them, out of the middle of them as they lie, kneel or stand folded over, with the glow on the ground under that
+    if (!seat) { _cp.set(0, AURA_UP / TOWN_SCALE - 1.43, 0).applyMatrix4(downed ? _cb : _cu); _cm.makeScale(1, Math.max(.1, (_cp.y - s.y) / AURA_UP), 1).setPosition(_cp.x, s.y, _cp.z); }
+    else _cm.makeTranslation(px, seat.y, pz);
     _cm.toArray(auras, i * 16); crowdAuraZ.setXYZ(i, far, hot, look);
   }
 }
@@ -5280,6 +5324,8 @@ const horde = createHorde({
   folks,
   // Most of them have gone quiet, and the ones who've burnt down haven't: more of those the further out of town they came out, which is in src/agents.js
   quiet: (s) => !burntDown(s.who, Math.hypot(...MAP.toGame(s.x, s.z))),
+  // and how far over they stand goes with it
+  hips: (s) => hipsOf(s.who, Math.hypot(...MAP.toGame(s.x, s.z))),
   blocked: (x, z, y) => blocked(x, z, y) || floorOnce(x, z) - y > .7 || (driving !== null && inVehicle(driving, x, z, .3)),
   water: (x, z) => floorOnce(x, z) < WATER.level(x, z) - .1,
   level: (x, z) => WATER.level(x, z),
@@ -7161,7 +7207,7 @@ if (TEST) {
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },
     compound: { JAM, JAM_SHED, DECK, LAWN, spot: screenSpot, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach },
     lures: { LYING, lyingNear, flying, popping, opened, ALARMS, lureSpots, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
-    horde, folks, traffic, homes: HOMES, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }),
+    horde, folks, traffic, homes: HOMES, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf, castHips: (id) => 180 - THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(NPCS[id].rig.hm.quaternion.w)))),
     mutters: () => mutterSlots.filter((m) => m.s && !m.e.hidden).map((m) => ({ says: m.e.textContent, id: m.s.who.id, opacity: +m.e.style.opacity, transform: m.e.style.transform, box: m.e.getBoundingClientRect().toJSON() })),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.

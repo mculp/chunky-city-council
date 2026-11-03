@@ -5,7 +5,7 @@
 // something, and only the ones who've burnt down come for him on sight, which is the top of how far gone they are.
 // What each of them is like and what they remember of him is in src/agents.js.
 
-import { AFTER, AWAY, TAILING } from './agents.js';
+import { AFTER, AWAY, TAILING, HOW } from './agents.js';
 
 export const SHAMBLE = 0, CURIOUS = 1, HUNTING = 2, SWARM = 3, GRABBING = 4, STUNNED = 5, AVOIDING = 6, TRAILING = 7;
 export const STATE_NAMES = ['shamble', 'curious', 'hunting', 'swarm', 'grabbing', 'stunned', 'avoiding', 'trailing'];
@@ -85,6 +85,9 @@ export function createHorde(world, tuning = {}, on = {}) {
     if (F) { const who = extra.who ?? F.next(); Object.assign(s, who.looks, extra); s.who = who; who.body = s; s.homeX = x; s.homeZ = z; s.mood = 0; }
     // whether they've gone quiet, unless it's been said. The people at home have their own way of being.
     if (s.quiet === undefined && !s.who?.calm) s.quiet = !!world.quiet?.(s);
+    // how far over they stand, in degrees at the hips, and whether that's far enough over to come after him low and quick like that
+    s.hips ??= world.hips?.(s) ?? 180;
+    s.scuttle ??= s.hips < HOW.hips.scuttles;
     all.push(s); return s;
   };
   // Whether they'd leave him be just now: anyone at home, and anyone who's gone quiet and isn't already after him, unless they've got something against him
