@@ -47,6 +47,12 @@ describe('the cast file', () => {
     assert.equal(checkCast(broken).length, 2);
   });
 
+  test('a rename has to point at someone, and the old name can\'t still be in use', () => {
+    const broken = JSON.parse(JSON.stringify(data));
+    broken.renamed = { tre: 'nobody', coop: 'rocky' };
+    assert.equal(checkCast(broken).length, 2);
+  });
+
   test('every node can be reached from someone you can talk to', () => {
     const seen = new Set(), walk = (id) => {
       if (seen.has(id)) return; seen.add(id);
@@ -60,15 +66,15 @@ describe('the cast file', () => {
 describe('meters', () => {
   test('stop at their limits', () => {
     const p = createPeople(data);
-    p.change('tre', 'trust', 99); assert.equal(p.get('tre', 'trust'), 3);
-    p.change('tre', 'fear', -5); assert.equal(p.get('tre', 'fear'), 0);
+    p.change('rocky', 'trust', 99); assert.equal(p.get('rocky', 'trust'), 3);
+    p.change('rocky', 'fear', -5); assert.equal(p.get('rocky', 'fear'), 0);
   });
 
   test('helping one person costs you with another, but falling out earns nothing back', () => {
     const p = createPeople(data);
-    p.change('coop', 'trust', 2); assert.equal(p.get('odessa', 'trust'), -1);
-    p.change('coop', 'trust', -2); assert.equal(p.get('odessa', 'trust'), -1);
-    assert.equal(p.get('tre', 'trust'), 0);
+    p.change('coop', 'trust', 2); assert.equal(p.get('bobby', 'trust'), -1);
+    p.change('coop', 'trust', -2); assert.equal(p.get('bobby', 'trust'), -1);
+    assert.equal(p.get('rocky', 'trust'), 0);
   });
 
   test('a tie doesn\'t set off another tie', () => {
@@ -81,19 +87,29 @@ describe('meters', () => {
 describe('saving', () => {
   test('meters, remembered flags and who you\'ve met survive a reload', () => {
     const store = memory(), c = ctx(), p = createPeople(data, { store });
-    p.apply([{ meter: 'tre.trust', by: 2 }, { set: 'tank' }, { set: 'delivered' }], c); p.meet('tre');
+    p.apply([{ meter: 'rocky.trust', by: 2 }, { set: 'tank' }, { set: 'delivered' }], c); p.meet('rocky');
     const q = createPeople(data, { store });
-    assert.equal(q.get('tre', 'trust'), 2);
+    assert.equal(q.get('rocky', 'trust'), 2);
     assert.deepEqual(q.flags(), { tank: true }, 'a flag that belongs to one run isn\'t kept');
-    assert.ok(q.known().some((x) => x.id === 'tre'));
+    assert.ok(q.known().some((x) => x.id === 'rocky'));
+  });
+
+  test('a save from before Tre was Rocky and Miss Odessa was Miss Bobby keeps what they thought of him', () => {
+    const store = memory(), KEY = `chunky.people.v${data.version}`;
+    store.setItem(KEY, JSON.stringify({ meters: { tre: { trust: 2, fear: 1 }, odessa: { trust: -1 }, coop: { debt: 3 } }, flags: { metTre: true, tank: true }, met: ['tre', 'odessa', 'robby'] }));
+    const p = createPeople(data, { store });
+    assert.equal(p.get('rocky', 'trust'), 2); assert.equal(p.get('rocky', 'fear'), 1); assert.equal(p.get('bobby', 'trust'), -1); assert.equal(p.get('coop', 'debt'), 3);
+    assert.deepEqual(p.flags(), { metRocky: true, tank: true });
+    p.change('coop', 'trust', 1);
+    assert.deepEqual(JSON.parse(store.getItem(KEY)).met.sort(), ['bobby', 'robby', 'rocky'], 'and it\'s saved under their new names');
   });
 
   test('a person with no meters yet starts at zero', () => {
     const store = memory();
-    createPeople(data, { store }).change('tre', 'trust', 1);
+    createPeople(data, { store }).change('rocky', 'trust', 1);
     const more = { ...data, cast: [...data.cast, { id: 'new', name: 'New', short: 'New' }] };
     const q = createPeople(more, { store });
-    assert.equal(q.get('new', 'trust'), 0); assert.equal(q.get('tre', 'trust'), 1);
+    assert.equal(q.get('new', 'trust'), 0); assert.equal(q.get('rocky', 'trust'), 1);
     assert.ok(!q.known().some((x) => x.id === 'new'), 'and they aren\'t shown until you meet them');
   });
 
@@ -127,8 +143,8 @@ describe('dialogue', () => {
     assert.deepEqual(parseCondition('coop.trust >= 1'), { who: 'coop', meter: 'trust', op: '>=', value: 1 });
     assert.deepEqual(parseCondition('beans < 3'), { what: 'beans', op: '<', value: 3 });
     assert.throws(() => parseCondition('coop.trust !! 3'));
-    const p = createPeople(data), c = ctx(); c.items.bag = 1; c.beans = 3; p.change('tre', 'trust', 1);
-    assert.ok(p.check(['has:bag', '!metCoop', 'tre.trust >= 1', 'beans >= 3'], c));
+    const p = createPeople(data), c = ctx(); c.items.bag = 1; c.beans = 3; p.change('rocky', 'trust', 1);
+    assert.ok(p.check(['has:bag', '!metCoop', 'rocky.trust >= 1', 'beans >= 3'], c));
     assert.ok(!p.check(['has:bag', 'metCoop'], c));
     c.items.bag = 0; assert.ok(p.check(['!has:bag'], c));
   });
@@ -151,18 +167,18 @@ describe('dialogue', () => {
 
   test('effects move beans, items and meters, and can have conditions of their own', () => {
     const p = createPeople(data), c = ctx();
-    p.apply(p.line('treHand', c).do, c);
+    p.apply(p.line('rockyHand', c).do, c);
     assert.equal(c.beans, 2); assert.equal(c.items.bag, -1); assert.ok(c.flags.delivered);
-    assert.equal(p.get('tre', 'trust'), 1); assert.equal(p.get('coop', 'debt'), -3);
-    const first = p.line('tre', ctx());
+    assert.equal(p.get('rocky', 'trust'), 1); assert.equal(p.get('coop', 'debt'), -3);
+    const first = p.line('rocky', ctx());
     const fresh = createPeople(data), d = ctx();
     fresh.apply(first.do, d); fresh.apply(first.do, d);
-    assert.equal(fresh.get('tre', 'fear'), 1, 'only the first meeting counts');
+    assert.equal(fresh.get('rocky', 'fear'), 1, 'only the first meeting counts');
   });
 
   test('the whole favor nets Coop out of your debt', () => {
     const p = createPeople(data), c = ctx();
-    for (const id of ['coopBag', 'treHand']) p.apply(p.line(id, c).do, c);
+    for (const id of ['coopBag', 'rockyHand']) p.apply(p.line(id, c).do, c);
     assert.equal(p.get('coop', 'debt'), -3);
     p.apply(p.line('coop', c).do, c);
     assert.equal(p.get('coop', 'debt'), 0); assert.equal(c.beans, 5); assert.equal(c.items.bag, 0);
@@ -171,10 +187,10 @@ describe('dialogue', () => {
   test('the steps are paid for out of the pantry, and she only asks while it has something', () => {
     const p = createPeople(data), c = ctx(), why = [];
     c.pantry = 2; c.fromPantry = (w) => { why.push(w); c.beans += c.pantry; c.pantry = 0; };
-    const asks = () => p.line('odessa', c).opts.some((o) => o.to === 'odBeans');
+    const asks = () => p.line('bobby', c).opts.some((o) => o.to === 'bobbyBeans');
     assert.ok(asks());
     p.apply(data.events.swept, c);
-    assert.deepEqual(why, ['Odessa']); assert.equal(c.beans, 2); assert.ok(c.flags.swept);
+    assert.deepEqual(why, ['Miss Bobby']); assert.equal(c.beans, 2); assert.ok(c.flags.swept);
     assert.ok(!asks());
     c.flags.swept = false;
     assert.ok(!asks(), 'not with nothing on the shelves');

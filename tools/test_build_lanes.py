@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from build_lanes import clear_of_buildings, closed_ends, crossings_of, lane_spec, measured_lanes, moves_buildings, rounded, split_off  # noqa: E402
+from build_lanes import Places, clear_of_buildings, closed_ends, crossings_of, lane_spec, measured_lanes, moves_buildings, rounded, split_off  # noqa: E402
 
 CONFIG = {
     "classes": {"S1400named": {"width": 5.5, "surface": "asphalt"}, "S1400": {"width": 4.2, "surface": "gravel"}, "S1740": {"width": 3.2, "surface": "dirt"}},
@@ -111,9 +111,29 @@ class TestMeasured(unittest.TestCase):
         # already on one: it isn't joined to itself
         self.assertEqual(second["points"], [[10, 50], [30, 50]])
 
+    def test_one_measured_from_a_road_between_its_vertices_starts_there_and_is_joined(self):
+        drive, = measured_lanes(ROADS, [], {"measured": [{"width": 4.5, "surface": "gravel", "points": [[40, 0], [40, -25]]}]})
+        self.assertEqual(drive["points"], [[40, 0], [40, -25]])
+        joined, pieces = split_off([drive], ROADS)
+        self.assertEqual(joined, [0])
+        self.assertEqual(pieces, [])
+
+    def test_one_thats_a_buildings_own_says_so(self):
+        drive, = measured_lanes(ROADS, [], {"measured": [{"width": 4.5, "surface": "gravel", "for": 7, "points": [[40, 0], [40, -25]]}]})
+        self.assertEqual(drive["for"], 7)
+
     def test_too_far_from_anything_stops_the_build(self):
         with self.assertRaises(SystemExit):
             measured_lanes(ROADS, [], {"measured": [{"width": 4, "surface": "gravel", "points": [[500, 500], [510, 500]]}]})
+
+
+class NearestRoad(unittest.TestCase):
+    def test_a_drive_thats_one_buildings_own_can_be_passed_over(self):
+        places = Places()
+        places.add_line([(0, 0), (100, 0)], 3, "road")
+        places.add_line([(40, 10), (60, 10)], 2, "lane_9")
+        self.assertEqual(places.nearest_road(50, 14)[3], "lane_9")
+        self.assertEqual(places.nearest_road(50, 14, skip={"lane_9"})[3], "road")
 
 
 if __name__ == "__main__":

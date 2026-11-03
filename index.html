@@ -1854,7 +1854,7 @@ const churchMat = triplanar(woodWhite, .5, { roughness: .9 });
 let steepleProp = null;
 // The building's own axes, from its middle in true metres: u runs east along its north wall, v south down the nave. Its door's in the middle of the front, at u -4.67.
 const CF = tilted(-307, -230.24, -2.81), trimWhite = new THREE.MeshStandardMaterial({ color: '#d6d2c6', roughness: .85 });
-// a step's height of concrete under the porch, which is what she means by her steps. It's that low because he walks over it and in.
+// a step's height of concrete under the porch. It's that low because he walks over it and in.
 breakable('steps', 3, () => CF.box(stoneMat, -4.67, .05, 19.5, 3.4, .1, 2.06, 1), { chip: '#7c7570' });
 // the porch: two white posts and a little gable over the door
 {
@@ -2238,21 +2238,37 @@ function fillTies(x, z) {
   }
   TIES.count = n; TIES.instanceMatrix.needsUpdate = true;
 }
-// rusted boxcar + Tre's spot, on a siding with the tracks behind it
+// rusted boxcar, on a siding with the tracks behind it
 const BOX = PLACES.boxcar;
-let tankProp = null;
 around(BOX, () => {
   pad(-9, 9, -9, 3);
   breakable('boxcar', 7, () => { addBox(steelMat, 0, Y0 + 2.4, 0, 13, 3.6, 3.4, 1.6); solid(-6.5, 6.5, -1.7, 1.7, Y0 + 4.2); addBox(roofMat, 1, Y0 + 2.2, -1.75, 3, 2.6, .1, 0); }, { chip: '#5a3a2c', squash: .34 });
-  tankProp = breakable('tank', .4, () => { addBox(roofMat, 1, Y0 + .4, -4, .9, .8, 1.4, 1.2); solid(.55, 1.45, -4.7, -3.3, Y0 + 1.5); }, { chip: '#cfefff' });
   flushBuckets();
 });
 for (const x of [-5, 5]) for (const z of [-.8, .8]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(.45, .45, .2, 14), roofMat); w.rotation.x = Math.PI / 2; w.position.set(BOX.x + x, Y0 + .5, BOX.z + z); scene.add(w); }
-const tank = new THREE.Mesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#cfefff', transparent: true, opacity: .18, roughness: .1, depthWrite: false })); tank.scale.set(.8, .7, 1.2); tank.position.set(BOX.x + 1, Y0 + 1.15, BOX.z - 4); outline(tank, INK, 1.2); scene.add(tank); tankProp.hide = [tank];
+// Where Rocky and Miss Bobby live: his trailer across US 80 from the gas station, and her house just north of the town hall on Commerce St.
+// Each of them is out front of their own door, which is where the building's own walls put it. `out` is how far from the wall and `side` how far along it.
+const homeDoor = (id) => wallsOf(STRUCTURES.find((s) => s.id === id), TOWN_Y).doors[0];
+const ROCKY_DOOR = homeDoor(75411012), BOBBY_DOOR = homeDoor(76094199);
+const byDoor = (d, out, side) => ({ x: d.x + d.nx * out + d.ex * side, z: d.z + d.nz * out + d.ez * side, yaw: Math.atan2(d.nx, d.nz) });
+// a plank stoop at his door, and his moccasin in a tank on a stand beside it, along the wall
+let tankProp = null;
 {
-  const pts = []; for (let i = 0; i <= 40; i++) { const a = i / 40 * Math.PI * 4.5, r = .32 - i * .006; pts.push(new THREE.Vector3(BOX.x + 1 + Math.sin(a) * r * .55, Y0 + .88 + i * .004, BOX.z - 4 + Math.cos(a) * r)); }
-  const coil = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, .035, 6), new THREE.MeshStandardMaterial({ map: snakeTex, roughness: .7 })); outline(coil, INK, 1); scene.add(coil); tankProp.hide.push(coil);
+  const s = byDoor(ROCKY_DOOR, .7, 0), t = byDoor(ROCKY_DOOR, .62, 2.1), q = new THREE.Quaternion().setFromAxisAngle(UP, t.yaw);
+  breakable('steps', 2, () => addBox(benchMat, s.x, Y0 + .06, s.z, 1.8, .12, 1.4, 1.1, q), { chip: '#6e5238' });
+  tankProp = breakable('tank', .4, () => { addBox(roofMat, t.x, Y0 + .4, t.z, 1.4, .8, .9, 1.2, q); solid(t.x - .75, t.x + .75, t.z - .75, t.z + .75, Y0 + 1.5); }, { chip: '#cfefff' });
+  flushBuckets();
+  const held = new THREE.Group(); held.position.set(t.x, Y0, t.z); held.rotation.y = t.yaw; scene.add(held);
+  const tank = new THREE.Mesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#cfefff', transparent: true, opacity: .18, roughness: .1, depthWrite: false })); tank.scale.set(1.2, .7, .8); tank.position.y = 1.15; outline(tank, INK, 1.2); held.add(tank);
+  const pts = []; for (let i = 0; i <= 40; i++) { const a = i / 40 * Math.PI * 4.5, r = .32 - i * .006; pts.push(new THREE.Vector3(Math.cos(a) * r, .88 + i * .004, Math.sin(a) * r * .55)); }
+  const coil = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, .035, 6), new THREE.MeshStandardMaterial({ map: snakeTex, roughness: .7 })); outline(coil, INK, 1); held.add(coil);
+  tankProp.hide = [held];
 }
+// a step of concrete at her door, which is what she means by her steps, and as low as the church's so that he walks over it and in
+breakable('steps', 3, () => { const s = byDoor(BOBBY_DOOR, .55, 0); addBox(stoneMat, s.x, Y0 + .05, s.z, 1.9, .1, 1.1, 1, new THREE.Quaternion().setFromAxisAngle(UP, s.yaw)); }, { chip: '#7c7570' });
+flushBuckets();
+// and the front yard her van's parked on, levelled like the house is, or it'd be standing on the slope down to the road
+{ const v = byDoor(BOBBY_DOOR, 2.45, 4.3); pad(v.x - 2.6, v.x + 1.8, v.z - 3.6, v.z + 3.6, 4); }
 // water tower with the town's name
 // Knock out two of its legs and the whole thing goes over, and what it lands on knows about it
 let towerProp = null, towerLegs = 0, beaconLive = true;
@@ -4201,12 +4217,13 @@ const NPCS = {
     extra: (b) => { const ch = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([[-.072, .155, .035], [-.092, .092, .135], [-.058, .02, .162], [0, -.035, .162], [.058, .02, .162], [.092, .092, .135], [.072, .155, .035]].map((p) => new THREE.Vector3(...p))), 24, .011, 6), gold); b.add(ch);
       const cap = new THREE.Mesh(new THREE.SphereGeometry(.137, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshToonMaterial({ color: '#1b2a4a', emissive: '#0a1020', gradientMap: toonGrad })); cap.scale.y = .78; cap.position.set(0, .455, .09); b.add(outline(cap, INK, 1.5));
       const brim = new THREE.Mesh(new THREE.BoxGeometry(.2, .016, .13), cap.material); brim.position.set(0, .447, .225); brim.rotation.x = .16; b.add(outline(brim, INK, 1.2)); } }),
-  tre: makeNPC({ id: 'tre', name: 'Tre', x: BOX.x + 3.3, z: BOX.z - 3, yaw: Math.PI * .9 }),
-  // at the foot of her steps, to one side of the door
-  odessa: makeNPC({ id: 'odessa', name: 'Miss Odessa', x: 71.3 + PLACES.church.x, z: -5.8 + PLACES.church.z, yaw: 0,
+  // out front of his trailer, to one side of the door, looking across at the road
+  rocky: makeNPC({ id: 'rocky', name: 'Rocky', ...byDoor(ROCKY_DOOR, 1.8, -1.4) }),
+  // at the foot of her step, on the side of her door away from the van
+  bobby: makeNPC({ id: 'bobby', name: 'Miss Bobby', ...byDoor(BOBBY_DOOR, 1.5, -1.4),
     extra: (b) => { const hat = new THREE.Mesh(new THREE.CylinderGeometry(.23, .23, .024, 24), new THREE.MeshToonMaterial({ color: '#b8ad96', gradientMap: toonGrad })); hat.position.set(0, .49, .09); hat.rotation.x = .1; b.add(outline(hat, INK, 1.3));
       const crown = new THREE.Mesh(new THREE.CylinderGeometry(.105, .125, .1, 18), hat.material); crown.position.set(0, .55, .095); crown.rotation.x = .1; b.add(outline(crown, INK, 1.2));
-      const skirt = new THREE.Mesh(new THREE.CylinderGeometry(.168, .29, .5, 16, 1, true), new THREE.MeshToonMaterial({ color: LOOKS.cast.odessa.top.colors[0], emissive: LOOKS.cast.odessa.top.colors[0], emissiveIntensity: .3, gradientMap: toonGrad, side: THREE.DoubleSide })); skirt.position.set(0, -.83, .005); b.add(outline(skirt, '#'+zombieLine(LOOKS.cast.odessa.degree).getHexString(), 2)); } }),
+      const skirt = new THREE.Mesh(new THREE.CylinderGeometry(.168, .29, .5, 16, 1, true), new THREE.MeshToonMaterial({ color: LOOKS.cast.bobby.top.colors[0], emissive: LOOKS.cast.bobby.top.colors[0], emissiveIntensity: .3, gradientMap: toonGrad, side: THREE.DoubleSide })); skirt.position.set(0, -.83, .005); b.add(outline(skirt, '#'+zombieLine(LOOKS.cast.bobby.degree).getHexString(), 2)); } }),
   // he didn't die, he moved to California
   robby: makeNPC({ id: 'robby', name: 'Robby', x: ROBBY.x, z: ROBBY.z, y: ROBBY.y, yaw: -Math.PI / 2, ghost: true, ph: 1.7 })
 };
@@ -5000,7 +5017,7 @@ function nextBeans() {
     if (!S.beans) return coop;
     left.push(coop);
   }
-  if (!S.flags.swept) left.push({ ...standing(NPCS.odessa), hint: `Miss Odessa is at the church on ${street('church_st')}` });
+  if (!S.flags.swept) left.push({ ...standing(NPCS.bobby), hint: `Miss Bobby is at her house by the town hall on ${street('commerce_st')}` });
   const away = (o) => Math.hypot(o.x - player.pos.x, o.z - player.pos.z), far = left.filter((o) => away(o) > 6);
   return (far.length ? far : left).sort((a, b) => away(a) - away(b))[0];
 }
@@ -5008,11 +5025,12 @@ function townObjective() {
   if (S.flags.ended) { objective('Chunky is yours. For now.'); return; }
   if (!S.flags.arrived) { objective(`Follow ${street('griffis_fountain_rd')} into town`, standing(NPCS.coop)); return; }
   const count = `Stock up on beans (${S.beans}/12)`;
-  if (S.items.bag > 0) objective(`${count} · Take Coop's bag to Tre at the boxcar, south of ${street('us_80')}`, standing(NPCS.tre));
+  if (S.items.bag > 0) objective(`${count} · Take Coop's bag to Rocky at his trailer, across ${street('us_80')} from the gas station`, standing(NPCS.rocky));
   else if (S.flags.delivered && !S.flags.paid) objective(`${count} · Go get paid by Coop at the gas station on ${street('us_80')}`, standing(NPCS.coop));
   else { const next = nextBeans(); objective(next.hint ? `${count} · ${next.hint}` : count, next); }
 }
-function startSweep() { S.mode = 'sweep'; S.sweep = 0; HP.kind = 'sweep'; player.pos.set(68.5 + PLACES.church.x, Y0 + .1, -6.9 + PLACES.church.z); player.yaw = 0; }
+// on her step, looking out
+function startSweep() { const s = byDoor(BOBBY_DOOR, .55, 0); S.mode = 'sweep'; S.sweep = 0; HP.kind = 'sweep'; player.pos.set(s.x, Y0 + .1, s.z); player.yaw = s.yaw; }
 function endChapter() {
   if (driving) getOut(true);
   S.mode = 'end'; prompt(null); $('dialog').hidden = true;
@@ -5245,7 +5263,7 @@ function bringOutCrowd() {
 const SET_ASIDE = [[...atTrue(880, 600), ...atTrue(1075, 740)], [...atTrue(-1600, -830), ...atTrue(-1490, -745)], [...atTrue(-730, 1630), ...atTrue(-440, 1780)]];
 // ---------------- people at home, at most of the houses and two at some. They come out as he gets near them, since working out where a door is takes a moment.
 // Nobody's at the places that are set aside, somebody's own, the trailer with the computer in it, or anywhere near Stuckey's Bridge.
-const HOME_ID = 1000, HOME_SEE = 190, HOME_SHARE = .8, HOME_TWO = .3, KEPT_EMPTY = new Set([75414843, 75057300, CRT_TRAILER]);
+const HOME_ID = 1000, HOME_SEE = 190, HOME_SHARE = .8, HOME_TWO = .3, KEPT_EMPTY = new Set([75414843, 75057300, CRT_TRAILER, 75411012, 76094199]);
 const HOMES = STRUCTURES.filter((s) => (s.use === 'house' || s.use === 'mobile') && !s.open && s.condition !== 'ruin' && !KEPT_EMPTY.has(s.id) && hash2(s.id | 0, 81) < HOME_SHARE && Math.hypot(s.pts[0][0], s.pts[0][1]) > 400 && !SET_ASIDE.some(([x0, z0, x1, z1]) => s.pts[0][0] > x0 && s.pts[0][0] < x1 && s.pts[0][1] > z0 && s.pts[0][1] < z1)).flatMap((s) => (hash2(s.id | 0, 83) < HOME_TWO ? [s, s] : [s])).map((s, i) => ({ s, id: HOME_ID + i, out: false }));
 let townFull = !new URLSearchParams(location.search).has('test'), homesLook = 0;
 function fillHomes(dt) {
@@ -5322,7 +5340,7 @@ function updateCrowd(dt, M) {
 // ================================================================ vehicles
 // How they handle and where they're parked is in src/vehicles.js, and what they're built from is in src/vehiclemodels.js.
 // One mesh for each kind and one for every wheel, with their outlines: ten draw calls, however many are about.
-const VEH_CAP = { car: 8, pickup: 8, quad: 7, golf: 3, coupe: 1 }, VEH_SEE = 170, VEH_BURNT = new THREE.Color('#1c1618');
+const VEH_CAP = { car: 8, pickup: 8, quad: 7, golf: 3, coupe: 1, van: 1 }, VEH_SEE = 170, VEH_BURNT = new THREE.Color('#1c1618');
 const vehGroup = new THREE.Group(); vehGroup.visible = false; scene.add(vehGroup);
 const vehMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .72, metalness: .18 });
 // Paint is the only pure white in the vertices, so that's what takes each one's colour. It's rusting through in patches, each its own way, except where its seed's below zero.
@@ -5352,6 +5370,12 @@ for (const [kind, n] of Object.entries(VEH_CAP)) {
 const VEH_WHEELS = Object.values(VEH_CAP).reduce((a, b) => a + b, 0) * 4;
 const vehWheels = vehMesh(vehGeos.wheel.geo, vehMat, VEH_WHEELS); vehWheels.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(VEH_WHEELS * 3).fill(1), 3);
 const vehWheelLines = vehMesh(vehGeos.wheel.line, outlineMat(INK, 1.4), VEH_WHEELS, vehWheels);
+// Chunky Baptist's name down both sides of the van Miss Bobby drives for it, off the same sheet as its sign. That isn't the church on Church St, whose pantry she runs.
+// It goes where the van goes, gets as dirty as it does, and burns off with it. As big as it'll go between the wheel arches and under the windows, so it reads from across the road,
+// and the side doors' seams in src/vehiclemodels.js stop where it crosses them.
+const vanWords = new THREE.Group(), vanWordsMat = new THREE.MeshStandardMaterial({ map: textTex(SIGN_SHEET.churches.find((c) => c.id === 'baptist').name, 1024, 284, 'rgba(0,0,0,0)', '#23324f', '84px Bungee, Impact, sans-serif'), transparent: true, depthWrite: false, roughness: .8 });
+vanWords.matrixAutoUpdate = false; vanWords.visible = false; vehGroup.add(vanWords);
+for (const s of [-1, 1]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(2.6, .72), vanWordsMat); m.position.set(s * 1.15, 1, .1); m.rotation.y = s * Math.PI / 2; vanWords.add(m); }
 
 // Where they are: where the real buildings say, and a few where the game needs one
 // a building's own drive stops at its wall, so it's the road that drive comes from that counts
@@ -5377,6 +5401,9 @@ const VEH_SET = [
   ['coupe', ...atTrue(-1541, -787), -1.84, -1], ['pickup', ...atTrue(-1506.9, -796.7), 3.05, .76], ['car', ...atTrue(-1503.6, -797.2), 3.05, .3],
   // at the farm south of the bridge, the white truck by the house
   ['pickup', ...atTrue(-684.7, 1733), .2, .76],
+  // Miss Bobby's church van, where something white's parked on the satellite: on the grass along the front of her house, just past her door and pointing at her drive.
+  // She still drives it, so it's kept up, with no rust for the church's name to sit on.
+  (() => { const p = byDoor(BOBBY_DOOR, 2.45, 4.3); return ['van', p.x, p.z, Math.atan2(-BOBBY_DOOR.ex, -BOBBY_DOOR.ez), -1]; })(),
 ].filter(([kind, x, z, yaw]) => vehicleFits(kind, x, z, yaw));
 // and nothing across the church on Church St's front steps, where he and everybody else go in and out
 const CHURCH_STEPS = CF.at(-4.67, 21);
@@ -5472,11 +5499,13 @@ function drawVehicles(step) {
   if (!driving && !vehDirty && !moving) return;
   for (const k in VEH_CAP) vehUsed[k] = 0;
   let w = 0;
+  vanWords.visible = false;
   for (const v of vehShown) {
     const K = v.K, i = vehUsed[v.kind]; if (i >= VEH_CAP[v.kind]) continue;
     vehUsed[v.kind]++;
     toBody(v).toArray(vehBodies[v.kind].instanceMatrix.array, i * 16);
     if (vehDirty) { _vc.copy(v.paint).lerp(VEH_BURNT, v.wrecked ? .94 : (1 - v.hp / K.hp) * .55); vehBodies[v.kind].setColorAt(i, _vc); vehSeeds[v.kind].array[i] = v.tone; }
+    if (v.kind === 'van') { vanWords.matrix.copy(_vb); vanWords.matrixWorldNeedsUpdate = true; vanWords.visible = !v.wrecked; vanWordsMat.color.setScalar(1 - (1 - v.hp / K.hp) * .55); }
     for (let a = 0; a < 2; a++) for (const s of [-1, 1]) {
       _ve.set(v.shownSpin, a ? 0 : -v.steer, 0);
       _vl.makeRotationFromEuler(_ve).scale(_vs.set(K.tread, K.wheel, K.wheel)).setPosition(s * K.track, K.wheel - (v.wrecked ? .1 : 0), K.axles[a]);
@@ -6821,11 +6850,11 @@ function tick(dt, draw = true) {
       if (input.nEdge) switchThrown();
     }
   }
-  // ---------------- sweeping Odessa's steps
+  // ---------------- sweeping Miss Bobby's steps
   if (M === 'sweep') {
     if (input.a) S.sweep = Math.min(1, S.sweep + dt / 3.2);
     prompt(`Hold ${press('SWEEP')} to sweep`, S.sweep); HP.kind = 'sweep';
-    if (S.sweep >= 1) { prompt(null); S.mode = 'town'; HP.kind = 'run'; people.apply(people.data.events.swept, played); openDialog('odessa'); }
+    if (S.sweep >= 1) { prompt(null); S.mode = 'town'; HP.kind = 'run'; people.apply(people.data.events.swept, played); openDialog('bobby'); }
   }
   // ---------------- held by the crowd: hauled along until he breaks free
   if (M === 'grabbed' && horde.grab) {
@@ -7069,7 +7098,7 @@ if (TEST) {
       const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(renderer.domElement, 0, 0);
       return cv;
     },
-    npcs: Object.fromEntries(Object.entries(NPCS).map(([k, n]) => [k, { x: n.root.position.x, z: n.root.position.z }])), pickups: PICKUPS,
+    npcs: Object.fromEntries(Object.entries(NPCS).map(([k, n]) => [k, { x: n.root.position.x, z: n.root.position.z }])), doors: { rocky: ROCKY_DOOR, bobby: BOBBY_DOOR }, tank: tankProp, pickups: PICKUPS, vanWords,
     vehicles: VEHICLES, vehShown, driving: () => driving, getIn, getOut, kinds: KINDS, vehicleFits, vehicleInReach,
     wreck: { strike, blast, blastCan, damage, breakProp, props: PROPS, falling, swing, burnAt, burners, catchTree, treesNear, treeBlocks, fellTree, gasCans: GAS_CANS, wreckVehicle, explodeVehicle, startFree, housesNear, trees: (x, z, r) => { const out = []; treesNear(x, z, r, (t) => out.push(t)); return out; } },
     openMap, closeMap, updateMini, mapState: () => ({ open: mapOpen, cam: mapCam, mini: !$('mini').hidden, name: $('miniName').hidden ? '' : $('miniName').textContent }), mapCamTo(c) { mapCam = { ...mapCam, ...c }; drawFullMap(); },

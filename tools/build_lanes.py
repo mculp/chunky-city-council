@@ -38,6 +38,7 @@ DRIVE_CLEAR = 1.8  # Past the wall of a building that isn't the one it's going t
 RIVER_GAP = 22  # Past the middle of the river, where the bank has come up to the level of the land.
 OFF_THE_WALL = 3.5  # Where it stops.
 MEASURED_JOIN = 45  # How far the end of a drive measured on the aerial can be from the road it leaves.
+ON_A_LINE = .5  # How near a road's centerline a drive measured from it has to start, to start on it.
 SHORT_GAP = 350  # How long a stretch of one road can be and still be filled in because there's road in the game at both ends of it.
 FRONTING = 3  # Past the road's edge. A building this close doesn't need a drive.
 SHED_NEAR = 35  # A shed this close to a building that's been seen to shares its way in.
@@ -320,8 +321,8 @@ class Places:
                 store[(i, j)].append(entry)
         return entry
 
-    def nearest_road(self, x, z, reach=5000, skip_drives=False):
-        """(metres, (px, pz), half, owner) of the nearest road or drive."""
+    def nearest_road(self, x, z, reach=5000, skip_drives=False, skip=()):
+        """(metres, (px, pz), half, owner) of the nearest road or drive, other than what's in skip."""
         best, cx, cz = (math.inf, None, 0, None), int(x // self.cell), int(z // self.cell)
         for r in range(int(reach / self.cell) + 2):
             for i in range(-r, r + 1):
@@ -329,7 +330,7 @@ class Places:
                     if max(abs(i), abs(j)) != r:
                         continue
                     for a, b, half, owner in self.segs.get((cx + i, cz + j), ()):
-                        if skip_drives and owner and owner.startswith("drive"):
+                        if (skip_drives and owner and owner.startswith("drive")) or owner in skip:
                             continue
                         dx, dz = b[0] - a[0], b[1] - a[1]
                         l2 = dx * dx + dz * dz
@@ -379,6 +380,8 @@ class Drives:
             self.places.add_line(line, width / 2, "road")
         for lane in lanes:
             self.places.add_line([self.world.point(*p) for p in lane["points"]], lane["width"] / 2, lane.get("id"))
+        # a drive measured on the aerial that's one building's own, and nobody else's starts from it
+        self.private = {lane.get("id") for lane in lanes if lane.get("for")}
         self.entries = {}
         for s in structures:
             ring = [self.world.point(s["x"] + p[0], s["z"] + p[1]) for p in s["ring"]]
@@ -500,7 +503,7 @@ class Drives:
                 continue
             seen += 1
             here = (at[0] * cell, at[1] * cell)
-            road = self.places.nearest_road(here[0], here[1], reach=cell * 2)
+            road = self.places.nearest_road(here[0], here[1], reach=cell * 2, skip=self.private)
             if road[0] <= road[2] + cell * .4 and (cell <= 4 or self.line_clear(road[1], here, own, True)):
                 pts = [road[1], here]
                 while at != start:
@@ -548,13 +551,13 @@ class Drives:
         target = self.where_it_stops(s, entry)
         if target is None:
             return None, "no room"
-        d, on, half, owner = self.places.nearest_road(target[0], target[1])
+        d, on, half, owner = self.places.nearest_road(target[0], target[1], skip=self.private)
         if d <= half + FRONTING:
             return None, "fronts"
         # straight, or as near as, to whatever's nearest, and then to the nearest real road, and failing that round whatever's in the way
         tries = [on]
         if owner and str(owner).startswith("drive"):
-            real = self.places.nearest_road(target[0], target[1], skip_drives=True)
+            real = self.places.nearest_road(target[0], target[1], skip_drives=True, skip=self.private)
             tries.append(real[1])
         for start in tries:
             for pts in (self.bowed(start, target, s["id"]), [start, target]):
@@ -596,16 +599,31 @@ class Drives:
         return None
 
 
+def on_a_line(p, lines):
+    """Whether a point is on one of these lines, at a vertex or between two."""
+    for line in lines:
+        for a, b in zip(line, line[1:]):
+            dx, dz = b[0] - a[0], b[1] - a[1]
+            t = max(0, min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz or 1)))
+            if math.dist(p, (a[0] + dx * t, a[1] + dz * t)) < ON_A_LINE:
+                return True
+    return False
+
+
 def measured_lanes(roads, lanes, config):
-    """Somebody's real drive, measured on the aerial, where TIGER hasn't got it and a generated one would go through the woods. Each starts at the nearest vertex of what's there, so that it's joined up."""
+    """Somebody's real drive, measured on the aerial, where TIGER hasn't got it and a generated one would go through the woods. Each starts at the nearest vertex of what's there, so that it's joined up.
+    One that's been measured from a point on a road, between two of TIGER's vertices, is joined where it starts."""
     out = []
     for m in config.get("measured", []):
         pts = [list(p) for p in m["points"]]
+        if on_a_line(pts[0], [e["points"] for e in roads["edges"]]):
+            out.append({"name": None, "mtfcc": "S1740", "linearId": None, "width": m["width"], "surface": m["surface"], "measured": True, "order": len(out), **({"for": m["for"]} if "for" in m else {}), "points": pts})
+            continue
         others = [p for e in roads["edges"] for p in e["points"]] + [p for lane in lanes + out for p in lane["points"]]
         near = min(others, key=lambda p: math.dist(p, pts[0]))
         if math.dist(near, pts[0]) > MEASURED_JOIN:
             raise SystemExit("a measured drive starts %.0f m from anything: %s" % (math.dist(near, pts[0]), pts[0]))
-        out.append({"name": None, "mtfcc": "S1740", "linearId": None, "width": m["width"], "surface": m["surface"], "measured": True, "points": pts if list(near) == pts[0] else [list(near), *pts]})
+        out.append({"name": None, "mtfcc": "S1740", "linearId": None, "width": m["width"], "surface": m["surface"], "measured": True, "order": len(out), **({"for": m["for"]} if "for" in m else {}), "points": pts if list(near) == pts[0] else [list(near), *pts]})
     return out
 
 
@@ -697,8 +715,9 @@ def clear_of_buildings(lanes, structures):
 
 
 def split_off(lanes, roads):
-    """Which lanes are joined to the game's roads by shared vertices, and the pieces that aren't, as lists of indexes."""
+    """Which lanes are joined to the game's roads by shared vertices, or by a measured drive that starts on one of them, and the pieces that aren't, as lists of indexes."""
     kept = {tuple(p) for e in roads["edges"] for p in e["points"]}
+    kept |= {tuple(lane["points"][0]) for lane in lanes if lane.get("measured") and on_a_line(lane["points"][0], [e["points"] for e in roads["edges"]])}
     at = defaultdict(set)
     for i, lane in enumerate(lanes):
         for p in lane["points"]:
@@ -850,8 +869,8 @@ def build():
             bypasses.append({"name": lane["name"], "mtfcc": lane["mtfcc"], "linearId": lane["linearId"], "width": lane["width"], "surface": lane["surface"], "generated": True, "points": pts})
     print("gaps", len(gaps), "ways round", len(bypasses))
     lanes = reconnected(lanes + bypasses, roads, finder)
-    # after TIGER's, so that adding one doesn't renumber them
-    lanes.sort(key=lambda lane: bool(lane.get("measured")))
+    # after TIGER's and in the order they're listed, so that adding one at the end of the list doesn't renumber anything
+    lanes.sort(key=lambda lane: (bool(lane.get("measured")), lane.get("order", 0)))
     for i, lane in enumerate(lanes):
         lane["id"] = "lane_%d" % (i + 1)
         for k in ("id", "name", "mtfcc", "linearId", "width", "surface", "points"):
@@ -861,6 +880,8 @@ def build():
     closed = closed_ends(lanes, roads)
     for lane in lanes:
         lane.pop("carriesOn", None)
+        lane.pop("order", None)
+        lane.pop("for", None)
     print("lanes", len(lanes), "km", round(sum(math.dist(a, b) for l in lanes for a, b in zip(l["points"], l["points"][1:])) / 1000, 1), "crossings", [(c["road"], c["with"]) for c in crossings], "closed", len(closed))
     return render(lanes, drives, crossings, closed, config)
 

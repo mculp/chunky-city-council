@@ -13,13 +13,17 @@ Real places are by structure id, never an address. Most of these are someone's h
 - "Radiating" is read as radium green: cracks that spread from the breastbone, clothes burning through to char, eyes that go from pinpricks to full sockets, and chalk strokes coming off them. The green is a guess, and so is the rest of how it looks.
 - "Varying degrees" is one number for each of them, from nearly a person to not much but char and light. Most are in the middle.
 - How far gone they are only changes how they look, for now. It doesn't change what they do.
-- Coop, Tre and Miss Odessa are the least far gone, because they still talk. Nothing's been written about what that means for them.
+- Coop, Rocky and Miss Bobby are the least far gone, because they still talk, and they stay a little zombified, as the owner says below. None of them comes for him. Coming for him once he's provoked them isn't built yet.
 - What they're wearing is invented, as ordinary clothes for around here.
 - The gate isn't built, since that's a "may". The hero's the only thing wearing a hood now, so when it comes, only his look has to change.
 
 Later:
 
 > Maybe not everyone should be zombies. There should be some people to communicate with. Zombies should be less aggressive in general if they are not messed with. Their idle state should be with their torso folded and arms hanging towards the ground. They can also but don't have to chase after you in the folded state.
+
+Asked whether Coop, Rocky and Miss Bobby should stop being zombies and be ordinary people:
+
+> Keep them "a little". zombiefied. They also don't attack you (unless you provoke them with actual dialogue/interaction like stealing from them)
 
 > There's no way to kill them, they just get back up, which I guess is ok for now but maybe they should at least be stunned for a while.
 
@@ -98,7 +102,7 @@ Word for word, with the street addresses taken out, as everywhere in this file, 
 - Six in a row is the side quest, because they played six on six. It takes the bat.
 - The gear's red with a plain bird on it and no name, so that it isn't anybody's logo: a pennant and a jersey on the wall of the little shed, a cap, a bat with red tape on the grip, a bigger pennant on the big building where it can be seen from the net, and somebody's cap on a post of the net. He doesn't wear any of it, because how he looks is the owner's own. The sign over the bat is mine.
 - The bat reaches a bit further than a hammer, and that's all it does.
-- The coupe's white, long and low with a fastback, with the bar left over the seats and the two panels out of the roof, and no make or badge on it. There's only one, it's the one thing in the game that isn't rusting, and it's the fastest thing on the road. His head comes up through the roof.
+- The coupe's white, long and low with a fastback, with the bar left over the seats and the two panels out of the roof, and no make or badge on it. There's only one, it and Miss Bobby's church van are the only things in the game that aren't rusting, and it's the fastest thing on the road. His head comes up through the roof.
 - The light on a pole isn't on the picture. It's there so that the net can be seen at night, and its light brings the crowd, the same as the gas station's canopy.
 - The trampoline's on the picture, and it works.
 - The walls can't be seen from above, so their colors are guesses.
@@ -158,7 +162,7 @@ They sent a picture of this from above too, and it stays out of the repo.
 
 > An old dead millionaire named Mr Barber lived south of the bridge and owned most of the farmland as soon as you go south of the bridge and had a compound about a mile south of the bridge maybe you can find it on satellite.
 
-**In the game:** the land's all there, as it is from above, from the river's bank south of the bridge he wakes on: the pastures and their fences, and about a mile on, the barns, a pond and two houses. Nobody's there, and nothing says whose it was. Which farm it is was read off the public aerial from what's said above, and hasn't been confirmed. There's no story in it yet.
+**In the game:** the land's all there, as it is from above, from the river's bank south of the bridge he wakes on: the pastures and their fences, and about a mile on, the barns, a pond and two houses. Nobody's there, and nothing says whose it was. Which farm it is was read off the public aerial from what's said above, and the owner's confirmed it. There's no story in it yet.
 
 ## The land
 
@@ -174,6 +178,15 @@ They sent a picture of this from above too, and it stays out of the repo.
 ## Rocky and Miss Bobby
 
 > Change tre and odessa's names to rocky and miss bobby. Miss bobby drives a church van and lives next to the town hall. The town hall is still in the wrong spot btw. It should be facing east on commerce st. Miss bobby lives right next to it on the north on commerce st. Rocky lives in trailer across from gas station
+
+> Correction: Miss Bobby drives the van for Chunky Baptist
+
+**In the game:** they're Rocky and Miss Bobby everywhere, and a save from before keeps what they thought of him. Decided around it:
+
+- Rocky's out front of the trailer across US 80 from the gas station, beside his door, and his moccasin's in her tank on a stand by it. Coop's bag goes to him there, across the road, and Coop says so. The boxcar's still on its siding, with a can by it.
+- Miss Bobby's at the foot of her step at the small white house just north of the town hall, as Street View has it: a grey door in the middle of the end that faces Commerce St, a concrete step, and a paved drive along its north side. That step is her steps now. Sweeping them's still paid out of the pantry she runs at the church on Church St, and nobody stands outside that church any more.
+- The van she drives for Chunky Baptist is out front, along the front of the house, where something white is parked on the satellite. It's a tall cream passenger van with CHUNKY BAPTIST CHURCH along both sides, off the same sheet as that church's sign, and no make or badge, and he can drive it like anything else. Chunky Baptist isn't the church on Church St: its sign's about 200 m south of that one, and the pantry's still where it was.
+- Nobody else lives in either place.
 
 ## Beans
 

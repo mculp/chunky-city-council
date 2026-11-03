@@ -13,7 +13,7 @@ let failed = 0;
 const check = (name, ok, got) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ' -- got ' + JSON.stringify(got)}`); if (!ok) failed++; };
 const g = (fn, arg) => page.evaluate(fn, arg);
 const snap = async (name) => { if (shots) { await mkdir(shots, { recursive: true }); await g(() => __game.step(1 / 12)); await page.screenshot({ path: join(shots, name + '.png') }); } };
-const KINDS = ['car', 'pickup', 'quad', 'golf', 'coupe'];
+const KINDS = ['car', 'pickup', 'quad', 'golf', 'coupe', 'van'];
 
 await g(() => {
   const G = __game;

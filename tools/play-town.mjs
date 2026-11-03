@@ -69,20 +69,22 @@ await snap('1-street');
 const going = await g(() => {
   const G = __game, s = G.horde.active.filter((c) => c.home && !c.who.met).sort((a, b) => near(a) - near(b))[0] ?? G.horde.active.find((c) => c.home);
   const startsAt = [s.x, s.z], door = s.home.door, been = { door: 0, inside: 0, yard: 0, off: 0 };
-  let moved = 0, stopped = 0, far = 0;
+  let moved = 0, stopped = 0, far = 0, took = 0;
   // a long way off from them, so it's only what they're doing
   const px = P().x, pz = P().z;
   G.place(s.x + 60, s.z + 60);
-  for (let t = 0; t < 240; t += .2) {
+  // Going in is a roll each time they stop at the door, about one in three, so four minutes of it can go by without. Then it watches on, for up to twelve.
+  for (let t = 0; t < 240 || (t < 720 && !(been.door && been.inside && been.yard)); t += .2) {
     G.sim(.2, 1 / 15);
-    const d = Math.hypot(s.x - door[0], s.z - door[1]); far = Math.max(far, d);
+    const d = Math.hypot(s.x - door[0], s.z - door[1]);
     if (s.inside) been.inside++; else if (d < 2) been.door++; else if (d < 12) been.yard++; else been.off++;
-    if (s.moving) moved++; else stopped++;
+    if (t < 240) { far = Math.max(far, d); if (s.moving) moved++; else stopped++; }
+    took = t + .2;
   }
   G.place(px, pz);
-  return { name: s.who.name, been, moved, stopped, far, state: s.state, homebody: s.who.homebody, startsAt };
+  return { name: s.who.name, been, moved, stopped, far, took, state: s.state, homebody: s.who.homebody, startsAt };
 });
-console.log(`     ${going.name}: ${JSON.stringify(going.been)} over 4 minutes, up to ${going.far.toFixed(0)} m from the door`);
+console.log(`     ${going.name}: ${JSON.stringify(going.been)} over ${Math.round(going.took / 60)} minutes, up to ${going.far.toFixed(0)} m from the door in the first 4`);
 check('someone at home moves around and stays a while', going.moved > 40 && going.stopped > 200, going);
 check('between the door, the house and the yard', going.been.door > 0 && going.been.inside > 0 && going.been.yard > 0, going);
 check('and doesn\'t wander off for good', going.far < 80, going);

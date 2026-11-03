@@ -121,6 +121,25 @@ function coupe() {
   ];
 }
 
+// A church's passenger van: a tall box with a short nose and windows all the way back. The church's name down each side is drawn over it in index.html.
+function van() {
+  return [
+    prism([[-2.95, .5], [-2.95, 2.04], [-2.84, 2.14], [1.28, 2.14], [1.56, 2], [2.34, 1.3], [2.86, 1.18], [2.95, .94], [2.95, .55], [2.78, .42], [-2.82, .42]], -1.12, 1.12),
+    box(0, .03, 0, 2.1, .02, 5.6, DARK),
+    // the windshield, the back windows, and a row of windows down each side with the pillars between them
+    prism([[1.56, 1.99], [2.31, 1.32], [2.35, 1.34], [1.6, 2.01]], -1, 1, DARK),
+    box(0, 1.64, -2.96, 1.86, .52, .02, DARK),
+    ...both((s) => box(s * 1.125, 1.64, -.45, .02, .5, 3.9, DARK)),
+    ...both((s) => box(s * 1.13, 1.64, -.05, .025, .56, .12)), ...both((s) => box(s * 1.13, 1.64, -1.3, .025, .56, .12)),
+    // the side doors on the right. The church's name in index.html goes across them from .64 to 1.36 m up, painted over the gaps, so they stop there, and there's no handle
+    // where it'd be read as a dash between the words.
+    ...[.2, -1].flatMap((z) => [box(-1.122, .505, z, .01, .27, .04, DARK), box(-1.122, 1.615, z, .01, .51, .04, DARK)]),
+    ...arches(1.95, .5, 1.12), ...arches(-1.75, .5, 1.12),
+    ...both((s) => box(s * .8, 1.02, 2.94, .42, .22, .06, LIGHT)), ...both((s) => box(s * 1.05, 1.12, -2.96, .1, .42, .04, TAIL)),
+    box(0, .84, 2.96, 1.2, .26, .04, DARK), box(0, .54, 2.98, 2.3, .18, .14, TRIM), box(0, .54, -2.98, 2.3, .18, .14, TRIM),
+  ];
+}
+
 // The outline's hull has to meet at the corners, so its normals are shared wherever two faces touch
 export function smoothed(geo) {
   const p = geo.attributes.position, sum = new Map(), key = (i) => `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`, n = geo.attributes.normal;
@@ -133,7 +152,7 @@ export function smoothed(geo) {
 
 export function vehicleGeometries() {
   const out = {};
-  for (const [kind, parts] of Object.entries({ car, pickup, quad, golf, coupe })) { const geo = mergeGeometries(parts()); out[kind] = { geo, line: smoothed(geo) }; }
+  for (const [kind, parts] of Object.entries({ car, pickup, quad, golf, coupe, van })) { const geo = mergeGeometries(parts()); out[kind] = { geo, line: smoothed(geo) }; }
   // one wheel, a unit across and a unit wide, turning about x
   const wheel = mergeGeometries([painted(new THREE.CylinderGeometry(1, 1, 1, 10).rotateZ(Math.PI / 2), TIRE), painted(new THREE.CylinderGeometry(.56, .56, 1.04, 6).rotateZ(Math.PI / 2), HUB)]);
   out.wheel = { geo: wheel, line: smoothed(wheel) };
@@ -147,6 +166,7 @@ export const LAMPS = {
   quad: { head: [.24, .82, 1.36], tail: [.22, .8, -1.34] },
   golf: { head: [.52, .66, 1.63], tail: [.5, .62, -1.58] },
   coupe: { head: [.66, .62, 2.46], tail: [.7, .78, -2.5] },
+  van: { head: [.8, 1.02, 2.98], tail: [1.05, 1.12, -2.99] },
 };
 
 // Each one's colour, faded the way paint goes, picked by how it's parked
@@ -156,4 +176,5 @@ export const PAINTS = {
   quad: ['#7a2f24', '#3d5a38', '#a8622a', '#2f3a30'],
   golf: ['#d3cdbd', '#c2bfae', '#b9c4b5'],
   coupe: ['#e6e1d2'],
+  van: ['#e3dfd3'],
 };

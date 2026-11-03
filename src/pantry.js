@@ -1,4 +1,4 @@
-// The pantry at the church on Church St: what's on its shelves, and whether Miss Odessa's steps want sweeping today. There's no
+// The pantry at the church on Church St: what's on its shelves, and whether Miss Bobby's steps want sweeping today. There's no
 // three.js or page in here, so node tests load it too. data/cast.md says how it goes.
 //
 // A day is the church signs' day, from src/signs.js, so it turns over at midnight in Mississippi when they change.

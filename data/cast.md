@@ -15,6 +15,7 @@ Who these people are, and what they say, is the owner's. The words here came fro
 | `version` | number | Part of the save's key. Change it only if old saves can't be read any more. |
 | `meters` | object | Each meter's name, with its `min` and `max`. |
 | `remember` | string[] | Flags saved across sessions. All others last one run. |
+| `renamed` | object | Old names of cast ids and remembered flags, each with what it's called now, so that a save from before a rename keeps what it had. Tre became Rocky and Miss Odessa became Miss Bobby this way. A rename has to point at someone, and the old name can't still be in use. |
 | `cast` | object[] | Everyone. See below. |
 | `ties` | object[] | How helping one person costs you with another. See below. |
 | `events` | object | Named lists of effects that the game fires itself, like `swept` when the steps are done. |
@@ -87,13 +88,13 @@ A node is `{ who, lines, opts }`. The first of its `lines` whose `when` all hold
 | `{ "meter": "coop.trust", "by": 1 }` | Moves a meter. |
 | `{ "item": "bag", "by": 1 }` | Adds or takes away an item. |
 | `{ "beans": 3, "why": "Coop" }` | Adds beans. `why` is shown with them. |
-| `{ "pantry": "Odessa" }` | Adds what the pantry pays and takes it off its shelves. The words are shown with them. |
+| `{ "pantry": "Miss Bobby" }` | Adds what the pantry pays and takes it off its shelves. The words are shown with them. |
 
 Any effect can have its own `when`, as with the first meeting that only counts once.
 
 ## The pantry
 
-Miss Odessa pays for sweeping her steps out of the pantry at the church, and what's on its shelves is what's left. `src/pantry.js` keeps it.
+Miss Bobby pays for sweeping her steps, at her house by the town hall, out of the pantry she runs at the church on Church St, and what's on its shelves is what's left. `src/pantry.js` keeps it.
 
 - The shelves hold 9 cans at most, and 2 more come in each day. She pays 3, or whatever's there if it's less.
 - The steps want sweeping once a day. A day is the church signs' day, so it turns over at midnight in Mississippi when they change.

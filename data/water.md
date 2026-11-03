@@ -11,7 +11,7 @@
 
 The roads come from TIGER/Line, so that was the first place to look. Its area water has 9 polygons around here, and the nearest is 406 m from a road, further than he can go. NHD has 189 lakes and ponds in the same area.
 
-Google Maps is for comparing by eye and for noticing what's missing. No geometry comes from it, and none of its imagery is committed.
+Google Maps is for comparing by eye and for noticing what's missing. None of the ponds' geometry has come from it so far, and none of its imagery is committed, but it and Street View are the source of truth: where they show the water somewhere else, it's corrected to match.
 
 ## What's left out, and what isn't
 

@@ -10,6 +10,7 @@ export const KINDS = {
   quad: { name: 'four-wheeler', top: 18, reverse: 5, accel: 9.5, brake: 12, grip: 3.4, corner: 13, lock: .72, wheelbase: 1.6, mass: 350, hp: 50, rough: .94, noise: 45, length: 2.6, width: 1.6, track: .64, axles: [.82, -.78], wheel: .42, tread: .36, seat: [0, 1.72, -.1], hands: [.42, -.42, .44], feet: [.28, -1.24, .1], size: .9, camDist: 6.6, camLook: 1.9 },
   coupe: { name: 'coupe', sound: 'car', top: 34, reverse: 9, accel: 9.5, brake: 17, grip: 5.2, corner: 15, lock: .54, wheelbase: 2.85, mass: 1500, hp: 90, rough: .42, noise: 65, length: 4.9, width: 2.1, track: 1, axles: [1.45, -1.4], wheel: .4, tread: .28, seat: [.42, .98, -.42], hands: [.1, -.12, .46], feet: [.14, -.84, .42], size: .8, camDist: 8.4, camLook: 1.4 },
   golf: { name: 'golf cart', top: 9, reverse: 4, accel: 3.8, brake: 8, grip: 6.5, corner: 7, lock: .66, wheelbase: 2.1, mass: 450, hp: 40, rough: .6, noise: 8, length: 3.2, width: 1.7, track: .74, axles: [1.05, -1.05], wheel: .3, tread: .2, seat: [.34, 1.54, -.1], hands: [.1, -.3, .46], feet: [.14, -1.12, .42], size: .8, camDist: 6.4, camLook: 1.6 },
+  van: { name: 'church van', sound: 'pickup', top: 24, reverse: 7, accel: 5.6, brake: 13, grip: 4.2, corner: 10, lock: .5, wheelbase: 3.7, mass: 2400, hp: 170, rough: .55, noise: 70, length: 5.9, width: 2.3, track: 1.02, axles: [1.95, -1.75], wheel: .44, tread: .27, seat: [.5, 1.34, 1.15], hands: [.1, -.14, .46], feet: [.14, -1.06, .42], size: .8, camDist: 10.2, camLook: 2.3 },
 };
 
 export const GRAVITY = 15;

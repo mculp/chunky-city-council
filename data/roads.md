@@ -460,7 +460,7 @@ It also asks the running game, sampling TIGER every 5 m over the whole map: ever
 
 The road and the river are left out where they're bent at Stuckey's Bridge. See [In the game](#in-the-game).
 
-Comparing the town picture with Google Maps is done by eye. Don't save its imagery or change road data from it. File any difference as a correction.
+Comparing the town picture with Google Maps is done by eye. TIGER isn't the last word: Street View and the satellite are the source of truth, and where TIGER's wrong, the road gets corrected to match them. Don't save their imagery.
 
 ## Decisions and assumptions
 

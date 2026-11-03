@@ -62,22 +62,22 @@ check('the road into town', /Griffis Fountain Rd/.test(st.obj), st.obj);
 const stuckeys = await g(() => { const P = __game.player.pos; return { far: Math.hypot(P.x, P.z) }; });
 check(`and Stuckey's is ${(stuckeys.far / 1609.344).toFixed(1)} miles behind him`, stuckeys.far > 9000, stuckeys);
 
-// Coop's bag to Tre
+// Coop's bag to Rocky
 await g(() => { const c = __game.npcs.coop; __game.place(c.x, c.z - 1.5); });
 st = await step(.1); check('talk prompt', /Coop/.test(st.prompt), st.prompt);
 await key('e'); st = await step(.05); await key('e', false); check('coop talks', st.dialog?.who === 'Coop', st.dialog); await snap('coop');
 st = await g(() => __game.choose(0)); check('beans ask', /Beans ain/.test(st.dialog?.say), st.dialog);
 st = await g(() => __game.choose(0)); st = await g(() => __game.choose(0)); check('got the bag', st.items.bag === 1, st.items);
-st = await g(() => __game.choose(0)); check('dialog closed', st.mode === 'town' && /Tre/.test(st.obj), [st.mode, st.obj]);
-await g(() => { const c = __game.npcs.tre; __game.place(c.x + .5, c.z - 1.5); });
-st = await step(.1); await key('e'); st = await step(.05); await key('e', false); check('tre talks', st.dialog?.who === 'Tre', st.dialog);
+st = await g(() => __game.choose(0)); check('dialog closed', st.mode === 'town' && /Rocky/.test(st.obj), [st.mode, st.obj]);
+await g(() => { const c = __game.npcs.rocky; __game.place(c.x + .5, c.z - 1.5); });
+st = await step(.1); await key('e'); st = await step(.05); await key('e', false); check('rocky talks', st.dialog?.who === 'Rocky', st.dialog);
 st = await g(() => __game.choose(0)); check('delivered', st.flags.delivered === true && st.beans === 2, st); st = await g(() => __game.choose(0));
 await g(() => { const c = __game.npcs.coop; __game.place(c.x, c.z - 1.5); });
 st = await step(.1); await key('e'); st = await step(.05); await key('e', false); check('coop pays', st.beans === 5, st.beans); st = await g(() => __game.choose(0));
 
-// sweep for Odessa, then the cans take it to twelve
-await g(() => { const c = __game.npcs.odessa; __game.place(c.x, c.z + 1.5); });
-st = await step(.1); await key('e'); st = await step(.05); await key('e', false); check('odessa talks', st.dialog?.who === 'Miss Odessa', st.dialog);
+// sweep for Miss Bobby, then the cans take it to twelve
+await g(() => { const c = __game.npcs.bobby; __game.place(c.x + 1.5, c.z); });
+st = await step(.1); await key('e'); st = await step(.05); await key('e', false); check('miss bobby talks', st.dialog?.who === 'Miss Bobby', st.dialog);
 st = await g(() => __game.choose(0)); st = await g(() => __game.choose(0)); check('sweeping', st.mode === 'sweep', st.mode);
 await key('e'); st = await step(3.4); await key('e', false); check('swept', st.flags.swept === true && st.beans === 8, st); await snap('swept');
 st = await g((i) => __game.choose(i), st.dialog.opts.length - 1);
@@ -88,7 +88,7 @@ st = await step(2); check('chapter ends', st.mode === 'end', st.mode); await sna
 
 // what you've built with people outlasts the page, and a run's own business doesn't
 const before = st.people;
-check('coop and tre moved', before.coop.trust !== 0 && before.tre.trust !== 0, before);
+check('coop and rocky moved', before.coop.trust !== 0 && before.rocky.trust !== 0, before);
 await page.reload({ waitUntil: 'load' }); await page.waitForFunction(() => window.__game, null, { timeout: 30000 });
 st = await g(() => __game.state());
 check('meters survive a reload', JSON.stringify(st.people) === JSON.stringify(before), [st.people, before]);

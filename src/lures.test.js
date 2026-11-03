@@ -61,9 +61,9 @@ test('it goes to something close to where he\'s facing, and the nearest of them'
 });
 
 test('someone\'s only swarmed if it came down near them and the crowd\'s around them now', () => {
-  const coop = { id: 'coop', x: 0, z: 0 }, tre = { id: 'tre', x: 200, z: 0 }, crowd = [...Array(SWARM.count)].map((_, i) => ({ x: i, z: 1 }));
+  const coop = { id: 'coop', x: 0, z: 0 }, rocky = { id: 'rocky', x: 200, z: 0 }, crowd = [...Array(SWARM.count)].map((_, i) => ({ x: i, z: 1 }));
   const spot = { x: 5, z: 5 };
-  assert.deepEqual(whoIsSwarmed([spot], [coop, tre], crowd), ['coop']);
+  assert.deepEqual(whoIsSwarmed([spot], [coop, rocky], crowd), ['coop']);
   assert.deepEqual(whoIsSwarmed([], [coop], crowd), [], 'nothing thrown');
   assert.deepEqual(whoIsSwarmed([{ x: 100, z: 0 }], [coop], crowd), [], 'thrown somewhere else');
   assert.deepEqual(whoIsSwarmed([spot], [coop], crowd.slice(1)), [], 'not enough of them');

@@ -21,13 +21,17 @@ export function createPeople(data, { store = null } = {}) {
   let meters = blank(), met = new Set(), kept = {};
   const people = { data, recent: null };
 
-  // A save that can't be read counts as no save, and a browser that won't store anything just doesn't remember
+  // A save that can't be read counts as no save, and a browser that won't store anything just doesn't remember.
+  // One from before someone was renamed is read under the name they have now.
   function load() {
     try {
-      const saved = JSON.parse(store.getItem(KEY));
-      for (const c of data.cast) for (const m of Object.keys(data.meters)) { const v = saved.meters?.[c.id]?.[m]; if (Number.isFinite(v)) meters[c.id][m] = bound(m, v); }
-      for (const f of data.remember) if (saved.flags?.[f]) kept[f] = true;
-      for (const id of saved.met || []) if (byId.has(id)) met.add(id);
+      const saved = JSON.parse(store.getItem(KEY)), now = (name) => data.renamed?.[name] ?? name;
+      for (const [id, theirs] of Object.entries(saved.meters || {})) {
+        const c = byId.get(now(id));
+        if (c) for (const m of Object.keys(data.meters)) { const v = theirs?.[m]; if (Number.isFinite(v)) meters[c.id][m] = bound(m, v); }
+      }
+      for (const [f, on] of Object.entries(saved.flags || {})) if (on && data.remember.includes(now(f))) kept[now(f)] = true;
+      for (const id of saved.met || []) if (byId.has(now(id))) met.add(now(id));
     } catch { /* nothing saved */ }
   }
   function save() { try { store.setItem(KEY, JSON.stringify({ meters, flags: kept, met: [...met] })); } catch { /* not stored */ } }
@@ -96,6 +100,11 @@ export function checkCast(data) {
     }
   };
   for (const t of data.ties) if (!ids.has(t.when) || !ids.has(t.then) || !meters.has(t.meter)) problems.push(`tie ${JSON.stringify(t)}: unknown person or meter`);
+  // a rename points at someone, or at a flag that's remembered, and the old name's not in use any more
+  for (const [was, now] of Object.entries(data.renamed || {})) {
+    if (!ids.has(now) && !data.remember.includes(now)) problems.push(`renamed ${was}: nobody and nothing remembered is called ${now}`);
+    if (ids.has(was) || data.remember.includes(was)) problems.push(`renamed ${was}: that name's still in use`);
+  }
   for (const [name, list] of Object.entries(data.events || {})) effects(list, `event ${name}`);
   for (const [id, node] of Object.entries(data.dialogue)) {
     if (!ids.has(node.who)) problems.push(`${id}: no cast member ${node.who}`);

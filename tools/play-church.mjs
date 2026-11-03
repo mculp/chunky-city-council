@@ -1,6 +1,7 @@
-// Goes round the church on Church St on a phone-sized page with the stick and real taps: in off the street through its front door, past Miss Odessa, with the roof and the steeple
-// out of the way while he's inside, up the aisle, across the pews and not getting anywhere, through the door in the wing's wall to the pantry and what's on its shelf. Then her steps,
-// swept for three in Chapter 1 however bare the shelf, and once a day after it, paid for out of the shelf, over a week of days, and still the same after a reload. Then the bell: the rope
+// Goes round the church on Church St on a phone-sized page with the stick and real taps: in off the street through its front door, with the roof and the steeple
+// out of the way while he's inside, up the aisle, across the pews and not getting anywhere, through the door in the wing's wall to the pantry and what's on its shelf. Then Miss Bobby,
+// out front of her house by the town hall with the van she drives for Chunky Baptist, and her steps, swept for three in Chapter 1 however bare the church's shelf, and once a day after it, paid for out
+// of the shelf, over a week of days, and still the same after a reload. Then the bell: the rope
 // inside the door, a tap, the crowd coming to it from all over and into the church while it rings, out again after, and on a laptop the E key. Last, the steeple coming down with
 // the church, and with it the bell.
 //
@@ -37,17 +38,16 @@ const setUp = () => g(() => {
   window.toastSays = () => document.getElementById('toast').textContent;
   window.prompted = () => (document.getElementById('prompt').hidden ? '' : document.getElementById('prompt').textContent);
   window.dialog = () => (document.getElementById('dialog').hidden ? null : { say: document.getElementById('dSay').textContent, opts: [...document.getElementById('dOpts').children].map((b) => b.textContent) });
-  window.byOdessa = () => { land(); const o = G.npcs.odessa; G.place(o.x, o.z + 1.5); G.step(.1); };
+  window.byBobby = () => { land(); const o = G.npcs.bobby; G.place(o.x + 1.5, o.z); G.step(.1); };
 });
 await setUp();
 
 // ---- in off the street
 let r = await g(() => {
-  const d = C.door(), [fx, fz] = C.at(-4.67, 18.47), o = G.npcs.odessa;
-  return { edge: d.edge, off: Math.hypot(d.x - fx, d.z - fz), faces: d.nz, odessa: Math.abs((o.x - d.x) * d.ex + (o.z - d.z) * d.ez) };
+  const d = C.door(), [fx, fz] = C.at(-4.67, 18.47);
+  return { edge: d.edge, off: Math.hypot(d.x - fx, d.z - fz), faces: d.nz };
 });
-check('its door is in the front gable, under the porch, where her steps are', r.edge === 0 && r.off < .3 && r.faces > .99, r);
-check('and she stands to one side of it', r.odessa > 1.8, r);
+check('its door is in the front gable, under the porch, where its step is', r.edge === 0 && r.off < .3 && r.faces > .99, r);
 r = await g(() => { land(); G.place(...C.at(-4.67, 30)); G.step(.1); const out = { street: walkTo(-4.67, 21.5), shown: C.steepleShown() }; out.door = walkTo(-4.67, 15); out.inside = inside(); G.step(.1); out.roof = G.G.uHideRoof.value.x === C.house.index; out.steeple = C.steepleShown(); return out; });
 check('he walks up off Church St and in through the door', r.street < .5 && r.door < .5 && r.inside, r);
 check('inside, the roof and the steeple are out of the way', r.roof && !r.steeple && r.shown, r);
@@ -64,18 +64,26 @@ await snap('2-the-pantry');
 r = await g(() => { walkTo(3, 1.4); walkTo(-4.67, 1.6); walkTo(-4.67, 15); walkTo(-4.67, 24); G.step(.1); return { inside: inside(), steeple: C.steepleShown(), roof: G.G.uHideRoof.value.x === C.house.index }; });
 check('and out again, the steeple and the roof are back', !r.inside && r.steeple && !r.roof, r);
 
+// ---- Miss Bobby, at her house by the town hall
+r = await g(() => {
+  const d = G.doors.bobby, o = G.npcs.bobby, van = G.vehicles.find((v) => v.kind === 'van'), along = (x, z) => ({ out: (x - d.x) * d.nx + (z - d.z) * d.nz, side: (x - d.x) * d.ex + (z - d.z) * d.ez });
+  return { faces: d.nx, her: along(o.x, o.z), van: van && along(van.x, van.z), words: G.vanWords.children.length };
+});
+check('she\'s out front of her own house, which looks east at Commerce St, to one side of her door', r.faces > .95 && Math.abs(r.her.side) > 1 && r.her.out > 1 && r.her.out < 2.5, r);
+check('and the Chunky Baptist van\'s along the front of it, on the other side of her door, with that church\'s name down both sides', r.van && r.van.out > 1.5 && r.van.out < 3.5 && r.van.side * r.her.side < 0 && Math.abs(r.van.side) > 3 && r.words === 2, r);
+
 // ---- her steps in Chapter 1
-r = await g(() => { G.S.flags.ended = false; G.S.flags.swept = false; G.S.beans = 0; byOdessa(); return null; });
+r = await g(() => { G.S.flags.ended = false; G.S.flags.swept = false; G.S.beans = 0; byBobby(); return null; });
 await tap('#bA');
 r = await g(() => dialog());
 check('in Chapter 1 she\'ll have the steps swept', r && r.opts.includes('Can I get some beans?'), r);
 await page.locator('#dOpts button', { hasText: 'Can I get some beans?' }).tap(); await g(() => G.sim(.05, T));
 await page.locator('#dOpts button', { hasText: 'Sweep the steps.' }).tap(); await g(() => G.sim(.05, T));
 r = await g(() => { G.key('e', true); G.sim(3.5, T); G.key('e', false); G.sim(.1, T); return { beans: G.S.beans, swept: G.S.flags.swept, shown: C.shown(), toast: toastSays(), d: dialog() }; });
-check('swept for three, and three come off the shelf', r.beans === 3 && r.swept && r.shown === 6 && /\+3 beans · Odessa/.test(r.toast), r);
+check('swept for three, and three come off the church\'s shelf', r.beans === 3 && r.swept && r.shown === 6 && /\+3 beans · Miss Bobby/.test(r.toast), r);
 check('and then she has her say', r.d && /lantern man/.test(r.d.say) && !r.d.opts.includes('Can I get some beans?'), r.d);
 await snap('3-swept');
-r = await g(() => { land(); C.pantry.sweep(C.today(), 9); G.S.flags.swept = false; G.S.beans = 0; byOdessa(); return C.shown(); });
+r = await g(() => { land(); C.pantry.sweep(C.today(), 9); G.S.flags.swept = false; G.S.beans = 0; byBobby(); return C.shown(); });
 await tap('#bA');
 await page.locator('#dOpts button', { hasText: 'Can I get some beans?' }).tap(); await g(() => G.sim(.05, T));
 await page.locator('#dOpts button', { hasText: 'Sweep the steps.' }).tap(); await g(() => G.sim(.05, T));
@@ -84,7 +92,7 @@ check('with the shelf bare, a run of Chapter 1 still gets its three, or it could
 
 // ---- after it, once a day
 const sweepToday = async () => {
-  await g(() => byOdessa()); await tap('#bA');
+  await g(() => byBobby()); await tap('#bA');
   const d = await g(() => dialog());
   if (!d?.opts.includes('Can I get some beans?')) { await g(() => land()); return { asked: false, d }; }
   await page.locator('#dOpts button', { hasText: 'Can I get some beans?' }).tap(); await g(() => G.sim(.05, T));

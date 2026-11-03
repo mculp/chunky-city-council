@@ -10,8 +10,8 @@
       "shoes": "#d9d3c4",
       "mark": { "kind": "flammable", "color": "#e626be" }
     },
-    "tre": {
-      "id": "tre",
+    "rocky": {
+      "id": "rocky",
       "degree": 0.38,
       "skin": "#a8957a",
       "hair": "#3a2416",
@@ -19,8 +19,8 @@
       "bottom": { "kind": "shorts", "color": "#39405c" },
       "shoes": "#efe9de"
     },
-    "odessa": {
-      "id": "odessa",
+    "bobby": {
+      "id": "bobby",
       "degree": 0.12,
       "skin": "#52402f",
       "hair": "#d8d4c8",

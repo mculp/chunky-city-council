@@ -1,5 +1,5 @@
 {
-  "note": "What the National Hydrography Dataset gets wrong, from comparing it by eye with USDA's public-domain NAIP aerial. Never from Google imagery.",
+  "note": "What the National Hydrography Dataset gets wrong, by eye. So far it's all from USDA's public-domain NAIP aerial, though Street View and the satellite, Google's included, are the source of truth.",
   "open": [
     { "id": "{e1b58427-a5be-41e8-b04b-ceee908dcf79}", "seen": "filed as a swamp, and it's a farm pond with a dam, all open water" },
     { "id": "{be1b4dfc-9ef8-42c6-8143-1811a09433e2}", "seen": "filed as a swamp, and it's an old bend of the river, dark open water all the way round" }

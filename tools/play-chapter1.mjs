@@ -1,6 +1,6 @@
 // Plays Chapter 1 on foot in real Chrome, from waking on the Chunky River Bridge to its final objective, and fails on
 // anything blocked or unreachable. Unlike tools/smoke.mjs nothing's teleported: it holds forward with the game's
-// own movement, and gets to Tre, back to Coop and to Miss Odessa by following the objective's arrow.
+// own movement, and gets to Rocky, back to Coop and to Miss Bobby by following the objective's arrow.
 //
 //   npm i && npm run play -- [--shots dir]
 import { mkdir } from 'node:fs/promises';
@@ -103,7 +103,7 @@ const inShot = async (id, who) => {
 };
 
 // nothing's left where the prototype had it
-const PROTOTYPE = { coop: [53, 8.4], tre: [84, 12.2], odessa: [68.5, -5.8] }, PROTOTYPE_CANS = [[38.2, -12.7], [43, -9.7], [76.6, 20.6], [100, -14], [85.9, 14]];
+const PROTOTYPE = { coop: [53, 8.4], rocky: [84, 12.2], bobby: [68.5, -5.8] }, PROTOTYPE_CANS = [[38.2, -12.7], [43, -9.7], [76.6, 20.6], [100, -14], [85.9, 14]];
 const placed = await g(() => ({ npcs: __game.npcs, cans: __game.pickups.map((c) => [c.x, c.z]) }));
 for (const [id, at] of Object.entries(PROTOTYPE)) { const d = Math.hypot(placed.npcs[id].x - at[0], placed.npcs[id].z - at[1]); check(`${id} has moved from the prototype's spot, by ${d.toFixed(0)} m`, d > 50, placed.npcs[id]); }
 placed.cans.forEach((c, i) => { const d = Math.min(...PROTOTYPE_CANS.map((p) => Math.hypot(c[0] - p[0], c[1] - p[1]))); check(`can ${i + 1} has moved, by ${d.toFixed(0)} m`, d > 50, c); });
@@ -125,12 +125,12 @@ s = await st(); check('arriving points at Coop', /Stock up on beans \(0\/12\) ·
 // Coop's bag
 let d = await talk('coop', 'Coop'); await snap('03-coop');
 await choose(0); await choose(0); s = await choose(0); check('took the bag', s.items.bag === 1, s.items);
-check('Coop says where the tracks really are', /south, across the road/.test(s.dialog?.say), s.dialog); s = await choose(0);
-check('the objective says where Tre is', /Take Coop's bag to Tre at the boxcar, south of US 80/.test(s.obj), s.obj); await snap('04-bag');
+check('Coop says Rocky\'s trailer is across the road', /trailer's right across the road/.test(s.dialog?.say), s.dialog); s = await choose(0);
+check('the objective says where Rocky is', /Take Coop's bag to Rocky at his trailer, across US 80 from the gas station/.test(s.obj), s.obj); await snap('04-bag');
 
-// follow the arrow to Tre, past the can by the boxcar
-r = await g(() => followArrow()); blockedCheck('follow the arrow to Tre', r);
-d = await talk('tre', 'Tre'); await snap('05-tre');
+// follow the arrow across the road to Rocky's trailer, and then the can out by the boxcar
+r = await g(() => followArrow()); blockedCheck('follow the arrow to Rocky', r);
+d = await talk('rocky', 'Rocky'); await snap('05-rocky');
 s = await choose(0); check('delivered for 2 beans', s.flags.delivered === true && s.beans >= 2, s); s = await choose(0);
 check('the objective says go back to Coop', /Go get paid by Coop at the gas station on US 80/.test(s.obj), s.obj);
 const boxCan = await can(4);
@@ -154,14 +154,14 @@ for (const [i, name] of [[2, 'the can by the mobile home'], [3, 'the can under t
   const c = await can(i); r = await walkTo(c.x, c.z, .8); blockedCheck(name, r);
   check(`picked up ${name}`, (await can(i)).got, await can(i));
 }
-s = await st(); check('ten beans by now and only Miss Odessa left', s.beans === 10 && /Miss Odessa is at the church on Church St/.test(s.obj), [s.beans, s.obj]); await snap('07-cans');
+s = await st(); check('ten beans by now and only Miss Bobby left', s.beans === 10 && /Miss Bobby is at her house by the town hall on Commerce St/.test(s.obj), [s.beans, s.obj]); await snap('07-cans');
 
-// Church St and the sweeping, which takes it past twelve
-r = await g(() => followArrow()); blockedCheck('follow the arrow to Church St', r);
-d = await talk('odessa', 'Miss Odessa'); await snap('08-odessa');
+// her house by the town hall and the sweeping, which takes it past twelve
+r = await g(() => followArrow()); blockedCheck('follow the arrow to Miss Bobby\'s', r);
+d = await talk('bobby', 'Miss Bobby'); await snap('08-bobby');
 await choose(0); s = await choose(0); check('sweeping', s.mode === 'sweep', s.mode);
 await g(() => __game.key('e', true)); s = await g(() => __game.step(3.4)); await g(() => __game.key('e', false));
-check('swept for 3 beans, and twelve is plenty', s.flags.swept === true && s.beans >= 12, [s.flags.swept, s.beans]); await inShot('odessa', 'Miss Odessa'); await snap('09-swept');
+check('swept for 3 beans, and twelve is plenty', s.flags.swept === true && s.beans >= 12, [s.flags.swept, s.beans]); await inShot('bobby', 'Miss Bobby'); await snap('09-swept');
 check('the crowd stays away for the whole chapter', !(await g(() => __game.crowd())).out);
 s = await g(() => __game.step(2)); check('the chapter ends', s.mode === 'end', s.mode); await snap('10-end');
 check('and now they come out', (await g(() => __game.crowd())).all > 0);

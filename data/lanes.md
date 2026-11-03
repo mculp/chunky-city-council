@@ -2,7 +2,7 @@
 
 `data/lanes.json` holds the smaller roads that `data/roads.json` leaves out, and a drive to every building that needs one, so that nobody has to go through the woods to get to a house. `tools/build_lanes.py` generates it. `src/map.js` loads it into `MAP.lanes`.
 
-There are 241 lanes, 102.5 km of them, and 994 drives, 40.9 km.
+There are 242 lanes, 102.5 km of them, and 994 drives, 40.9 km.
 
 ## Where it comes from
 
@@ -12,11 +12,13 @@ There are 241 lanes, 102.5 km of them, and 994 drives, 40.9 km.
 | Drives | Generated from where the road and the building are | Ours |
 | Measured drives | Measured on USDA's [NAIP aerial](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer), `measured` in `tools/lane_config.json` | Public domain |
 
-Every vertex of a lane is where TIGER has it, apart from the few that say `measured`. Those are somebody's real drive that TIGER hasn't got and a generated one would miss, like the ones into the compound on Pine Forest Rd and the yard off True Light Rd, measured off NAIP in true metres. They come after TIGER's in the file, so adding one doesn't renumber anything, and each starts from the nearest vertex of a road or a lane so that it's joined up. Nothing comes from Google's imagery.
+Every vertex of a lane is where TIGER has it, apart from the few that say `measured`. Those are somebody's real drive that TIGER hasn't got and a generated one would miss, like the ones into the compound on Pine Forest Rd and the yard off True Light Rd, measured off NAIP in true metres. They come after TIGER's in the file, in the order they're listed, so adding one at the end of the list doesn't renumber anything. Each starts from the nearest vertex of a road or a lane so that it's joined up, unless it's been measured from a point on a road between two of TIGER's vertices, and then it starts there. One that says which building it's `for` is that building's own, and nobody else's drive starts from it.
+
+The paved drive along the north side of the house just north of the town hall, off Commerce St, is the first from Google's satellite and Street View, which are the source of truth. It's concrete on Street View, and drawn as asphalt, which is the nearest there is. That house's footprint, and the town hall's, sit about 5 m south of where the satellite has them, so the drive's placed against the house rather than where the satellite has it, so that it runs past the house's north wall to its front corner as it does in life.
 
 A road doesn't stop for a stretch just because nothing on that stretch needed it. Where one of TIGER's roads is in the game on both sides of a gap of up to 350 m, the gap comes in too, so that True Light Rd isn't barricaded from itself. Two longer gaps stay out, on Point Wanita Lake Rd and Pauldin Rd.
 
-A drive isn't anybody's survey. It goes from the nearest road to beside the door by the shortest way that misses everything, and it bows a little by a hash of whose it is, so that it isn't ruled. It says `generated`, and so does a stretch of track that's had to find its way round a building TIGER has it going through.
+A drive isn't anybody's survey. It goes from the nearest road, other than a drive that's somebody else's own, to beside the door by the shortest way that misses everything, and it bows a little by a hash of whose it is, so that it isn't ruled. It says `generated`, and so does a stretch of track that's had to find its way round a building TIGER has it going through.
 
 ## Which roads
 
@@ -43,7 +45,7 @@ TIGER has no width or surface, so those are assumed, in `tools/lane_config.json`
 
 `reachOut` there takes a road on past where the map would have stopped, as far as it says, with whatever box of footprints that needs. Chunky Duffee Rd goes on up past its cemetery that way, about 5.5 km further than it did. From above its north end looks like gravel, but on Street View it's paved the whole way, dark and worn at first and faded tan by the time it gets up there, so it stays paved here. There's a white line at the edge in places and a yellow one in others, and neither's drawn. Griffis Fountain Rd goes on past the farm south of the Chunky River Bridge the same way, by its name and three of TIGER's unnamed roads by their ids, and Johnson Rd along that farm's south fence. Both are in what's already been fetched, so they have no box. Street View by coordinates shows Griffis Fountain Rd is gravel all the way along, so it says so in `byName`, whatever its class would say.
 
-`ownDrive` there is for buildings with a drive or a forecourt of their own, already built by hand in `index.html`: the owner's house and barn, the gas station and the town hall. A shed beside one of those shares its way in, as it does with a drive.
+`ownDrive` there is for buildings with a drive or a forecourt of their own, built by hand in `index.html` or measured: the owner's house and barn, the gas station, the town hall, the house just north of it and the compound on Pine Forest Rd. A shed beside one of those shares its way in, as it does with a drive.
 
 ## A building and a track
 
