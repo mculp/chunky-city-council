@@ -225,3 +225,38 @@ describe('kids on four-wheelers', () => {
     run(t, p, 1); assert.equal(c.dir, -1);
   });
 });
+
+describe('a railroad crossing', () => {
+  const shutAt = (world, x) => { world.shut = (px, pz) => Math.hypot(px - (OFF + x), pz) < 7; };
+
+  test('shut, it holds a driver up for as long as it takes, and they don\'t go round it or turn back', () => {
+    const { t, world } = setUp(), c = aCar(t, world, 100), p = him(100, 500);
+    shutAt(world, 180);
+    run(t, p, 40);
+    assert.ok(c.v.x < OFF + 180 - 7 && c.v.x > OFF + 100, `stopped short of it at ${c.v.x - OFF}`);
+    assert.ok(Math.abs(c.v.f) < .5, 'and stayed stopped');
+    assert.equal(c.dir, 1); assert.equal(c.passUntil, null); assert.equal(c.what, 'crossing');
+    world.shut = null;
+    run(t, p, 6);
+    assert.ok(c.v.x > OFF + 185, `went on when it opened, to ${c.v.x - OFF}`);
+  });
+
+  test('someone already on it when it shuts carries on over it', () => {
+    const { t, world } = setUp(), c = aCar(t, world, 100), p = him(100, 500);
+    shutAt(world, 103);
+    run(t, p, 3);
+    assert.ok(c.v.x > OFF + 112, `got off it, to ${c.v.x - OFF}`);
+  });
+
+  test('a kid holds up for it too, and goes on', () => {
+    const { t, world } = setUp({ tuning: { riders: 1, riderFrom: [0, 1], riderGone: 1e6 } }), p = him(5000);
+    run(t, him(300, 150), 1); const c = t.riders[0];
+    c.road = lane; c.s = 100; c.dir = 1; c.v.x = OFF + 300; c.v.z = 100; c.v.yaw = 0; c.off = c.want = 0; c.v.f = c.speed; c.next = 0;
+    world.shut = (x, z) => Math.hypot(x - (OFF + 300), z - 140) < 7;
+    run(t, p, 12);
+    assert.ok(c.v.z < 134 && c.v.z > 100, `stopped short of it at ${c.v.z}`);
+    world.shut = null;
+    run(t, p, 5);
+    assert.ok(c.v.z > 150 || c.road !== lane, `went on, to ${c.v.z}`);
+  });
+});

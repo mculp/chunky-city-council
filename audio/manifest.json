@@ -257,6 +257,14 @@
       "request": "01a198b8-9c9b-7133-ac36-9db4c0b9b9e3",
       "date": "2026-11-01T20:06:42.305Z"
     },
+    "audio/sfx/crossing.bell.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 4,
+      "bytes": 65244,
+      "sha256": "bcc6df5173a9676d894f42c860ff4abc71bcf6e8a5de83c69c7ec189ab62f278",
+      "request": "01a19d29-6928-79b1-8a5d-2dd2ecd3b446",
+      "date": "2026-11-02T16:48:24.054Z"
+    },
     "audio/sfx/dream.swell.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
       "seconds": 6,
@@ -937,6 +945,38 @@
       "request": "01a198de-fa0c-74c3-9fd6-3ce48af94242",
       "date": "2026-11-01T20:48:37.297Z"
     },
+    "audio/sfx/train.blast.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 3,
+      "bytes": 48944,
+      "sha256": "28656cedfe8604c91658250cbaf24927646cb0b9dee7410dea0a67afbccde7c3",
+      "request": "01a19d29-8417-75e0-a783-b9878fd7224b",
+      "date": "2026-11-02T16:48:30.721Z"
+    },
+    "audio/sfx/train.clatter.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 10,
+      "bytes": 160957,
+      "sha256": "65c374e1b33d432d16d87e47938897b5ef43b69bb560899fcb3674a06127c2bf",
+      "request": "01a19d29-ebee-7763-badf-dd8f91cf9a9e",
+      "date": "2026-11-02T16:48:57.513Z"
+    },
+    "audio/sfx/train.horn.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 7,
+      "bytes": 112892,
+      "sha256": "c18fcba0ef26eaf6ddba7a12ea20df0ea0053a0b47428ab703964c44946c326a",
+      "request": "01a19d29-7c23-7aa1-9ad8-cafe945ec193",
+      "date": "2026-11-02T16:48:28.673Z"
+    },
+    "audio/sfx/train.rumble.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 14,
+      "bytes": 224905,
+      "sha256": "33c7a0808d75516710902cdd8f05b06792e0eb113e864e08d102de5e78175b09",
+      "request": "01a19d29-ebef-7ab3-aff3-9a5021e6243e",
+      "date": "2026-11-02T16:48:59.306Z"
+    },
     "audio/sfx/tramp.spring.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
       "seconds": 1,
@@ -1027,7 +1067,7 @@
     }
   },
   "spent": {
-    "likely": 11.3824,
-    "most": 16.6024
+    "likely": 11.5064,
+    "most": 16.7264
   }
 }

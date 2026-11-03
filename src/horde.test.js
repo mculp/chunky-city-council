@@ -304,3 +304,67 @@ test('far from the player they wait', () => {
   run(h, still, 2);
   assert.equal(h.active.length, 0); assert.equal(s.x, 500);
 });
+
+describe('run over', () => {
+  const hit = (over = {}) => ({ x: 3, z: 0, vx: 10, vz: 0, vy: 6, kills: true, seconds: 30, spin: 8, ...over });
+
+  test('whoever it finds is thrown, and it says how many', () => {
+    const h = createHorde(field()), near = h.add(1, 0), far = h.add(9, 0);
+    run(h, still, .05);
+    assert.equal(h.runOver((x) => (x < 2 ? hit() : null)), 1);
+    assert.equal(near.state, STUNNED); assert.equal(near.x, 3); assert.ok(near.thrown); assert.ok(!far.thrown);
+    assert.equal(h.runOver(() => hit()), 1, 'not twice for the same one');
+  });
+
+  test('they fly, land, and if it killed them they lie there and then they\'re gone', () => {
+    const h = createHorde(field()), s = h.add(1, 0), n = h.all.length;
+    run(h, still, .05);
+    h.runOver((x) => (x < 2 ? hit() : null));
+    run(h, still, .3);
+    assert.ok(s.y > 0, 'in the air'); assert.ok(s.x > 4); assert.ok(s.tumble > 0);
+    run(h, still, .7);
+    assert.equal(s.thrown, null); assert.equal(s.y, 0); assert.equal(s.tumble, 0); assert.ok(s.x > 9, `to ${s.x}`);
+    const landed = s.x;
+    run(h, still, TUNING.liesDead - .5);
+    assert.ok(s.flat > 0, 'still down'); assert.equal(s.x, landed, 'and not going anywhere'); assert.equal(h.all.length, n);
+    run(h, still, 2.5);
+    assert.equal(h.all.length, n - 1, 'gone');
+  });
+
+  test('if it didn\'t, they get up', () => {
+    const h = createHorde(field()), s = h.add(1, 0), n = h.all.length;
+    run(h, still, .05);
+    h.runOver((x) => (x < 2 ? hit({ kills: false, seconds: 3 }) : null));
+    run(h, still, 6);
+    assert.notEqual(s.state, STUNNED); assert.equal(h.all.length, n); assert.equal(s.dead, undefined);
+  });
+
+  test('a wall stops them flying through it', () => {
+    const h = createHorde(field({ blocked: (x) => x > 5 })), s = h.add(1, 0);
+    run(h, still, .05);
+    h.runOver((x) => (x < 2 ? hit() : null));
+    run(h, still, 1.5);
+    assert.ok(s.x < 5.1, `to ${s.x}`);
+  });
+
+  test('into the water and that\'s the last of them, with a splash', () => {
+    let splashes = 0;
+    const h = createHorde(field({ water: (x) => x > 5, level: () => 0, floorAt: (x) => (x > 5 ? -3 : 0) }), {}, { splash: () => splashes++ }), s = h.add(1, 0), n = h.all.length;
+    run(h, still, .05);
+    h.runOver((x) => (x < 2 ? hit({ kills: false, seconds: 3 }) : null));
+    run(h, still, 1);
+    assert.equal(splashes, 1); assert.ok(s.under !== undefined);
+    run(h, still, 2);
+    assert.equal(h.all.length, n - 1);
+  });
+
+  test('someone holding him lets go, and with nobody left he\'s free', () => {
+    let freed = 0;
+    const h = createHorde(field(), {}, { free: () => freed++, grab() {} }), s = h.add(.3, 0);
+    s.state = HUNTING;
+    run(h, { ...still, y: 0 }, .4);
+    assert.ok(h.grab, 'he\'s held');
+    h.runOver(() => hit());
+    assert.equal(h.grab, null); assert.equal(freed, 1);
+  });
+});

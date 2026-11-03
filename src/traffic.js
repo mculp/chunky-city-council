@@ -31,7 +31,7 @@ const hypot = Math.hypot, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 function turn(from, to, k) { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return from + d * k; }
 
 // world: { roads, nodes, lanes, along(id, s), sOn(id, x, z), half(road, x, z), blocked(x, z, y), floorAt(x, z), someoneAt(x, z, r), rand(), add(kind, x, z, yaw) -> vehicle, remove(v),
-//          person(kind) -> who, out(car, why), mood(who) -> whether they'd run him down, roadNear(x, z) -> a road or nothing, laneAt(x, z, not) -> a lane or nothing, laneNear(x, z) -> a lane or nothing, touch(car) }
+//          person(kind) -> who, out(car, why), mood(who) -> whether they'd run him down, roadNear(x, z) -> a road or nothing, laneAt(x, z, not) -> a lane or nothing, laneNear(x, z) -> a lane or nothing, touch(car), shut(x, z) -> whether there's a railroad crossing shut there, if there's such a thing }
 // p: { x, z, y, driving }
 export function createTraffic(world, tuning = {}) {
   const T = { ...TRAFFIC, ...tuning }, cars = [], riders = [], nodeById = new Map(world.nodes.map((n) => [n.id, n]));
@@ -68,8 +68,11 @@ export function createTraffic(world, tuning = {}) {
   function look(c, p) {
     const v = c.v, f = Math.abs(v.f), w = v.K.width / 2 + .6, reach = Math.max(14, 8 + f * f / (2 * T.roomy) + f);
     c.ahead = Infinity; c.what = null;
+    // someone already on a crossing when it shuts carries on over it
+    const onIt = world.shut?.(v.x, v.z);
     for (let d = v.K.length / 2 + 1.2; d < reach; d += 3) {
       const q = world.along(c.road.id, c.s + c.dir * d), rx = -q.tz * c.dir, rz = q.tx * c.dir, x = q.x + rx * c.want, z = q.z + rz * c.want;
+      if (!onIt && world.shut?.(x, z)) { c.ahead = d; c.what = 'crossing'; return; }
       if (hypot(p.x - x, p.z - z) < w + (p.driving ? 1.2 : .2) && !world.mood(c.who)) { c.ahead = d; c.what = 'him'; return; }
       if (world.someoneAt(x, z, w)) { c.ahead = d; c.what = 'someone'; return; }
       if (d < 24 && world.blocked(x, z, v.y + .6)) { c.ahead = d; c.what = 'thing'; return; }
@@ -110,7 +113,8 @@ export function createTraffic(world, tuning = {}) {
       if ((c.s - c.passUntil) * c.dir > 0) { c.passUntil = null; c.want = lane; c.stopped = 0; }
     } else {
       c.want = lane;
-      if (c.what && still) {
+      // and nobody goes round a train. They wait.
+      if (c.what && c.what !== 'crossing' && still) {
         c.stopped += dt;
         if (c.stopped > T.patience[1] - (T.patience[1] - T.patience[0]) * c.who.temper) {
           if (!onComing(c) && clearAt(c, -lane, c.ahead + K.length + 8, p)) { c.want = -lane; c.passUntil = c.s + c.dir * (c.ahead + K.length + 7); c.what = null; c.ahead = Infinity; c.stopped = 0; c.stuck = 0; }
@@ -173,6 +177,7 @@ export function createTraffic(world, tuning = {}) {
       const q = world.along(c.road.id, c.s), fx = q.tx * c.dir, fz = q.tz * c.dir, rx = -fz, rz = fx, dx = p.x - v.x, dz = p.z - v.z, d = hypot(dx, dz), ahead = dx * fx + dz * fz, across = dx * rx + dz * rz, reach = p.driving ? T.swerveDriving : T.swerve;
       c.turned = Math.max(0, (c.turned ?? 0) - T.lookEvery);
       c.want = 0;
+      c.held = !world.shut?.(v.x, v.z) && !!world.shut?.(v.x + fx * 7, v.z + fz * 7);
       if (d < reach && ahead > -4) {
         // away from whichever side he's on, or the other way if there's something there
         const side = across >= 0 ? -1 : 1, can = (o) => !world.blocked(q.x + rx * o, q.z + rz * o, v.y + .6);
@@ -181,7 +186,7 @@ export function createTraffic(world, tuning = {}) {
         if (!c.want && ahead > 2 && !c.turned) { c.dir = -c.dir; c.turned = 2; v.f = Math.min(v.f, 5); }
       }
     }
-    const top = c.speed * (Math.abs(c.want) > 0 ? .8 : 1);
+    const top = c.held ? 0 : c.speed * (Math.abs(c.want) > 0 ? .8 : 1);
     v.f += clamp(top - v.f, -K.brake * dt, K.accel * dt);
     c.s += c.dir * v.f * dt;
     if (c.s <= 0 || c.s >= c.road.length) {

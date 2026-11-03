@@ -229,6 +229,8 @@ import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boun
 import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
 import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, rimHit, placeVehicles, settle, speedOf } from './src/vehicles.js';
 import { vehicleGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
+import { makeLine, createTrains } from './src/trains.js';
+import { trainGeometries, TRAIN_LAMPS, gateArm } from './src/trainmodels.js';
 import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, feedBin, stockTank } from './src/things.js';
 import { CEMETERY, layGraves, graveSolid } from './src/graves.js';
 import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/volley.js';
@@ -683,6 +685,21 @@ const onDock = (x, z) => {
   if (Math.abs(dx) > 11 || Math.abs(dz) > 11 || !DOCK.prop || DOCK.prop.down) return false;
   const t = DOCK.deg * Math.PI / 180, u = dx * Math.cos(t) + dz * Math.sin(t), v = dz * Math.cos(t) - dx * Math.sin(t);
   return u > -7.5 && u < 9.2 && Math.abs(v) < (u > 5.6 ? 1.8 : 1);
+};
+// The railroad crosses the river on three trestles. He can walk them, and there's somewhere to stand clear halfway over. data/railroad.md has the rest.
+const RAIL = makeLine(MAP.rail[0]), TRESTLE = { span: 34, half: 1.45, top: TOWN_Y + .1, refugeOut: 2.7, refuge: 1.55, bents: 4.8 };
+const TRESTLES = MAP.trestles.map((t) => {
+  const s = RAIL.nearest(t.x, t.z).s, q = RAIL.at(s + .01), right = [-q.tz, q.tx];
+  return { id: t.id, x: t.x, z: t.z, s, rx: t.x + right[0] * TRESTLE.refugeOut, rz: t.z + right[1] * TRESTLE.refugeOut };
+});
+const onTrestle = (x, z) => {
+  for (let i = 0; i < TRESTLES.length; i++) {
+    const t = TRESTLES[i], dx = x - t.x, dz = z - t.z;
+    if (dx > TRESTLE.span || dx < -TRESTLE.span || dz > TRESTLE.span || dz < -TRESTLE.span) continue;
+    if (Math.hypot(x - t.rx, z - t.rz) < TRESTLE.refuge) return true;
+    if (dx * dx + dz * dz < TRESTLE.span * TRESTLE.span && MAP.railGrid.nearest(x, z) < TRESTLE.half) return true;
+  }
+  return false;
 };
 const HILLS = await loadHills('data/hills.json', MAP);
 {
@@ -3429,6 +3446,114 @@ const FENCE_POST = new THREE.MeshStandardMaterial({ color: '#342d29', roughness:
   }, { rigid: true, line: [...F.at(-7.5, 0), ...F.at(9, 0)], chip: '#6e5238' });
   flushBuckets(230);
 }
+// ===== the railroad: its trestles, its road crossings and the marker at the old wreck. The train itself is further down.
+{
+  const creosote = new THREE.MeshStandardMaterial({ color: '#33271d', roughness: 1 }), planks = new THREE.MeshStandardMaterial({ color: '#4d3d2d', roughness: 1 }), A = {}, B = {}, along = new THREE.Vector3(), rq = new THREE.Quaternion();
+  const under = Y0 - .02;
+  for (const t of TRESTLES) {
+    for (let d = -TRESTLE.span; d < TRESTLE.span; d += TRESTLE.bents) {
+      RAIL.at(t.s + d, A); RAIL.at(t.s + d + TRESTLE.bents, B);
+      // what the ties lie on, and the walkway's edge
+      for (const off of [-.8, .8, -1.25, 1.25]) addBeam([A.x - A.tz * off, under - .2, A.z + A.tx * off], [B.x - A.tz * off, under - .2, B.z + A.tx * off], Math.abs(off) > 1 ? .12 : .3, Math.abs(off) > 1 ? .2 : .38, creosote, Math.abs(off) > 1 ? 1 : 0);
+      const foot = groundH(A.x, A.z);
+      if (foot > under - 1.3) continue;
+      // a bent: piles out of the ground or the river bed, leaning in to a cap, and a brace across them
+      along.set(A.tx, 0, A.tz); rq.setFromUnitVectors(XA, along);
+      const nx = -A.tz, nz = A.tx, cap = under - .62;
+      addBox(creosote, A.x, cap, A.z, .44, .36, 5.2, 1.1, rq);
+      for (const [off, lean] of [[-2.05, -.7], [-.72, -.12], [.72, .12], [2.05, .7]]) {
+        const tx = A.x + nx * off, tz = A.z + nz * off, bx = tx + nx * lean + (hash(t.s, d, off) - .5) * .12, bz = tz + nz * lean + (hash(d, off, t.s) - .5) * .12;
+        addBeam([bx, groundH(bx, bz) - .5, bz], [tx, cap, tz], .38, .38, creosote, 1.1);
+        solid(bx - .22, bx + .22, bz - .22, bz + .22, cap);
+      }
+      const y0 = Math.max(foot + 1, cap - 4.2);
+      addBeam([A.x + nx * 2.2, y0, A.z + nz * 2.2], [A.x - nx * 2.2, cap - .3, A.z - nz * 2.2], .1, .2, creosote, 1);
+      addBeam([A.x - nx * 2.2, y0, A.z - nz * 2.2], [A.x + nx * 2.2, cap - .3, A.z + nz * 2.2], .1, .2, creosote, 1);
+    }
+    // somewhere to stand while it goes by
+    RAIL.at(t.s, A); along.set(A.tx, 0, A.tz); rq.setFromUnitVectors(XA, along);
+    addBox(planks, t.rx, TRESTLE.top - .06, t.rz, 2.9, .12, 2.9, 1.1, rq);
+    const out = TRESTLE.refugeOut + 1.35, ex = t.x - A.tz * out, ez = t.z + A.tx * out;
+    addBox(creosote, ex, TRESTLE.top + .5, ez, 2.9, .1, .1, 1, rq);
+    for (const u of [-1.4, 1.4]) addBox(creosote, ex + A.tx * u, TRESTLE.top + .2, ez + A.tz * u, .12, .8, .12, 1);
+    for (const u of [-1.2, 1.2]) addBeam([ex + A.tx * u, TRESTLE.top - 1.8, ez + A.tz * u], [t.x + A.tx * u - A.tz * 1.5, TRESTLE.top - .12, t.z + A.tz * u + A.tx * 1.5], .14, .14, creosote, 1);
+    flushBuckets(260);
+  }
+}
+// The road crossings. A mast each side with a crossbuck, two red lamps and a gate arm, and a cabinet on one corner, as they have at Chestnut St.
+const RAIL_CROSSINGS = MAP.crossings.filter((c) => c.with === 'railroad').map((c) => ({ road: c.road, x: c.x, z: c.z }));
+const GATE_ARMS = [], GATE_LAMPS = [];
+{
+  const mastMat = new THREE.MeshStandardMaterial({ color: '#8d9195', metalness: .4, roughness: .6 }), lampMat = new THREE.MeshStandardMaterial({ color: '#240806', roughness: .5 }), boxMat = new THREE.MeshStandardMaterial({ color: '#cfcbbd', roughness: .85 }), backMat = new THREE.MeshStandardMaterial({ color: '#1c1a20', roughness: 1 });
+  const buck = textTex([], 512, 256, '#dcd7c8', '#17131c', '40px Georgia, serif', { after: (g) => {
+    g.fillStyle = '#17131c'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '700 74px Georgia, "Times New Roman", serif';
+    g.fillText('RAILROAD', 256, 66, 480); g.fillText('CROSSING', 256, 192, 480);
+    g.fillRect(0, 0, 512, 5); g.fillRect(0, 123, 512, 10); g.fillRect(0, 251, 512, 5);
+  } });
+  const buckMat = new THREE.MeshStandardMaterial({ map: buck, emissiveMap: buck, emissive: '#ffffff', emissiveIntensity: .3, roughness: 1 });
+  const arm = (angle, row) => { const g = new THREE.PlaneGeometry(2.3, .34), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, (uv.getY(i) + row) / 2); return g.rotateZ(angle); };
+  const buckGeo = mergeGeometries([arm(Math.PI / 4, 1), arm(-Math.PI / 4, 0).translate(0, 0, .01)]), up = new THREE.Vector3(0, 1, 0), rq = new THREE.Quaternion(), tilt = new THREE.Quaternion();
+  for (const c of RAIL_CROSSINGS) {
+    const road = MAP.roadById.get(c.road);
+    if (!road || road.lane || RAIL.nearest(c.x, c.z).d > 6) continue;
+    const p = MAP.along(road.id, MAP.sOn(road.id, c.x, c.z)), half = roadHalf(road, c.x, c.z), q = RAIL.at(RAIL.nearest(c.x, c.z).s), skew = Math.max(.4, Math.abs(p.tx * q.tz - p.tz * q.tx)), back = 5.4 / skew;
+    for (const side of [1, -1]) {
+      // on the right, for someone coming up to it from this side
+      const fx = -p.tx * side, fz = -p.tz * side, rx = -fz, rz = fx, x = c.x - fx * back + rx * (half + 1.3), z = c.z - fz * back + rz * (half + 1.3), foot = Math.min(groundH(x, z), Y0), yaw = Math.atan2(-fx, -fz);
+      rq.setFromAxisAngle(up, yaw);
+      const face = new THREE.Mesh(buckGeo, buckMat);
+      face.position.set(x - fx * .05, Y0 + 3.95, z - fz * .05); face.rotation.y = yaw; scene.add(face);
+      DISTANT.push({ obj: face, x, z, r: 240 });
+      const prop = breakable('signal', 3, () => {
+        addBox(mastMat, x, (foot + Y0 + 4.6) / 2, z, .16, Y0 + 4.6 - foot, .16, 1.2);
+        addBox(mastMat, x, foot + .35, z, .5, .7 + (Y0 - foot), .5, 1.1);
+        addBox(mastMat, x + -rx * .22, Y0 + 1.35, z + -rz * .22, .4, .7, .34, 1.1);
+        addBox(mastMat, x, Y0 + 3.05, z, 1.5, .1, .1, 1, rq);
+        for (const u of [-.62, .62]) {
+          const lx = x + rx * u, lz = z + rz * u;
+          addBox(backMat, lx, Y0 + 3.05, lz, .5, .5, .06, 1, rq);
+          addBox(lampMat, lx - fx * .06, Y0 + 3.05, lz - fz * .06, .3, .3, .1, 0, rq);
+          GATE_LAMPS.push({ gate: c, u, x: lx - fx * .14, y: Y0 + 3.05, z: lz - fz * .14 });
+        }
+        for (const a of [Math.PI / 4, -Math.PI / 4]) { tilt.copy(rq).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), a)); addBox(backMat, x, Y0 + 3.95, z, 2.36, .4, .03, 0, tilt); }
+        solid(x - .2, x + .2, z - .2, z + .2, Y0 + 4.6);
+        PROP.objs.push(face);
+      }, { rigid: true, chip: '#6d6a72', foot: [x, z] });
+      // the arm comes down across their side of the road, from the mast to the middle
+      GATE_ARMS.push({ gate: c, prop, x: x - rx * .4, y: Y0 + 1.4, z: z - rz * .4, yaw: Math.atan2(rz, -rx), len: half + .5, down: 0 });
+    }
+    const cx = c.x + p.tx * (back + 3) - p.tz * (half + 4.5), cz = c.z + p.tz * (back + 3) + p.tx * (half + 4.5);
+    breakable('cabinet', 2.5, () => {
+      rq.setFromAxisAngle(up, Math.atan2(p.tx, p.tz));
+      addBox(boxMat, cx, Y0 + .95, cz, 1.3, 1.9, 1.1, 1.3, rq); addBox(mastMat, cx, Y0 + 1.95, cz, 1.4, .08, 1.2, 1, rq);
+      solid(cx - .7, cx + .7, cz - .7, cz + .7, Y0 + 2);
+    }, { rigid: true, chip: '#cfcbbd', foot: [cx, cz] });
+    flushBuckets(260);
+  }
+}
+const RAILROAD = await (await fetch('data/railroad.json')).json();
+const RAIL_MARKER = (() => {
+  const [x, z] = atTrue(...RAILROAD.marker.at), q = RAIL.at(RAIL.nearest(x, z).s), side = ((x - q.x) * -q.tz + (z - q.z) * q.tx) >= 0 ? 1 : -1, nx = -q.tz * side, nz = q.tx * side, foot = Math.min(groundH(x, z), Y0);
+  const plate = textTex([], 1024, 720, '#1f2a24', '#efe7d2', '40px Georgia, serif', { after: (g) => {
+    g.strokeStyle = '#efe7d2'; g.lineWidth = 7; g.strokeRect(20, 20, 984, 680);
+    g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = '#efe7d2';
+    g.font = '86px Bungee, Impact, sans-serif'; g.fillText(RAILROAD.marker.title, 512, 130, 930); g.fillRect(70, 160, 884, 6);
+    g.font = '700 58px Georgia, "Times New Roman", serif'; g.fillText(RAILROAD.marker.date, 512, 240, 930);
+    g.font = '38px Georgia, "Times New Roman", serif';
+    RAILROAD.marker.lines.forEach((t, i) => g.fillText(t, 512, 318 + i * 47, 930));
+  } });
+  const yaw = Math.atan2(-nx, -nz), face = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.05), new THREE.MeshStandardMaterial({ map: plate, emissiveMap: plate, emissive: '#ffffff', emissiveIntensity: .5, roughness: 1 }));
+  face.position.set(x - nx * .06, Y0 + 1.5, z - nz * .06); face.rotation.y = yaw; scene.add(face); DISTANT.push({ obj: face, x, z, r: 200 });
+  breakable('sign', 2, () => {
+    addBox(poleMat, x, (foot + Y0 + 2.1) / 2, z, .1, Y0 + 2.1 - foot, .1, 1);
+    addBox(poleMat, x - nx * .02, Y0 + 1.5, z - nz * .02, 1.56, 1.1, .05, 1, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw));
+    solid(x - .08, x + .08, z - .08, z + .08, Y0 + 2.1); PROP.objs.push(face);
+  }, { rigid: true, chip: '#1f2a24', foot: [x, z] });
+  flushBuckets(200);
+  return { x, z, words: RAILROAD.marker.words };
+})();
+const railMarkerInReach = () => Math.hypot(RAIL_MARKER.x - player.pos.x, RAIL_MARKER.z - player.pos.z) < 2.4;
+let railMarkerRead = false;
 indexProps();
 // Where the town's props leave the random sequence, however many there are, so the lantern and the snakes stay as they were in the opening
 rs = 426193737;
@@ -4105,6 +4230,7 @@ function poseCrowd(s, i, step) {
     const lie = s.flat > 0 ? Math.min(1, (s.flatFor - s.flat) * 7, s.flat * 2.2) : 0;
     _cb.compose(_cp.set(s.x, seat ? s.y : s.y + 1.43 * size * (1 - lie) + .28 * lie + Math.abs(Math.sin(p)) * .03, s.z), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(size));
     if (lie) _cb.multiply(_cl.makeRotationX(-1.45 * lie));
+    if (s.tumble) _cb.multiply(_cl.makeRotationX(s.tumble));
     // the top half leans from the hips, so the feet stay on the ground
     const list = (s.phase - 3.14) * .035;
     _cl.makeRotationFromEuler(_ce.set(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : .16, 0, list + (st === STUNNED ? Math.sin(step * .9) * .12 : Math.sin(p) * (after ? .05 : .1))));
@@ -4825,6 +4951,7 @@ function floorAt(x, z) {
   if (Math.abs(z) < 4.25 && Math.abs(Math.abs(x) - 22) < 2.25) f = Math.max(f, DY - .05);
   const p = plankUnder(x, z); if (p && !p.hole && p.fall === 0) f = Math.max(f, DECK_TOP);
   if (onDock(x, z)) f = Math.max(f, DOCK.top);
+  if (onTrestle(x, z)) f = Math.max(f, TRESTLE.top);
   return f;
 }
 // solids by cell, so a check only looks at what's around it
@@ -4857,8 +4984,18 @@ function hitsWall(x, z, y, list) {
   }
   return false;
 }
+// The one train, from src/trains.js. What it looks like and what it does are further down, by what's on the road.
+const trainRand = (() => { let s = 20261102; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+let trainsOn = !new URLSearchParams(location.search).has('test');
+const trains = createTrains(RAIL, { crossings: RAIL_CROSSINGS, posts: TRESTLES, tuning: FEW ? { cars: [10, 16] } : {}, world: {
+  rand: trainRand,
+  start: (tr) => { for (const c of tr.cars) { const list = TRAIN_PAINTS[c.kind]; c.paint = new THREE.Color(list[Math.floor(c.seed * 97) % list.length]); } },
+  horn: (g, tr) => trainHorn(g, tr),
+  blast: (tr) => playNew('train.blast', { x: tr.cars[0].x, z: tr.cars[0].z }),
+} });
 function blocked(x, z, y) {
   if (!MAP.inBounds(x, z)) return true;
+  if (trains.train && y > TOWN_Y - 2 && trains.at(x, z, .15)) return true;
   const cell = (Math.floor(x / 16) + 32768) * 65536 + Math.floor(z / 16) + 32768, list = solidCells.get(cell);
   if (list) for (const [x0, x1, z0, z1, top] of list) if (x > x0 - .3 && x < x1 + .3 && z > z0 - .3 && z < z1 + .3 && y < top - .25) return true;
   const walls = wallCells.get(cell);
@@ -4885,6 +5022,7 @@ const horde = createHorde({
   folks,
   blocked: (x, z, y) => blocked(x, z, y) || floorOnce(x, z) - y > .7 || (driving !== null && inVehicle(driving, x, z, .3)),
   water: (x, z) => floorOnce(x, z) < WATER.level(x, z) - .1,
+  level: (x, z) => WATER.level(x, z),
   floorAt: floorOnce,
   rand: crowdRand,
   // along the streets they first came out on, too far off for him to see it happen
@@ -4902,6 +5040,8 @@ const horde = createHorde({
     return [p.x + (crowdRand() - .5) * 8, p.z + (crowdRand() - .5) * 8];
   },
 }, {}, {
+  thrown(s, hit) { SFX.play('hit.flesh', { x: s.x, z: s.z }); spray(s.x, s.y + 1, s.z, hit.kills ? (FEW ? 6 : 12) : 3, .1, 5, .22, .95, .45, hit.vx * .05, hit.vz * .05); },
+  splash(s) { addRipple(s.x, s.z, .4, 0); SFX.play('splash.small', { x: s.x, z: s.z }); },
   grab() { SFX.play('groan.grab'); SFX.play('hurt', { gain: .6 }); SFX.say('grabbed'); S.mode = 'grabbed'; HP.kind = 'struggle'; HP.speed = 0; player.kb.set(0, 0); if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35); },
   free() { SFX.play('hit.flesh'); S.mode = 'town'; HP.kind = 'run'; player.inv = 1.2; prompt(null); glitch(.4, .2); },
   overrun() {
@@ -5056,7 +5196,7 @@ const TRAFFIC_ID = { car: 5000, rider: 6000 }, trafficTurn = { car: 0, rider: 0 
 const unpaved = (r) => !!r && r.lane && r.surface !== 'asphalt';
 const traffic = createTraffic({
   roads: MAP.roads, nodes: MAP.nodes, along: MAP.along, sOn: MAP.sOn, half: roadHalf, rand: trafficRand,
-  blocked: blockedInTown, floorAt,
+  blocked: blockedInTown, floorAt, shut: (x, z) => trains.shutAt(x, z),
   someoneAt(x, z, r) { for (const s of horde.active) if (Math.hypot(s.x - x, s.z - z) < r) return true; return false; },
   add(kind, x, z, yaw, who) {
     const v = makeVehicle(kind, x, z, yaw, floorAt(x, z)), list = PAINTS[kind];
@@ -5081,7 +5221,7 @@ const traffic = createTraffic({
     let x = v.x + rx * (K.width / 2 + .8), z = v.z + rz * (K.width / 2 + .8);
     if (blocked(x, z, v.y + .2)) { x = v.x - rx * (K.width / 2 + .8); z = v.z - rz * (K.width / 2 + .8); }
     bringOutFolk(); who.calm = true; horde.add(x, z, { who });
-    folks.hurt(who, x, z, why === 'hit' ? 'truck' : 'hit');
+    folks.hurt(who, x, z, why === 'train' ? 'train' : why === 'hit' ? 'truck' : 'hit');
     SFX.play('vehicle.door', { x: v.x, z: v.z });
   },
   mood: (who) => folks.mood(who) === AFTER,
@@ -5697,6 +5837,169 @@ function ram(x, z, y, speed, dirx, dirz, mass, self = null) {
   return { energy: r.used * SMASH_J, gone: r.gone };
 }
 
+// ---------------- the train. src/trains.js says where it is, and this is what it looks like and what it does.
+const TRAIN_CAP = { loco: 2, box: 26, hopper: 26, tank: 26 }, TRAIN_SEE = 240, TRAIN_NEAR = 150, TRAIN_LURE = 95, RAIL_TOP = Y0 + .25;
+const TRAIN_PAINTS = { loco: ['#46586a', '#5a4638', '#4b5a44', '#5e4c3e'], box: ['#7d5638', '#8c5636', '#5e6470', '#7f6a46', '#6b4234'], hopper: ['#9a9482', '#7e8488', '#8c8570'], tank: ['#3a3a42', '#4e4e58', '#6a6e74'] };
+const trainGeos = trainGeometries(), trainGroup = new THREE.Group(), trainBodies = {}, trainLines = {}, trainSeeds = {}, trainUsed = {};
+trainGroup.visible = false; scene.add(trainGroup);
+for (const [kind, n] of Object.entries(TRAIN_CAP)) {
+  trainSeeds[kind] = new THREE.InstancedBufferAttribute(new Float32Array(n), 1).setUsage(THREE.DynamicDrawUsage); trainGeos[kind].geo.setAttribute('iSeed', trainSeeds[kind]);
+  const b = new THREE.InstancedMesh(trainGeos[kind].geo, vehMat, n), l = new THREE.InstancedMesh(trainGeos[kind].line, outlineMat(INK, 1.7), n);
+  b.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage); b.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  l.instanceMatrix = b.instanceMatrix; b.frustumCulled = l.frustumCulled = false; b.count = l.count = 0;
+  trainGroup.add(b, l); trainBodies[kind] = b; trainLines[kind] = l;
+}
+// Its lights: a star down the line, the same size however far off, since that's what you see first, a glare when it's close, and the track lit up ahead of it. None of it's a real light.
+const lampCloud = (n, material) => { const p = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage)).setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage)), new THREE.PointsMaterial({ map: radialTex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, ...material })); p.frustumCulled = false; p.geometry.setDrawRange(0, 0); p.renderOrder = 3; scene.add(p); return p; };
+const trainStar = lampCloud(4, { size: 26, sizeAttenuation: false }), trainGlare = lampCloud(4, { size: 7, sizeAttenuation: true });
+const trainPool = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 1, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: radialTex, color: '#ffe2b0', transparent: true, opacity: .55, depthWrite: false, blending: THREE.AdditiveBlending }));
+trainPool.frustumCulled = false; trainPool.visible = false; trainPool.renderOrder = 2; scene.add(trainPool);
+function drawTrain() {
+  const tr = trains.train;
+  drawGates();
+  trainGroup.visible = trainPool.visible = !!tr;
+  if (!tr) { trainStar.geometry.setDrawRange(0, 0); trainGlare.geometry.setDrawRange(0, 0); return; }
+  const cx = camera.position.x, cz = camera.position.z;
+  for (const k in TRAIN_CAP) trainUsed[k] = 0;
+  for (const c of tr.cars) {
+    if (Math.abs(c.x - cx) > TRAIN_SEE || Math.abs(c.z - cz) > TRAIN_SEE) continue;
+    const n = trainUsed[c.kind], b = trainBodies[c.kind];
+    if (n >= TRAIN_CAP[c.kind]) continue;
+    trainUsed[c.kind]++;
+    _m.compose(_tl.set(c.x, RAIL_TOP, c.z), _tq.setFromAxisAngle(UP, c.yaw), _ts.set(1, 1, 1)).toArray(b.instanceMatrix.array, n * 16);
+    b.setColorAt(n, c.paint); trainSeeds[c.kind].array[n] = c.seed;
+  }
+  for (const k in TRAIN_CAP) { const b = trainBodies[k], n = trainUsed[k]; b.count = trainLines[k].count = n; b.visible = trainLines[k].visible = n > 0; if (n) { b.instanceMatrix.needsUpdate = true; b.instanceColor.needsUpdate = true; trainSeeds[k].needsUpdate = true; } }
+  // the lamps. A car's left is (fz, -fx).
+  const pos = trainStar.geometry.attributes.position, col = trainStar.geometry.attributes.color, nose = tr.cars[0], last = tr.cars[tr.cars.length - 1];
+  let n = 0;
+  const cy = camera.position.y;
+  // Further off than the ground goes, the skyline's in the way, and it's only the hills' trees, so a lamp's drawn nearer on the same line from the camera: it's the same size however far off, and whatever's close still hides it.
+  const lamp = (c, lx, ly, lz, r, g, b) => {
+    let x = c.x + c.fz * lx + c.fx * lz, y = RAIL_TOP + ly, z = c.z - c.fx * lx + c.fz * lz;
+    const d = Math.hypot(x - cx, z - cz);
+    if (d > TRAIN_NEAR) { const k = TRAIN_NEAR / d, seen = y + hillUp(x, z); x = cx + (x - cx) * k; z = cz + (z - cz) * k; y = cy + (seen - cy) * k - hillUp(x, z); }
+    pos.setXYZ(n, x, y, z); col.setXYZ(n, r, g, b); n++;
+  };
+  const away = Math.hypot(cx - nose.x, cz - nose.z) || 1, front = ((cx - nose.x) * nose.fx + (cz - nose.z) * nose.fz) / away, H = TRAIN_LAMPS.head, D = TRAIN_LAMPS.ditch;
+  const k = sstep(-.1, .4, front) * (.45 + .55 * (1 - sstep(150, 1100, away))) * (MAP.railGrid.nearest(cx, cz) < 24 || away < TRAIN_NEAR ? 1 : 1 - sstep(TRAIN_NEAR, 500, away));
+  // the two down low take it in turns as it comes up to a crossing, as they do
+  const ditching = !reduceMotion && trains.gates.some((g) => g.shut && (g.s - tr.head) * tr.dir > 0 && (g.s - tr.head) * tr.dir < 200), flip = Math.floor(time * 3) % 2;
+  lamp(nose, H[0], H[1], H[2], k, k * .92, k * .7);
+  lamp(nose, D[0], D[1], D[2], k * .8 * (ditching && flip ? .1 : 1), k * .72 * (ditching && flip ? .1 : 1), k * .5 * (ditching && flip ? .1 : 1));
+  lamp(nose, -D[0], D[1], D[2], k * .8 * (ditching && !flip ? .1 : 1), k * .72 * (ditching && !flip ? .1 : 1), k * .5 * (ditching && !flip ? .1 : 1));
+  const T = TRAIN_LAMPS.tail, seen = sstep(-.1, .4, -((cx - last.x) * last.fx + (cz - last.z) * last.fz) / (Math.hypot(cx - last.x, cz - last.z) || 1)), blink = reduceMotion || Math.floor(time * 1.4) % 2 ? 1 : .08;
+  lamp(last, T[0], T[1], -last.len / 2 - .05, seen * blink, seen * blink * .08, seen * blink * .05);
+  trainStar.geometry.setDrawRange(0, n); pos.needsUpdate = col.needsUpdate = true;
+  // the glare's only for what's near, and a point that's nearly touching the camera would be as big as the screen
+  const gp = trainGlare.geometry.attributes.position, gc = trainGlare.geometry.attributes.color, close = sstep(3, 9, away) * (1 - sstep(70, 200, away));
+  for (let i = 0; i < 3; i++) { gp.setXYZ(i, pos.getX(i), pos.getY(i), pos.getZ(i)); gc.setXYZ(i, col.getX(i) * close, col.getY(i) * close, col.getZ(i) * close); }
+  trainGlare.geometry.setDrawRange(0, 3); gp.needsUpdate = gc.needsUpdate = true;
+  trainPool.position.set(nose.x + nose.fx * 42, TOWN_Y + .14, nose.z + nose.fz * 42); trainPool.rotation.y = nose.yaw; trainPool.scale.set(15, 1, 72);
+}
+// The gates. Down in about five seconds and up in about seven.
+const gateArmGeo = gateArm(), GATE_N = GATE_ARMS.length;
+const gateArms = new THREE.InstancedMesh(gateArmGeo.geo, new THREE.MeshBasicMaterial({ vertexColors: true }), GATE_N), gateArmLines = new THREE.InstancedMesh(gateArmGeo.line, outlineMat(INK, 1.3), GATE_N);
+gateArmLines.instanceMatrix = gateArms.instanceMatrix; gateArms.frustumCulled = gateArmLines.frustumCulled = false; gateArms.instanceMatrix.setUsage(THREE.DynamicDrawUsage); gateArms.visible = gateArmLines.visible = false; scene.add(gateArms, gateArmLines);
+const gateLamps = lampCloud(GATE_LAMPS.length, { size: 1.5, sizeAttenuation: true });
+const _gr = new THREE.Euler(0, 0, 0, 'YZX');
+let gatesDrawn = false;
+function moveGates(dt) {
+  for (const a of GATE_ARMS) { const to = a.gate.shut ? 1 : 0; if (a.down !== to) { a.down = to > a.down ? Math.min(1, a.down + dt / 5) : Math.max(0, a.down - dt / 7); gatesDrawn = false; } }
+}
+function drawGates() {
+  const cx = camera.position.x, cz = camera.position.z, seen = GATE_ARMS.some((a) => Math.abs(a.x - cx) < 240 && Math.abs(a.z - cz) < 240);
+  gateArms.visible = gateArmLines.visible = seen;
+  if (seen && !gatesDrawn) {
+    GATE_ARMS.forEach((a, i) => {
+      _gr.set(0, a.yaw, (1 - a.down) * 1.5);
+      _m.compose(_tl.set(a.x, a.y, a.z), _tq.setFromEuler(_gr), _ts.set(a.prop.down ? .001 : a.len, a.prop.down ? .001 : 1, a.prop.down ? .001 : 1)).toArray(gateArms.instanceMatrix.array, i * 16);
+    });
+    gateArms.instanceMatrix.needsUpdate = true; gatesDrawn = true;
+  }
+  let n = 0;
+  if (seen && trains.train) {
+    const pos = gateLamps.geometry.attributes.position, col = gateLamps.geometry.attributes.color, flip = Math.floor(time * 1.7) % 2 ? 1 : -1;
+    for (const l of GATE_LAMPS) {
+      if (!l.gate.shut) continue;
+      const k = reduceMotion || l.u * flip > 0 ? 1 : .05;
+      pos.setXYZ(n, l.x, l.y, l.z); col.setXYZ(n, k, k * .1, k * .06); n++;
+    }
+    if (n) pos.needsUpdate = col.needsUpdate = true;
+  }
+  gateLamps.geometry.setDrawRange(0, n);
+}
+function trainHorn(g, tr) {
+  playNew('train.horn', { x: tr.cars[0].x, z: tr.cars[0].z });
+  // long, and long again
+  after(4.6, () => { if (trains.train === tr) playNew('train.horn', { x: tr.cars[0].x, z: tr.cars[0].z }); });
+  // They come to it, and it's the last thing some of them do. Whoever's lived with it all their life knows better, and that goes for anyone it's fooled often enough.
+  if (g.road && folkOut) horde.lure(g.x, g.z, TRAIN_LURE, (trains.T.horn + tr.length + 30) / tr.speed, false, 'train');
+}
+// Someone in its way: { where they end up, how they fly }. Off the front of it that's the end of them, and off the side they're only thrown clear.
+const trainHit = { x: 0, z: 0, vx: 0, vz: 0, vy: 0, kills: false, seconds: 0, spin: 0 };
+function trainThrows(x, z, y) {
+  if (y < TOWN_Y - 2) return null;
+  const c = trains.at(x, z, .3);
+  if (!c) return null;
+  const tr = trains.train, side = trains.side(c, x, z), ax = c.fz * side, az = -c.fx * side, along = (x - c.x) * c.fx + (z - c.z) * c.fz, front = c === tr.cars[0] && along > c.len / 2 - 2.5, r = trainRand(), H = trainHit;
+  H.x = c.x + c.fx * along + ax * (c.half + .5); H.z = c.z + c.fz * along + az * (c.half + .5);
+  const ahead = front ? tr.speed * (.6 + r * .35) : 0, off = front ? 7 + r * 6 : 4 + r * 2;
+  H.vx = c.fx * ahead + ax * off; H.vz = c.fz * ahead + az * off; H.vy = front ? 5 + r * 5 : 2.5; H.kills = front; H.seconds = front ? 30 : 3 + r * 2; H.spin = front ? 8 + r * 8 : 3;
+  return H;
+}
+function trainHitsVehicle(v, c, tr) {
+  v.trainAt = time;
+  const side = trains.side(c, v.x, v.z), ax = c.fz * side, az = -c.fx * side, along = (v.x - c.x) * c.fx + (v.z - c.z) * c.fz;
+  if (v.ai) traffic.letGo(v.ai, 'train');
+  soundAlarm(v);
+  if (hurtVehicle(v, 1e4)) wreckVehicle(v);
+  v.x = c.x + c.fx * along + ax * (c.half + v.K.length / 2 + .4); v.z = c.z + c.fz * along + az * (c.half + v.K.length / 2 + .4);
+  toss(v, c.fx * tr.speed * .7 + ax * 10, c.fz * tr.speed * .7 + az * 10, 6 + trainRand() * 3);
+  if (v.loose) { v.loose.drag = 2; v.loose.clear = .4; }
+  vehDirty = true;
+  SFX.play('crash', { x: v.x, z: v.z, gain: 1.3 });
+  spray(v.x, v.y + 1, v.z, FEW ? 8 : 16, .14, 7, .3, .28, .3, c.fx, c.fz); puff(v.x, v.y + .4, v.z, 1, .7, 1.2);
+  if (!reduceMotion) cam.shake = Math.max(cam.shake, .6 * Math.max(.2, 1 - Math.hypot(player.pos.x - v.x, player.pos.z - v.z) / 40));
+  if (folkOut) horde.noise(v.x, v.z, 60, 3);
+}
+// It doesn't stop for him, and there's no surviving it.
+let trainGot = false, flungUntil = 0;
+function trainGotHim(c, tr) {
+  const P = player.pos, side = trains.side(c, P.x, P.z), ax = c.fz * side, az = -c.fx * side, along = (P.x - c.x) * c.fx + (P.z - c.z) * c.fz;
+  trainGot = true; flungUntil = time + 1.2;
+  P.x = c.x + c.fx * along + ax * (c.half + .5); P.z = c.z + c.fz * along + az * (c.half + .5);
+  player.kb.set(c.fx * tr.speed * .7 + ax * 9, c.fz * tr.speed * .7 + az * 9); player.vy = 7; player.grounded = false; player.inv = 1.6;
+  SFX.play('hit.flesh', { gain: 1.3 }); SFX.play('hurt');
+  if (!reduceMotion) cam.shake = .9;
+  flash(); glitch(.9, .5);
+  after(1.1, () => { trainGot = false; if (S.mode === 'town' || S.mode === 'grabbed') fail('The train got you.', "It can't stop. You get the horn and about twenty seconds."); });
+}
+let trainLoud = false;
+function updateTrains(dt) {
+  const P = player.pos, me = driving ?? P;
+  trains.update(dt, { x: me.x, z: me.z });
+  moveGates(dt);
+  const tr = trains.train;
+  let bell = 0;
+  for (const g of trains.gates) if (g.shut) bell = Math.max(bell, 1 - Math.hypot(g.x - me.x, g.z - me.z) / 110);
+  SFX.loop('crossing.bell', Math.max(0, bell) ** 2);
+  if (!tr) { if (trainLoud) { SFX.loop('train.rumble', 0); SFX.loop('train.clatter', 0); trainLoud = false; } return; }
+  // heard a long way off, and it comes up through your feet
+  const gap = tr.gap, rate = 1 + tr.closing / 340;
+  SFX.loop('train.rumble', Math.min(1, (1 - Math.min(1, gap / 1100)) ** 2 * 1.2), rate);
+  SFX.loop('train.clatter', (1 - Math.min(1, gap / 90)) ** 2, rate);
+  trainLoud = true;
+  if (gap < 34 && !reduceMotion) cam.shake = Math.max(cam.shake, .3 * (1 - gap / 34));
+  if (gap > 340) return;
+  if (!driving && !trainGot && (S.mode === 'town' || S.mode === 'grabbed') && P.y > TOWN_Y - 2 && trains.at(P.x, P.z, .05)) trainGotHim(trains.at(P.x, P.z, .05), tr);
+  for (const v of VEHICLES) {
+    if (v.kid || v.x < tr.x0 || v.x > tr.x1 || v.z < tr.z0 || v.z > tr.z1 || v.y < TOWN_Y - 2 || time - (v.trainAt ?? -9) < 1.5) continue;
+    const fx = Math.sin(v.yaw) * v.K.length * .42, fz = Math.cos(v.yaw) * v.K.length * .42, w = v.K.width / 2, c = trains.at(v.x, v.z, w) ?? trains.at(v.x + fx, v.z + fz, w) ?? trains.at(v.x - fx, v.z - fz, w);
+    if (c) trainHitsVehicle(v, c, tr);
+  }
+  if (folkOut) horde.runOver(trainThrows);
+}
 // ---- the hammer. It's in his hands for as long as he's swinging it, which is all anyone sees of it.
 // With the mouse, what he swings at or throws at is what the camera's looking at. He keeps going the way he was going while he does.
 let aimT = 0;
@@ -5933,6 +6236,7 @@ const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d')
 const MAP_PLACES = [
   ["Stuckey's Bridge", 0, 0, 3], ['Chunky River Bridge', WAKE_BRIDGE.x, WAKE_BRIDGE.z, 2], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-64.5, -39.5), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Ball field', ...atTrue(-345, -495), 3], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
   ...SIGN_SHEET.churches.map((c) => ['Church', ...atTrue(c.x, c.z), 2]),
+  ...TRESTLES.map((t) => ['Trestle', t.x, t.z, 2]),
 ].sort((a, b) => b[3] - a[3]);
 let mapOpen = false, mapDirty = false, mapCam = { x: 0, z: 0, scale: .4 };
 // Paper for the big map: scratches, in the game's own hatching, repeating too far apart to notice
@@ -6056,7 +6360,7 @@ let stepT = 0, lastStepIdx = -1;
 // ================================================================ main loop
 const clock = new THREE.Clock();
 // ================================================================ what he hears
-const METAL_PROPS = new Set(['tractor', 'bin', 'sign', 'pump', 'icebox', 'cooler', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'tower', 'leg', 'trailer', 'boxcar', 'cart', 'bleachers', 'net', 'trampoline', 'propane']);
+const METAL_PROPS = new Set(['tractor', 'bin', 'sign', 'pump', 'icebox', 'cooler', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'tower', 'leg', 'trailer', 'boxcar', 'cart', 'bleachers', 'net', 'trampoline', 'propane', 'signal', 'cabinet']);
 const VEHICLE_LOOPS = ['engine.car', 'engine.pickup', 'engine.quad', 'engine.golf', 'vehicle.road', 'vehicle.dirt', 'vehicle.skid'];
 const SCORE = { title: 'title', hang: 'hang', fall: 'fall', land: 'bank', bridge: 'run', bitten: 'bite', dream: 'dream', wake: 'wake', grabbed: 'grabbed', fail: 'failed', end: 'end' };
 const FEVER_QUIET = { bitten: .25, dream: 0, wake: .5 };
@@ -6065,7 +6369,7 @@ const soundRand = randomFrom(2026);
 let soundSlow = 0, lastStride = 0, creakSide = false, sawAt = -9, strokeT = 0, plankGroanT = 0, heartT = 0, frogT = 1, groanT = 0, huntedUntil = -9, nightQuiet = 1, boardOpen = false;
 function surfaceUnder() {
   const P = player.pos;
-  if ((P.y > DECK_TOP - .4 && Math.abs(P.x) < 20.6 && Math.abs(P.z) < 4) || fromWake(P.x, P.z) < WAKE_SPAN / 2 + .5 || houseAt(P.x, P.z)) return 'wood';
+  if ((P.y > DECK_TOP - .4 && Math.abs(P.x) < 20.6 && Math.abs(P.z) < 4) || fromWake(P.x, P.z) < WAKE_SPAN / 2 + .5 || houseAt(P.x, P.z) || (P.y > TOWN_Y - .4 && onTrestle(P.x, P.z))) return 'wood';
   if (WATER.look(P.x, P.z) && WATER.pond.pool && WATER.d < 3) return 'road';
   if (P.y < .8 || (WATER.look(P.x, P.z) && WATER.d < 1.5)) return 'mud';
   return pavedAt(P.x, P.z) ? 'road' : 'dirt';
@@ -6245,7 +6549,7 @@ function tick(dt, draw = true) {
     else if (want > .1) player.yaw += angDiff(player.yaw, Math.atan2(dir.x, dir.z)) * Math.min(1, dt * 10);
     const heading = aimT > 0 && want > .1 ? Math.atan2(dir.x, dir.z) : player.yaw;
     let nx = player.pos.x + (Math.sin(heading) * sp + player.kb.x) * dt, nz = player.pos.z + (Math.cos(heading) * sp + player.kb.y) * dt;
-    player.kb.multiplyScalar(Math.exp(-dt * 5));
+    player.kb.multiplyScalar(Math.exp(-dt * (time < flungUntil ? .8 : 5)));
     if (!S.flags.toldEdge && !MAP.inBounds(nx, nz)) { S.flags.toldEdge = true; toast('Nothing that way.'); after(12, () => { S.flags.toldEdge = false; }); }
     if (player.pos.y > DECK_TOP - .4 && Math.abs(nx) < 20.6 && Math.abs(nz) < 40) nz = clamp(nz, -2.25, 2.25);
     const fl = floorAt(nx, nz), stops = M === 'town' ? blockedInTown : blocked;
@@ -6292,11 +6596,12 @@ function tick(dt, draw = true) {
       const jam = !near && !ride && !meat && !door && jamInReach();
       const ball = !near && !ride && !meat && !door && !jam && ballWants(), gear = !near && !ride && !meat && !door && !jam && !ball && batInReach();
       if (crtLook && (Math.hypot(input.x, input.y) > .1 || input.sEdge || input.cEdge)) crtLook = false;
-      const crt = !near && !ride && !meat && !door && !jam && !ball && (crtLook || crtInReach()), stone = !near && !ride && !meat && !door && !jam && !ball && stoneInReach();
-      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : gear && S.flags.sixInARow ? 'Take the bat' : null;
+      const crt = !near && !ride && !meat && !door && !jam && !ball && (crtLook || crtInReach()), stone = !near && !ride && !meat && !door && !jam && !ball && stoneInReach(), plate = !near && !ride && !meat && !door && !jam && !ball && railMarkerInReach();
+      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : gear && S.flags.sixInARow ? 'Take the bat' : null;
       if (!stone) stoneRead = false;
-      if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
-      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) stoneRead = true; else if (gear && S.flags.sixInARow) takeBat(); else swing(); }
+      if (!plate) railMarkerRead = false;
+      if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (railMarkerRead && S.act === 'Read the marker') prompt(`<span class="words">${RAIL_MARKER.words}</span>`); else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
+      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) stoneRead = true; else if (plate) railMarkerRead = true; else if (gear && S.flags.sixInARow) takeBat(); else swing(); }
       if (input.sEdge) swing();
       if (input.cEdge) throwOne();
       if (input.nEdge) switchThrown();
@@ -6346,6 +6651,7 @@ function tick(dt, draw = true) {
     if (townFull) { const P = player.pos; traffic.update(dt, { x: driving ? driving.x : P.x, z: driving ? driving.z : P.z, y: P.y, driving: !!driving }); }
   }
   if (S.flags.town) updateWreck(dt, step);
+  if (trainsOn && S.flags.town) updateTrains(dt);
   // ---------------- hero placement
   if (S.mode === 'drive') {
     _v.set(driving.K.seat[0], driving.K.seat[1], driving.K.seat[2]).applyMatrix4(toBody(driving)); heroRoot.position.copy(_v);
@@ -6458,7 +6764,7 @@ function tick(dt, draw = true) {
   if (folkOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
   else if (folkOut) drawSeated(step);
   if (folkOut) drawWho();
-  if (S.flags.town) { drawVehicles(step); drawWreck(step); }
+  if (S.flags.town) { drawVehicles(step); drawWreck(step); if (trainsOn) drawTrain(); }
   updateParticles(dt, M);
   if (bottle.visible) levelLiquid();
   const hillHere = HILL.uHillHere.value = hillsOn ? HILLS.at(heroRoot.position.x, heroRoot.position.z) : 0;
@@ -6512,7 +6818,7 @@ if (TEST) {
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },
     compound: { JAM, JAM_SHED, DECK, LAWN, spot: screenSpot, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach },
     lures: { LYING, lyingNear, flying, popping, opened, ALARMS, lureSpots, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
-    horde, folks, traffic, homes: HOMES, fillTown() { townFull = true; }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far) }),
+    horde, folks, traffic, homes: HOMES, fillTown() { townFull = true; }, trains: { t: trains, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far) }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
     topDown({ x0, z0, x1, z1, scale, everywhere, houses }) {
