@@ -118,6 +118,19 @@ body.talking #keyStrip{visibility:hidden}
 .btn.on{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
 @media (pointer:coarse){#stick{display:block}#btns{display:flex}}
 body.talking .ctl{visibility:hidden}
+#mute{align-self:flex-start;width:40px;height:40px;margin:-4px 0 0 -7px;padding:7px;background:none;border:0;color:var(--cream);opacity:.6;pointer-events:auto;touch-action:manipulation}
+#mute svg{display:block;width:100%;height:100%;filter:drop-shadow(0 1px 0 var(--ink))}
+#mute .off{display:none}
+#mute.muted .on{display:none}
+#mute.muted .off{display:block}
+body.talking #mute{visibility:hidden}
+#sub{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom, 0px) + 176px);z-index:6;max-width:min(86vw,520px);padding:6px 12px;background:var(--panel);border:1px solid var(--line);color:var(--cream);font-size:15px;line-height:1.35;text-align:center;pointer-events:none}
+#sub[hidden]{display:none}
+#board{overflow-y:auto;padding:calc(env(safe-area-inset-top, 0px) + 16px) 16px 32px;align-items:flex-start;display:block}
+#board h2{margin:14px 0 8px;font-family:var(--f-display);font-size:18px;font-weight:400;color:var(--rust)}
+#board button{margin:0 6px 6px 0;padding:8px 10px;font-size:12px;background:var(--panel);border:1px solid var(--line);color:var(--cream)}
+#board button.file{border-color:var(--cream)}
+#board button.on{border-color:var(--rust);color:var(--rust)}
 #flash{position:fixed;inset:0;z-index:3;background:var(--hot);opacity:0;pointer-events:none;transition:opacity .35s}
 @media (max-width:600px){#toast.low{top:calc(env(safe-area-inset-top, 0px) + 150px)}}
 @media (prefers-reduced-motion: reduce){.card,#flash,#toast{transition:none}}
@@ -132,6 +145,7 @@ body.talking .ctl{visibility:hidden}
     <div class="hearts" id="hearts" hidden>♥♥♥</div>
     <div class="stam" id="stam" hidden><i id="stamFill"></i></div>
     <div class="beans" id="beans" hidden>Beans 0/12</div>
+    <button id="mute" aria-label="Sound" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.6L12 18.5v-13L7.6 9.5z" fill="currentColor"/><path class="on" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"/><path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
   </div>
   <div class="right">
     <div class="obj" id="obj" hidden></div>
@@ -141,6 +155,7 @@ body.talking .ctl{visibility:hidden}
 </div>
 <div id="prompt" hidden></div>
 <div id="toast"></div>
+<div id="sub" hidden></div>
 <div id="flash"></div>
 <div class="card" id="card"><div><h2 id="cardH"></h2><p id="cardP"></p></div></div>
 <div id="keyStrip" hidden></div>
@@ -158,7 +173,8 @@ body.talking .ctl{visibility:hidden}
     <button class="big" id="start">Start</button>
     <button class="forget" id="free">Skip to town</button>
     <button class="forget" id="forget" hidden>Forget everyone</button>
-    <p class="keys"><span class="k">WASD or arrows move · Shift runs · Space jumps · E uses · M is the map · drag to look</span><span class="t">Left thumb moves · the buttons say what they do · drag to look</span></p>
+    <button class="forget" id="soundWord">Sound on</button>
+    <p class="keys"><span class="k">WASD or arrows move · Shift runs · Space jumps · E uses · M is the map · N is the sound · drag to look</span><span class="t">Left thumb moves · the buttons say what they do · drag to look</span></p>
   </div>
 </div>
 <div class="panel" id="fail" hidden>
@@ -167,6 +183,8 @@ body.talking .ctl{visibility:hidden}
 <div class="panel" id="end" hidden>
   <div class="pbox"><h2>You came down.<br>You crossed over.<br><span>You got beans.</span></h2><p id="endP"></p><p>Chapter 2 · Supply and Demand · soon</p><button class="big" id="again">Keep walking</button><p class="credit">Buildings from USA Structures by ORNL and FEMA, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, changed to fit the game. Roads from the US Census. Roof colours from USDA NAIP.</p></div>
 </div>
+
+<div class="panel" id="board" hidden></div>
 
 <script type="importmap">
 { "imports": {
@@ -184,6 +202,8 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { loadMap } from './src/map.js';
 import { loadWater } from './src/water.js';
+import { loadSound } from './src/sound.js';
+import { randomFrom } from './src/soundbank.js';
 import { createPeople } from './src/people.js';
 import { drawCloth, drawSkull } from './src/looks.js';
 import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
@@ -569,6 +589,9 @@ const DY = 6.0, TY = 11.6, ZS = 2.8, XE = 20, XP = 15, DECK_TOP = 6.36, ROAD_TOP
 const channel = (z) => 3.5 * Math.sin(z * .035);
 const MAP = await loadMap('data/roads.json', { riverAtBridge: channel });
 const WATER = await loadWater('data/water.json', MAP);
+// The game plays what's been made with ElevenLabs, in data/sound-new.json, which the owner chose over the sounds worked out from code. Those stay in data/sound.json: #sounds is their board, and #old plays the game with them.
+const OLD_SOUND = location.hash === '#sounds' || location.hash === '#old';
+const SFX = await loadSound(OLD_SOUND ? 'data/sound.json' : ['data/sound-new.json', 'data/sound.json'], { onLine: (words) => { const el = $('sub'); el.textContent = words ?? ''; el.hidden = words === null; } });
 let swimY = 0;   // how high the water he's swimming in is
 // Stuckey Bridge Rd, which is laid along z 0 through the first scene
 const OPENING_ROAD = MAP.opening.road;
@@ -797,8 +820,8 @@ function plankUnder(x, z) {
 function stepPlanks(dt) {
   S.collapse += 3.5 * dt;
   for (const p of PLANKS) {
-    if (!p.hole && p.fall === 0 && p.x < S.collapse) { p.fall = 1; p.vy = 0; }
-    if (p.fall) { p.vy -= 9.8 * dt; p.y += p.vy * dt; p.rot += dt * (p.row ? 1.4 : -1.1); if (p.y < -1 && p.fall === 1) { p.fall = 2; addRipple(p.x, p.z, .25, 0); } }
+    if (!p.hole && p.fall === 0 && p.x < S.collapse) { p.fall = 1; p.vy = 0; SFX.play('plank.crack', { x: p.x, z: p.z }); }
+    if (p.fall) { p.vy -= 9.8 * dt; p.y += p.vy * dt; p.rot += dt * (p.row ? 1.4 : -1.1); if (p.y < -1 && p.fall === 1) { p.fall = 2; addRipple(p.x, p.z, .25, 0); SFX.play('splash.small', { x: p.x, z: p.z, gain: .5 }); } }
   }
   drawPlanks();
 }
@@ -969,7 +992,7 @@ function swayMat(params) {
   const falls = [], _leaf = new THREE.Color();
   fellTree = (t, dx, dz) => {
     if (t.down) return;
-    t.down = true;
+    t.down = true; SFX.play('tree.fall', { x: t.x, z: t.z });
     if (t.burner) { t.burner.T = 0; t.burner = null; }
     const l = Math.hypot(dx, dz), a = t.x * 7 + t.z * 3;
     t.dirx = l ? dx / l : Math.cos(a); t.dirz = l ? dz / l : Math.sin(a);
@@ -1279,6 +1302,7 @@ const BITS = { wall: [5, .3, 3.2], lintel: [2, .2, 2.4], roof: [2, .34, 2], gabl
 function fallPiece(s, p) {
   const cell = s.cell, g = cell.mesh.geometry, first = cell.starts.get(s.index) + p.first, at = first * 3, len = p.count * 3, P = g.attributes.position, C = g.attributes.color.array;
   const begin = () => {
+    SFX.play('rubble', { x: p.x, z: p.z, gain: p.kind === 'wall' || p.kind === 'roof' ? 1 : .5 });
     const [n, size, speed] = BITS[p.kind] ?? [1, .2, 2];
     spray(p.x, Math.max(p.y - 1, TOWN_Y + .4), p.z, FEW ? Math.ceil(n * .6) : n, size, speed, C[at], C[at + 1], C[at + 2], p.dirx, p.dirz);
     if (p.kind === 'wall' || p.kind === 'roof' || p.kind === 'gable') puff(p.x, TOWN_Y + .5, p.z, .6 + wreckRand() * .5, .7, 1.2, .07, .06, .052);
@@ -1346,7 +1370,7 @@ function dust(x, z, dirx, dirz, long, wide = 1.2) {
 }
 function breakProp(p, dx = 0, dz = 0) {
   if (p.down) return;
-  p.down = true;
+  p.down = true; SFX.play(METAL_PROPS.has(p.kind) ? 'break.metal' : 'break.wood', { x: p.cx, z: p.cz });
   const l = Math.hypot(dx, dz), a = (p.cx + p.cz) * 7, { min, max } = p.box;
   let dirx = l ? dx / l : Math.cos(a), dirz = l ? dz / l : Math.sin(a);
   // a stretch of fence only goes over one way or the other
@@ -1432,7 +1456,7 @@ function updateThrown(dt) {
     if (!c.on) continue;
     c.vy -= 15 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt; c.turn += dt * 11; gasDirty = true;
     const fl = floorAt(c.x, c.z), hitSomeone = crowdOut && horde.active.some((s) => s.state !== 5 && Math.hypot(s.x - c.x, s.z - c.z) < .7 && c.y < s.y + 2);
-    if (c.y <= fl + .1 || blocked(c.x, c.z, c.y) || hitSomeone) { c.on = false; gasDirty = true; if (fl < WATER.level(c.x, c.z) - .1) { addRipple(c.x, c.z, .4, 0); continue; } blastCan(c.x, Math.max(c.y, fl + .2), c.z); }
+    if (c.y <= fl + .1 || blocked(c.x, c.z, c.y) || hitSomeone) { c.on = false; gasDirty = true; if (fl < WATER.level(c.x, c.z) - .1) { addRipple(c.x, c.z, .4, 0); SFX.play('splash.small', { x: c.x, z: c.z }); continue; } blastCan(c.x, Math.max(c.y, fl + .2), c.z); }
   }
 }
 function layOutGas() {
@@ -3122,6 +3146,7 @@ addEventListener('keydown', (e) => {
   if (S.mode === 'dialog' && /^[1-4]$/.test(k)) { const b = $('dOpts').children[+k - 1]; if (b) b.click(); }
   if (k === 'm' && !e.repeat) { if (mapOpen) closeMap(); else if (canOpenMap()) openMap(); }
   if (k === 'escape' && mapOpen) closeMap();
+  if (k === 'n' && !e.repeat) showMuted(!SFX.muted);
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 let stickId = null; const stick = $('stick'), knob = $('knob');
@@ -3258,18 +3283,19 @@ function drawPeople() {
 }
 $('repHead').addEventListener('click', () => { peopleOpen = !peopleOpen; changedUntil = 0; drawPeople(); });
 function flash() { const f = $('flash'); f.style.transition = 'none'; f.style.opacity = '.45'; requestAnimationFrame(() => { f.style.transition = ''; f.style.opacity = '0'; }); }
-function glitch(p, d) { if (!reduceMotion) { triggerBurst(p, d, false, false); stepBurst(); } }
-function addBeans(n, why) { S.beans += n; toast(`+${n} beans${why ? ' · ' + why : ''}`); if (S.beans >= 12 && !S.flags.ended) { S.flags.ended = true; after(1.4, endChapter); } }
+function glitch(p, d) { SFX.play('glitch'); if (!reduceMotion) { triggerBurst(p, d, false, false); stepBurst(); } }
+function addBeans(n, why) { SFX.play('can.clink'); SFX.say('beans'); S.beans += n; toast(`+${n} beans${why ? ' · ' + why : ''}`); if (S.beans >= 12 && !S.flags.ended) { S.flags.ended = true; after(1.4, endChapter); } }
 
 function hurt(dir, kind) {
   if (player.inv > 0 || S.mode === 'fail') return;
-  S.hp -= 1; player.inv = 1.4; cam.shake = .5; flash(); glitch(.9, .35);
+  S.hp -= 1; player.inv = 1.4; cam.shake = .5; flash(); glitch(.9, .35); SFX.play('snake.strike'); SFX.play('hurt');
   const l = Math.hypot(dir.x, dir.y) || 1; player.kb.set(dir.x / l * 4, dir.y / l * 4);
   addRipple(player.pos.x, player.pos.z, .35, 1);
   if (S.hp <= 0) fail(kind === 'deck' ? 'Cottonmouth on the boards.' : 'The cottonmouths got you.', kind === 'deck' ? 'Jump it next time.' : `Keep moving. Hold ${fastWord(touchUI)} to get away.`);
   else toast(kind === 'deck' ? 'Bit on the bridge' : 'Bit');
 }
 function fail(h, p) {
+  SFX.play('fail'); SFX.say('failed');
   S.mode = 'fail'; $('failH').textContent = h; $('failP').textContent = p; $('fail').hidden = false; prompt(null);
   setTimeout(() => $('retry').focus(), 50);
 }
@@ -3287,7 +3313,7 @@ $('retry').addEventListener('click', () => {
 // ---------------- dialogue: the words and what they do are in data/cast.json
 const ACTIONS = { sweep: () => startSweep() };
 function openDialog(id) {
-  const node = people.line(id, played); people.meet(node.whoId); people.apply(node.do, played);
+  const node = people.line(id, played); people.meet(node.whoId); people.apply(node.do, played); SFX.play('ui.tap');
   if (S.mode !== 'dialog') faceWhoever(NPCS[node.whoId]);
   S.mode = 'dialog'; HP.speed = 0; $('dialog').hidden = false; prompt(null);
   $('dWho').textContent = node.who; $('dSay').textContent = node.say;
@@ -3342,7 +3368,7 @@ function endChapter() {
   S.mode = 'end'; prompt(null); $('dialog').hidden = true;
   const known = people.known().map((c) => ({ c, trust: Math.round(people.get(c.id, 'trust')) })), best = [...known].sort((a, b) => b.trust - a.trust)[0];
   $('endP').textContent = `${known.map(({ c, trust }) => `${c.short} ${trust >= 0 ? '+' : ''}${trust}`).join(' · ')}. ${best.trust > 0 ? best.c.name + ' has your back.' : 'Nobody trusts you yet.'}`;
-  $('end').hidden = false;
+  $('end').hidden = false; SFX.say('end');
   bringOutCrowd();
 }
 $('again').addEventListener('click', () => { $('end').hidden = true; S.mode = 'town'; townObjective(); });
@@ -3353,13 +3379,13 @@ function startHang() {
   heroRoot.position.copy(ANCHOR); heroRoot.rotation.set(0, 0, 0);
   hero.body.position.set(0, 0, 0); hero.body.rotation.set(0, 0, 0);
   ropeTop.visible = true; nooseRing.visible = knot.visible = true; lantern.visible = true;
-  objective(null);
+  objective(null); SFX.say('hang');
   card('Stuckey\'s <span>Bridge</span>', 'Chunky River · Mississippi · 2026', 3.4);
   after(3.6, () => { if (S.mode === 'hang') card('He decides to <span>live</span>.', '', 2.6); });
 }
 let fallT = 0;
 function cutDown() {
-  S.mode = 'fall'; HP.kind = 'fall'; fallT = 0; glitch(.8, .3);
+  S.mode = 'fall'; HP.kind = 'fall'; fallT = 0; glitch(.8, .3); SFX.play('rope.snap'); SFX.play('fall.air'); SFX.say('cut');
   hero.body.updateWorldMatrix(true, false);
   const wp = new THREE.Vector3(), wq = new THREE.Quaternion(); hero.body.getWorldPosition(wp); hero.body.getWorldQuaternion(wq);
   heroRoot.position.copy(wp); heroRoot.quaternion.copy(wq); hero.body.position.set(0, 0, 0); hero.body.quaternion.identity();
@@ -3385,7 +3411,7 @@ function startSwim(retry) {
 function startBridge() {
   S.mode = 'bridge'; S.flags.bridgeStarted = true; HP.kind = 'run'; S.hp = Math.max(S.hp, 1);
   player.pos.set(-24.5, ROAD_TOP, 0); player.vy = 0; player.yaw = Math.PI / 2; player.grounded = true; cam.yaw = player.yaw + Math.PI; cam.pitch = .3; cam.snap = true;
-  resetPlanks(); S.collapse = -32;
+  resetPlanks(); S.collapse = -32; SFX.play('bridge.fall'); SFX.say('run');
   objective('Run. The bridge is coming apart.');
   card('<span>Run</span>.', 'Jump the rotten planks', 2);
   deckSnake.reset();
@@ -3397,14 +3423,14 @@ let biteT = 0, biteV = 0, biteSide = 1, dreamT = 0, wakeT = 0, feverLeft = 0, dr
 const dreamFrom = new THREE.Vector3(), biteAt = new THREE.Vector3();
 function feverTo(k) { const u = gifMat.uniforms; u.uTint.value = k; u.uDream.value = reduceMotion ? 0 : k; }
 function startBitten() {
-  S.mode = 'bitten'; biteT = 0; HP.kind = 'run'; prompt(null); objective(null); cardT = 0; $('card').classList.remove('show'); hudVitals();
+  S.mode = 'bitten'; biteT = 0; HP.kind = 'run'; prompt(null); objective(null); cardT = 0; $('card').classList.remove('show'); hudVitals(); SFX.play('snake.strike'); SFX.play('bite.sting'); SFX.say('bitten');
   // he stops where it's lying, just as it gets to him. It's a metre or so ahead of there, facing him.
   biteV = Math.max(HP.speed, 3); biteSide = player.pos.z > 0 ? -1 : 1;
   biteAt.set(player.pos.x + biteV * BITE_AT / 2, player.pos.y, player.pos.z);
   deckSnake.strike(biteAt.x + .95, player.pos.z + biteSide * .85);
 }
 function startDream() {
-  S.mode = 'dream'; dreamT = 0; dreamYaw = cam.yaw; dreamFrom.copy(camera.position); hudVitals();
+  S.mode = 'dream'; dreamT = 0; dreamYaw = cam.yaw; dreamFrom.copy(camera.position); hudVitals(); SFX.play('dream.swell');
 }
 // on the boards of the Chunky River Bridge, and pointing at town
 function onWakeBridge() {
@@ -3413,14 +3439,14 @@ function onWakeBridge() {
   S.collapse = 99; S.flags.town = true; vehGroup.visible = true; gasMesh.visible = gasLine.visible = true;
 }
 function startWake() {
-  S.mode = 'wake'; wakeT = 0; onWakeBridge(); HP.kind = 'down'; HP.down = 1; HP.speed = 0; cam.pitch = .42; feverLeft = 1; gifMat.uniforms.uFade.value = 0; hudVitals();
+  S.mode = 'wake'; wakeT = 0; onWakeBridge(); HP.kind = 'down'; HP.down = 1; HP.speed = 0; cam.pitch = .42; feverLeft = 1; gifMat.uniforms.uFade.value = 0; hudVitals(); SFX.say('wake');
 }
 function startTown() {
   S.mode = 'town'; S.collapse = 99; S.flags.town = true; vehGroup.visible = true; gasMesh.visible = gasLine.visible = true;
   // Stuckey's is a ruin by now, however he got here, with nothing moving on it
   for (const q of PLANKS) if (!q.hole) { q.fall = 2; q.y = -50; }
   drawPlanks(); deckSnake.show(false);
-  card('Chunky, <span>Mississippi</span>', '2026', 3.4);
+  card('Chunky, <span>Mississippi</span>', '2026', 3.4); SFX.say('town');
   if (touchUI) after(5, () => { if (S.mode === 'town') toast('Tap the map to open it'); });
   if (HORDE_EARLY) bringOutCrowd();
   townObjective(); hudVitals();
@@ -3501,10 +3527,10 @@ const horde = createHorde({
     return [p.x + (crowdRand() - .5) * 8, p.z + (crowdRand() - .5) * 8];
   },
 }, {}, {
-  grab() { S.mode = 'grabbed'; HP.kind = 'struggle'; HP.speed = 0; player.kb.set(0, 0); if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35); },
-  free() { S.mode = 'town'; HP.kind = 'run'; player.inv = 1.2; prompt(null); glitch(.4, .2); },
+  grab() { SFX.play('groan.grab'); SFX.play('hurt', { gain: .6 }); SFX.say('grabbed'); S.mode = 'grabbed'; HP.kind = 'struggle'; HP.speed = 0; player.kb.set(0, 0); if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35); },
+  free() { SFX.play('hit.flesh'); S.mode = 'town'; HP.kind = 'run'; player.inv = 1.2; prompt(null); glitch(.4, .2); },
   overrun() {
-    S.mode = 'town'; HP.kind = 'run'; player.inv = 1.4; prompt(null); S.hp -= 1; if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35);
+    SFX.play('hurt'); S.mode = 'town'; HP.kind = 'run'; player.inv = 1.4; prompt(null); S.hp -= 1; if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35);
     if (S.hp <= 0) { fail('They dragged you off.', `Keep moving. Mash ${press('FREE')} to break free.`); return; }
     if (S.beans > 0) { S.beans -= 1; toast('-1 beans · they got a can'); } else toast('Keep moving');
   },
@@ -3513,7 +3539,7 @@ const horde = createHorde({
 const CROWD_STREETS = [['us_80', atTrue(-615, -18), atTrue(185, 0), 56], ['church_st', atTrue(-1098, -379), atTrue(-281, -199), 20], ['adams_st', atTrue(-283, -23), atTrue(-285, -338), 20]];
 let crowdOut = false;
 function bringOutCrowd() {
-  if (crowdOut) return; crowdOut = true; crowdGroup.visible = true; S.hp = 3;
+  if (crowdOut) return; crowdOut = true; crowdGroup.visible = true; S.hp = 3; SFX.say('crowd');
   const [cx, cz] = atTrue(-309, -228);
   if (!S.flags.churchDown) { churchZone = { x: cx, z: cz, r: 28 }; horde.zones.push(churchZone); }
   for (const f of fires) if (!f.out) horde.lights.push(f.spot);
@@ -3673,6 +3699,7 @@ function vehicleInReach() {
 function getIn(v) {
   if (v.loose) { loose.splice(loose.indexOf(v), 1); v.loose = null; } else markVehicle(v, false);
   driving = v; vehTag.visible = false; vehPicked = -1;
+  SFX.play('vehicle.door', { x: v.x, z: v.z }); if (!v.wrecked && !v.drowned) SFX.play('vehicle.start'); SFX.say('drive');
   S.mode = 'drive'; HP.kind = 'drive'; HP.speed = 0; prompt(null);
   heroRoot.rotation.order = 'YXZ'; hero.body.scale.setScalar(HERO_SCALE * v.K.size);
   player.running = false; player.runK = 0; player.yaw = v.yaw;
@@ -3695,6 +3722,7 @@ function getOut(force = false) {
   heroRoot.rotation.set(0, v.yaw, 0); heroRoot.rotation.order = 'XYZ'; hero.body.scale.setScalar(HERO_SCALE);
   ghost.add(gLight); gLight.position.set(0, 0, 0); gLight.color.set('#ff9a46'); gLight.distance = 12; gLight.decay = 1.8; headlights.visible = false;
   player.pos.set(x, y, z); player.yaw = v.yaw; player.grounded = true; player.vy = 0; player.kb.set(0, 0);
+  SFX.play('vehicle.door'); for (const n of VEHICLE_LOOPS) SFX.loop(n, 0);
   const lv = WATER.level(x, z);
   if (y < lv - .3) { swimY = lv; player.pos.y = lv; S.mode = 'swim'; HP.kind = 'swim'; objective('Swim to the bank.'); }
   else { S.mode = 'town'; HP.kind = 'run'; }
@@ -3753,7 +3781,7 @@ function pickUpCans(reach) {
 const DRIVE_WORLD = { blocked: (x, z, y) => blockedInTown(x, z, y) || !!looseAt(x, z, y), floorAt, level: WATER.level, road: onRoad, edge: (x, z) => !MAP.inBounds(x, z), ram };
 let vehPuffT = 0, vehClawT = 0, vehSmokeT = 0;
 function wreckedNow(v) {
-  vehDirty = true;
+  vehDirty = true; SFX.play(v.drowned ? 'flood' : 'crash', { x: v.x, z: v.z }); SFX.say('wrecked');
   if (v.drowned) toast('Flooded'); else wreckVehicle(v);
   if (!reduceMotion) cam.shake = .6; glitch(.9, .35);
   for (let i = 0; i < 7; i++) puff(v.x + (vehRand() - .5) * 2.4, v.y + .6 + vehRand(), v.z + (vehRand() - .5) * 2.4, (.8 + vehRand() * .6) * (v.drowned ? .4 : 1), 1 + vehRand() * .5, v.drowned ? 2 : 3, .09, .08, .095);
@@ -3790,6 +3818,9 @@ function updateDrive(dt) {
       break;
     }
   }
+  if (r.hit > 7) SFX.play('crash', { gain: Math.min(1, r.hit / 18) });
+  if (r.smash > 0) SFX.play('break.wood', { gain: Math.min(1, .3 + r.smash / SMASH_J * .3) });
+  if (r.landed > 6) SFX.play('hit.wood', { rate: .6, gain: Math.min(1, r.landed / 12) });
   if (r.hit > 7 && !reduceMotion) cam.shake = Math.min(.6, r.hit * .03);
   if (r.hit > 14) glitch(.7, .25);
   if (r.hit > 7 && crowdOut) horde.noise(v.x, v.z, 40, 1.5);
@@ -3800,7 +3831,7 @@ function updateDrive(dt) {
   if (crowdOut) {
     if (speed > 3) {
       const dir = v.f < 0 ? -1 : 1, n = horde.knock(v.x + fx * dir * K.length * .35, v.z + fz * dir * K.length * .35, K.width / 2 + .8, 2.6 + speed * .12) + horde.knock(v.x, v.z, K.width / 2 + .6, 2.6 + speed * .12);
-      if (n) { v.f *= Math.pow(.97, n); if (hurtVehicle(v, .5 * n)) done = true; vehDirty = true; if (!reduceMotion) cam.shake = Math.max(cam.shake, .18); }
+      if (n) { SFX.play('hit.flesh'); v.f *= Math.pow(.97, n); if (hurtVehicle(v, .5 * n)) done = true; vehDirty = true; if (!reduceMotion) cam.shake = Math.max(cam.shake, .18); }
     } else if ((vehClawT -= dt) <= 0) {
       vehClawT = .5;
       let n = 0; for (const s of horde.active) if (s.state >= HUNTING && s.state <= SWARM && inVehicle(v, s.x, s.z, 1)) n++;
@@ -3815,6 +3846,12 @@ function updateDrive(dt) {
   }
   if ((vehSmokeT -= dt) <= 0 && v.hp / K.hp < .4) { vehSmokeT = v.wrecked ? .13 : .26; puff(v.x + fx * K.length * .3 + (vehRand() - .5) * .5, v.y + 1.1, v.z + fz * K.length * .3 + (vehRand() - .5) * .5, .16 + vehRand() * .16, 1.1, 3, .07, .062, .075); }
   arriving(); pickUpCans(2.4); pickUpGas(2.4);
+  // what it sounds like
+  const running = !v.wrecked && !v.drowned, k = speed / K.top, tar = onRoad(v.x, v.z);
+  SFX.loop(`engine.${v.kind}`, running ? .7 + .3 * Math.abs(gas) : 0, .72 + 1.5 * k + .12 * Math.abs(gas));
+  SFX.loop('vehicle.road', v.grounded && tar ? Math.min(1, k * 1.4) : 0, .8 + k * .5);
+  SFX.loop('vehicle.dirt', v.grounded && !tar ? Math.min(1, k * 1.8) : 0, .8 + k * .5);
+  SFX.loop('vehicle.skid', v.grounded && ((braking && speed > 6) || Math.abs(v.s) > 3.5) ? Math.min(1, speed / 14) : 0);
   drawHeadlights(v, braking || gas < -.1);
   if (input.aEdge) getOut();
 }
@@ -3855,7 +3892,7 @@ const burners = [], burningHouses = new Set();
 let drawnBurners = [], burnersPicked = -1, fireClock = 0, heatAt = 0;
 function burnAt(x, y, z, size, T = Infinity, owner = null) {
   const b = { x, y, z, size, T, owner, age: 0, dead: false, floor: floorAt(x, z), seed: wreckRand() * 6.283, seen: 0 };
-  burners.push(b); burnersPicked = -1;
+  burners.push(b); burnersPicked = -1; SFX.play('fire.catch', { x, z });
   return b;
 }
 // What a burning piece leaves behind it where it lands, unless there's plenty alight already
@@ -4023,7 +4060,7 @@ function thud(x, y, z, r, power) {
   if (!reduceMotion) cam.shake = Math.max(cam.shake, .45 * Math.max(.25, 1 - Math.hypot(player.pos.x - x, player.pos.z - z) / (r * 5)));
 }
 function blast(x, y, z, r, power, skip = null) {
-  shock(x, y, z, r, power, skip, true);
+  shock(x, y, z, r, power, skip, true); SFX.play('explosion', { x, z });
   // what you see of it
   const d = Math.hypot(player.pos.x - x, player.pos.z - z), fl = floorAt(x, z), b = booms[boomNext]; boomNext = (boomNext + 1) % BOOM_N;
   b.t = 0; b.r = r * .72; b.m.position.set(x, y + .6, z); b.m.material = boomMats[0]; b.m.scale.setScalar(b.r * BOOM_SIZE[0]); b.m.visible = true;
@@ -4044,6 +4081,7 @@ function blastCan(x, y, z) {
 }
 // Fire and blasts knock him about whenever. They only cost him once the hearts are showing, which is once the crowd's out.
 function hurtBy(kind, dx, dz, force = 6) {
+  SFX.play('hurt');
   if (player.inv > 0 || S.mode !== 'town') return;
   const l = Math.hypot(dx, dz) || 1; player.kb.set(dx / l * force, dz / l * force); player.inv = 1.4;
   if (!reduceMotion) cam.shake = Math.max(cam.shake, .5); flash(); glitch(.9, .35);
@@ -4150,7 +4188,7 @@ function ram(x, z, y, speed, dirx, dirz, mass, self = null) {
 }
 
 // ---- the hammer. It's in his hands for as long as he's swinging it, which is all anyone sees of it.
-function swing() { if (swingT < 0 && S.mode === 'town') { swingT = 0; swingHit = false; } }
+function swing() { if (swingT < 0 && S.mode === 'town') { swingT = 0; swingHit = false; SFX.play('swing'); } }
 function updateSwing(dt) {
   if (throwT > 0) throwT -= dt;
   if (swingT < 0) return;
@@ -4158,6 +4196,8 @@ function updateSwing(dt) {
   if (!swingHit && swingT >= SWING_AT) {
     swingHit = true;
     const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), P = player.pos, x = P.x + fx * .9, z = P.z + fz * .9, r = strike(x, P.y + 1.1, z, 1.3, 1, fx, fz), n = crowdOut ? horde.knock(x, z, 1.5, 2.4) : 0;
+    if (n) SFX.play('hit.flesh');
+    if (r && !r.gone) SFX.play(r.house ? (r.house.walls === 'metal' || r.house.walls === 'mobile' ? 'hit.metal' : 'hit.wood') : METAL_PROPS.has(r.thing.kind) ? 'hit.metal' : 'hit.wood');
     if ((r || n) && !reduceMotion) cam.shake = Math.max(cam.shake, .22);
     if (crowdOut) horde.noise(P.x, P.z, 14, 1);
   }
@@ -4165,10 +4205,10 @@ function updateSwing(dt) {
 }
 function throwOne() {
   if (S.mode !== 'town' || !(S.gas > 0) || !throwCan()) return;
-  S.gas--; throwT = .25;
+  S.gas--; throwT = .25; SFX.play('swing', { rate: 1.4 });
 }
 function pickUpGas(reach) {
-  for (const c of GAS_CANS) if (!c.got && S.gas < GAS_CARRY && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; gasDirty = true; S.gas++; toast(`+1 gas can · ${S.gas}`); }
+  for (const c of GAS_CANS) if (!c.got && S.gas < GAS_CARRY && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; gasDirty = true; S.gas++; SFX.play('can.slosh'); toast(`+1 gas can · ${S.gas}`); }
 }
 let wreckStep = -1, wreckDrawn = -1;
 function updateWreck(dt, step) {
@@ -4278,13 +4318,14 @@ function drawFullMap() {
 }
 function redrawMap() { if (mapOpen && !mapDirty) { mapDirty = true; requestAnimationFrame(() => { mapDirty = false; if (mapOpen) drawFullMap(); }); } }
 function openMap() {
+  SFX.play('ui.paper');
   mapOpen = true; $('map').hidden = false;
   touchStick.set(0, 0); knob.style.transform = ''; stickId = null;
   mapCam = { x: player.pos.x, z: player.pos.z, scale: Math.max(.34, fitScale(mapData.bounds, innerWidth, innerHeight)) };
   const said = $('obj').textContent; $('mapObj').hidden = !said; $('mapObj').textContent = said;
   drawFullMap();
 }
-function closeMap() { mapOpen = false; $('map').hidden = true; clock.getDelta(); }
+function closeMap() { SFX.play('ui.paper'); mapOpen = false; $('map').hidden = true; clock.getDelta(); }
 {
   const c = $('mapC'), fingers = new Map();
   let pinch = 0;
@@ -4317,6 +4358,98 @@ let stepT = 0, lastStepIdx = -1;
 
 // ================================================================ main loop
 const clock = new THREE.Clock();
+// ================================================================ what he hears
+const METAL_PROPS = new Set(['sign', 'pump', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'tower', 'leg', 'trailer', 'boxcar', 'cart', 'bleachers']);
+const VEHICLE_LOOPS = ['engine.car', 'engine.pickup', 'engine.quad', 'engine.golf', 'vehicle.road', 'vehicle.dirt', 'vehicle.skid'];
+const SCORE = { title: 'title', hang: 'hang', fall: 'fall', land: 'bank', bridge: 'run', bitten: 'bite', dream: 'dream', wake: 'wake', grabbed: 'grabbed', fail: 'failed', end: 'end' };
+const FEVER_QUIET = { bitten: .25, dream: 0, wake: .5 };
+// Its own random numbers, because the game's are seeded for the opening
+const soundRand = randomFrom(2026);
+let soundSlow = 0, lastStride = 0, creakSide = false, sawAt = -9, strokeT = 0, plankGroanT = 0, heartT = 0, frogT = 1, groanT = 0, huntedUntil = -9, nightQuiet = 1, boardOpen = false;
+function surfaceUnder() {
+  const P = player.pos;
+  if ((P.y > DECK_TOP - .4 && Math.abs(P.x) < 20.6 && Math.abs(P.z) < 4) || fromWake(P.x, P.z) < WAKE_SPAN / 2 + .5 || houseAt(P.x, P.z)) return 'wood';
+  if (P.y < .8 || (WATER.look(P.x, P.z) && WATER.d < 1.5)) return 'mud';
+  return onRoad(P.x, P.z) ? 'road' : 'dirt';
+}
+function footstep(k = 1) { SFX.play(`step.${surfaceUnder()}`, { gain: k, rate: k > 1.2 ? .85 : 1 }); }
+function crowdVoices() {
+  let hunters = 0;
+  const P = player.pos, list = horde.active;
+  for (const s of list) {
+    const hunting = s.state === HUNTING || s.state === SWARM;
+    if (hunting && Math.hypot(s.x - P.x, s.z - P.z) < 45) hunters++;
+    // one that's just noticed him says so
+    if (hunting && !s.heard) { s.heard = true; SFX.play('groan.hunt', { x: s.x, z: s.z }); } else if (!hunting) s.heard = false;
+  }
+  if (hunters) huntedUntil = time + 6;
+  groanT -= .25;
+  if (groanT <= 0 && list.length) {
+    const s = list[Math.floor(soundRand() * list.length)], hunting = s.state === HUNTING || s.state === SWARM;
+    SFX.play(hunting ? 'groan.hunt' : 'groan.low', { x: s.x, z: s.z });
+    groanT = hunters ? .4 + soundRand() * .8 : 1.2 + soundRand() * 2.4;
+  }
+}
+function soundTick(dt, M) {
+  const P = player.pos;
+  SFX.update(P.x, P.z, cam.yaw);
+  if (!SFX.unlocked || boardOpen) return;
+  SFX.music(SCORE[M] ?? (M === 'swim' && !S.flags.town ? 'river' : time < huntedUntil ? 'chase' : 'town'));
+  // his feet, once a stride
+  if (M === 'land' || M === 'bridge' || M === 'town') {
+    const stride = Math.floor(HP.phase / Math.PI);
+    if (stride !== lastStride) { lastStride = stride; if (player.grounded && HP.speed > .4) footstep(player.running ? 1.2 : 1); }
+  }
+  if (M === 'hang' || M === 'title') { const side = Math.sin(time * 2.4) > 0; if (side !== creakSide) { creakSide = side; SFX.play('rope.creak'); } }
+  if (M === 'hang' && input.a && cardT <= 0 && time - sawAt > .3) { sawAt = time; SFX.play('rope.saw'); }
+  if (M === 'swim' && HP.speed > .2 && (strokeT -= dt) <= 0) { const fast = HP.speed > 2; strokeT = fast ? .55 : .95; SFX.play('swim.stroke', { rate: fast ? 1.15 : 1 }); }
+  if (M === 'bridge' && (plankGroanT -= dt) <= 0) { plankGroanT = 1.8 + soundRand() * 1.6; SFX.play('bridge.groan'); }
+  if (feverLeft > .05 && (heartT -= dt) <= 0) { heartT = 1.1; SFX.play('wake.heart', { gain: Math.min(1, feverLeft * 1.4) }); }
+  // The rest only changes slowly
+  if ((soundSlow -= dt) > 0) return;
+  soundSlow = .25;
+  const quiet = FEVER_QUIET[M] ?? 1;
+  if (quiet !== nightQuiet) { nightQuiet = quiet; SFX.fade('ambience', quiet); }
+  const rd = riverDist(P.x, P.z), shore = WATER.look(P.x, P.z) ? WATER.d : Infinity, water = 1 - Math.min(sstep(8, 38, rd), sstep(0, 14, shore));
+  SFX.loop('amb.wind', 1);
+  SFX.loop('amb.crickets', driving ? .5 : 1);
+  SFX.loop('amb.river', M === 'swim' ? 1 : water);
+  let fire = Infinity;
+  for (const b of burners) if (!b.dead) fire = Math.min(fire, Math.hypot(b.x - P.x, b.z - P.z));
+  for (const f of fires) if (!f.out) fire = Math.min(fire, Math.hypot(f.home.x - P.x, f.home.z - P.z));
+  SFX.loop('amb.fire', 1 - sstep(4, 40, fire));
+  // frogs: more of them near water, all round him, and none in the fever
+  if (quiet === 1 && (frogT -= .25) <= 0) {
+    frogT = (water > .2 ? .4 : 1.6) + soundRand() * (water > .2 ? 1.6 : 4);
+    const a = soundRand() * 6.283, d = 14 + soundRand() * 34, kind = soundRand();
+    SFX.play(kind < .5 ? 'frog.b' : kind < .85 ? 'frog.a' : 'frog.c', { x: P.x + Math.cos(a) * d, z: P.z + Math.sin(a) * d });
+  }
+  // snakes, close by, some of the time
+  if (M === 'swim' && !S.flags.town) { for (const s of SNAKES) if (soundRand() < .3) SFX.play('snake.hiss', { x: s.p.x, z: s.p.z }); }
+  else if (M === 'bridge' && soundRand() < .3) SFX.play('snake.hiss', { x: deckSnake.p.x, z: deckSnake.p.z });
+  if (crowdOut) crowdVoices();
+}
+function showMuted(on) {
+  SFX.setMuted(on);
+  $('mute').classList.toggle('muted', on); $('mute').setAttribute('aria-pressed', on ? 'false' : 'true'); $('soundWord').textContent = on ? 'Sound off' : 'Sound on';
+}
+showMuted(SFX.muted);
+$('mute').addEventListener('click', () => showMuted(!SFX.muted));
+// The tap that starts the sound is asking for sound, so it doesn't turn it straight off again
+$('soundWord').addEventListener('click', () => { if (SFX.muted || performance.now() - SFX.startedAt > 900) showMuted(!SFX.muted); });
+// Every sound and every part of the score, one button each, at #sounds and #sounds-new. Nothing else in the game runs while it's up.
+function openBoard() {
+  boardOpen = true; const box = $('board'); box.hidden = false; $('title').hidden = true; $('mute').hidden = true;
+  if (!OLD_SOUND) { const h = document.createElement('h2'); h.textContent = 'Made with ElevenLabs'; box.append(h); }
+  const group = (title, items, act) => {
+    const h = document.createElement('h2'); h.textContent = title; box.append(h);
+    for (const name of items) { const b = document.createElement('button'); b.textContent = name; b.classList.toggle('file', !!(SFX.data.cues[name] ?? SFX.data.music[name])?.file); b.addEventListener('click', () => act(name, b)); box.append(b); }
+  };
+  const loops = SFX.cueNames().filter((n) => /^(amb|engine|vehicle\.(road|dirt|skid))/.test(n));
+  group('The score', Object.keys(SFX.data.music), (name, b) => { box.querySelectorAll('button.score').forEach((x) => x.classList.remove('on')); b.classList.add('on', 'score'); SFX.music(name); });
+  group('Goes on until you stop it', loops, (name, b) => { const on = b.classList.toggle('on'); SFX.loop(name, on ? 1 : 0); });
+  group('Once', SFX.cueNames().filter((n) => !loops.includes(n)), (name) => SFX.play(name));
+}
 const V = new THREE.Vector3();
 function tick(dt, draw = true) {
   time += dt;
@@ -4347,7 +4480,7 @@ function tick(dt, draw = true) {
     heroRoot.quaternion.slerp(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, player.yaw, 0)), Math.min(1, dt * 3));
     ropeTop.scale.set(1, 1.2, 1); ropeTop.position.copy(ANCHOR).add(new THREE.Vector3(0, -.6, 0)); ropeTop.quaternion.identity();
     if (heroRoot.position.y < .25) {
-      addRipple(heroRoot.position.x, heroRoot.position.z, .5, 1.4); addRipple(heroRoot.position.x + .4, heroRoot.position.z, .3, 0); glitch(.6, .25); cam.shake = .4;
+      addRipple(heroRoot.position.x, heroRoot.position.z, .5, 1.4); addRipple(heroRoot.position.x + .4, heroRoot.position.z, .3, 0); glitch(.6, .25); cam.shake = .4; SFX.play('splash.big'); SFX.say('river');
       startSwim(false);
     }
   }
@@ -4372,7 +4505,7 @@ function tick(dt, draw = true) {
     if (groundH(player.pos.x, player.pos.z) > swimY - (S.flags.town ? .2 : .35)) {
       if (S.flags.town) { S.mode = 'town'; HP.kind = 'run'; player.grounded = true; player.pos.y = floorAt(player.pos.x, player.pos.z); townObjective(); }
       else if (player.pos.x < -8) { S.mode = 'land'; HP.kind = 'run'; player.grounded = true; player.pos.y = floorAt(player.pos.x, player.pos.z);
-        objective('Get up to the road.'); if (!S.removedNoose) { S.removedNoose = true; nooseRing.visible = knot.visible = false; ropeTail.visible = false; toast('He takes off the noose.'); } }
+        objective('Get up to the road.'); SFX.say('bank'); if (!S.removedNoose) { S.removedNoose = true; nooseRing.visible = knot.visible = false; ropeTail.visible = false; toast('He takes off the noose.'); } }
       else { player.pos.x -= Math.sin(player.yaw) * sp * dt; player.pos.z -= Math.cos(player.yaw) * sp * dt; }
     }
     if (!S.flags.town) ghost.position.set(-17.5, 1.3 + Math.sin(time * 2) * .12, 7.5);
@@ -4398,17 +4531,17 @@ function tick(dt, draw = true) {
       else { nx = player.pos.x; nz = player.pos.z; }
     }
     player.pos.x = nx; player.pos.z = nz;
-    if (input.bEdge && player.grounded) { player.vy = 5.6; player.grounded = false; }
+    if (input.bEdge && player.grounded) { player.vy = 5.6; player.grounded = false; footstep(.6); }
     const f2 = floorAt(player.pos.x, player.pos.z);
     if (player.grounded && f2 < player.pos.y - .5) player.grounded = false;
     if (player.grounded) { player.pos.y += (f2 - player.pos.y) * Math.min(1, dt * 18); player.vy = 0; }
-    else { player.vy -= 15 * dt; player.pos.y += player.vy * dt; if (player.pos.y <= f2 && player.vy <= 0) { player.pos.y = f2; player.grounded = true; if (crowdOut) horde.noise(player.pos.x, player.pos.z, 16, .6); } }
+    else { player.vy -= 15 * dt; player.pos.y += player.vy * dt; if (player.pos.y <= f2 && player.vy <= 0) { player.pos.y = f2; player.grounded = true; footstep(1.5); if (crowdOut) horde.noise(player.pos.x, player.pos.z, 16, .6); } }
     HP.kind = player.grounded ? 'run' : 'air'; HP.speed = sp * (player.grounded ? 1 : 0); HP.phase += dt * (Math.min(sp, 4.4) * 2.4 + Math.max(0, sp - 4.4) * 1.3);
     // into the water from the bank or bridge
     const lv = WATER.level(player.pos.x, player.pos.z);
     if (player.pos.y < lv + .05 && f2 < lv - .3) {
       if (M === 'bridge') fail('The Chunky takes you back.', 'Jump the gaps. Don\'t stop running.');
-      else { swimY = lv; S.mode = 'swim'; HP.kind = 'swim'; objective(S.flags.town ? 'Swim to the bank.' : 'Swim to the west bank. Follow the lantern.'); }
+      else { if (S.flags.town) SFX.play('splash.small'); swimY = lv; S.mode = 'swim'; HP.kind = 'swim'; objective(S.flags.town ? 'Swim to the bank.' : 'Swim to the west bank. Follow the lantern.'); }
     }
     if (M === 'land') {
       ghost.position.lerp(new THREE.Vector3(-23, ROAD_TOP + 1.6, 1.5), Math.min(1, dt * 1.2));
@@ -4447,7 +4580,7 @@ function tick(dt, draw = true) {
     if (!blocked(nx, nz, P.y) && fl > WATER.level(nx, nz) - .1 && fl - P.y < .6) { P.x = nx; P.z = nz; P.y += (fl - P.y) * Math.min(1, dt * 18); }
     player.yaw += angDiff(player.yaw, g.at + Math.PI) * Math.min(1, dt * 8);
     HP.phase += dt * 14;
-    if (input.aEdge) horde.mash();
+    if (input.aEdge) { horde.mash(); SFX.play('hit.flesh', { gain: .5 }); }
     if (horde.grab) prompt(`Mash ${press('FREE')} to break free`, g.progress);
   }
   if (M === 'bitten') {
@@ -4563,6 +4696,7 @@ function tick(dt, draw = true) {
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').classList.remove('show'); }
   if (cardT > 0) { cardT -= dt; if (cardT <= 0) $('card').classList.remove('show'); }
   hudVitals();
+  soundTick(dt, M);
   input.aEdge = false; input.bEdge = false; input.cEdge = false; input.sEdge = false;
 
   sky.material.uniforms.uTime.value = time; waterMat.uniforms.uTime.value = time; swayU.uTime.value = time; gifMat.uniforms.uTime.value = time;
@@ -4603,12 +4737,13 @@ for (const s of SNAKES) s.update(.016); deckSnake.update(.016);
 ghost.position.set(-17.5, 1.3, 7.5);
 requestAnimationFrame(loop);
 if (location.hash === '#free') startFree();
+if (location.hash === '#sounds' || location.hash === '#sounds-new') openBoard();
 
 // ================================================================ test hook: index.html?test
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdHoods.count }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
