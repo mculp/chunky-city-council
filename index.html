@@ -247,6 +247,7 @@ import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, easel
 import { CEMETERY, layGraves, graveSolid } from './src/graves.js';
 import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/volley.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
+import { createPantry, PANTRY } from './src/pantry.js';
 import { makeLight, stepLight, lightAt } from './src/light.js';
 
 const $ = (id) => document.getElementById(id);
@@ -1847,13 +1848,23 @@ const gasSign = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.4), new THREE.Mesh
 gasSign.position.set(gasAt(46.5, 0)[0], Y0 + 6.2, gasAt(0, 13.5)[1]); gasSign.rotation.y = -Math.PI / 4; scene.add(gasSign);
 signProp.gas.objs.push(gasSign);
 const gasSpot = { x: gasLight.position.x, z: gasLight.position.z, r: 40 };
-// the church's steps and its tall window on the Adams St end. The rest is the building's own.
+// the church on Church St's front, which is its south gable: the steps under the little porch, and its tall window on the Adams St end. The rest of it's further down, and the building's its own.
 const churchMat = triplanar(woodWhite, .5, { roughness: .9 });
 let steepleProp = null;
-around(PLACES.church, () => {
-  breakable('steps', 3, () => { for (let i = 0; i < 3; i++) addBox(stoneMat, 68.5, Y0 + .15 + i * .3, -6.2 - i * .45, 4, .3, 1.4 - i * .45, 1); }, { chip: '#7c7570' });
-  flushBuckets();
-});
+// The building's own axes, from its middle in true metres: u runs east along its north wall, v south down the nave. Its door's in the middle of the front, at u -4.67.
+const CF = tilted(-307, -230.24, -2.81), trimWhite = new THREE.MeshStandardMaterial({ color: '#d6d2c6', roughness: .85 });
+// a step's height of concrete under the porch, which is what she means by her steps. It's that low because he walks over it and in.
+breakable('steps', 3, () => CF.box(stoneMat, -4.67, .05, 19.5, 3.4, .1, 2.06, 1), { chip: '#7c7570' });
+// the porch: two white posts and a little gable over the door
+{
+  const rise = .75, run = 1.78, slope = Math.atan2(rise, run), slant = Math.hypot(rise, run) + .14;
+  breakable('porch', 3, () => {
+    for (const u of [-6.12, -3.22]) CF.box(trimWhite, u, 1.45, 20.3, .16, 2.7, .16, 1.1);
+    CF.box(trimWhite, -4.67, 2.86, 20.3, 3.3, .22, .2, 1.1);
+    for (const side of [-1, 1]) { const [x, z] = CF.at(-4.67 + side * run / 2, 19.47); addBox(roofMat, x, Y0 + 2.97 + rise / 2, z, slant, .1, 2.2, 1.2, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, CF.yaw, -side * slope, 'YXZ'))); }
+  }, { rigid: true, chip: '#d6d2c6' });
+}
+flushBuckets();
 const churchAt = (x, z) => [x + PLACES.church.x, z + PLACES.church.z];
 const CHURCH_HOUSE = houseAt(...atTrue(-307, -230));
 let churchWindow = null, churchZone = null;
@@ -1870,13 +1881,19 @@ let churchWindow = null, churchZone = null;
   win.position.set(wx + .06, Y0 + 1.2, wz); win.rotation.y = Math.PI / 2 + .048; scene.add(win); churchWindow = win;
 }
 const churchLight = new THREE.PointLight('#ffb347', 10, 13, 1.7); churchLight.position.set(churchAt(68.5, 0)[0], Y0 + 2.6, churchAt(0, -5)[1]); scene.add(churchLight);
-// the window goes with the wall it's in, the steeple with enough of the walls under it, and past that it's no refuge
+// the windows go with the walls they're in, the steeple with enough of the walls under it, and past that it's no refuge
 tieTo(CHURCH_HOUSE, (s, p) => {
   if (churchWindow.visible && Math.hypot(p.x - churchWindow.position.x, p.z - churchWindow.position.z) < 2.4) { churchWindow.visible = false; spray(churchWindow.position.x, Y0 + 3, churchWindow.position.z, 6, .12, 3, .9, .5, .2); }
+  if (roundWindow.visible && Math.hypot(p.x - roundWindow.position.x, p.z - roundWindow.position.z) < 2.4) { roundWindow.visible = false; spray(roundWindow.position.x, Y0 + 6, roundWindow.position.z, 5, .1, 3, .3, .45, .7); }
   const gone = damage.gone(s);
+  if (gone > .35) breakProp(churchSteeple, 0, 1);
   if (gone > .4) { churchLight.intensity = 0; if (churchZone) { horde.zones.splice(horde.zones.indexOf(churchZone), 1); churchZone = null; } S.flags.churchDown = true; }
 });
-// the white steeple on the red brick church on US 80: the only one in town, on the ridge behind its front gable
+// What stands on a roof doesn't go with the roof when he's inside, so it's in a group of its own that can: what's been drawn since the last flush
+function onTheRoof() { flushBuckets(); const drawn = DISTANT[DISTANT.length - 1].obj, g = new THREE.Group(); scene.remove(drawn); g.add(drawn); scene.add(g); return g; }
+// the white steeple on the red brick church on US 80, on the ridge behind its front gable
+const US80_CHURCH = houseAt(...atTrue(-315.2, -47));
+let us80Steeple = null;
 {
   const [x, z] = atTrue(-315.2, -47), stage = (w, y0, y1) => addBox(churchMat, x, Y0 + (y0 + y1) / 2, z, w, y1 - y0, w, 1.3);
   // it goes over in one piece once enough of the walls under it have gone, and what it lands on knows about it
@@ -1885,13 +1902,127 @@ tieTo(CHURCH_HOUSE, (s, p) => {
     // an arched louvre in each face of the upper stage
     for (const [dx, dz, wx, wz] of [[1.27, 0, .06, .8], [-1.27, 0, .06, .8], [0, 1.27, .8, .06], [0, -1.27, .8, .06]]) addBox(roofMat, x + dx, Y0 + 13.4, z + dz, wx, 2, wz, 0);
   }, { rigid: true, T: 1.5, pivotY: Y0 + 8, chip: '#c9c1b4', landed(p, dirx, dirz) { thud(p.cx + dirx * 9, Y0 + 1, p.cz + dirz * 9, 7, 2.5); } });
-  tieTo(houseAt(x, z), (s) => { if (damage.gone(s) > .35) breakProp(steepleProp, 0, 1); });
+  tieTo(US80_CHURCH, (s) => { if (damage.gone(s) > .35) breakProp(steepleProp, 0, 1); });
   pad(x - 6, x + 6, z - 6, z + 6, 2);
-  flushBuckets();
-  const spire = new THREE.Mesh(new THREE.ConeGeometry(1.25, 7, 8), new THREE.MeshStandardMaterial({ color: '#79877c', roughness: .6, metalness: .3 })); spire.position.set(x, Y0 + 18.75, z); outline(spire, INK, 1.4); scene.add(spire); steepleProp.objs.push(spire);
+  us80Steeple = onTheRoof();
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(1.25, 7, 8), new THREE.MeshStandardMaterial({ color: '#79877c', roughness: .6, metalness: .3 })); spire.position.set(x, Y0 + 18.75, z); outline(spire, INK, 1.4); us80Steeple.add(spire); steepleProp.objs.push(spire);
+}
+// ===== the church on Church St, where the pantry is
+// Its steeple's on the ridge just behind the front gable, white and with a white spire, and in the gable under it there's a round window with a cross in it.
+const PROP_WALLS = [];   // [ax, az, bx, bz, top, radius], the same as a building's walls
+const STEEPLE = (() => { const [x, z] = CF.at(-4.4, 15.6); return { x, z }; })();
+let churchSteeple = null, churchSteepleOn = null, roundWindow = null;
+{
+  const stage = (w, y0, y1, mat = churchMat) => CF.box(mat, -4.4, (y0 + y1) / 2, 15.6, w, y1 - y0, w, 1.3);
+  churchSteeple = breakable('steeple', 5, () => {
+    stage(2.3, 8.2, 11.8); stage(2.65, 11.8, 12); stage(2, 12, 14.2); stage(2.3, 14.2, 14.4);
+    // an arched louvre in each face of the belfry
+    for (const [du, dv, su, sv] of [[1.01, 0, .06, .7], [-1.01, 0, .06, .7], [0, 1.01, .7, .06], [0, -1.01, .7, .06]]) CF.box(roofMat, -4.4 + du, 13.1, 15.6 + dv, su, 1.6, sv, 0);
+  }, { rigid: true, T: 1.5, pivotY: Y0 + 9.4, chip: '#d6d2c6', landed(p, dirx, dirz) { thud(p.cx + dirx * 8, Y0 + 1, p.cz + dirz * 8, 6, 2.2); } });
+  churchSteepleOn = onTheRoof();
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(1.05, 6.6, 8), trimWhite); spire.position.set(STEEPLE.x, Y0 + 17.7, STEEPLE.z); spire.rotation.y = CF.yaw + Math.PI / 8; outline(spire, INK, 1.4); churchSteepleOn.add(spire); churchSteeple.objs.push(spire);
+  // the round window: blue glass, a white cross and a white rim, lit a little from inside
+  const glass = textTex([''], 128, 128, '#d6d2c6', '#000', '12px sans-serif', { after: (g) => {
+    g.fillStyle = '#2d5a86'; g.beginPath(); g.arc(64, 64, 52, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#e8e2d2'; g.fillRect(58, 26, 12, 76); g.fillRect(36, 48, 56, 12);
+  } });
+  roundWindow = new THREE.Mesh(new THREE.CircleGeometry(.6, 28), new THREE.MeshBasicMaterial({ map: glass, color: new THREE.Color(1.2, 1.2, 1.2) }));
+  const [wx, wz] = CF.at(-4.4, 18.6); roundWindow.position.set(wx, Y0 + 6.4, wz); roundWindow.rotation.y = CF.yaw; outline(roundWindow, INK, 1.2); scene.add(roundWindow);
+}
+// Inside, none of it measured, since nobody's seen it: pews either side of an aisle up the nave from the door, the pulpit and the table up a step at the north end,
+// a piano in the alcove, and the wing through a door in its own wall, which is the pantry. What's on the pantry's shelves is further down, with the cans.
+const pewMat = new THREE.MeshStandardMaterial({ color: '#5b3d29', roughness: .8 }), plasterMat = triplanar(woodWhite, .5, { roughness: 1, color: '#9c8a70' });
+// where the bell rope hangs, inside the door under the steeple, and the shelf the beans go on
+const ROPE = (() => { const [x, z] = CF.at(-3.25, 16.6); return { x, z }; })();
+const PANTRY_SHELF = { u: 6.7, v: -4.05 };
+{
+  const floor = (mat, u0, u1, v0, v1) => CF.box(mat, (u0 + u1) / 2, .02, (v0 + v1) / 2, u1 - u0, .03, v1 - v0, 0);
+  const wood = new THREE.MeshStandardMaterial({ color: '#3b2e25', roughness: .9 }), runner = new THREE.MeshStandardMaterial({ color: '#5e1f24', roughness: 1 }), lino = new THREE.MeshStandardMaterial({ color: '#57534c', roughness: .7 });
+  floor(wood, -10.13, .79, -2.8, 18.37); floor(wood, -9.59, .79, -20.25, -2.8); floor(wood, -14.36, -10.13, -2.7, 5.07); floor(lino, .99, 20.38, -4.3, 6.67);
+  CF.box(runner, -4.67, .04, 1.7, 1.2, .02, 33.3, 0);
+  // A solid's square to the world, so each of these stops him a little wider than it's drawn, at all four of its corners
+  const square = (u0, u1, v0, v1, top) => { const c = [CF.at(u0, v0), CF.at(u1, v0), CF.at(u0, v1), CF.at(u1, v1)], xs = c.map((p) => p[0]), zs = c.map((p) => p[1]); solid(Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs), Y0 + top); };
+  // the pews, which face the front
+  const pew = (u0, u1, v) => breakable('pew', 1.5, () => {
+    const u = (u0 + u1) / 2, L = u1 - u0;
+    CF.box(pewMat, u, .45, v, L, .06, .44, 1); CF.box(pewMat, u, .74, v + .22, L, .56, .06, 1);
+    for (const e of [u0 + .03, u1 - .03]) CF.box(pewMat, e, .46, v + .02, .06, .92, .52, 1);
+    square(u0, u1, v - .24, v + .27, .95);
+  }, { chip: '#5b3d29' });
+  for (let v = 13.9; v > 3; v -= 1) { pew(-9.47, -5.67, v); pew(-3.67, .13, v); }
+  for (let v = -.1; v > -12; v -= 1) { pew(-9.47, -5.67, v); pew(-3.67, .13, v); }
+  // up a step at the north end: the table, the pulpit, and a cross on the wall
+  CF.box(runner, -4.4, .1, -17.57, 10.38, .2, 5.35, 1);
+  breakable('table', 2, () => { CF.box(pewMat, -4.67, .62, -15.9, 2, .84, .8, 1); CF.box(trimWhite, -4.67, 1.06, -15.9, 2.06, .03, .86, 0); }, { chip: '#5b3d29' });
+  breakable('pulpit', 2, () => { CF.box(pewMat, -1.6, .75, -16, .9, 1.1, .7, 1); CF.box(pewMat, -1.6, 1.33, -16.06, 1, .06, .82, 1); }, { chip: '#5b3d29' });
+  const brass = new THREE.MeshStandardMaterial({ color: '#c9a24a', metalness: .8, roughness: .35, emissive: '#2a1e06' });
+  breakable('cross', 1, () => { CF.box(brass, -4.4, 3.3, -20.17, .14, 1.9, .08, 1); CF.box(brass, -4.4, 3.75, -20.17, 1.05, .14, .08, 1); }, { rigid: true, chip: '#c9a24a' });
+  // an upright piano in the alcove, against its west wall
+  breakable('piano', 3, () => {
+    CF.box(pewMat, -13.95, .65, 1.2, .6, 1.3, 1.5, 1); CF.box(pewMat, -13.5, .74, 1.2, .32, .06, 1.42, 1); CF.box(trimWhite, -13.46, .78, 1.2, .22, .02, 1.3, 0);
+    square(-14.3, -13.3, .4, 2, 1.3);
+  }, { rigid: true, chip: '#3a281c' });
+  // The wing's own wall, where the nave's would have gone on, with a door in it. It goes over a side at a time.
+  const wall = (v0, v1) => breakable('wall', 4, () => {
+    CF.box(plasterMat, .89, 2.3, (v0 + v1) / 2, .2, 4.6, v1 - v0, 1.2);
+    const w = [...CF.at(.89, v0), ...CF.at(.89, v1), Y0 + 4.6, .1]; PROP_WALLS.push(w); PROP.walls.push(w);
+  }, { chip: '#cbc2ae' });
+  wall(-4.4, .6); const south = wall(2.2, 6.77);
+  breakable('lintel', 2, () => CF.box(plasterMat, .89, 3.375, 1.4, .2, 2.45, 1.6, 1.2), { chip: '#cbc2ae' });
+  // a sheet of paper on the nave side of it, by the door, so it can be found
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(.62, .42), new THREE.MeshStandardMaterial({ map: textTex(['PANTRY'], 256, 172, '#e8e2d2', '#2a2420', '62px Bungee, Impact, sans-serif'), roughness: 1 }));
+  const [px, pz] = CF.at(.77, 2.95); sign.position.set(px, Y0 + 1.65, pz); sign.rotation.y = CF.yaw - Math.PI / 2; scene.add(sign); south.hide.push(sign);
+  // the pantry: grey shelving down its north wall, a table, and what's left of what's come in. Nothing on any of it has writing on it.
+  const goods = ['#8a6a3a', '#b8ae94', '#6d2f2a', '#3f5a73', '#a08a5a', '#d2c7a8'].map((color) => new THREE.MeshStandardMaterial({ color, roughness: .9 }));
+  for (const [i, u] of [4, 6.7, 9.4].entries()) breakable('shelf', 1.5, () => {
+    for (const y of [.06, .66, 1.26, 1.86]) CF.box(shelfMat, u, y, PANTRY_SHELF.v, 2.4, .04, .5, 1);
+    for (const du of [-1.18, 1.18]) for (const dv of [-.23, .23]) CF.box(shelfMat, u + du, .95, PANTRY_SHELF.v + dv, .04, 1.9, .04, 0);
+    // what isn't beans: boxes and bags, some gone
+    if (u !== PANTRY_SHELF.u) for (const y of [.08, .68, 1.28]) for (let k = 0; k < 6; k++) { if (hash(i, k, Math.round(y * 10)) < .3) continue; const h = .22 + hash(i, k, 7) * .16; CF.box(goods[Math.floor(hash(i, k, 9 + y * 10) * goods.length)], u - 1 + k * .4, y + h / 2, PANTRY_SHELF.v + .03, .3, h, .3, .8); }
+    square(u - 1.22, u + 1.22, PANTRY_SHELF.v - .28, PANTRY_SHELF.v + .27, 1.9);
+  }, { chip: '#4a4650' });
+  breakable('table', 2, () => {
+    CF.box(new THREE.MeshStandardMaterial({ color: '#9a9284', roughness: .7 }), 11.5, .74, 1.6, 2.4, .04, .76, 1);
+    for (const du of [-1.1, 1.1]) for (const dv of [-.32, .32]) CF.box(shelfMat, 11.5 + du, .36, 1.6 + dv, .04, .72, .04, 0);
+    square(10.3, 12.7, 1.22, 1.98, .76);
+  }, { chip: '#9a9284' });
+  flushBuckets(40);
+  // what the lights would throw, since real ones are too dear: warm pools on the floor down the aisle, at the front and in the pantry
+  const pools = [[-4.67, 12, 7], [-4.67, 1, 7], [-4.67, -9, 7], [-4.4, -16.5, 8], [6.7, -2.4, 6], [12, 1.6, 7]].map(([u, v, r]) => { const [x, z] = CF.at(u, v); return new THREE.PlaneGeometry(r, r).rotateX(-Math.PI / 2).translate(x, Y0 + .06, z); });
+  const glow = new THREE.Mesh(mergeGeometries(pools), new THREE.MeshBasicMaterial({ map: radialTex, color: '#5a4026', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  glow.renderOrder = 1; scene.add(glow); const [gx, gz] = CF.at(0, 0); DISTANT.push({ obj: glow, x: gx, z: gz, r: 70 });
+}
+// the bell rope, a rope down from the steeple with a woollen grip, which gives a tug at each stroke
+const ropeGroup = new THREE.Group();
+{
+  const rope = new THREE.Mesh(new THREE.CylinderGeometry(.02, .02, 3.6, 6), new THREE.MeshStandardMaterial({ color: '#b3a07a', roughness: 1 })); rope.position.y = 2.8; outline(rope, INK, 1);
+  const sally = new THREE.Mesh(new THREE.CylinderGeometry(.05, .05, .5, 10), new THREE.MeshStandardMaterial({ color: '#8a2a2a', roughness: 1 })); sally.position.y = 1.45; outline(sally, INK, 1.1);
+  // and the block it comes down through, where the ceiling would be
+  const guide = new THREE.Mesh(boxGeo, pewMat); guide.scale.set(.34, .14, .34); guide.position.y = 4.65; outline(guide, INK, 1.1);
+  ropeGroup.add(rope, sally, guide); ropeGroup.position.set(ROPE.x, Y0, ROPE.z); scene.add(ropeGroup); DISTANT.push({ obj: ropeGroup, x: ROPE.x, z: ROPE.z, r: 60 });
+}
+// Pulling it rings the bell, which is heard all over town. It's a lure like the others, so anyone in reach who isn't after him goes to see and anyone it's fooled
+// often enough stops coming, and while it rings the church isn't off limits to them: that's the bell in src/horde.js. It can't be rung again until it's stopped,
+// and with the steeple down there's nothing to ring.
+const BELL = { reach: 160, seconds: 20, every: 2.8 };
+let bellLeft = 0, bellNext = 0, ropeTug = 0, bellStrokes = 0;
+const bellInReach = () => !churchSteeple.down && bellLeft <= 0 && Math.hypot(ROPE.x - player.pos.x, ROPE.z - player.pos.z) < 1.6;
+function ringBell() {
+  if (bellLeft > 0 || churchSteeple.down) return;
+  bellLeft = BELL.seconds; bellNext = 0; horde.bell(STEEPLE.x, STEEPLE.z, BELL.reach, BELL.seconds);
+  toast("The bell's ringing. They'll come to it.");
+}
+function stepBell(dt) {
+  if (bellLeft > 0) {
+    bellLeft -= dt; bellNext -= dt;
+    if (bellNext <= 0 && bellLeft > .5) { bellNext = BELL.every; ropeTug = 1; bellStrokes++; playNew('church.bell', { x: STEEPLE.x, z: STEEPLE.z }); }
+  }
+  ropeTug = Math.max(0, ropeTug - dt * 2.2);
+  const [rope, sally] = ropeGroup.children, pull = reduceMotion ? 0 : .35 * Math.sin(ropeTug * Math.PI);
+  rope.position.y = 2.8 - pull; sally.position.y = 1.45 - pull;
+  for (const c of ropeGroup.children) c.visible = !churchSteeple.down;
 }
 // the white house on the north side of Commerce St's bend and its barn: what's around them, from the public aerial
-const PROP_WALLS = [];   // [ax, az, bx, bz, top, radius], the same as a building's walls
 // A vehicle tests for walls .6 m up, and a wall counts from .25 under its top, so a low one has to stop higher than it's drawn or a car goes through it without touching it. He can still hop it.
 const LOW_WALL = 1;
 let CHAIN_MAT = null;    // the ball field's chain-link, for any other fence
@@ -2336,7 +2467,7 @@ paintChurchSigns();
 // They're lit, off tubes on their way out, and knocked over they aren't
 function updateChurchSigns(step) {
   if (step === signStep) return; signStep = step;
-  if (step % 120 === 0) paintChurchSigns();
+  if (step % 120 === 0) { paintChurchSigns(); showPantry(); }
   CHURCH_SIGNS.forEach((s, i) => {
     const d = Math.hypot(camera.position.x - s.x, camera.position.z - s.z), shown = d < 320;
     for (const f of s.faces) f.visible = shown;
@@ -4070,7 +4201,8 @@ const NPCS = {
       const cap = new THREE.Mesh(new THREE.SphereGeometry(.137, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshToonMaterial({ color: '#1b2a4a', emissive: '#0a1020', gradientMap: toonGrad })); cap.scale.y = .78; cap.position.set(0, .455, .09); b.add(outline(cap, INK, 1.5));
       const brim = new THREE.Mesh(new THREE.BoxGeometry(.2, .016, .13), cap.material); brim.position.set(0, .447, .225); brim.rotation.x = .16; b.add(outline(brim, INK, 1.2)); } }),
   tre: makeNPC({ id: 'tre', name: 'Tre', x: BOX.x + 3.3, z: BOX.z - 3, yaw: Math.PI * .9 }),
-  odessa: makeNPC({ id: 'odessa', name: 'Miss Odessa', x: 68.5 + PLACES.church.x, z: -5.8 + PLACES.church.z, yaw: 0,
+  // at the foot of her steps, to one side of the door
+  odessa: makeNPC({ id: 'odessa', name: 'Miss Odessa', x: 71.3 + PLACES.church.x, z: -5.8 + PLACES.church.z, yaw: 0,
     extra: (b) => { const hat = new THREE.Mesh(new THREE.CylinderGeometry(.23, .23, .024, 24), new THREE.MeshToonMaterial({ color: '#b8ad96', gradientMap: toonGrad })); hat.position.set(0, .49, .09); hat.rotation.x = .1; b.add(outline(hat, INK, 1.3));
       const crown = new THREE.Mesh(new THREE.CylinderGeometry(.105, .125, .1, 18), hat.material); crown.position.set(0, .55, .095); crown.rotation.x = .1; b.add(outline(crown, INK, 1.2));
       const skirt = new THREE.Mesh(new THREE.CylinderGeometry(.168, .29, .5, 16, 1, true), new THREE.MeshToonMaterial({ color: LOOKS.cast.odessa.top.colors[0], emissive: LOOKS.cast.odessa.top.colors[0], emissiveIntensity: .3, gradientMap: toonGrad, side: THREE.DoubleSide })); skirt.position.set(0, -.83, .005); b.add(outline(skirt, '#'+zombieLine(LOOKS.cast.odessa.degree).getHexString(), 2)); } }),
@@ -4092,6 +4224,15 @@ const PICKUPS = [
   halo.scale.setScalar(.9); m.add(halo);
   return { m, x, y, z, got: false, ph: rnd() * 6 };
 });
+// What's on the pantry's shelf is the pantry's stock, three to a shelf, and they go from the top. They aren't his to pick up.
+const pantryCans = new THREE.InstancedMesh(new THREE.CylinderGeometry(.11, .11, .26, 18), [canMat[0], canMat[1], canMat[1]], PANTRY.most);
+const pantryInk = new THREE.InstancedMesh(pantryCans.geometry, outlineMat(INK, 1.3, 0), PANTRY.most); pantryInk.instanceMatrix = pantryCans.instanceMatrix;
+{
+  const g = new THREE.Group(); g.add(pantryCans, pantryInk); scene.add(g); DISTANT.push({ obj: g, x: ROPE.x, z: ROPE.z, r: 70 });
+  for (let i = 0; i < PANTRY.most; i++) { const [x, z] = CF.at(PANTRY_SHELF.u + (i % 3 - 1) * .34, PANTRY_SHELF.v + .02); _m.compose(_v.set(x, Y0 + .21 + Math.floor(i / 3) * .6, z), _q.setFromAxisAngle(UP, CF.yaw + i * 1.3), _s.set(1, 1, 1)); pantryCans.setMatrixAt(i, _m); }
+  for (const m of [pantryCans, pantryInk]) m.frustumCulled = false;
+}
+function showPantry() { pantryCans.count = pantryInk.count = pantry.stock(today()); }
 
 // What else is in the store, on the shelves and the counter. No arrow points at any of it: it's there for whoever goes looking. Beans are beans, and he just holds on to the rest for now.
 const LOOT_NAMES = { bottle: 'Bottles', crackers: 'Firecrackers', fluid: 'Lighter fluid' };
@@ -4681,8 +4822,14 @@ const S = { mode: 'title', hp: 3, beans: 0, gas: 0, hand: null, items: {}, flags
 let saveStore = null; try { saveStore = localStorage; mouse.speed = clamp(+saveStore.getItem('chunky.mouseSpeed') || 1, MOUSE.slowest, MOUSE.fastest); } catch { /* not saved */ }
 const people = createPeople(await (await fetch('data/cast.json')).json(), { store: saveStore });
 Object.assign(S.flags, people.flags());
+// The church's pantry: what's on its shelves comes and goes with the church signs' days. data/cast.md says how.
+const pantry = createPantry({ store: saveStore }), today = () => (signNow === null ? dayOf() : dayOf(new Date(signNow)));
+// What she'd give him for the steps. Until Chapter 1's done she always has his three, or he couldn't get to twelve.
+const pantryOwes = () => (S.flags.ended ? pantry.owes(today()) : PANTRY.pays);
+function fromPantry(why) { const n = pantryOwes(); pantry.sweep(today(), n); showPantry(); if (n) addBeans(n, why); }
+showPantry();
 // what dialogue reads and changes
-const played = { flags: S.flags, items: S.items, get beans() { return S.beans; }, addBeans };
+const played = { flags: S.flags, items: S.items, get beans() { return S.beans; }, addBeans, get pantry() { return pantryOwes(); }, fromPantry };
 const player = { pos: new THREE.Vector3(), vy: 0, yaw: Math.PI, grounded: true, inv: 0, stamina: 1, running: false, winded: false, ran: false, runK: 0, boostT: 0, kb: new THREE.Vector2(), fallV: new THREE.Vector3(), lastSafe: new THREE.Vector3() };
 const cam = { yaw: -.6, pitch: .28, shake: 0, snap: false, talk: 0 };
 // over his shoulder when he's talking: how far back, how far out, how high, how high it looks, and how far along towards them
@@ -4813,6 +4960,8 @@ $('retry').addEventListener('click', () => {
 // ---------------- dialogue: the words and what they do are in data/cast.json
 const ACTIONS = { sweep: () => startSweep() };
 function openDialog(id) {
+  // after Chapter 1 her steps want sweeping again each day
+  if (S.flags.ended) S.flags.swept = pantry.sweptOn(today());
   const node = people.line(id, played); people.meet(node.whoId); people.apply(node.do, played); SFX.play('ui.tap');
   if (S.mode !== 'dialog') faceWhoever(NPCS[node.whoId]);
   S.mode = 'dialog'; HP.speed = 0; $('dialog').hidden = false; prompt(null);
@@ -4862,7 +5011,7 @@ function townObjective() {
   else if (S.flags.delivered && !S.flags.paid) objective(`${count} · Go get paid by Coop at the gas station on ${street('us_80')}`, standing(NPCS.coop));
   else { const next = nextBeans(); objective(next.hint ? `${count} · ${next.hint}` : count, next); }
 }
-function startSweep() { S.mode = 'sweep'; S.sweep = 0; HP.kind = 'sweep'; player.pos.set(68.5 + PLACES.church.x, Y0 + .3, -6.9 + PLACES.church.z); player.yaw = 0; }
+function startSweep() { S.mode = 'sweep'; S.sweep = 0; HP.kind = 'sweep'; player.pos.set(68.5 + PLACES.church.x, Y0 + .1, -6.9 + PLACES.church.z); player.yaw = 0; }
 function endChapter() {
   if (driving) getOut(true);
   S.mode = 'end'; prompt(null); $('dialog').hidden = true;
@@ -5228,9 +5377,11 @@ const VEH_SET = [
   // at the farm south of the bridge, the white truck by the house
   ['pickup', ...atTrue(-684.7, 1733), .2, .76],
 ].filter(([kind, x, z, yaw]) => vehicleFits(kind, x, z, yaw));
+// and nothing across the church on Church St's front steps, where he and everybody else go in and out
+const CHURCH_STEPS = CF.at(-4.67, 21);
 const VEHICLES = [
   ...VEH_SET.map(([kind, x, z, yaw, tone]) => ({ kind, x, z, yaw, tone })),
-  ...placeVehicles(STRUCTURES, { hash: hash2, road: nearestRoadPoint, free: (kind, x, z, yaw) => !(Math.abs(x) < 150 && Math.abs(z) < 150) && !SET_ASIDE.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1) && !VEH_SET.some((h) => Math.hypot(h[1] - x, h[2] - z) < 8) && vehicleFits(kind, x, z, yaw) }),
+  ...placeVehicles(STRUCTURES, { hash: hash2, road: nearestRoadPoint, free: (kind, x, z, yaw) => !(Math.abs(x) < 150 && Math.abs(z) < 150) && !SET_ASIDE.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1) && !VEH_SET.some((h) => Math.hypot(h[1] - x, h[2] - z) < 8) && Math.hypot(x - CHURCH_STEPS[0], z - CHURCH_STEPS[1]) > 4.5 && vehicleFits(kind, x, z, yaw) }),
 ].map(({ kind, x, z, yaw, tone }) => {
   const v = makeVehicle(kind, x, z, yaw, floorAt(x, z)), list = PAINTS[kind];
   v.tone = tone; v.paint = new THREE.Color(list[Math.floor(tone * list.length) % list.length]); v.shownSpin = 0; v.seen = Infinity; settle(v, floorAt);
@@ -6657,11 +6808,12 @@ function tick(dt, draw = true) {
       const ball = !near && !ride && !meat && !door && !jam && ballWants(), gear = !near && !ride && !meat && !door && !jam && !ball && batInReach();
       if (crtLook && (Math.hypot(input.x, input.y) > .1 || input.sEdge || input.cEdge)) crtLook = false;
       const crt = !near && !ride && !meat && !door && !jam && !ball && (crtLook || crtInReach()), stone = !near && !ride && !meat && !door && !jam && !ball && stoneInReach(), plate = !near && !ride && !meat && !door && !jam && !ball && railMarkerInReach();
-      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : gear && S.flags.sixInARow ? 'Take the bat' : null;
+      const bell = !near && !ride && !meat && !door && !jam && !ball && !crt && bellInReach();
+      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : bell ? 'Ring the bell' : gear && S.flags.sixInARow ? 'Take the bat' : null;
       if (!stone) stoneRead = false;
       if (!plate) railMarkerRead = false;
       if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (railMarkerRead && S.act === 'Read the marker') prompt(`<span class="words">${RAIL_MARKER.words}</span>`); else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
-      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) stoneRead = true; else if (plate) railMarkerRead = true; else if (gear && S.flags.sixInARow) takeBat(); else swing(); }
+      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) stoneRead = true; else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else swing(); }
       if (input.sEdge) swing();
       if (input.hEdge) toggleShamble();
       if (input.cEdge) throwOne();
@@ -6741,7 +6893,7 @@ function tick(dt, draw = true) {
   for (const c of PICKUPS) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
   if (lootGroup.visible) for (const c of LOOT) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
   for (const f of fires) { const k = .8 + .2 * Math.sin(time * 11 + f.ph) * Math.sin(time * 7.3 + f.ph); f.pl.intensity = (f.duty ? 34 : f.out ? 0 : 12) * k; }
-  stepScreen(); stepCrt();
+  stepScreen(); stepCrt(); stepBell(dt);
   beacon.visible = beaconLive && Math.floor(time * 1.2) % 2 === 0; { const dip = Math.random() < .02 && !reduceMotion; gasLight.intensity = (dip ? 2 : 9) * gasPower; gasStrip.material.color.copy(GAS_STRIP).multiplyScalar(dip ? .25 : 1); }
   if (!driving && boomLight <= 0) gLight.intensity = 14 * (.8 + .2 * Math.sin(time * 9.7));
 
@@ -6802,6 +6954,7 @@ function tick(dt, draw = true) {
       G.uHideRoof.value.set(home ? home.index : -2, behind ? behind.index : -2);
       if (hallBoard.visible === (home === HALL_HOUSE)) hallBoard.visible = home !== HALL_HOUSE;
       if (postBoard.visible === (home === POST_OFFICE)) postBoard.visible = home !== POST_OFFICE;
+      churchSteepleOn.visible = home !== CHURCH_HOUSE || churchSteeple.down; us80Steeple.visible = home !== US80_CHURCH || steepleProp.down;
       camera.updateMatrixWorld(); _v.copy(heroRoot.position); _v.y += 1; _v.project(camera);
       G.uSee.value.set((_v.x * .5 + .5) * G.uRes.value.x, (_v.y * .5 + .5) * G.uRes.value.y, _v.z * .5 + .5, cam.crt > 0 ? 0 : G.uRes.value.y * .18); G.uSeeY.value = heroRoot.position.y + .4;
     }
@@ -6858,7 +7011,7 @@ const clickedIn = (e) => { if (e.isTrusted && e.detail > 0) takeMouse(); };
 $('start').addEventListener('click', (e) => { $('title').hidden = true; startHang(); clickedIn(e); });
 $('free').addEventListener('click', (e) => { startFree(); clickedIn(e); });
 $('forget').hidden = !people.hasSave() && !folks.hasSave();
-$('forget').addEventListener('click', () => { people.forget(); folks.forget(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
+$('forget').addEventListener('click', () => { people.forget(); folks.forget(); pantry.forget(); showPantry(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
 // first frame: him hanging behind the title
 heroRoot.position.copy(ANCHOR); poseHero(0); drawPlanks();
 for (const s of SNAKES) s.update(.016); deckSnake.update(.016);
@@ -6872,7 +7025,7 @@ if (location.hash === '#signs') openSignBoard();
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, farm: FARM, dock: DOCK, onDock, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, farm: FARM, dock: DOCK, onDock, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, church: { house: CHURCH_HOUSE, at: CF.at, door: () => wallsOf(CHURCH_HOUSE, Y0).doors[0], steeple: churchSteeple, steeplePos: STEEPLE, steepleShown: () => churchSteepleOn.visible, us80: US80_CHURCH, us80Shown: () => us80Steeple.visible, roundWindow, rope: ROPE, bellInReach, ring: ringBell, ringing: () => bellLeft > 0, strokes: () => bellStrokes, BELL, pantry, PANTRY, today, owes: pantryOwes, shown: () => pantryCans.count, shelf: PANTRY_SHELF }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
     THREE, hills: { at: HILLS.at, slope: HILLS.slope, follow: HILLS.follow, here: () => HILL.uHillHere.value, uniforms: HILL, flat: hillsFlat, skyline },
     stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead },

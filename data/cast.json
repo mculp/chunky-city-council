@@ -20,7 +20,7 @@
     "swept": [
       { "set": "swept" },
       { "meter": "odessa.trust", "by": 2 },
-      { "beans": 3, "why": "Odessa" }
+      { "pantry": "Odessa" }
     ]
   },
   "dialogue": {
@@ -127,7 +127,7 @@
     "odessa": {
       "who": "odessa",
       "opts": [
-        { "say": "Can I get some beans?", "to": "odBeans", "when": ["!swept"] },
+        { "say": "Can I get some beans?", "to": "odBeans", "when": ["!swept", "pantry > 0"] },
         { "say": "Coop gave me a bag for Tre.", "to": "odTold", "when": ["has:bag", "!toldOdessa"] },
         { "say": "Later." }
       ],

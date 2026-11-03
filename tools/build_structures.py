@@ -455,8 +455,10 @@ def lean_of(ring, lean, world):
     return out
 
 
-def door_edge(ring_world, world, faces=None):
-    """Which wall the door goes in: the longest one that faces the way it's told, the nearest road or, far from any, the track."""
+def door_edge(ring_world, world, faces=None, near=None):
+    """Which wall the door goes in: the one nearest where it's put, or else the longest one that faces the way it's told, the nearest road or, far from any, the track."""
+    if near:
+        return min(range(len(ring_world)), key=lambda i: seg_dist(near[0], near[1], ring_world[i], ring_world[(i + 1) % len(ring_world)]))
     cx, cz = centroid(ring_world)
     if faces:
         tx, tz = COMPASS[faces]
@@ -595,7 +597,8 @@ def main():
         named = look.pop("wallColor", None)
         wall = named if named and named.startswith("#") else WALL_COLORS.get(named) or WALL_DEFAULT[look["walls"]]
         roof = note.get("roofColor") or (None if args.no_aerial else roof_colour(s["ring"], tiles, args.refresh)) or ROOF_DEFAULT[look["roofMat"]]
-        out = {"id": s["id"], "x": round2(s["at"][0]), "z": round2(s["at"][1]), "ring": [[round2(p[0] - s["cx"]), round2(p[1] - s["cz"])] for p in s["ring"]], "sqm": round(s["sqm"]), "use": note.get("use", s["use"]), **look, "wallColor": wall, "roofColor": roof, "door": door_edge(s["world_ring"], world, note.get("doorFaces"))}
+        near = (s["wx"] + note["doorNear"][0], s["wz"] + note["doorNear"][1]) if note.get("seen") and "doorNear" in note else None
+        out = {"id": s["id"], "x": round2(s["at"][0]), "z": round2(s["at"][1]), "ring": [[round2(p[0] - s["cx"]), round2(p[1] - s["cz"])] for p in s["ring"]], "sqm": round(s["sqm"]), "use": note.get("use", s["use"]), **look, "wallColor": wall, "roofColor": roof, "door": door_edge(s["world_ring"], world, note.get("doorFaces"), near)}
         for k, default in (("porch", "none"), ("carport", False), ("shutters", False), ("condition", None), ("steep", False)):
             if out.get(k, default) == default:
                 out.pop(k, None)

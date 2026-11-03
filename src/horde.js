@@ -68,8 +68,8 @@ export function createHorde(world, tuning = {}, on = {}) {
   let owed = 0, comeIn = T.comeIn;
 
   h.inSanctuary = (x, z) => zones.some((a) => hypot(x - a.x, z - a.z) < a.r);
-  // Off limits unless the bell's ringing. Anyone caught inside when it stops can still walk out.
-  const offLimits = (s, x, z) => clock >= bellUntil && zones.some((a) => { const d = hypot(x - a.x, z - a.z); return d < a.r && d <= hypot(s.x - a.x, s.z - a.z); });
+  // Off limits unless the bell's ringing, to anyone outside. Anyone caught inside when it stops is on their way out, and can go round whatever's in the way.
+  const offLimits = (s, x, z) => clock >= bellUntil && zones.some((a) => hypot(x - a.x, z - a.z) < a.r && hypot(s.x - a.x, s.z - a.z) >= a.r);
   const open = (s, x, z) => !world.blocked(x, z, s.y) && (s.wading || !world.water(x, z)) && !offLimits(s, x, z);
 
   h.add = (x, z, extra = {}) => {
@@ -78,9 +78,10 @@ export function createHorde(world, tuning = {}, on = {}) {
     if (F) { const who = extra.who ?? F.next(); Object.assign(s, who.looks, extra); s.who = who; who.body = s; s.homeX = x; s.homeZ = z; s.mood = 0; }
     all.push(s); return s;
   };
-  // Something loud: anyone in reach goes to look, and at a bell they forget the church is off limits
+  // Something loud: anyone in reach goes to look
   h.noise = (x, z, r, seconds) => { noises.push({ x, z, r, until: clock + seconds }); };
-  h.bell = (x, z, r, seconds) => { h.noise(x, z, r, seconds); bellUntil = clock + seconds; };
+  // The church bell draws them the way a lure does, and anyone it's fooled often enough stops coming. While it rings they forget the church is off limits.
+  h.bell = (x, z, r, seconds) => { h.lure(x, z, r, seconds, false, 'bell'); bellUntil = clock + seconds; };
   // He's given himself away, running or fighting or in the light: anyone close who'd have noticed him turns on him, or away from him if they're scared of him. It says how many.
   h.unmask = (p, r = T.unmask) => {
     let n = 0;

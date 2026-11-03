@@ -108,6 +108,7 @@ The second trailer in the row nearest the ball field and the low building by the
 | `seen` | Must be `true` for the rest of the note to count. |
 | `clip` | `{ "axis": "z", "max": -35.6 }` cuts the footprint at that true coordinate, for one that took in something that isn't building. The old gas station's took in its canopy. |
 | `doorFaces` | `north`, `south`, `east` or `west`, to put the door on that side rather than facing the road. |
+| `doorNear` | `[dx, dz]` in metres from the footprint's middle: the door goes in the wall nearest there, for one whose door isn't in its longest wall that way. The church on Church St's is in its front gable, not the wing beside it. |
 | `use` | Replaces the source's use, for one that's plainly something else. |
 | `roofColor` | Hex, in place of the aerial's. |
 | `move` | `[dx, dz]` in metres, for a footprint the aerial shows is out. |

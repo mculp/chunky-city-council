@@ -1,7 +1,7 @@
 // What he can throw to move the crowd without fighting it. There's no three.js or page in here, so node tests load it too. How they look and sound is in index.html.
 //
 // Each one says how far off it can be made out and for how long. What the crowd does about it is in src/horde.js: while one's going they go to it, and can't make out
-// anything else unless he's right on top of them. A car alarm isn't thrown, but anything that is can set one off.
+// anything else unless he's right on top of them. A car alarm isn't thrown, but anything that is can set one off. The church bell isn't either: it's with the church, in index.html.
 
 export const LURES = {
   // he's been able to throw these for a while, and they're a bomb, not a lure. They come along here so that there's one list of what's in his hand.

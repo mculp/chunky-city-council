@@ -246,12 +246,24 @@ describe('the church', () => {
     h.bell(0, 0, 40, 12); run(h, { ...still, x: 100, hidden: true }, 8);
     assert.ok(Math.hypot(s.x, s.z) < 7, `at ${s.x},${s.z}`);
   });
+  test('it draws them the way a lure does, quicker than a noise would', () => {
+    const a = createHorde(field()), s = a.add(30, 0); a.noise(0, 0, 60, 6); run(a, { ...still, x: 100, hidden: true }, 4);
+    const b = createHorde(field()), t = b.add(30, 0); b.bell(0, 0, 60, 6); run(b, { ...still, x: 100, hidden: true }, 4);
+    assert.ok(Math.hypot(t.x, t.z) < Math.hypot(s.x, s.z) - 2, `a noise left them ${Math.hypot(s.x, s.z).toFixed(1)} m off, the bell ${Math.hypot(t.x, t.z).toFixed(1)}`);
+  });
   test('and when it stops, they walk back out', () => {
     const h = createHorde(field()); h.zones.push(zone); const s = h.add(14, 0);
     h.bell(0, 0, 40, 8); run(h, { ...still, x: 100, hidden: true }, 8.1);
     assert.ok(Math.hypot(s.x, s.z) < 10, 'inside when it stopped');
-    run(h, { ...still, x: 100, hidden: true }, 12);
+    run(h, { ...still, x: 100, hidden: true }, 20);
     assert.ok(Math.hypot(s.x, s.z) >= 10, `still in there at ${s.x},${s.z}`);
+  });
+  test('and something parked in the way doesn\'t keep them in', () => {
+    for (const [x0, x1, z0, z1] of [[9.6, 12.4, -.9, .9], [9.6, 10.4, -3, 3]]) {
+      const h = createHorde(field({ blocked: (x, z) => x > x0 && x < x1 && z > z0 && z < z1 })); h.zones.push(zone); const s = h.add(9, .3);
+      run(h, { ...still, z: 30, hidden: true }, 15);
+      assert.ok(Math.hypot(s.x, s.z) >= 10, `still in there at ${s.x.toFixed(2)},${s.z.toFixed(2)}`);
+    }
   });
 });
 

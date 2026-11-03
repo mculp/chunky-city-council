@@ -49,7 +49,7 @@ export function createPeople(data, { store = null } = {}) {
     people.recent = id; save();
   };
 
-  // ctx is what the game's holding: { flags, items, beans, addBeans(n, why) }
+  // ctx is what the game's holding: { flags, items, beans, addBeans(n, why), pantry, fromPantry(why) }
   people.check = (when, ctx) => (when || []).every((text) => {
     const c = parseCondition(text);
     if (c.flag) return !!ctx.flags[c.flag] !== c.not;
@@ -64,6 +64,7 @@ export function createPeople(data, { store = null } = {}) {
       else if (e.meter) { const [id, meter] = e.meter.split('.'); people.change(id, meter, e.by); }
       else if (e.item) ctx.items[e.item] = (ctx.items[e.item] || 0) + e.by;
       else if (e.beans) ctx.addBeans(e.beans, e.why);
+      else if (e.pantry) ctx.fromPantry(e.pantry);
     }
   };
   // The first line of a node whose conditions hold, with the options that are open right now
@@ -91,7 +92,7 @@ export function checkCast(data) {
       for (const text of e.when || []) condition(text, where);
       if (e.meter) { const [id, m] = e.meter.split('.'); if (!ids.has(id) || !meters.has(m)) problems.push(`${where}: no meter ${e.meter}`); if (!Number.isFinite(e.by)) problems.push(`${where}: ${e.meter} has no "by"`); }
       else if (e.item) { if (!Number.isFinite(e.by)) problems.push(`${where}: item ${e.item} has no "by"`); }
-      else if (!e.set && !e.unset && !e.beans) problems.push(`${where}: an effect that does nothing: ${JSON.stringify(e)}`);
+      else if (!e.set && !e.unset && !e.beans && !e.pantry) problems.push(`${where}: an effect that does nothing: ${JSON.stringify(e)}`);
     }
   };
   for (const t of data.ties) if (!ids.has(t.when) || !ids.has(t.then) || !meters.has(t.meter)) problems.push(`tie ${JSON.stringify(t)}: unknown person or meter`);

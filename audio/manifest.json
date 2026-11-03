@@ -241,6 +241,22 @@
       "request": "01a198bb-8bee-75e2-9f96-0d5a47c76096",
       "date": "2026-11-01T20:09:56.757Z"
     },
+    "audio/sfx/church.bell.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 9,
+      "bytes": 145074,
+      "sha256": "5c73bfe1185a6222f5ce9360f578e16b4e058ff8b198d3eb027d56a65c612e6b",
+      "request": "01a19fa0-a0e1-7373-9183-a166bab87724",
+      "date": "2026-11-03T04:17:51.837Z"
+    },
+    "audio/sfx/church.bell.2.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 9,
+      "bytes": 145074,
+      "sha256": "80a0ee15a6a6011248ad2e2fd01193d800e2b98b40f3c82918929a7ce811aa08",
+      "request": "01a19fa0-a0de-74f3-93f8-d23b0a42fbbe",
+      "date": "2026-11-03T04:17:51.679Z"
+    },
     "audio/sfx/crash.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
       "seconds": 1.5,
@@ -1067,7 +1083,7 @@
     }
   },
   "spent": {
-    "likely": 11.5064,
-    "most": 16.7264
+    "likely": 11.5424,
+    "most": 16.7624
   }
 }

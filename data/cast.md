@@ -76,6 +76,7 @@ A node is `{ who, lines, opts }`. The first of its `lines` whose `when` all hold
 | `!has:bag` | You aren't. |
 | `coop.trust >= 1` | A meter compares, with `>=`, `<=`, `>`, `<` or `==`. |
 | `beans >= 3` | Your beans compare, the same way. |
+| `pantry > 0` | What the pantry would pay for the steps right now, the same way. |
 
 ### Effects
 
@@ -86,8 +87,21 @@ A node is `{ who, lines, opts }`. The first of its `lines` whose `when` all hold
 | `{ "meter": "coop.trust", "by": 1 }` | Moves a meter. |
 | `{ "item": "bag", "by": 1 }` | Adds or takes away an item. |
 | `{ "beans": 3, "why": "Coop" }` | Adds beans. `why` is shown with them. |
+| `{ "pantry": "Odessa" }` | Adds what the pantry pays and takes it off its shelves. The words are shown with them. |
 
 Any effect can have its own `when`, as with the first meeting that only counts once.
+
+## The pantry
+
+Miss Odessa pays for sweeping her steps out of the pantry at the church, and what's on its shelves is what's left. `src/pantry.js` keeps it.
+
+- The shelves hold 9 cans at most, and 2 more come in each day. She pays 3, or whatever's there if it's less.
+- The steps want sweeping once a day. A day is the church signs' day, so it turns over at midnight in Mississippi when they change.
+- Until Chapter 1's done she always has his three, however empty the shelves are, because a run can't reach 12 without them. That's `pantry` reading 3 while it lasts. The cans still come off the shelves.
+- Once it's done, `swept` means the steps have been swept today, and comes off at midnight.
+- It's saved under `chunky.pantry.v1`, with the day it was last looked at, how many cans there were and the day the steps were last swept. "Forget everyone" wipes it with the rest.
+
+Sweeping every day runs the shelves down to what comes in, so after a week it's 2 a day. Left alone for a few days, they're full again. Every number is in `PANTRY` in `src/pantry.js`.
 
 ## Saving
 
