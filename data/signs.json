@@ -1,17 +1,18 @@
 {
   "version": 1,
   "churches": [
-    { "id": "church-st", "name": ["THE CHURCH ON", "CHURCH ST"], "x": -291.5, "z": -206.5, "facing": 135 },
-    { "id": "second-first", "name": ["SECOND FIRST", "BAPTIST CHURCH"], "x": -326.5, "z": -31, "facing": 90 },
-    { "id": "old-new-hope", "name": ["OLD NEW HOPE", "MISSIONARY BAPTIST"], "x": 14810.5, "z": 6724, "facing": 90 }
+    { "id": "methodist", "name": ["CHUNKY COMMUNITY", "METHODIST CHURCH"], "x": -291.5, "z": -206.5, "facing": 135 },
+    { "id": "baptist", "name": ["CHUNKY BAPTIST", "CHURCH"], "x": -326.5, "z": -31, "facing": 90 },
+    { "id": "meridian", "name": ["MERIDIAN", "CHURCH"], "x": 14810.5, "z": 6724, "facing": 90 }
   ],
   "feudEvery": 5,
   "feuds": [
-    { "second-first": ["WE WERE HERE", "FIRST"], "church-st": ["THEN WHY ARE YOU", "CALLED SECOND"] },
-    { "second-first": ["OUR STEEPLE", "IS TALLER", "JUST SAYING"], "church-st": ["WE SEEN WHAT YOU", "PAID FOR THAT", "STEEPLE"] },
-    { "old-new-hope": ["NOBODY EVER", "DRIVES OUT HERE", "WE KNOW WHY"], "second-first": ["OLD NEW HOPE", "IS NOT A NAME"], "church-st": ["AT LEAST WE KNOW", "WHAT STREET", "WE ON"] },
-    { "second-first": ["POTLUCK SUNDAY", "NOT YOU", "CHURCH ST"], "church-st": ["SECOND FIRST", "POTATO SALAD", "IS A SIN"] },
-    { "church-st": ["WE FORGIVE", "SECOND FIRST", "FOR THE SPELLING"], "second-first": ["WE FORGIVE", "CHURCH ST", "FOR THE PARKING"], "old-new-hope": ["WE FORGIVE", "NOBODY"] }
+    { "baptist": ["WE WERE HERE", "FIRST"], "methodist": ["NO YOU WAS NOT", "CHECK THE CORNER", "STONE"] },
+    { "baptist": ["OUR STEEPLE", "IS TALLER", "JUST SAYING"], "methodist": ["WE SEEN WHAT YOU", "PAID FOR THAT", "STEEPLE"] },
+    { "meridian": ["NOBODY EVER", "DRIVES OUT HERE", "WE KNOW WHY"], "baptist": ["THAT CHURCH IS", "SO FAR OUT IT", "GOT ITS OWN HELL"], "methodist": ["AT LEAST WE KNOW", "WHAT STREET", "WE ON"] },
+    { "baptist": ["POTLUCK SUNDAY", "NOT YOU", "METHODISTS"], "methodist": ["BAPTIST", "POTATO SALAD", "IS A SIN"] },
+    { "methodist": ["WE FORGIVE", "THE BAPTISTS", "FOR THE SPELLING"], "baptist": ["WE FORGIVE", "THE METHODISTS", "FOR THE PARKING"], "meridian": ["WE FORGIVE", "NOBODY"] },
+    { "baptist": ["WE DUNK", "THEY SPRINKLE", "CHOOSE WISE"], "methodist": ["SPRINKLE IS", "STILL WET", "CALM DOWN"] }
   ],
   "lines": [
     ["REPENT", "YOU KNOW WHAT", "YOU DID"],
