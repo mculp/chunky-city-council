@@ -86,6 +86,16 @@ And whatever their mood:
 
 None of them say anything. They don't have any new lines, and whether they should, with a real AI model, is the owner's call.
 
+## Shambling with them
+
+He can pass for one of them: SHAMBLE on a phone, C on a laptop. It holds him to their pace, 1.3 m/s however far the stick's pushed. While it holds, nobody who isn't already after him notices him by sound, smell or touch. The numbers are with the crowd's in `src/horde.js`.
+
+- **Looking twice.** Anyone within 5 m comes to see through it. It's faster the closer he is, at night, the nosier they are, and the more beans he's carrying, since they can smell those. Right up against one with nothing on him it takes about 3 to 8 seconds, and a third of that with twelve cans. It wears off once he's out of reach. When one sees through it, that one comes for him, and the act holds for everyone else.
+- **What gives him away.** Running, a swing, or stepping into a light gives him away to everyone within 14 m at once. They know where he is for 5 seconds, so standing still and quiet doesn't lose them.
+- **Who isn't taken in.** Someone with a grudge knows him too well, and anyone already after him stays after him. People at home leave him be either way.
+- **What doesn't give him away.** Throwing something, jumping, or a lure going off nearby, which still draws them while he shambles past. Being grabbed, getting in a vehicle or going into the river ends it.
+- **What you see.** How close each of the nearest five is to seeing through it is a small bar over their head, cream and then red near the end. For anyone off the screen it sits at the edge on their side, with an arrow.
+
 ## People at home
 
 Four in five houses and trailers have someone at home, and three in ten of those have two. That's about 900 people, and they come out when he gets within 190 m of the house, since working out where a door is takes a moment. Nobody's kept out of a house for what's there except:

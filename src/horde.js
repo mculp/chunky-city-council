@@ -47,13 +47,20 @@ export const TUNING = {
   tagalong: .55, tagReach: 20, tagLost: 30,   // who goes along with their own people, how far off they'll notice, and how far before they give up
   afterHim: .5,                    // the chance someone with a grudge heads his way when they've got nothing else to go on
   atHome: [8, 26],                 // seconds someone at home stays where they've got to
+  // Shambling along with them, he passes for one of them. Each of them comes to see through it at their own rate, and only up close.
+  actPace: 1.3,                    // m/s. No quicker than one of them going to look at something
+  susReach: 5,                     // metres. Further off than this, nobody looks twice at him
+  susRate: .18,                    // how much of the way to seeing through him they get in a second, right up against him with nothing on him
+  susPerBean: .15,                 // and how much quicker for each can of beans he's carrying, since they can smell those
+  susFade: .1,                     // a second, once he's out of their reach
+  unmask: 14,                      // metres. Giving himself away gives him away to everyone this close
 };
 
 const hypot = Math.hypot, TRY = [0, .8, 1.6, 2.4, 3.1];
 function turn(from, to, k) { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return from + d * k; }
 
 // world: { blocked(x, z, y), water(x, z), floorAt(x, z), wander(s) -> [x, z], rand(), comeFrom(p) -> [x, z] or nothing, folks: src/agents.js's, or nothing and they're nobody }
-// on: { grab(grab), free(), overrun() }
+// on: { grab(grab), free(), overrun(), spotted(s) when one of them sees through his act }
 export function createHorde(world, tuning = {}, on = {}) {
   const T = { ...TUNING, ...tuning }, all = [], active = [], noises = [], lights = [], zones = [], F = world.folks;
   let clock = 0, bellUntil = -1, mercy = 0;
@@ -74,6 +81,18 @@ export function createHorde(world, tuning = {}, on = {}) {
   // Something loud: anyone in reach goes to look, and at a bell they forget the church is off limits
   h.noise = (x, z, r, seconds) => { noises.push({ x, z, r, until: clock + seconds }); };
   h.bell = (x, z, r, seconds) => { h.noise(x, z, r, seconds); bellUntil = clock + seconds; };
+  // He's given himself away, running or fighting or in the light: anyone close who'd have noticed him turns on him, or away from him if they're scared of him. It says how many.
+  h.unmask = (p, r = T.unmask) => {
+    let n = 0;
+    for (const s of active) {
+      if (s.under !== undefined || s.thrown || s.dead !== undefined || s.state === GRABBING || s.state === STUNNED || hypot(s.x - p.x, s.z - p.z) > r) continue;
+      const w = s.who, mood = w ? F.mood(w) : 0;
+      if (w?.calm && !mood) continue;
+      s.sus = 0; s.alert = 1; s.lost = 0; s.tx = p.x; s.tz = p.z; s.knows = clock + T.lostAfter;
+      s.state = mood === AWAY ? AVOIDING : HUNTING; n++;
+    }
+    return n;
+  };
   // Something thrown to draw them. While it's going it's all they can make out, unless he's right on top of them, and they go to it quicker than they'd go to look.
   // One that's landed in the water takes them in after it, and that's the last anyone sees of them.
   h.lure = (x, z, r, seconds, wet = false, kind = 'lure') => { noises.push({ x, z, r, until: clock + seconds, lure: true, wet, kind }); };
@@ -168,8 +187,19 @@ export function createHorde(world, tuning = {}, on = {}) {
   function think(s, p) {
     const w = s.who, mood = w ? (s.mood = F.mood(w)) : 0;
     const d = hypot(s.x - p.x, s.z - p.z), sharp = 1 + (T.nightSense - 1) * p.night, loud = nearestNoise(s);
+    const scared = mood === AWAY || (w?.truck > 0 && p.driving);
+    // Shambling, he's one of them to anyone who isn't already after him. Someone with a grudge knows him too well to be taken in.
+    const taken = !!p.acting && !p.hidden && mood !== AFTER && s.state !== HUNTING && s.state !== SWARM && s.state !== GRABBING && !(w?.calm && !mood);
+    if (taken) {
+      const near = loud?.lure ? Math.min(T.susReach, T.drowned) : T.susReach;
+      if (d < near) s.sus = Math.min(1, (s.sus ?? 0) + T.thinkEvery * T.susRate * (1 - d / near) * sharp * (1 + T.susPerBean * p.beans) * (w ? .6 + .8 * w.nosy : 1));
+      else if (s.sus) s.sus = Math.max(0, s.sus - T.thinkEvery * T.susFade);
+      // and that's it: they've seen through him
+      if (s.sus >= 1) { s.sus = 0; s.alert = 1; s.state = scared ? AVOIDING : HUNTING; s.lost = 0; s.tx = p.x; s.tz = p.z; s.timer = 0; s.knows = clock + T.lostAfter; h.on.spotted?.(s); return; }
+    } else if (s.sus) s.sus = Math.max(0, s.sus - T.thinkEvery * T.susFade);
+    const hid = p.hidden || taken;
     // the people who live here have got nothing against him, until he gives them something
-    const reach = p.hidden || (w?.calm && !mood) ? 0 : Math.min(Math.max(p.noise * sharp, (T.smellBase + T.smellPerBean * p.beans) * sharp, p.light * sharp, T.touch) * (w ? F.senses(w, mood) : 1), loud?.lure ? T.drowned : Infinity);
+    const reach = hid || (w?.calm && !mood) ? 0 : Math.min(Math.max(p.noise * sharp, (T.smellBase + T.smellPerBean * p.beans) * sharp, p.light * sharp, T.touch) * (w ? F.senses(w, mood) : 1), loud?.lure ? T.drowned : Infinity);
     const sensed = d < reach;
     if (sensed) s.alert = Math.min(1, s.alert + T.thinkEvery * (T.alertRate[0] + (T.alertRate[1] - T.alertRate[0]) * (1 - d / reach)) * (mood === AFTER ? 2 : 1));
     else s.alert = Math.max(0, s.alert - T.thinkEvery * T.alertFade);
@@ -180,7 +210,6 @@ export function createHorde(world, tuning = {}, on = {}) {
       // and it gets around, one of them at a time, among their own people
       if (F.hasNews(w)) { const o = active[Math.floor(world.rand() * active.length)]; if (o?.who && hypot(o.x - s.x, o.z - s.z) < T.tell) F.tell(w, o.who); }
     }
-    const scared = mood === AWAY || (w?.truck > 0 && p.driving);
     // once they've set off after one in the water they go all the way, and anyone who hasn't got there by the time something else comes up stays out
     if (loud?.wet) s.wading = true; else if (s.wading && s.state !== CURIOUS && !world.water(s.x, s.z)) s.wading = false;
 
@@ -192,14 +221,14 @@ export function createHorde(world, tuning = {}, on = {}) {
     }
     const startled = Math.max(reach * 1.5, T.startle);
     if (s.turned > 0) s.turned -= T.thinkEvery;
-    else if (scared && !p.hidden && d < startled && s.state !== AVOIDING && s.state !== GRABBING) { s.state = AVOIDING; s.lost = 0; }
-    if (mood === TAILING && s.state <= CURIOUS && !loud && !p.hidden && d < T.trail) s.state = TRAILING;
+    else if (scared && !hid && d < startled && s.state !== AVOIDING && s.state !== GRABBING) { s.state = AVOIDING; s.lost = 0; }
+    if (mood === TAILING && s.state <= CURIOUS && !loud && !hid && d < T.trail) s.state = TRAILING;
     if (s.state === AVOIDING) {
-      if (!scared || p.hidden || d > startled + T.backOff) { s.state = SHAMBLE; s.timer = 0; return; }
+      if (!scared || hid || d > startled + T.backOff) { s.state = SHAMBLE; s.timer = 0; return; }
       if (d < T.cornered && s.stuck > 1) { s.state = HUNTING; s.lost = 0; s.tx = p.x; s.tz = p.z; s.turned = T.turnsFor; return; }
       const k = 14 / (d || 1); s.tx = s.x + (s.x - p.x) * k; s.tz = s.z + (s.z - p.z) * k;
     } else if (s.state === TRAILING) {
-      if (mood !== TAILING || loud || p.hidden || d > T.trail + 10) { s.state = SHAMBLE; s.timer = 0; return; }
+      if (mood !== TAILING || loud || hid || d > T.trail + 10) { s.state = SHAMBLE; s.timer = 0; return; }
       // it's always the same distance for the same person, and when they're there they stop and face him
       const gap = T.trailGap[0] + (T.trailGap[1] - T.trailGap[0]) * w.temper;
       if (d > gap + 1.5 || d < gap - 2) { const k = gap / (d || 1); s.tx = p.x + (s.x - p.x) * k; s.tz = p.z + (s.z - p.z) * k; }
@@ -222,8 +251,8 @@ export function createHorde(world, tuning = {}, on = {}) {
       if (s.stuck > T.feelAlong) { s.stuck = 0; s.state = SHAMBLE; s.timer = 0; }   // can't get there
       else if (hypot(s.tx - s.x, s.tz - s.z) < 1.2) { s.timer -= T.thinkEvery; if (s.timer <= 0) { s.state = SHAMBLE; s.timer = 0; } }
     } else if (s.state === HUNTING || s.state === SWARM) {
-      // a noise only pulls a hunter off you if it's lost you already
-      if (sensed) { s.lost = 0; s.tx = p.x; s.tz = p.z; }
+      // a noise only pulls a hunter off you if it's lost you already, and someone who's just seen him for what he is knows where he is for a while
+      if (sensed || clock < (s.knows ?? 0)) { s.lost = 0; s.tx = p.x; s.tz = p.z; }
       else {
         s.lost += T.thinkEvery;
         if (loud) { s.state = CURIOUS; s.alert = T.curiousAt; s.tx = loud.x; s.tz = loud.z; s.timer = T.lookAround; return; }
@@ -290,7 +319,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     if (broke) h.on.free?.(); else h.on.overrun?.();
   }
 
-  // p: { x, z, y, noise, light, beans, night, hidden, canGrab, driving }
+  // p: { x, z, y, noise, light, beans, night, hidden, canGrab, driving, acting }, and acting is him shambling along with them
   h.update = (dt, p) => {
     clock += dt; mercy = Math.max(0, mercy - dt); F?.tick(dt);
     for (let i = noises.length - 1; i >= 0; i--) if (noises[i].until < clock) noises.splice(i, 1);
