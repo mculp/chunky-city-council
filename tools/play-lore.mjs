@@ -1,5 +1,5 @@
 // Goes and looks at what's come from the owner's lore, in docs/lore.md, with the game's own movement and real key presses and taps: every church's sign,
-// what it says today and tomorrow, and what happens when it's hit, then Robby's lot and the flies. It can't say whether the jokes are any good.
+// what it says today and tomorrow, and what happens when it's hit, then Charlie Flake's catfish, then Robby's lot and the flies. It can't say whether the jokes are any good.
 //
 //   npm i && npm run lore [-- --shots dir]
 import { mkdirSync } from 'node:fs';
@@ -79,6 +79,23 @@ await snap('sign-rammed');
 // ---- what they cost
 const cost = await g(() => { const G = __game; G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); faceSign(2, 10); G.step(.2); const full = G.calls(); G.churchSigns.list[2].faces.forEach((f) => { f.visible = false; }); return { full, ...G.calls() }; });
 console.log(`     looking at a sign: ${cost.full.calls} draw calls and ${cost.full.triangles} triangles`);
+
+// ---- Charlie Flake's catfish, on the left coming off the bridge
+await g(() => { const G = __game; if (G.driving()) G.getOut(true); G.jump('town'); G.S.flags.town = true; G.step(.1); window.C = G.charlie; });
+const charlie = await g(() => {
+  const G = __game, m = G.map, id = 'griffis_fountain_rd', c = m.crossings.find((o) => o.road === id && o.with === 'river'), s0 = m.sOn(id, c.x, c.z), p = m.along(id, s0 - 19), P = G.player.pos, hx = -p.tx, hz = -p.tz, left = (C.x - p.x) * hz - (C.z - p.z) * hx;
+  G.place(p.x + p.tx * 8, p.z + p.tz * 8); G.look(Math.atan2(G.player.pos.x - C.x, G.player.pos.z - C.z)); G.step(.6);
+  const road = Array.from({ length: 9 }, (_, k) => G.blocked(p.x + (C.x - p.x) * (k - 4) / 13, p.z + (C.z - p.z) * (k - 4) / 13, G.floorAt(p.x, p.z) + .1)).filter(Boolean).length;
+  return { words: C.words.join(' ').toLowerCase(), left: left > 0, off: m.roadGrid.nearest(C.x, C.z), road, down: C.marker.down, fish: C.fish.position.toArray(), solid: G.blocked(C.x, C.z, 6.2) };
+});
+check('the marker says the owner\'s words and nothing else', charlie.words === 'a local resident known for catching a record 56-pound catfish from the chunky river in 1924', charlie);
+check('it\'s on the left going into town, off the road', charlie.left && charlie.off > 5, charlie);
+check('and the road past it is clear', charlie.road === 0, charlie);
+check('you can\'t walk through its pole', charlie.solid, charlie);
+await snap('charlie-from-road');
+const felled = await g(() => { const G = __game, a = C.fish.position.toArray(); G.place(C.x + .9, C.z); G.look(Math.atan2(.9, 0)); for (let k = 0; k < 4 && !C.marker.down; k++) { G.key('f', true); G.sim(1 / 30, 1 / 30); G.key('f', false); G.sim(.9, 1 / 30); } G.step(2); const b = C.fish.position.toArray(); return { down: C.marker.down, fell: a[1] - b[1] }; });
+check('a hammer brings it down, and the fish with it', felled.down && felled.fell > 1, felled);
+await snap('charlie-down');
 
 // ---- Robby's: the first house on the right coming off the bridge, which burned down. He said these words the once.
 const LINE = 'hey man, help me get these flies out of here so we can cook some deer meat';

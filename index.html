@@ -1895,6 +1895,70 @@ for (const [x, z] of [[...gasAt(50, 7.4)], [96, -5.5], [BOX.x - 3, BOX.z - 6]]) 
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(3, 1.5), new THREE.MeshStandardMaterial({ map: textTex(['CHUNKY', 'POP. 254'], 512, 256, '#1f5a3a', '#f1e6cf', '64px Bungee, Impact, sans-serif', { after: (g) => { g.strokeStyle = '#ff2a6a'; g.lineWidth = 10; g.beginPath(); g.moveTo(250, 160); g.lineTo(420, 190); g.stroke(); g.fillStyle = '#ff2a6a'; g.font = '62px Bungee, Impact, sans-serif'; g.fillText('41', 440, 220); } }), roughness: .8 }));
   sign.position.set(cx + p.tx * .06, Y0 + 2.1, cz + p.tz * .06); sign.rotation.y = Math.atan2(p.tx, p.tz); scene.add(sign); townSign.objs.push(sign);
 }
+// ---- Charlie Flake's catfish. The owner: "A local resident known for catching a record 56-pound catfish from the Chunky River in 1924". So it's a marker saying
+// just that, on the left as you come off the bridge, on the bank of the river he caught it in. The fish on top is the size of one that weighs that, 1.2 m nose to tail.
+function makeCatfish() {
+  const fish = new THREE.Group(), skin = new THREE.MeshBasicMaterial({ vertexColors: true }), dark = lit('#2b3640'), pale = lit('#d8d0b8'), N = 14;
+  // From the nose back: how far along, half its height and width, and how far its middle sits under the line. It's flat at the head and deep behind it.
+  const rings = [[0, .018, .06, -.02], [.03, .034, .125, -.022], [.1, .062, .178, -.026], [.22, .1, .19, -.036], [.38, .13, .168, -.046], [.56, .122, .128, -.036], [.74, .094, .088, -.018], [.9, .062, .05, 0], [1, .04, .024, .012]];
+  const pos = [], col = [], tri = [], back = new THREE.Color('#42566a'), side = new THREE.Color('#61768a'), belly = new THREE.Color('#a8a58f'), spot = new THREE.Color('#2b3845'), c = new THREE.Color();
+  const put = (x, y, z, k) => { pos.push(x - .54, y + .22 * (x - .5) * (x - .5), z); col.push(k.r, k.g, k.b); };
+  rings.forEach(([x, h, w, dy], i) => {
+    for (let k = 0; k < N; k++) {
+      const a = k / N * 6.2832, up = Math.sin(a);
+      if (up < -.62) c.copy(belly); else if (up < .35) c.copy(side); else c.copy(back);
+      if (up > -.62 && hash(i, k, 91) < .2) c.copy(spot);
+      put(x, dy + up * h * (up < 0 ? .86 : 1), Math.cos(a) * w, c);
+    }
+  });
+  const last = rings.length - 1;
+  for (let i = 0; i < last; i++) for (let k = 0; k < N; k++) { const a = i * N + k, b = i * N + (k + 1) % N, d = a + N, e = b + N; tri.push(a, d, b, b, d, e); }
+  // the two ends shut
+  put(rings[0][0] - .012, rings[0][3], 0, side); put(rings[last][0] + .01, rings[last][3], 0, side);
+  const nose = pos.length / 3 - 2, tip = nose + 1;
+  for (let k = 0; k < N; k++) { const b = (k + 1) % N; tri.push(nose, k, b, tip, last * N + b, last * N + k); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.setIndex(tri); geo.computeVertexNormals();
+  fish.add(outline(new THREE.Mesh(geo, skin), INK, 1.2));
+  // Fins: flat shapes along it, thick enough to take the line
+  const fin = (pts, x, y, z = 0, turn = 0, tilt = 0) => {
+    const shape = new THREE.Shape(pts.map(([a, b]) => new THREE.Vector2(a, b))), m = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: .014, bevelEnabled: false }), dark);
+    m.position.set(x - .54, y, z - .007); m.rotation.set(tilt, turn, 0); fish.add(outline(m, INK, 1));
+  };
+  fin([[0, 0], [.1, .17], [.2, .05], [.2, 0]], .28, .1);                                      // the back
+  fin([[0, 0], [.07, .05], [.12, 0]], .78, .07);                                              // the little one behind it
+  fin([[0, 0], [.14, -.12], [.32, -.09], [.3, 0]], .62, -.11);                                // underneath
+  fin([[0, .02], [.19, .15], [.13, .01], [.2, -.13], [0, -.02]], .98, .02);                   // the tail, which forks
+  for (const k of [1, -1]) fin([[0, 0], [.18, -.1], [.2, -.03], [.08, .02]], .16, -.05, k * .17, k * -.5, k * .35); // the sides
+  // the whiskers, which is how you know
+  const whisker = (from, mid, to, r = .011) => { const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(from[0] - .54, from[1], from[2]), new THREE.Vector3(mid[0] - .54, mid[1], mid[2]), new THREE.Vector3(to[0] - .54, to[1], to[2])]), 8, r, 5, false), pale); fish.add(outline(m, INK, 1)); };
+  for (const k of [1, -1]) { whisker([.03, -.005, k * .1], [-.05, -.06, k * .17], [.03, -.17, k * .22], .012); whisker([.03, -.03, k * .05], [.0, -.09, k * .06], [.05, -.13, k * .07], .008); }
+  // the eye, up high and small, and a mouth as wide as its head
+  for (const k of [1, -1]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(.03, 10, 8), lit('#efe9d6')), pupil = new THREE.Mesh(new THREE.SphereGeometry(.018, 8, 6), lit('#0c0a10')); eye.position.set(.13 - .54, .025, k * .15); pupil.position.set(.12 - .54, .03, k * .172); fish.add(eye, pupil); }
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(.012, .012, .2), lit('#0c0a10')); mouth.position.set(.018 - .54, -.022, 0); fish.add(mouth);
+  return fish;
+}
+const CHARLIE = (() => {
+  const s0 = MAP.sOn(WAKE_ROAD, WAKE_BRIDGE.x, WAKE_BRIDGE.z), p = MAP.along(WAKE_ROAD, s0 - 19), lx = -p.tz, lz = p.tx, x = p.x + lx * 6, z = p.z + lz * 6, foot = Math.min(groundH(x, z), Y0), H = 2.75;
+  // the owner's own words, and nothing else
+  const words = ['A LOCAL RESIDENT', 'KNOWN FOR CATCHING', 'A RECORD 56-POUND', 'CATFISH FROM THE', 'CHUNKY RIVER IN 1924'];
+  const fish = makeCatfish(), plate = textTex([], 1024, 720, '#16303c', '#efe7d2', '40px Georgia, serif', { after: (g) => {
+    g.strokeStyle = '#efe7d2'; g.lineWidth = 7; g.strokeRect(20, 20, 984, 680);
+    g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = '#efe7d2';
+    g.font = '90px Bungee, Impact, sans-serif'; g.fillText('CHARLIE FLAKE', 512, 134, 930); g.fillRect(70, 166, 884, 6);
+    g.font = '700 66px Georgia, "Times New Roman", serif';
+    words.forEach((t, i) => g.fillText(t, 512, 262 + i * 98, 930));
+  } });
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.55), new THREE.MeshStandardMaterial({ map: plate, emissiveMap: plate, emissive: '#ffffff', emissiveIntensity: .55, roughness: 1 }));
+  face.position.set(x + p.tx * .13, Y0 + 1.7, z + p.tz * .13); face.rotation.y = Math.atan2(p.tx, p.tz); scene.add(face);
+  // Side-on to whoever's walking along the road, with its nose to the road
+  fish.position.set(x, Y0 + H + .18, z); fish.rotation.y = Math.atan2(-lz, lx); fish.rotation.z = .06; scene.add(fish);
+  const marker = breakable('sign', 2, () => {
+    addBox(poleMat, x, (foot + Y0 + H + .1) / 2, z, .14, Y0 + H + .1 - foot, .14, 1);
+    addBox(poleMat, x + p.tx * .085, Y0 + 1.7, z + p.tz * .085, 2.28, 1.63, .08, 1, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, face.rotation.y, 0)));
+    solid(x - .1, x + .1, z - .1, z + .1, Y0 + H); PROP.objs.push(face, fish);
+  }, { rigid: true, chip: '#16303c', foot: [x, z] });
+  return { marker, x, z, fish, face, words };
+})();
 flushBuckets();
 // ================================================================ the church signs
 // What they say is on a sheet, data/signs.json, and it changes at midnight in Mississippi. How they're built is measured off the three photos
@@ -4930,7 +4994,7 @@ if (location.hash === '#signs') openSignBoard();
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdHoods.count }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
