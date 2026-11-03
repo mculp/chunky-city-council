@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test",
     "smoke": "node tools/smoke.mjs",
-    "walk": "node tools/walk-roads.mjs"
+    "walk": "node tools/walk-roads.mjs",
+    "overlay": "node tools/map-overlay.mjs"
   },
   "devDependencies": {
     "playwright-core": "1.56.1"

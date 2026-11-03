@@ -24,3 +24,4 @@ Then open http://localhost:8000. It needs a network connection for three.js and 
 - `tools/`: the scripts that fetch the source data, build the road graph and plot it
 - `tools/smoke.mjs`: plays Chapter 1 in Chrome (`npm i`, then `npm run smoke`)
 - `tools/walk-roads.mjs`: walks every road end to end in Chrome (`npm run walk`)
+- `tools/map-overlay.mjs`: draws TIGER's lines over a top-down capture of the game and measures the difference (`npm run overlay`)
