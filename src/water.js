@@ -18,10 +18,11 @@ export function buildWater(data, map) {
     const ring = d.ring.map(([x, z]) => map.fromTrue(x, z));
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-    const p = { id: d.id, source: d.source, area: d.area, pool: d.pool ?? null, ring, x0, x1, z0, z1, x: (x0 + x1) / 2, z: (z0 + z1) / 2, level: 0, deep: d.pool ? POOL_DEEP : Math.max(1.1, Math.min(3, Math.sqrt(d.area) / 18)), rows: [] };
-    // the edges each row of the pond crosses, so asking if a point's in it only looks at a few
-    ring.forEach(([ax, az], i) => {
-      const [bx, bz] = ring[(i + 1) % ring.length];
+    const islands = (d.islands ?? []).map((one) => one.map(([x, z]) => map.fromTrue(x, z)));
+    const p = { id: d.id, source: d.source, area: d.area, pool: d.pool ?? null, look: d.look ?? null, ring, islands, x0, x1, z0, z1, x: (x0 + x1) / 2, z: (z0 + z1) / 2, level: 0, deep: d.pool ? POOL_DEEP : Math.max(1.1, Math.min(3, Math.sqrt(d.area) / 18)), rows: [] };
+    // the edges each row of the pond crosses, so asking if a point's in it only looks at a few. An island's are edges like any other, and being inside one is crossing an even number of them.
+    for (const shape of [ring, ...islands]) shape.forEach(([ax, az], i) => {
+      const [bx, bz] = shape[(i + 1) % shape.length];
       shore.add(ax, az, bx, bz, p);
       for (let r = Math.floor((Math.min(az, bz) - z0) / ROW); r <= Math.floor((Math.max(az, bz) - z0) / ROW); r++) (p.rows[r] ??= []).push([ax, az, bx, bz]);
     });

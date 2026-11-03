@@ -120,6 +120,32 @@ export function propaneTank() {
 export function hotTub() {
   return [painted(new THREE.CylinderGeometry(1.05, 1.08, .82, 8).rotateY(Math.PI / 8).translate(0, .41, 0), '#4c3a30'), painted(new THREE.CylinderGeometry(1, 1.05, .1, 8).rotateY(Math.PI / 8).translate(0, .87, 0), '#2a262c'), box(0, .92, 0, 2, .012, .05, '#16131a')];
 }
+// A round bale lying on its side, weathered grey on the outside, with the straw showing at the ends
+export function roundBale(r = .72, long = 1.25) {
+  return [cylX(0, r, 0, r, long, '#8f8460', 12), cylX(long / 2 + .005, r, 0, r * .82, .02, '#b09a5e', 12), cylX(-long / 2 - .005, r, 0, r * .82, .02, '#a48f58', 12)];
+}
+// A plain old farm tractor with no make on it: big wheels behind, little ones in front, a long hood and a seat in the open
+export function tractor(color = '#3e6b38') {
+  const TYRE = '#17151a', RIM = '#c9b14a';
+  return [
+    ...both((s) => [cylX(s * .72, .68, -.62, .68, .34, TYRE, 14), cylX(s * .9, .68, -.62, .3, .02, RIM, 10), cylX(s * .52, .34, 1.12, .34, .16, TYRE, 12), cylX(s * .61, .34, 1.12, .15, .02, RIM, 8)]).flat(),
+    box(0, .92, .32, .46, .5, 1.5, color), box(0, 1.22, .34, .42, .12, 1.42, color), box(0, .6, .3, .3, .24, 1.7, '#24211f'), box(0, .94, 1.08, .46, .46, .04, '#2a2a24'),
+    box(0, .82, -.56, .62, .3, .62, '#2a2826'), ...both((s) => box(s * .46, 1.42, -.62, .36, .06, .9, color)), box(0, 1.18, -.72, .36, .08, .32, '#1c1a1c'), box(0, 1.42, -.9, .36, .42, .06, '#1c1a1c'),
+    bar([.14, 1.28, .78], [.14, 1.96, .78], .05, '#1c1a1c'), bar([0, 1.1, -.26], [0, 1.5, -.1], .03, '#1c1a1c'), box(0, 1.51, -.09, .3, .03, .03, '#1c1a1c'),
+  ];
+}
+// A little two-wheeled trailer with low white sides
+export function utilityTrailer() {
+  return [box(0, .62, -.25, 1.3, .08, 2.3, '#55524c'), ...both((s) => [box(s * .63, .86, -.25, .05, .42, 2.3, '#c9c8bf'), cylX(s * .72, .32, -.25, .32, .16, '#17151a', 10)]).flat(), box(0, .86, -1.38, 1.3, .42, .05, '#c9c8bf'), box(0, .86, .88, 1.3, .42, .05, '#c9c8bf'), bar([-.4, .6, .9], [0, .44, 1.9], .06, '#55524c'), bar([.4, .6, .9], [0, .44, 1.9], .06, '#55524c')];
+}
+// A galvanised feed bin on legs with a cone for a top and a cone for a bottom
+export function feedBin(color = '#a9acab') {
+  return [...[[-.9, -.9], [.9, -.9], [-.9, .9], [.9, .9]].map(([x, z]) => bar([x, 0, z], [x * .9, 1.7, z * .9], .09, '#6c6e6e')), painted(new THREE.CylinderGeometry(1.3, .22, 1.1, 12).translate(0, 1.6, 0), '#8e9190'), cyl(0, 3.3, 0, 1.3, 2.3, color, 14), painted(new THREE.ConeGeometry(1.34, .8, 14).translate(0, 4.85, 0), '#bcbfbe'), box(0, 5.3, 0, .36, .1, .36, '#7c7e7e')];
+}
+// A round steel stock tank
+export function stockTank(r = 1.1) {
+  return [cyl(0, .32, 0, r, .64, '#7c8083', 16), cyl(0, .6, 0, r * .92, .06, '#2a2c2c', 16)];
+}
 // A long pale boat with a point at each end, turned over or not, that isn't made of boxes
 export function boat(long = 4.2, wide = .9, color = '#d3cdb9') {
   const pos = [], N = 10, stations = [];

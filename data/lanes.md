@@ -2,7 +2,7 @@
 
 `data/lanes.json` holds the smaller roads that `data/roads.json` leaves out, and a drive to every building that needs one, so that nobody has to go through the woods to get to a house. `tools/build_lanes.py` generates it. `src/map.js` loads it into `MAP.lanes`.
 
-There are 228 lanes, 95.0 km of them, and 987 drives, 40.8 km.
+There are 241 lanes, 102.5 km of them, and 994 drives, 40.9 km.
 
 ## Where it comes from
 
@@ -41,7 +41,7 @@ TIGER has the same stretch twice where a road has two names. It goes to the full
 
 TIGER has no width or surface, so those are assumed, in `tools/lane_config.json`. `byName` there has what's been looked at by eye. On Street View True Light Rd, Ridge Rd and Johnson Rd are narrow and paved with no paint, and Point Wanita Lake Rd is paved with a double yellow and white edge lines. So a named road is asphalt with no paint unless `byName` says it has some. That unnamed roads are gravel and private ones dirt is a guess.
 
-`reachOut` there takes a road on past where the map would have stopped, as far as it says, with whatever box of footprints that needs. Chunky Duffee Rd goes on up past its cemetery that way, about 5.5 km further than it did. From above its north end looks like gravel, but on Street View it's paved the whole way, dark and worn at first and faded tan by the time it gets up there, so it stays paved here. There's a white line at the edge in places and a yellow one in others, and neither's drawn.
+`reachOut` there takes a road on past where the map would have stopped, as far as it says, with whatever box of footprints that needs. Chunky Duffee Rd goes on up past its cemetery that way, about 5.5 km further than it did. From above its north end looks like gravel, but on Street View it's paved the whole way, dark and worn at first and faded tan by the time it gets up there, so it stays paved here. There's a white line at the edge in places and a yellow one in others, and neither's drawn. Griffis Fountain Rd goes on past the farm south of the Chunky River Bridge the same way, by its name and three of TIGER's unnamed roads by their ids, and Johnson Rd along that farm's south fence. Both are in what's already been fetched, so they have no box. Street View by coordinates shows Griffis Fountain Rd is gravel all the way along, so it says so in `byName`, whatever its class would say.
 
 `ownDrive` there is for buildings with a drive or a forecourt of their own, already built by hand in `index.html`: the owner's house and barn, the gas station and the town hall. A shed beside one of those shares its way in, as it does with a drive.
 

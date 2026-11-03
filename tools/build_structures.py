@@ -108,6 +108,8 @@ def everything(roads, refresh=False):
     raw, sha = download(bbox_of(roads), refresh)
     seen, also = {f["attributes"]["OBJECTID"] for f in raw["features"]}, []
     for reach in json.loads(LANE_CONFIG.read_text()).get("reachOut", []):
+        if "box" not in reach:   # what the road's own box has already fetched will do
+            continue
         x0, z0, x1, z1 = reach["box"]
         west, south = to_lonlat(x0, z1)
         east, north = to_lonlat(x1, z0)
