@@ -46,6 +46,8 @@ Then open http://localhost:8000.
 
 ## Tests
 
-`npm test` runs `node --test` for data and logic. Name test files `*.test.js`. There are no tests yet.
+`npm test` runs `node --test` for data and logic. Name test files `*.test.js`.
 
-A Playwright smoke test is planned, using a game test hook to fix the clock and seed, jump to a phase, place the player and read state. Neither exists yet.
+`npm run smoke` plays Chapter 1 in real Chrome and fails on a wrong beat or a console error. It needs `npm i` first and takes `--shots dir` for screenshots and `--touch` for a phone viewport.
+
+`index.html?test` adds `window.__game`, which is what the smoke test drives. `pause()` and `step(seconds)` hold and advance the clock, `jump(phase)` starts a phase, `place(x, z)` moves the player, `key(k, down)` and `stick(x, y)` give input, `state()` reads the game, and Math.random is seeded. A background tab runs at about 1 fps, so test with the clock held or in a real window.

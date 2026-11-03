@@ -2,7 +2,7 @@
 
 The game should look like a hand-drawn GIF you can walk around in. It's a real 3D scene, but every frame reads as an animated drawing: chalk lines that boil, scribbled hatching, a limited palette, dithering and glitches.
 
-`index.html` is the working implementation. `reference/stuckeys-bridge.html` is the scene the game grew out of, and in a few places it's still closer to the target. See "Where the game is behind the reference" below.
+`index.html` is the working implementation. `reference/stuckeys-bridge.html` is the scene the game grew out of. See "What only the reference has" below.
 
 ## How it's made
 
@@ -16,13 +16,13 @@ Everything is procedural three.js. The game has no image, model or texture files
 | `outlineMat`, `outline` | Screen-space outlines. A `chalk` value above 0 adds the boil and the broken chalk texture |
 | `pixelTex`, `triplanar`, `textTex` | Surface textures and painted signage |
 | `swayMat` | Foliage that moves |
-| `gifPass` | The final look: dither, grain, vignette and glitches |
+| `gifMat`, `renderFrame` | The final look: dither, grain, vignette and glitches |
+| `triggerBurst`, `glitch` | Glitch bursts: `glitch` for hits, `triggerBurst` for the timed ones |
+| `updateParticles` | Leaves, fireflies, cyan drips and mist, wrapped around the camera |
 
 This approach came from a failed one. Flat shapes drawn in code and set against painted frames looked like clip art and were thrown out. Building a real 3D scene and making it feel hand-drawn is what worked, so don't go back to flat sprites or paste painted images into the scene.
 
 ## The protagonist
-
-This is the target. The game doesn't have all of it yet.
 
 - One continuous hood flowing into broad shoulders. Not a ball stacked on a tube.
 - Black cloth `#08050a` scribbled with hot red crosshatch: `#d81f4f`, `#f2305f`, `#7e1030`.
@@ -38,8 +38,12 @@ Other characters use the same construction with their own colours, like Coop, Tr
 
 - **12 fps drawing over a smooth camera.** Pose, hatch and boil step at `Math.floor(time * 12)`. The camera keeps the full frame rate.
 - **Boil.** Hatching cycles through three drawings (`step % 3`) and chalk outlines shift each step (`step % 4`).
-- **Limited colour.** `UnrealBloomPass` (strength .5, radius .45, threshold .92), then `OutputPass`, then `gifPass`: an 8×8 Bayer dither to 30 levels per channel, grain, a vignette and slight chromatic aberration.
+- **Limited colour.** `UnrealBloomPass` (strength .5, radius .45, threshold .92), then `OutputPass`, then `gifMat`: an 8×8 Bayer dither to 30 levels per channel, grain, a vignette and slight chromatic aberration.
 - **Glitches.** Scanline tears, block shifts and colour crush down to 9 levels. They respect `prefers-reduced-motion`.
+  - **Hits** (`glitch`) fire on the cut, the splash and a bite: big blocks that slide. These are what the trailer shows.
+  - **Timed bursts** fire every 4 to 11 seconds: finer blocks that swap colour, and about half of them hold, freezing and smearing blocks of the previous frame.
+  - **He stays clean.** A mask pass keeps him and his outlines out of the break-up. The mask and the hold buffers are only drawn during a burst, so calm frames cost no extra passes.
+- **Particles.** Falling leaves, fireflies, mist, and a stray cyan drop from the bottle that rings the water where it lands. Phones get 140 leaves, 70 fireflies and 5 mist sprites instead of 380, 180 and 10.
 
 ## The world
 
@@ -55,18 +59,12 @@ Night in an abandoned Mississippi town.
 
 The town in `index.html` is a placeholder. The brief is a "perfectly 3d modeled city": the real layout and landmarks of Chunky on real street geometry, rendered in this hand-drawn style. Accuracy applies to where things are and what they are. It doesn't mean photorealism.
 
-## Where the game is behind the reference
+## What only the reference has
 
-`reference/stuckeys-bridge.html` has these and `index.html` doesn't:
+The game has the reference's clean character, holds, timed bursts, full bottle, drawstrings and particles. These stay in the reference on purpose:
 
-- **A clean character during glitches.** A mask pass (`maskRT`, `tMask`) keeps him intact while the background breaks up. The game's glitches hit the whole frame, character included. Keeping him clean is the intended look.
-- **Datamosh holds.** `uHold` and `tPrev` freeze and smear blocks of the previous frame.
-- **Glitches on a timer.** Bursts fire every few seconds (`nextBurst`). The game's fire only on hits and falls.
-- **The full bottle.** The label and the level liquid (`labelTex`, `liqMat`). The game has a plain cyan cylinder.
-- **Drawstrings and eyelets** (`strings`, `EYES`).
-- **Particles.** Falling leaves, fireflies, cyan drips and mist.
-
-Port these as the work reaches them, and hold the phone performance target while doing it. The mask is an extra render pass, and the reference runs 380 leaves and 180 fireflies.
+- **Mirror reflections.** The reference renders a `Reflector`. The game's water fakes the sky and moon, which is what the trailer shows and what a phone can afford.
+- **The drink.** In the reference he raises and tips the bottle on a loop, with his hood bent back to meet it. In the game he holds it at his side until he decides to live, as in the trailer.
 
 ## Type and words
 

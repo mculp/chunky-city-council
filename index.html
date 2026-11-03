@@ -27,7 +27,7 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .hearts{font-size:22px;line-height:1;letter-spacing:3px;color:var(--hot);text-shadow:0 2px 0 var(--ink)}
 .stam{width:118px;height:8px;border:2px solid var(--cream);background:rgba(0,0,0,.45)}
 .stam i{display:block;height:100%;width:100%;background:var(--cyan);transform-origin:left center}
-.beans{font-family:var(--f-display);font-size:18px;color:var(--rust);text-shadow:0 2px 0 var(--ink)}
+.beans{font-family:var(--f-display);font-size:18px;color:var(--rust);text-shadow:0 2px 0 var(--ink);white-space:nowrap}
 .right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:0}
 .obj{font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);padding:6px 10px;max-width:min(58vw,360px);text-align:right;line-height:1.4}
 .rep{display:grid;grid-template-columns:auto auto;gap:3px 10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);padding:6px 9px}
@@ -44,6 +44,7 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .card.show{opacity:1}
 .card h2{font-family:var(--f-display);font-weight:400;font-size:clamp(26px,7.5vw,60px);margin:0;line-height:.98;text-wrap:balance;text-shadow:0 3px 0 var(--ink),0 0 30px rgba(236,128,58,.3)}
 .card h2 span{color:var(--rust)}
+.burst .card h2{text-shadow:-3px 0 var(--cyan),3px 0 var(--hot),0 3px 0 var(--ink);transform:translateX(2px)}
 .card p{margin:12px 0 0;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dusk)}
 .panel{position:fixed;inset:0;z-index:8;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 50% 40%,rgba(30,14,34,.55),rgba(7,5,11,.92))}
 .panel[hidden]{display:none!important}
@@ -131,7 +132,10 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 const $ = (id) => document.getElementById(id);
 await Promise.race([document.fonts.load('40px Bungee').catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const G = { uStep: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uBurst: { value: 0 }, uPxScale: { value: 1 } };
+// ?test adds window.__game (see the bottom of this file) and seeds Math.random, so a run can be repeated
+const TEST = new URLSearchParams(location.search).has('test');
+if (TEST) { let s = 20261031; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; }
+const G = { uStep: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uBurst: { value: 0 }, uPxScale: { value: 1 }, uMask: { value: 0 } };
 const INK = '#120b14', ORANGE = '#ff7a2c', CHALK_WHITE = '#f6f2ea';
 const UP = new THREE.Vector3(0, 1, 0), XA = new THREE.Vector3(1, 0, 0);
 
@@ -248,7 +252,7 @@ function makeHatch(seed, base, cols, n) {
   return toTex(cv);
 }
 const hatch = [1, 2, 3].map(k => makeHatch(k * 7919, '#08050a', ['#d81f4f', '#f2305f', '#7e1030'], 760));
-const pantsHatch = makeHatch(104729, '#09070c', ['#3e2c60', '#523a78', '#22182f'], 420);
+const pantsHatch = [1, 2, 3].map(k => makeHatch(k * 104729, '#09070c', ['#3e2c60', '#523a78', '#22182f'], 420));
 const ropeTex = (() => {
   const cv = document.createElement('canvas'); cv.width = 64; cv.height = 256; const g = cv.getContext('2d');
   g.fillStyle = '#b07a40'; g.fillRect(0, 0, 64, 256);
@@ -261,6 +265,36 @@ const snakeTex = (() => {
   for (let y = 0; y < 256; y += 32) { g.fillStyle = '#17120c'; g.beginPath(); g.moveTo(0, y); g.lineTo(64, y + 4); g.lineTo(64, y + 18); g.lineTo(32, y + 12); g.lineTo(0, y + 18); g.closePath(); g.fill(); }
   g.fillStyle = 'rgba(160,140,90,.35)'; g.fillRect(28, 0, 8, 256);
   const t = toTex(cv); t.repeat.set(1, 5); return t;
+})();
+// bottle label: black wrap with the orange warning triangle (no lettering)
+const labelTex = (() => {
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 160; const g = cv.getContext('2d');
+  g.fillStyle = '#0b0a0c'; g.fillRect(0, 0, 512, 160);
+  for (const cx of [128, 384]) {
+    g.save(); g.translate(cx, 84); g.lineJoin = 'round';
+    g.beginPath(); g.moveTo(0, -52); g.lineTo(56, 44); g.lineTo(-56, 44); g.closePath();
+    g.lineWidth = 16; g.strokeStyle = '#b9d24a'; g.stroke();
+    g.lineWidth = 9; g.strokeStyle = '#f08a3c'; g.stroke(); g.fillStyle = '#f08a3c'; g.fill();
+    g.fillStyle = '#120a0a'; g.beginPath(); g.moveTo(-7, -24); g.lineTo(7, -24); g.lineTo(4, 16); g.lineTo(-4, 16); g.closePath(); g.fill();
+    g.beginPath(); g.arc(0, 30, 6.5, 0, 7); g.fill();
+    g.restore();
+  }
+  let s = 99; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(10,10,12,${r() * .5})`; g.fillRect(r() * 512, r() * 160, 2, 2); }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; return t;
+})();
+const leafTex = (() => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
+  g.fillStyle = '#fff'; g.beginPath(); g.moveTo(4, 32); g.quadraticCurveTo(30, 0, 60, 30); g.quadraticCurveTo(32, 64, 4, 32); g.fill();
+  g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 2; g.beginPath(); g.moveTo(4, 32); g.lineTo(58, 31); g.stroke();
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+const mistTex = (() => {
+  const { cv } = pixelTex(128, (u, v) => {
+    const d = Math.hypot(u - .5, (v - .5) * 1.6), n = fbm(u * 4, v * 4, 91, 4);
+    const a = Math.max(0, 1 - d * 2.1) * (.4 + .9 * n); return [255, 255, 255, Math.min(255, a * 200)];
+  });
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
 })();
 function textTex(lines, w, h, bg, fg, font, opts = {}) {
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const g = cv.getContext('2d');
@@ -355,10 +389,10 @@ function outlineMat(color, px, chalk) {
   const key = color + '|' + px + '|' + chalk;
   if (outlineMats.has(key)) return outlineMats.get(key);
   const uniforms = Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
-    uColor: { value: new THREE.Color(color) }, uPx: { value: px }, uChalk: { value: chalk }, uStep: G.uStep, uRes: G.uRes, uPxScale: G.uPxScale
+    uColor: { value: new THREE.Color(color) }, uPx: { value: px }, uChalk: { value: chalk }, uStep: G.uStep, uRes: G.uRes, uPxScale: G.uPxScale, uMask: G.uMask
   });
   const m = new THREE.ShaderMaterial({
-    side: THREE.BackSide, fog: true, uniforms,
+    side: THREE.BackSide, fog: true, uniforms, userData: { outline: true },
     vertexShader: `uniform float uPx, uStep, uChalk, uPxScale; uniform vec2 uRes;
       #include <fog_pars_vertex>
       float hn(vec3 p){ return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453); }
@@ -379,10 +413,11 @@ function outlineMat(color, px, chalk) {
         gl_Position=clip;
         #include <fog_vertex>
       }`,
-    fragmentShader: `uniform vec3 uColor; uniform float uStep, uChalk, uPxScale;
+    fragmentShader: `uniform vec3 uColor; uniform float uStep, uChalk, uPxScale, uMask;
       #include <fog_pars_fragment>
       float h2(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
       void main(){
+        if(uMask>.5){ gl_FragColor=vec4(1.); return; }
         vec3 c=uColor;
         if(uChalk>0.){ vec2 q=floor(gl_FragCoord.xy/(1.5*uPxScale))+uStep*13.; if(h2(q)<.15*uChalk) discard; c*=.8+.32*h2(q+7.); }
         gl_FragColor=vec4(c,1.);
@@ -828,6 +863,8 @@ function ik(S, T, l1, l2, hint, out) {
   return out.copy(S).addScaledVector(dir, a).addScaledVector(pole, h);
 }
 const fingerGeo = new THREE.TorusGeometry(.06, .021, 8, 14, Math.PI * 1.3), sphGeo = new THREE.SphereGeometry(1, 14, 10), cuffGeo = new THREE.CylinderGeometry(1, 1, 1, 14);
+const stringMat = new THREE.MeshBasicMaterial({ color: '#0c0809' }), whiteMat = new THREE.MeshBasicMaterial({ color: CHALK_WHITE });
+const eyeGeo = new THREE.TorusGeometry(.016, .005, 6, 14), agletGeo = new THREE.CylinderGeometry(.009, .009, .035, 8);
 function orientGroup(g, axisY, awayZ) {
   const Y = axisY.clone().normalize(), Z = awayZ.clone().addScaledVector(Y, -awayZ.dot(Y)); if (Z.lengthSq() < 1e-6) Z.set(0, 0, 1); Z.normalize();
   const X = new THREE.Vector3().crossVectors(Y, Z); g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
@@ -853,6 +890,13 @@ function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, pitch = -.1 }
     const up = new THREE.Mesh(new THREE.CapsuleGeometry(.068, .16, 4, 10), shoeM); up.rotation.x = Math.PI / 2; up.position.set(0, .01, .07); up.scale.set(1, 1, .82); outline(up, ol, 2.2, 1); g.add(up);
     return g;
   });
+  // drawstrings: white-outlined black cords from white eyelets
+  const cords = [hood.surfAt(-.2, .03), hood.surfAt(.2, .03)].map(({ p, n }) => {
+    const eye = new THREE.Mesh(eyeGeo, whiteMat); eye.position.copy(p).addScaledVector(n, .003); eye.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n); body.add(eye);
+    const sw = new Sweep(8, 6, stringMat); outline(sw.mesh, CHALK_WHITE, 1.3, 1); body.add(sw.mesh);
+    const ag = new THREE.Mesh(agletGeo, whiteMat); body.add(ag);
+    return { p, n, sw, ag };
+  });
   const rig = { body, arms, legs, shoes, hm, fm, hood };
   rig.S = [new THREE.Vector3(-.3, -.07, 0), new THREE.Vector3(.3, -.07, 0)];
   rig.H = [new THREE.Vector3(-.12, -.7, 0), new THREE.Vector3(.12, -.7, 0)];
@@ -868,6 +912,18 @@ function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, pitch = -.1 }
     orientGroup(arms[i].fist, gripAxis || new THREE.Vector3().crossVectors(fdir, UP).normalize(), fdir);
     return grip;
   };
+  // the cords lie on the chest and sway behind the body's motion
+  rig.strings = (tq, lag) => {
+    for (const s of cords) {
+      const sway = new THREE.Vector3(.02 * Math.sin(tq * 1.95 + s.p.x * 20), 0, lag * .15);
+      const P0 = s.p.clone().addScaledVector(s.n, .006);
+      const P1 = P0.clone().addScaledVector(s.n, .02).add(new THREE.Vector3(0, -.04, 0));
+      const P2 = P0.clone().addScaledVector(s.n, .025).add(new THREE.Vector3(0, -.11, 0)).addScaledVector(sway, .5); P2.z = Math.max(P2.z, .232);
+      const P3 = P0.clone().addScaledVector(s.n, .022).add(new THREE.Vector3(0, -.19, 0)).add(sway); P3.z = Math.max(P3.z, .238);
+      s.sw.update(new THREE.CatmullRomCurve3([P0, P1, P2, P3]).getSpacedPoints(8), .0075);
+      s.ag.position.copy(P3).add(new THREE.Vector3(0, -.012, 0)); s.ag.quaternion.setFromUnitVectors(UP, P3.clone().sub(P2).normalize());
+    }
+  };
   rig.leg = (i, ankle, hint, toe = 0) => {
     const Hp = rig.H[i], K = new THREE.Vector3(); ik(Hp, ankle, .34, .34, hint, K);
     const pts = new THREE.CatmullRomCurve3([Hp.clone().add(new THREE.Vector3(0, .14, 0)), Hp, K, ankle], false, 'centripetal').getSpacedPoints(10);
@@ -881,7 +937,7 @@ function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, pitch = -.1 }
 const heroHood = buildHoodie(-.1, 0, 0);
 const heroFace = faceMat(0, [1.32, .78, .07], [.006, .004, .008]);
 const heroHoodM = hoodMat(hatch[0], .32), heroSleeveM = new THREE.MeshToonMaterial({ map: hatch[1], emissiveMap: hatch[1], emissive: 0xffffff, emissiveIntensity: .32, gradientMap: toonGrad });
-const heroPantsM = new THREE.MeshToonMaterial({ map: pantsHatch, emissiveMap: pantsHatch, emissive: 0xffffff, emissiveIntensity: .35, gradientMap: toonGrad });
+const heroPantsM = new THREE.MeshToonMaterial({ map: pantsHatch[0], emissiveMap: pantsHatch[0], emissive: 0xffffff, emissiveIntensity: .35, gradientMap: toonGrad });
 const darkHand = new THREE.MeshToonMaterial({ color: '#1c1015', gradientMap: toonGrad });
 const hero = makeRig({ hood: heroHood, hoodM: heroHoodM, sleeveM: heroSleeveM, pantsM: heroPantsM, handM: darkHand, faceM: heroFace, ol: ORANGE });
 const heroRoot = new THREE.Group(); scene.add(heroRoot); heroRoot.add(hero.body);
@@ -892,28 +948,46 @@ const KNOT = new THREE.Vector3(-.3, .1, -.06);
 const knot = new THREE.Mesh(sphGeo, ropeMat); knot.scale.set(.055, .075, .055); knot.position.copy(KNOT); hero.body.add(knot);
 const ANCHOR = new THREE.Vector3(0, DY - .34, ZS + .3);
 const ropeTop = new THREE.Mesh(new THREE.CylinderGeometry(.032, .032, 1, 8), ropeMat); outline(ropeTop, INK, 1.1); scene.add(ropeTop);
-const ropeTail = new THREE.Mesh(new THREE.CylinderGeometry(.03, .026, 1, 8), ropeMat); scene.add(ropeTail); ropeTail.visible = false;
+const ropeTail = new THREE.Mesh(new THREE.CylinderGeometry(.03, .026, 1, 8), ropeMat); scene.add(ropeTail); ropeTail.visible = false; ropeTail.layers.enable(1);
 // props
+const _la = new THREE.Vector3();
+const liqMat = new THREE.ShaderMaterial({
+  uniforms: { uLevel: { value: 0 } }, side: THREE.DoubleSide,
+  vertexShader: `varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.); vW=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }`,
+  fragmentShader: `uniform float uLevel; varying vec3 vW; void main(){ if(vW.y>uLevel) discard; float band=smoothstep(.014,0.,uLevel-vW.y);
+    gl_FragColor=vec4(mix(vec3(.22,1.45,1.38),vec3(1.3,2.3,2.2),band),1.); }`
+});
 const bottle = new THREE.Group(); hero.body.add(bottle);
 {
   const glass = new THREE.Mesh(new THREE.LatheGeometry([[0, 0], [.05, 0], [.056, .012], [.056, .2], [.05, .235], [.03, .27], [.019, .3], [.018, .37], [.021, .375], [.021, .392], [.016, .395], [0, .395]].map(([r, y]) => new THREE.Vector2(r, y)), 20),
     new THREE.MeshStandardMaterial({ color: '#e8f6ff', transparent: true, opacity: .2, roughness: .05, depthWrite: false }));
   glass.renderOrder = 3; outline(glass, CHALK_WHITE, 2.4, 1); bottle.add(glass);
-  const liq = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, .17, 16), lit('#3ad9d2', 1.6)); liq.position.y = .1; bottle.add(liq);
+  const label = new THREE.Mesh(new THREE.CylinderGeometry(.0578, .0578, .13, 24, 1, true), new THREE.MeshBasicMaterial({ map: labelTex, color: new THREE.Color(.8, .8, .8) })); label.position.y = .1; bottle.add(label);
+  bottle.add(new THREE.Mesh(new THREE.LatheGeometry([[0, .014], [.05, .014], [.05, .2], [.044, .235], [.026, .27], [.0155, .3], [.0145, .37], [0, .37]].map(([r, y]) => new THREE.Vector2(r, y)), 20), liqMat));
+}
+// the liquid finds its level as the bottle tips
+function levelLiquid() {
+  bottle.updateWorldMatrix(true, false);
+  const a = bottle.localToWorld(_la.set(0, .014, 0)).y, b = bottle.localToWorld(_la.set(0, .37, 0)).y;
+  const lo = Math.min(a, b), hi = Math.max(a, b); liqMat.uniforms.uLevel.value = lo + .82 * (hi - lo + .02);
 }
 const knife = new THREE.Group(); hero.body.add(knife); knife.visible = false;
 { const blade = new THREE.Mesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#d8dde6', metalness: .9, roughness: .25 })); blade.scale.set(.012, .16, .035); blade.position.y = .14; knife.add(outline(blade, INK, 1.2)); const handle = new THREE.Mesh(boxGeo, darkHand); handle.scale.set(.03, .1, .045); knife.add(handle); }
 const lantern = new THREE.Group(); hero.body.add(lantern);
 const lanternLight = new THREE.PointLight('#ff9440', 3, 8, 1.6); lanternLight.position.y = -.2; lantern.add(lanternLight);
+const lanternFlame = new THREE.Mesh(new THREE.SphereGeometry(.035, 10, 8), lit('#ff9a30', 3.5));
 {
   const frame = new THREE.MeshStandardMaterial({ color: '#1a1420', metalness: .6, roughness: .4 });
   const cage = new THREE.Mesh(new THREE.CylinderGeometry(.075, .085, .2, 6, 1, true), new THREE.MeshStandardMaterial({ color: '#ffb46a', transparent: true, opacity: .35, side: THREE.DoubleSide, emissive: '#ff8a2a', emissiveIntensity: .8 })); cage.position.y = -.2; lantern.add(cage);
   const cap = new THREE.Mesh(new THREE.ConeGeometry(.1, .08, 6), frame); cap.position.y = -.07; lantern.add(outline(cap, INK, 1.2));
   const base = new THREE.Mesh(new THREE.CylinderGeometry(.095, .095, .03, 6), frame); base.position.y = -.31; lantern.add(base);
-  const flame = new THREE.Mesh(new THREE.SphereGeometry(.035, 10, 8), lit('#ff9a30', 3.5)); flame.position.y = -.2; flame.scale.y = 1.6; lantern.add(flame);
+  lanternFlame.position.y = -.2; lanternFlame.scale.y = 1.6; lantern.add(lanternFlame);
 }
 const broom = new THREE.Group(); hero.body.add(broom); broom.visible = false;
 { const stick = new THREE.Mesh(new THREE.CylinderGeometry(.02, .02, 1.3, 6), new THREE.MeshStandardMaterial({ color: '#8a6a40' })); stick.position.y = -.3; broom.add(outline(stick, INK, 1)); const bristle = new THREE.Mesh(new THREE.ConeGeometry(.14, .3, 8), new THREE.MeshStandardMaterial({ color: '#d4b060' })); bristle.position.y = -.95; broom.add(outline(bristle, INK, 1)); }
+
+// he stays clean during glitches: layer 1 is his shape for the mask pass, layer 2 his outlines, which draw themselves
+heroRoot.traverse(o => { o.layers.enable(1); if (o.material && o.material.userData.outline) o.layers.enable(2); });
 
 // pose the hero; limbs are redrawn 12 times a second (on twos), the body moves every frame
 const HP = { kind: 'hang', phase: 0, speed: 0, cut: 0, lag: 0, t: 0 };
@@ -932,7 +1006,12 @@ function poseHero(tq) {
       if (bottle.parent === hero.body) { bottle.position.copy(g).add(V3(0, -.3, 0)); bottle.quaternion.identity(); }
     }
     const gL = R.arm(0, V3(-.37, -.6, .1 + lag * .45), V3(-.7, -.4, -.2));
-    lantern.position.copy(gL).add(V3(0, -.04, 0));
+    if (lantern.parent === hero.body) {
+      // it hangs plumb and trails the swing, whatever his body does, and the flame flickers
+      lantern.position.copy(gL).add(V3(0, -.04, 0));
+      lantern.quaternion.copy(heroRoot.quaternion).invert().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(lag * .5, 0, -heroRoot.rotation.z * .6)));
+      const fl = .85 + .15 * Math.sin(tq * 13) * Math.sin(tq * 7.7); lanternLight.intensity = 3 * fl; lanternFlame.scale.set(fl, 1.6 * fl, fl);
+    }
     R.leg(0, V3(-.135, -1.33, .04 + lag * .5 + .025 * Math.sin(tq * 1.95)), V3(-.1, -1, .8), .95 + lag * .8);
     R.leg(1, V3(.135, -1.33, .04 + lag * .5 + .025 * Math.sin(tq * 1.95 + 1)), V3(.1, -1, .8), .95 + lag * .8);
   } else if (k === 'fall') {
@@ -962,6 +1041,7 @@ function poseHero(tq) {
       R.leg(i, V3(s * .13, -1.36 + lift, Math.sin(p) * .34 * a), V3(s * .1, -1, .8), lift * 2);
     }
   }
+  R.strings(tq, k === 'hang' ? HP.lag : Math.sin(ph) * .1 * Math.min(1, HP.speed / 4.2));
 }
 
 // ================================================================ townsfolk
@@ -973,7 +1053,7 @@ function makeNPC({ name, x, z, yaw, hatchCols, ol, pat, ca, cb, extra }) {
   const root = new THREE.Group(); root.add(rig.body); rig.body.position.y = 1.43; root.position.set(x, Y0, z); root.rotation.y = yaw; scene.add(root);
   const V3 = (a, b, c) => new THREE.Vector3(a, b, c);
   rig.arm(0, V3(-.36, -.58, .08), V3(-.7, -.35, -.25)); rig.arm(1, V3(.36, -.58, .08), V3(.7, -.35, -.25));
-  rig.leg(0, V3(-.13, -1.36, 0), V3(-.1, -1, .8)); rig.leg(1, V3(.13, -1.36, 0), V3(.1, -1, .8));
+  rig.leg(0, V3(-.13, -1.36, 0), V3(-.1, -1, .8)); rig.leg(1, V3(.13, -1.36, 0), V3(.1, -1, .8)); rig.strings(0, 0);
   if (extra) extra(rig.body);
   const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTex([name.toUpperCase()], 256, 64, 'rgba(0,0,0,0)', '#f1e6cf', '34px Bungee, Impact, sans-serif'), transparent: true, depthTest: false, fog: false }));
   tag.scale.set(1.4, .35, 1); tag.position.set(0, 2.45, 0); tag.renderOrder = 10; root.add(tag);
@@ -1089,37 +1169,152 @@ const gOrb = new THREE.Mesh(new THREE.SphereGeometry(.09, 10, 8), lit('#ffb050',
 const gHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color: new THREE.Color(1, .55, .2), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); gHalo.scale.setScalar(2.4); ghost.add(gHalo);
 const gLight = new THREE.PointLight('#ff9a46', 14, 12, 1.8); ghost.add(gLight);
 
-// ================================================================ post: bloom + GIF dither, glitches on hits
+// ================================================================ particles: leaves, fireflies, cyan drips, mist. They wrap around the camera, and phones get fewer.
+const LOW = matchMedia('(pointer:coarse)').matches;
+const LEAVES = LOW ? 140 : 380, FF = LOW ? 70 : 180, MISTS = LOW ? 5 : 10, WRAP_X = 68, WRAP_Z = 40;
+const wrapTo = (v, c, span) => c + ((((v - c + span / 2) % span) + span) % span) - span / 2;
+const leaves = new THREE.InstancedMesh(new THREE.PlaneGeometry(.26, .18), new THREE.MeshStandardMaterial({ map: leafTex, alphaTest: .5, side: THREE.DoubleSide, roughness: .8 }), LEAVES);
+leaves.frustumCulled = false; scene.add(leaves);
+const leafState = [];
+{
+  const pal = ['#e0662a', '#f4a23c', '#c4462a', '#f2b24a', '#6fd6c8', '#a3306c'].map(c => new THREE.Color(c));
+  for (let i = 0; i < LEAVES; i++) {
+    leafState.push({ p: new THREE.Vector3((Math.random() - .5) * WRAP_X, Math.random() * 18, (Math.random() - .5) * WRAP_Z), r: new THREE.Euler(Math.random() * 6, Math.random() * 6, Math.random() * 6), s: .6 + Math.random() * .8, ph: Math.random() * 10, landed: 0, floor: null });
+    leaves.setColorAt(i, pal[i % pal.length]);
+  }
+}
+const ffGeo = new THREE.BufferGeometry(), ffPos = new Float32Array(FF * 3), ffSeed = [];
+for (let i = 0; i < FF; i++) { const side = Math.random() < .5 ? -1 : 1; ffSeed.push([side * (14 + Math.random() * 16), .6 + Math.random() * 6, (Math.random() - .5) * 50, Math.random() * 10]); }
+ffGeo.setAttribute('position', new THREE.BufferAttribute(ffPos, 3));
+const fireflies = new THREE.Points(ffGeo, new THREE.PointsMaterial({ map: radialTex, color: new THREE.Color(3.2, 2.6, .9), size: .28, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+fireflies.frustumCulled = false; scene.add(fireflies);
+const drips = [], dripGeo = new THREE.SphereGeometry(.017, 8, 6), dripMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(.4, 2.3, 2.2) });
+for (let i = 0; i < 12; i++) { const m = new THREE.Mesh(dripGeo, dripMat); m.visible = false; scene.add(m); drips.push({ m, v: new THREE.Vector3(), on: false }); }
+const mists = [];
+for (let i = 0; i < MISTS; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, color: '#c9b6e6', transparent: true, opacity: .06, depthWrite: false }));
+  s.scale.set(26 + Math.random() * 18, 5 + Math.random() * 3, 1); s.position.set((Math.random() - .5) * 80, 0, (Math.random() - .5) * 60);
+  s.userData.v = .2 + Math.random() * .4; s.userData.y = .8 + Math.random() * 1.6; scene.add(s); mists.push(s);
+}
+let partY = 0, lastDrip = 0;
+function updateParticles(dt, M) {
+  const cx = camera.position.x, cz = camera.position.z;
+  // on foot they drift around him; at the river they hang over the water
+  partY += ((M === 'land' || M === 'bridge' || M === 'town' || M === 'sweep' || M === 'dialog' ? player.pos.y : 0) - partY) * Math.min(1, dt * .8);
+  // cyan: a stray drop from the bottle while he still has it, and a ring where it lands
+  if (bottle.parent === hero.body && bottle.visible && time - lastDrip > 3.1) {
+    const d = drips.find(x => !x.on);
+    if (d) { lastDrip = time; d.m.position.set(0, .375, 0); bottle.localToWorld(d.m.position); d.v.set((Math.random() - .5) * .35, -.2, .15 + Math.random() * .25); d.on = true; d.m.visible = true; }
+  }
+  for (const d of drips) if (d.on) {
+    d.v.y -= 9.8 * dt; d.m.position.addScaledVector(d.v, dt);
+    d.m.scale.set(1, 1 + d.v.length() * .35, 1); d.m.quaternion.setFromUnitVectors(UP, d.v.clone().normalize());
+    if (d.m.position.y <= 0) { addRipple(d.m.position.x, d.m.position.z, .3, 1); d.on = false; d.m.visible = false; }
+  }
+  if ((M === 'title' || M === 'hang') && Math.random() < dt * .25) { const w = _la; hero.shoes[1].getWorldPosition(w); addRipple(w.x + (Math.random() - .5) * .4, w.z + (Math.random() - .5) * .4, .12, 0); }
+  for (let i = 0; i < LEAVES; i++) {
+    const L = leafState[i];
+    if (L.floor === null) L.floor = Math.max(.02, groundH(L.p.x, L.p.z) + .03);
+    if (L.landed > 0) {
+      L.landed -= dt; if (L.floor <= .02) L.p.x += .25 * dt;
+      if (L.landed <= 0) { L.p.set(cx + (Math.random() - .5) * WRAP_X, partY + 14 + Math.random() * 6, cz + (Math.random() - .5) * WRAP_Z); L.floor = null; }
+    } else {
+      L.p.y -= (.55 + .25 * Math.sin(time * 2 + L.ph)) * dt; L.p.x += (.5 + .6 * Math.sin(time * .5 + L.ph)) * dt; L.p.z += .3 * Math.cos(time * .7 + L.ph) * dt;
+      L.r.x += dt * (1.5 + L.s); L.r.y += dt * .9; L.r.z += dt * (.6 + L.s * .5);
+      if (L.p.y < L.floor) { L.p.y = L.floor; L.r.set(-Math.PI / 2, 0, L.ph); L.landed = 6 + Math.random() * 8; if (L.floor <= .02 && Math.random() < .3) addRipple(L.p.x, L.p.z, .06, 0); }
+    }
+    const wx = wrapTo(L.p.x, cx, WRAP_X), wz = wrapTo(L.p.z, cz, WRAP_Z);
+    if (wx !== L.p.x || wz !== L.p.z) { L.p.x = wx; L.p.z = wz; L.floor = null; if (L.landed > 0) L.landed = .01; }
+    _m.compose(L.p, _q.setFromEuler(L.r), _s.setScalar(L.s)); leaves.setMatrixAt(i, _m);
+  }
+  leaves.instanceMatrix.needsUpdate = true;
+  for (let i = 0; i < FF; i++) {
+    const [x, y, z, s] = ffSeed[i];
+    const fx = wrapTo(x + Math.sin(time * .4 + s) * 1.6 + Math.sin(time * 1.3 + s * 2) * .3, cx, WRAP_X), fz = wrapTo(z + Math.cos(time * .35 + s) * 1.6, cz, 60);
+    // up against the lens one would be a big white blob, so it drops out of sight
+    ffPos[i * 3] = fx; ffPos[i * 3 + 1] = (fx - cx) ** 2 + (fz - cz) ** 2 < 49 ? -60 : partY + y + Math.sin(time * .6 + s * 3) * .6; ffPos[i * 3 + 2] = fz;
+  }
+  ffGeo.attributes.position.needsUpdate = true;
+  fireflies.material.opacity = .75 + .25 * Math.sin(time * 3.1);
+  for (const m of mists) { m.position.x = wrapTo(m.position.x + m.userData.v * dt, cx, 80); m.position.z = wrapTo(m.position.z, cz, 60); m.position.y = partY + m.userData.y; }
+}
+
+// ================================================================ post: bloom, then a GIF pass (dither, tears, datamosh holds) that leaves him clean
 const composer = new EffectComposer(renderer);
+composer.renderToScreen = false;
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), .5, .45, .92); composer.addPass(bloom);
 composer.addPass(new OutputPass());
-const gifPass = new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uFrame: { value: 0 }, uBurst: G.uBurst, uPxScale: G.uPxScale, uHurt: { value: 0 } },
-  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime,uFrame,uBurst,uPxScale,uHurt; varying vec2 vUv;
+const bufSize = new THREE.Vector2(); renderer.getDrawingBufferSize(bufSize);
+// the ping-pong buffers and the mask only get drawn to during a burst, so calm frames cost no extra passes
+let rtA = new THREE.WebGLRenderTarget(bufSize.x, bufSize.y), rtB = new THREE.WebGLRenderTarget(bufSize.x, bufSize.y);
+const maskRT = new THREE.WebGLRenderTarget(Math.ceil(bufSize.x / 2), Math.ceil(bufSize.y / 2));
+const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
+const FSV = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }`;
+const gifMat = new THREE.ShaderMaterial({
+  depthTest: false, depthWrite: false,
+  uniforms: { tScene: { value: null }, tPrev: { value: null }, tMask: { value: maskRT.texture }, uMaskOn: { value: 0 }, uTime: { value: 0 }, uFrame: { value: 0 }, uBurst: G.uBurst, uHold: { value: 0 }, uFine: { value: 0 }, uSeed: { value: 0 }, uPxScale: G.uPxScale, uHurt: { value: 0 } },
+  vertexShader: FSV,
+  fragmentShader: `uniform sampler2D tScene,tPrev,tMask; uniform float uMaskOn,uTime,uFrame,uBurst,uHold,uFine,uSeed,uPxScale,uHurt; varying vec2 vUv;
     float h2(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
     float b2(vec2 a){ a=floor(a); return fract(dot(a,vec2(.5,a.y*.75))); }
     float bayer8(vec2 a){ return b2(.25*a)*.0625+b2(.5*a)*.25+b2(a); }
-    void main(){ vec2 uv=vUv; float st=uFrame;
+    void main(){ vec2 uv=vUv; float st=uFrame+uSeed;
+      float bg=1.-uMaskOn*smoothstep(.15,.6,texture2D(tMask,uv).r);
       float band=floor(uv.y*90.); float tear=step(1.-.25*uBurst,h2(vec2(band,st)))*(h2(vec2(band,st+3.1))-.5)*.08*uBurst;
-      vec2 blk=floor(uv*vec2(9.,16.)); float on=step(1.-.25*uBurst,h2(blk+st*1.31));
-      vec2 suv=clamp(uv+vec2(tear+on*(h2(blk+st+5.)-.5)*.12*uBurst,0.),0.,1.);
-      float ca=.0012+.01*uBurst;
-      vec3 col=vec3(texture2D(tDiffuse,suv+vec2(ca,0.)).r,texture2D(tDiffuse,suv).g,texture2D(tDiffuse,suv-vec2(ca,0.)).b);
+      // uFine 0 is a hit: big blocks that slide. uFine 1 is a timed burst: finer blocks of any size that also swap colour.
+      float sc=1.+floor(h2(vec2(st,1.7))*4.)*uFine; vec2 blk=floor(uv*vec2(9.,16.)*sc);
+      float on=step(1.-mix(.25,.32,uFine)*uBurst,h2(blk+st*1.31))*step(.001,uBurst);
+      vec2 suv=clamp(uv+vec2(tear+on*(h2(blk+st+5.)-.5)*mix(.12,.18,uFine)*uBurst,on*(h2(blk+st+9.)-.5)*.02*uBurst*uFine)*bg,0.,1.);
+      float ca=(.0012+.01*uBurst)*mix(.3,1.,bg);
+      vec3 col=vec3(texture2D(tScene,suv+vec2(ca,0.)).r,texture2D(tScene,suv).g,texture2D(tScene,suv-vec2(ca,0.)).b);
       vec2 c=uv-.5; col*=1.-dot(c,c)*.85; col=mix(col,vec3(col.r*1.4+.08,col.g*.6,col.b*.7),uHurt);
+      // holds read the finished last frame, so they come after the vignette or they'd darken every frame
+      col=mix(col,texture2D(tPrev,uv+vec2(0.,.003)).rgb,uHold*step(.42,h2(blk*1.7+floor(st*.5)))*bg);
+      col=mix(col,col.brg,on*step(.78,h2(blk+st+13.))*bg*.85*uFine);
       vec2 fc=floor(gl_FragCoord.xy/uPxScale); col+=(h2(fc+fract(uTime*7.3)*113.)-.5)*.045;
-      float L=mix(30.,9.,on*uBurst); col=floor(clamp(col,0.,1.)*(L-1.)+bayer8(fc))/(L-1.);
+      float L=mix(30.,9.,on*bg*mix(uBurst,1.,uFine)); col=floor(clamp(col,0.,1.)*(L-1.)+bayer8(fc))/(L-1.);
       gl_FragColor=vec4(col,1.); }`
 });
-gifPass.uniforms.uBurst = G.uBurst; gifPass.uniforms.uPxScale = G.uPxScale;
-composer.addPass(gifPass);
+const blitMat = new THREE.ShaderMaterial({ depthTest: false, depthWrite: false, uniforms: { t: { value: null } }, vertexShader: FSV, fragmentShader: `uniform sampler2D t; varying vec2 vUv; void main(){ gl_FragColor=texture2D(t,vUv); }` });
+const fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), fsQuad = new THREE.PlaneGeometry(2, 2);
+const gifScene = new THREE.Scene(); gifScene.add(new THREE.Mesh(fsQuad, gifMat));
+const blitScene = new THREE.Scene(); blitScene.add(new THREE.Mesh(fsQuad, blitMat));
 function sizeAll() {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
-  const v = new THREE.Vector2(); renderer.getDrawingBufferSize(v); G.uRes.value.copy(v); G.uPxScale.value = renderer.getPixelRatio();
+  renderer.getDrawingBufferSize(bufSize); G.uRes.value.copy(bufSize); G.uPxScale.value = renderer.getPixelRatio();
+  rtA.setSize(bufSize.x, bufSize.y); rtB.setSize(bufSize.x, bufSize.y); maskRT.setSize(Math.ceil(bufSize.x / 2), Math.ceil(bufSize.y / 2));
 }
 sizeAll(); addEventListener('resize', sizeAll);
+// bursts: a hit (glitch) slides big blocks across the frame at a steady level. The timed ones are finer, boil with the 12fps step and sometimes hold.
+let nextBurst = 5 + Math.random() * 4, burstEnd = 0, burstHold = 0, burstPow = 0, burstFine = 0, burstSeed = 0, burstOn = false, burstFrames = 0;
+function triggerBurst(pow, dur, hold, fine) { burstPow = pow; burstEnd = time + dur; burstHold = hold ? 1 : 0; burstFine = fine ? 1 : 0; burstSeed = fine ? Math.random() * 100 : 0; }
+function stepBurst() {
+  if (!reduceMotion && time > nextBurst) { if (time >= burstEnd) triggerBurst(.5 + Math.random() * .5, .12 + Math.random() * .4, Math.random() < .45, true); nextBurst = time + 4 + Math.random() * 7; }
+  const active = time < burstEnd, u = gifMat.uniforms;
+  G.uBurst.value = active ? burstPow * (burstFine ? .55 + .45 * Math.random() : 1) : 0; u.uSeed.value = burstSeed; u.uFine.value = burstFine;
+  if (active !== burstOn) { burstOn = active; burstFrames = 0; document.body.classList.toggle('burst', active); }
+}
+function renderFrame(dt) {
+  if (burstOn) {
+    // 1) his silhouette: the shape, then the outlines, which push themselves out in their own shader
+    renderer.setRenderTarget(maskRT); renderer.clear();
+    camera.layers.set(1); scene.overrideMaterial = maskMat; renderer.render(scene, camera); scene.overrideMaterial = null;
+    renderer.autoClear = false; camera.layers.set(2); G.uMask.value = 1; renderer.render(scene, camera); G.uMask.value = 0; renderer.autoClear = true;
+    camera.layers.set(0); renderer.setRenderTarget(null);
+  }
+  // 2) the scene with bloom, 3) the GIF pass, through the ping-pong buffer only during a burst
+  composer.render(dt);
+  const u = gifMat.uniforms; u.tScene.value = composer.readBuffer.texture; u.uMaskOn.value = burstOn ? 1 : 0;
+  if (burstOn) {
+    // nothing is in the buffer on a burst's first frame, so holds start on the second
+    u.tPrev.value = rtB.texture; u.uHold.value = burstFrames++ > 0 ? burstHold : 0;
+    renderer.setRenderTarget(rtA); renderer.render(gifScene, fsCam);
+    blitMat.uniforms.t.value = rtA.texture; renderer.setRenderTarget(null); renderer.render(blitScene, fsCam);
+    const tmp = rtA; rtA = rtB; rtB = tmp;
+  } else { u.uHold.value = 0; renderer.setRenderTarget(null); renderer.render(gifScene, fsCam); }
+}
 
 // ================================================================ input: keyboard, touch stick, buttons, drag to look
 const input = { x: 0, y: 0, a: false, b: false, aEdge: false, bEdge: false };
@@ -1167,6 +1362,9 @@ const S = { mode: 'title', hp: 3, beans: 0, rep: { coop: 0, tre: 0, odessa: 0 },
 const player = { pos: new THREE.Vector3(), vy: 0, yaw: Math.PI, grounded: true, inv: 0, stamina: 1, boostT: 0, kb: new THREE.Vector2(), fallV: new THREE.Vector3(), lastSafe: new THREE.Vector3() };
 const cam = { yaw: -.6, pitch: .28, shake: 0, snap: false };
 let toastT = 0, cardT = 0;
+// game-clock timers, so story beats wait for the game when the tab sleeps or a test holds the clock
+const timers = [];
+function after(sec, fn) { timers.push({ at: time + sec, fn }); }
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); toastT = 2.2; }
 function card(h, p, dur = 3.2) { $('cardH').innerHTML = h; $('cardP').textContent = p || ''; $('card').classList.add('show'); cardT = dur; }
 function objective(t) { const o = $('obj'); o.hidden = !t; o.textContent = t || ''; }
@@ -1195,23 +1393,10 @@ function hudVitals() {
     setHTML('rep', `<span>Coop</span><span class="pips">${pips(S.rep.coop)}</span><span>Tre</span><span class="pips">${pips(S.rep.tre)}</span><span>Odessa</span><span class="pips">${pips(S.rep.odessa)}</span>`);
   }
 }
-function hudVitalsOld() {
-  $('hearts').hidden = !(S.mode === 'swim' || S.mode === 'bridge' || S.mode === 'land');
-  $('hearts').textContent = '♥'.repeat(Math.max(0, S.hp)) + '♡'.repeat(Math.max(0, 3 - S.hp));
-  $('stam').hidden = S.mode !== 'swim'; $('stamFill').style.transform = `scaleX(${player.stamina.toFixed(3)})`;
-  const town = S.mode === 'town' || S.mode === 'dialog' || S.mode === 'sweep';
-  $('beans').hidden = !town; $('beans').textContent = `Beans ${S.beans}/12`;
-  $('rep').hidden = !town;
-  if (town) {
-    const pips = (v) => '■'.repeat(Math.max(0, v + 3)) + '□'.repeat(Math.max(0, 3 - v));
-    $('rep').innerHTML = `<span>Coop</span><span class="pips">${pips(S.rep.coop)}</span><span>Tre</span><span class="pips">${pips(S.rep.tre)}</span><span>Odessa</span><span class="pips">${pips(S.rep.odessa)}</span>`;
-  }
-}
 function flash() { const f = $('flash'); f.style.transition = 'none'; f.style.opacity = '.45'; requestAnimationFrame(() => { f.style.transition = ''; f.style.opacity = '0'; }); }
-let burst = 0;
-function glitch(p, d) { if (!reduceMotion) burst = Math.max(burst, d) + 0 * p; G.uBurst.value = reduceMotion ? 0 : p; }
+function glitch(p, d) { if (!reduceMotion) { triggerBurst(p, d, false, false); stepBurst(); } }
 function rep(who, d) { S.rep[who] = clamp(S.rep[who] + d, -3, 3); }
-function addBeans(n, why) { S.beans += n; toast(`+${n} beans${why ? ' · ' + why : ''}`); if (S.beans >= 12 && !S.flags.ended) { S.flags.ended = true; setTimeout(endChapter, 1400); } }
+function addBeans(n, why) { S.beans += n; toast(`+${n} beans${why ? ' · ' + why : ''}`); if (S.beans >= 12 && !S.flags.ended) { S.flags.ended = true; after(1.4, endChapter); } }
 
 function hurt(dir, kind) {
   if (player.inv > 0 || S.mode === 'fail') return;
@@ -1308,7 +1493,7 @@ function startHang() {
   ropeTop.visible = true; nooseRing.visible = knot.visible = true; lantern.visible = true;
   objective(null);
   card('Stuckey\'s <span>Bridge</span>', 'Chunky River · Mississippi · 2026', 3.4);
-  setTimeout(() => { if (S.mode === 'hang') card('He decides to <span>live</span>.', '', 2.6); }, 3600);
+  after(3.6, () => { if (S.mode === 'hang') card('He decides to <span>live</span>.', '', 2.6); });
 }
 let fallT = 0;
 function cutDown() {
@@ -1324,7 +1509,7 @@ function cutDown() {
 const drops = [];
 function dropProp(obj, glow) {
   obj.updateWorldMatrix(true, false); const p = new THREE.Vector3(); obj.getWorldPosition(p);
-  scene.attach(obj); drops.push({ obj, v: new THREE.Vector3((rnd() - .5) * .5, 0, .3), glow, sink: 0 });
+  scene.attach(obj); obj.traverse(o => { o.layers.disable(1); o.layers.disable(2); }); drops.push({ obj, v: new THREE.Vector3((rnd() - .5) * .5, 0, .3), glow, sink: 0 });
 }
 function startSwim(retry) {
   S.mode = 'swim'; HP.kind = 'swim';
@@ -1333,7 +1518,7 @@ function startSwim(retry) {
   player.yaw = -Math.PI / 2 - .25; player.stamina = 1; player.inv = 1.2; S.hp = 3; if (retry) { cam.yaw = player.yaw + Math.PI; cam.snap = true; }
   heroRoot.quaternion.identity();
   objective('Swim to the west bank. Follow the lantern.');
-  if (!retry) setTimeout(() => toast('Cottonmouths in the water'), 1500);
+  if (!retry) after(1.5, () => toast('Cottonmouths in the water'));
 }
 function startBridge() {
   S.mode = 'bridge'; S.flags.bridgeStarted = true; HP.kind = 'run'; S.hp = Math.max(S.hp, 1);
@@ -1371,14 +1556,14 @@ let stepT = 0, lastStepIdx = -1;
 // ================================================================ main loop
 const clock = new THREE.Clock();
 const V = new THREE.Vector3();
-function tick() {
-  const dt = Math.min(clock.getDelta(), .05); time += dt;
+function tick(dt) {
+  time += dt;
+  for (let i = timers.length - 1; i >= 0; i--) if (time >= timers[i].at) timers.splice(i, 1)[0].fn();
   readInput();
   const step = Math.floor(time * 12);
-  if (step !== lastStepIdx) { lastStepIdx = step; G.uStep.value = step % 4; gifPass.uniforms.uFrame.value = step % 997; const k = step % 3; heroHoodM.map = heroHoodM.emissiveMap = hatch[k]; heroSleeveM.map = heroSleeveM.emissiveMap = hatch[(k + 1) % 3]; poseHero(step / 12); }
-  if (burst > 0) { burst -= dt; if (burst <= 0) G.uBurst.value = 0; }
+  if (step !== lastStepIdx) { lastStepIdx = step; G.uStep.value = step % 4; gifMat.uniforms.uFrame.value = step % 997; const k = step % 3; heroHoodM.map = heroHoodM.emissiveMap = hatch[k]; heroSleeveM.map = heroSleeveM.emissiveMap = hatch[(k + 1) % 3]; heroPantsM.map = heroPantsM.emissiveMap = pantsHatch[k]; poseHero(step / 12); stepBurst(); }
   if (player.inv > 0) player.inv -= dt;
-  gifPass.uniforms.uHurt.value = Math.max(0, player.inv - .9) * .8;
+  gifMat.uniforms.uHurt.value = Math.max(0, player.inv - .9) * .8;
 
   const M = S.mode;
   // ---------------- hang: hold A to cut
@@ -1505,6 +1690,8 @@ function tick() {
     const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z);
     const want = d < 7 && (M === 'town' || M === 'dialog') ? Math.atan2(player.pos.x - n.root.position.x, player.pos.z - n.root.position.z) : n.yaw;
     n.root.rotation.y += angDiff(n.root.rotation.y, want) * Math.min(1, dt * 3); n.tag.visible = d < 14 && M !== 'title';
+    // their limbs never frustum-cull, so someone across town costs forty draw calls for a few pixels in the fog
+    n.root.visible = Math.hypot(n.root.position.x - camera.position.x, n.root.position.z - camera.position.z) < 95;
   }
   for (const c of PICKUPS) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
   for (const f of fires) { const k = .8 + .2 * Math.sin(time * 11 + f.ph) * Math.sin(time * 7.3 + f.ph); f.pl.intensity = 12 * k; f.fl.scale.set(k, .8 + .4 * k, k); }
@@ -1532,17 +1719,53 @@ function tick() {
   hudVitals();
   input.aEdge = false; input.bEdge = false;
 
-  sky.material.uniforms.uTime.value = time; waterMat.uniforms.uTime.value = time; swayU.uTime.value = time; gifPass.uniforms.uTime.value = time;
+  sky.material.uniforms.uTime.value = time; waterMat.uniforms.uTime.value = time; swayU.uTime.value = time; gifMat.uniforms.uTime.value = time;
   sky.position.copy(camera.position);
-  composer.render(dt);
-  requestAnimationFrame(tick);
+  updateParticles(dt, M);
+  if (bottle.visible) levelLiquid();
+  renderFrame(dt);
 }
+let paused = false;
+function loop() { if (paused) return; tick(Math.min(clock.getDelta(), .05)); requestAnimationFrame(loop); }
 $('start').addEventListener('click', () => { $('title').hidden = true; startHang(); });
 // first frame: him hanging behind the title
 heroRoot.position.copy(ANCHOR); poseHero(0); drawPlanks();
 for (const s of SNAKES) s.update(.016); deckSnake.update(.016);
 ghost.position.set(-17.5, 1.3, 7.5);
-requestAnimationFrame(tick);
+requestAnimationFrame(loop);
+
+// ================================================================ test hook: index.html?test
+// pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
+if (TEST) {
+  window.__game = {
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot,
+    npcs: Object.fromEntries(Object.entries(NPCS).map(([k, n]) => [k, { x: n.root.position.x, z: n.root.position.z }])), pickups: PICKUPS,
+    pause() { paused = true; },
+    resume() { if (paused) { paused = false; clock.getDelta(); requestAnimationFrame(loop); } },
+    step(seconds = 1 / 60, dt = 1 / 60) { paused = true; for (let i = 0, n = Math.max(1, Math.round(seconds / dt)); i < n; i++) tick(dt); return this.state(); },
+    state() {
+      return { mode: S.mode, time, hp: S.hp, beans: S.beans, rep: { ...S.rep }, flags: { ...S.flags }, kind: HP.kind, cut: HP.cut, pos: player.pos.toArray(), yaw: player.yaw, stamina: player.stamina, grounded: player.grounded, hero: heroRoot.position.toArray(), cam: camera.position.toArray(), burst: burstOn, uBurst: G.uBurst.value, obj: $('obj').textContent, toast: $('toast').classList.contains('show') ? $('toast').textContent : '', card: $('card').classList.contains('show') ? $('cardH').textContent : '', prompt: $('prompt').hidden ? '' : $('prompt').textContent, dialog: $('dialog').hidden ? null : { who: $('dWho').textContent, say: $('dSay').textContent, opts: [...$('dOpts').children].map(b => b.textContent) } };
+    },
+    // phases by name, set up the way play reaches them
+    jump(phase) {
+      $('title').hidden = true; $('fail').hidden = true; $('end').hidden = true;
+      if (phase === 'hang') startHang();
+      else if (phase === 'swim') { startHang(); cardT = 0; $('card').classList.remove('show'); startSwim(true); }
+      else if (phase === 'land') { S.mode = 'land'; HP.kind = 'run'; player.pos.set(-20, ROAD_TOP, 2); player.grounded = true; player.yaw = Math.PI / 2; cam.yaw = player.yaw + Math.PI; cam.snap = true; heroRoot.quaternion.identity(); nooseRing.visible = knot.visible = false; S.removedNoose = true; objective('Get up to the road.'); }
+      else if (phase === 'bridge') { nooseRing.visible = knot.visible = false; S.removedNoose = true; ropeTop.visible = false; lantern.visible = false; bottle.visible = false; startBridge(); }
+      else if (phase === 'town') { nooseRing.visible = knot.visible = false; S.removedNoose = true; ropeTop.visible = false; lantern.visible = false; bottle.visible = false; HP.kind = 'run'; player.pos.set(24, ROAD_TOP, 0); player.grounded = true; player.yaw = Math.PI / 2; cam.yaw = player.yaw + Math.PI; cam.snap = true; startTown(); }
+      return this.state();
+    },
+    place(x, z, y) { player.pos.set(x, y ?? floorAt(x, z), z); player.grounded = true; player.vy = 0; cam.snap = true; return this.state(); },
+    look(yaw, pitch) { cam.yaw = yaw; if (pitch !== undefined) cam.pitch = pitch; cam.snap = true; lastLook = time; },
+    key(k, down = true) { k = k.toLowerCase(); if (down) { if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ' || k === 'shift') input.bEdge = true; } keys.add(k); } else keys.delete(k); },
+    stick(x, y) { touchStick.set(x, y); },
+    choose(i) { $('dOpts').children[i].click(); return this.state(); },
+    burst(pow = 1, dur = .5, hold = true, fine = true) { triggerBurst(pow, dur, hold, fine); },
+    render(dt = 1 / 60) { renderFrame(dt); },
+    calls() { const i = renderer.info; i.autoReset = false; i.reset(); tick(1 / 60); const r = { calls: i.render.calls, triangles: i.render.triangles, textures: i.memory.textures, geometries: i.memory.geometries }; i.autoReset = true; return r; }
+  };
+}
 </script>
 
 </body></html>
