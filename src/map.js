@@ -31,11 +31,14 @@ export class SegGrid {
       list.push(seg);
     }
   }
-  nearest(x, z) {
+  // `skip(owner)`, if it's given, leaves some out.
+  nearest(x, z, skip = null) {
     const list = this.cells.get(this.key(Math.floor(x / this.cell), Math.floor(z / this.cell)));
     let best = Infinity, seg = null, tb = 0;
     if (list) for (let i = 0; i < list.length; i++) {
-      const g = list[i], px = x - g.ax, pz = z - g.az;
+      const g = list[i];
+      if (skip && skip(g.owner)) continue;
+      const px = x - g.ax, pz = z - g.az;
       let t = g.l2 ? (px * g.dx + pz * g.dz) / g.l2 : 0;
       t = t < 0 ? 0 : t > 1 ? 1 : t;
       const ex = px - g.dx * t, ez = pz - g.dz * t, d2 = ex * ex + ez * ez;
@@ -100,7 +103,7 @@ export function bendOpeningRoad(pts, { west, east, joinWest, joinEast }) {
   ];
 }
 
-export function buildMap(data, { riverAtBridge = null } = {}) {
+export function buildMap(data, { riverAtBridge = null, lanes = null } = {}) {
   const edges = new Map(data.edges.map((e) => [e.id, e]));
   const lat0 = data.origin.lat * Math.PI / 180, lon0 = data.origin.lon * Math.PI / 180;
   const opening = data.opening, bridge = data.reference.crossings.find((c) => c.road === opening.road && c.with === 'river');
@@ -121,8 +124,16 @@ export function buildMap(data, { riverAtBridge = null } = {}) {
     const s = measure(pts);
     return { id: r.id, name: r.name, width: r.width, surface: r.surface, pts, s, length: s.at(-1), nodes: r.nodes };
   });
-  const roadById = new Map(roads.map((r) => [r.id, r]));
+  // The smaller roads and the drives, from data/lanes.json. To anything asking what road is here they're roads, but `roads` stays the graph, with its nodes and its names.
+  const laneRows = !lanes ? [] : [...lanes.lanes, ...lanes.drives].map((l) => {
+    const pts = line(l.points), s = measure(pts);
+    return { id: l.id, name: l.name ?? null, width: l.width, surface: l.surface, pts, s, length: s.at(-1), nodes: [], lane: true, paint: !!l.paint, structure: l.structure ?? null, generated: !!l.generated };
+  });
+  const everyRoad = [...roads, ...laneRows];
+  const roadById = new Map(everyRoad.map((r) => [r.id, r]));
   const nodes = data.nodes.map((n) => { const [x, z] = toWorld(n.x, n.z); return { ...n, x, z }; });
+  // where a lane stops and TIGER's road carries on, the same as a clip node in the graph
+  const closedLanes = (lanes?.closed ?? []).map((c) => { const [x, z] = toWorld(c.x, c.z); return { kind: 'clip', roads: [c.road], x, z }; });
   const rail = data.reference.railroad.lines.map((l) => line(l.points));
   // Near the bridge the river bends over to the channel the opening scene was built on
   const river = data.reference.river.lines.map((l) => line(l.points).map(([x, z]) => {
@@ -132,10 +143,10 @@ export function buildMap(data, { riverAtBridge = null } = {}) {
     return [riverAtBridge(z) + (x - riverAtBridge(z)) * k, z];
   }));
   const trestles = data.reference.trestles.map((t) => { const [x, z] = toWorld(t.x, t.z); return { ...t, x, z }; });
-  const crossings = data.reference.crossings.map((c) => { const [x, z] = toWorld(c.x, c.z); return { ...c, x, z }; });
+  const crossings = [...data.reference.crossings, ...(lanes?.crossings ?? [])].map((c) => { const [x, z] = toWorld(c.x, c.z); return { ...c, x, z }; });
 
   const roadGrid = new SegGrid(24, 32), riverGrid = new SegGrid(32, 40), railGrid = new SegGrid(24, 24);
-  for (const r of roads) for (let i = 1; i < r.pts.length; i++) roadGrid.add(r.pts[i - 1][0], r.pts[i - 1][1], r.pts[i][0], r.pts[i][1], r, r.s[i - 1]);
+  for (const r of everyRoad) for (let i = 1; i < r.pts.length; i++) roadGrid.add(r.pts[i - 1][0], r.pts[i - 1][1], r.pts[i][0], r.pts[i][1], r, r.s[i - 1]);
   for (const l of river) for (let i = 1; i < l.length; i++) riverGrid.add(l[i - 1][0], l[i - 1][1], l[i][0], l[i][1]);
   for (const l of rail) for (let i = 1; i < l.length; i++) railGrid.add(l[i - 1][0], l[i - 1][1], l[i][0], l[i][1], l);
 
@@ -176,17 +187,21 @@ export function buildMap(data, { riverAtBridge = null } = {}) {
     const r = Math.ceil(BOUND / BC), cx0 = Math.floor(x / BC), cz0 = Math.floor(z / BC);
     for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) if (i * i + j * j <= r * r) inside.add((cx0 + i + 32768) * 65536 + (cz0 + j + 32768));
   };
-  for (const l of [...roads.map((r) => r.pts), ...rail]) for (let i = 1; i < l.length; i++) {
+  for (const l of [...everyRoad.map((r) => r.pts), ...rail]) for (let i = 1; i < l.length; i++) {
     const [ax, az] = l[i - 1], [bx, bz] = l[i], n = Math.ceil(Math.hypot(bx - ax, bz - az) / 30);
     for (let k = 0; k <= n; k++) mark(ax + (bx - ax) * k / n, az + (bz - az) * k / n);
   }
   const inBounds = (x, z) => inside.has((Math.floor(x / BC) + 32768) * 65536 + (Math.floor(z / BC) + 32768));
 
-  return { bridge, opening, compression: data.compression, toWorld, toGame, fromTrue, trueOf, fromLonLat, roads, roadById, nodes, rail, river, trestles, crossings, roadGrid, riverGrid, railGrid, along, zAt, sOn, inBounds };
+  return { bridge, opening, compression: data.compression, toWorld, toGame, fromTrue, trueOf, fromLonLat, roads, lanes: laneRows, closedLanes, roadById, nodes, rail, river, trestles, crossings, roadGrid, riverGrid, railGrid, along, zAt, sOn, inBounds };
 }
 
-export async function loadMap(url, opts) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Couldn't load ${url}: ${res.status}`);
-  return buildMap(await res.json(), opts);
+export async function loadMap(url, { lanes, ...opts } = {}) {
+  const get = async (u) => {
+    const res = await fetch(u);
+    if (!res.ok) throw new Error(`Couldn't load ${u}: ${res.status}`);
+    return res.json();
+  };
+  const [data, laneData] = await Promise.all([get(url), lanes ? get(lanes) : null]);
+  return buildMap(data, { ...opts, lanes: laneData });
 }

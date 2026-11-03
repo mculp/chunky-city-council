@@ -49,3 +49,13 @@ They sent three photos of real signs for how they look. The photos stay out of t
 - It goes by the real calendar, since the game has no days of its own yet, so that everyone sees the same sign on the same day. Every fifth day they argue with each other. That part wasn't asked for.
 - A few lines nod at the crowd without saying what they are. `REVIVAL TONIGHT / NOT THAT KIND` is the closest it comes.
 - Nobody's said who changes them. `DO NOT ASK WHO / CHANGES THE SIGN` is as far as it goes.
+
+## Jason and Jesse
+
+> This is the greatest lore find in chunky history. The video shows the mother, Dana Maxwell, of one of my two best friends growing up giving an interview for travel channel. Jason Maxwell and Jesse savell died a few years later.
+
+> The map and house is where the maxwells house is and that's why we need more small roads
+
+The clip is someone else's footage, so it stays out of the repo. What it says, briefly: in 2005 Jason and his best friend Jesse were out on the back roads and stopped at Stuckey's Bridge, which was closed by then. They saw a light out there, swinging. It came along the bridge, went through Jesse and through Jason and on out the other way, still swinging, and they never heard a thing. They called home. Dana didn't believe it until she saw Jason, white and shaking. Within five years both of them had died, suddenly.
+
+**In the game:** nothing of it yet except a road to the house. The house isn't marked, and which one it is isn't written down here, because it's someone's home.

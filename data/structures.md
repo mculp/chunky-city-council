@@ -20,13 +20,16 @@ USA Structures doesn't include anything under 450 sq ft, and its height and outb
 
 ```sh
 .venv/bin/python tools/build_structures.py [--refresh]
+.venv/bin/python tools/build_lanes.py
 ```
+
+The drives in `data/lanes.json` go up to these buildings, so it's built after them.
 
 Downloads are cached in `data/raw/structures/`, which is gitignored. `--refresh` fetches them again. It needs nothing from pip beyond what `tools/requirements.txt` already lists, and it reads the aerial's PNGs with the standard library.
 
 ## What's kept
 
-Everything within 280 m of a road or the railroad, which is the reach of `MAP.inBounds`. What's further out is counted in `outsideTheMap`.
+Everything within 280 m of a road, a lane or the railroad, which is the reach of `MAP.inBounds`. What's further out is counted in `outsideTheMap`. The lanes bring in buildings and the buildings bring in the lanes that go to them, so `tools/build_lanes.py` works that out once and both use it. `data/lanes.md` has the details.
 
 A footprint never changes shape or size, and it stands where the source has it. They're placed in this order, and whatever doesn't fit goes in `dropped` with the reason:
 

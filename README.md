@@ -26,6 +26,8 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `docs/art-direction.md`: how it should look
 - `data/roads.json`: the road graph of real Chunky, MS, generated from Census TIGER/Line data
 - `data/roads.md`: where that data comes from, its schema and how to regenerate it
+- `data/lanes.json`: the smaller roads from the same Census data, and a generated drive to every building that needs one
+- `data/lanes.md`: where that comes from, what's assumed about it and how to regenerate it
 - `data/structures.json`: every real building within reach of those roads, generated from FEMA and ORNL footprints, USDA aerials and our own notes
 - `data/structures.md`: where that data comes from, what's left out and why, and how to regenerate it
 - `data/water.json`: the ponds within reach of those roads, generated from USGS's National Hydrography Dataset and corrections made by eye on a public-domain aerial
@@ -43,6 +45,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/walk-roads.mjs`: walks every road end to end in Chrome (`npm run walk`)
 - `tools/play-chapter1.mjs`: plays Chapter 1 on foot in Chrome, from where he wakes to the final objective (`npm run play`)
 - `tools/play-horde.mjs`: plays against the crowd in Chrome and reports what it costs (`npm run horde`)
+- `tools/play-lanes.mjs`: drives up a lane and a drive in Chrome, and checks what's on them (`npm run lanes`)
 - `tools/play-drive.mjs`: drives every kind of vehicle in Chrome, on the roads and off them, into walls and through the crowd (`npm run drive`)
 - `tools/play-field.mjs`: walks onto the ball field and tries its fence and gates, on foot and in a pickup (`npm run field`)
 - `tools/play-water.mjs`: swims across a pond, floods a pickup in another and checks what's under them (`npm run water`)

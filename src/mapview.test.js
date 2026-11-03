@@ -18,6 +18,18 @@ test('every point of a long line ends up in a piece', () => {
   assert.deepEqual(d.bounds, { x0: 0, x1: 1950 + 50, z0: 0, z1: 500 });
 });
 
+test('the lanes are drawn apart from the roads: a named one with the small roads, and a drive on its own', () => {
+  const d = buildMapData({
+    roads: [{ id: 'a', name: 'A Road', width: 7.3, pts: [[0, 0], [100, 0]] }],
+    lanes: [{ id: 'l1', name: 'Long Rd', pts: [[0, 0], [0, 50]] }, { id: 'l2', name: null, pts: [[100, 0], [300, 300]] }, { id: 'd', name: null, structure: 5, pts: [[0, 50], [10, 60]] }],
+    rail: [], river: [], structures: [],
+  });
+  assert.equal(d.minor.length, 1);
+  assert.equal(d.lanes.length, 1);
+  assert.equal(d.drives.length, 1);
+  assert.deepEqual(d.bounds, { x0: 0, x1: 300, z0: 0, z1: 300 });
+});
+
 test('north is up with no yaw, and east is right', () => {
   const v = makeView(10, 20, 2, 0, 100, 100);
   assert.deepEqual(toScreen(v, 10, 20), [50, 50]);

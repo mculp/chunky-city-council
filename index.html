@@ -592,7 +592,7 @@ function flushBuckets(range = 300) {
 const DY = 6.0, TY = 11.6, ZS = 2.8, XE = 20, XP = 15, DECK_TOP = 6.36, ROAD_TOP = 6.2, TOWN_Y = 6.15;
 // The opening scene's river. The map's river bends over to it near the bridge.
 const channel = (z) => 3.5 * Math.sin(z * .035);
-const MAP = await loadMap('data/roads.json', { riverAtBridge: channel });
+const MAP = await loadMap('data/roads.json', { riverAtBridge: channel, lanes: 'data/lanes.json' });
 const WATER = await loadWater('data/water.json', MAP);
 // The game plays what's been made with ElevenLabs, in data/sound-new.json, which the owner chose over the sounds worked out from code. Those stay in data/sound.json: #sounds is their board, and #old plays the game with them.
 const OLD_SOUND = location.hash === '#sounds' || location.hash === '#old';
@@ -2117,7 +2117,7 @@ const roadMat = triplanar(asphaltTex, .12, { roughness: 1 });
       .replace('diffuseColor*=tx;', `diffuseColor*=tx;
         vec3 roadGlow=vec3(0.);
         {
-          float u=vRoad.x, s=vRoad.y, hw=abs(vRoad.z), ink=vRoad.w, au=abs(u), paved=smoothstep(30.,60.,abs(vTriP.x)), fs=fwidth(s);
+          float u=vRoad.x, s=vRoad.y, hw=abs(vRoad.z), ink=abs(vRoad.w), unpainted=step(vRoad.w,0.), au=abs(u), paved=smoothstep(30.,60.,abs(vTriP.x)), fs=fwidth(s);
           vec3 col=mix(diffuseColor.rgb,(diffuseColor.rgb*2.8+.05)*(.8+.4*texture2D(uRoadN,vTriP.xz/420.).r),paved); float bare=0.;
           if(ink>.002){
             // wheel paths, polished
@@ -2133,7 +2133,7 @@ const roadMat = triplanar(asphaltTex, .12, { roughness: 1 });
             col*=1.-.72*ink*cr;
             // paint: worn away in long stretches, speckled when you're close enough to see
             float keep=smoothstep(.22,.66,texture2D(uRoadN,vec2(s/2000.,.37+u*.002)).r*.65+texture2D(uRoadN,vec2(s/320.,.61+u*.01)).g*.35);
-            float paint=mix(smoothstep(-.08,.08,.12+keep-texture2D(uRoadN,vec2(u*.6,s*.25)).b),.2+.7*keep,clamp(fs*8.-.4,0.,1.))*ink;
+            float paint=mix(smoothstep(-.08,.08,.12+keep-texture2D(uRoadN,vec2(u*.6,s*.25)).b),.2+.7*keep,clamp(fs*8.-.4,0.,1.))*ink*(1.-unpainted);
             float uw=u+.05*(texture2D(uRoadN,vec2(s/90.,.8)).r-.5), yel;
             if(vRoad.z>0.) yel=rdLine(abs(uw)-.14,.075);
             else { float fr=fract(s/12.), e=max(fs/12.,1e-3); yel=rdLine(uw,.085)*mix(clamp((.25-fr)/e+.5,0.,1.),.25,clamp(e*6.,0.,1.)); }
@@ -2160,6 +2160,34 @@ const roadMat = triplanar(asphaltTex, .12, { roughness: 1 });
   };
 }
 const SURFACES = { asphalt: roadMat, gravel: triplanar(stoneTex, .2, { roughness: 1 }), dirt: triplanar(stoneTex, .1, { roughness: 1, color: '#6a4a34' }) };
+// The lanes that aren't paved: tan gravel, and the red clay of a Mississippi drive. Two ruts with the crown left between them, grass in the crown of a dirt one, and an edge that
+// wanders off into the ground. aTrack is metres across from the centre line, metres along, its half width, and 0 for gravel or 1 for clay. aTrackJoin fades it out where it meets another road.
+const trackMat = new THREE.MeshStandardMaterial({ roughness: 1, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetUnits: 2 });
+trackMat.onBeforeCompile = (sh) => {
+  sh.uniforms.uRoadN = { value: roadNoise };
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aTrack; attribute float aTrackJoin; varying vec4 vTrack; varying vec2 vTrackP; varying float vTrackJoin;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvTrack=aTrack; vTrackJoin=aTrackJoin; vTrackP=(modelMatrix*vec4(transformed,1.)).xz;');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec4 vTrack; varying vec2 vTrackP; varying float vTrackJoin; uniform sampler2D uRoadN;')
+    .replace('#include <color_fragment>', `#include <color_fragment>
+      {
+        float u=vTrack.x, s=vTrack.y, hw=vTrack.z, clay=vTrack.w, au=abs(u); vec2 P=vTrackP;
+        // up close, stones and clods. Once they're too small to see, just their average.
+        float far=clamp((fwidth(P.x)+fwidth(P.y))*9.-.35,0.,1.), n=texture2D(uRoadN,P/53.).r*.6+texture2D(uRoadN,P/11.).g*.4;
+        vec4 st=textureLod(uRoadN,(floor(P*mix(17.,7.,clay))+.5)/64.,0.);
+        vec3 gravel=mix(vec3(.085,.078,.066),vec3(.2,.185,.155),n)*mix(.72+.56*st.r,1.,far);
+        vec3 dirt=mix(vec3(.12,.05,.028),vec3(.25,.105,.05),n)*mix(.85+.3*st.g,1.,far);
+        vec3 col=mix(gravel,dirt,clay);
+        // the ruts, pressed darker
+        float rr=(au-.82)/.3; col*=1.-.42*exp(-rr*rr)*(.55+.45*texture2D(uRoadN,vec2(s/40.,.31)).g);
+        // grass up the middle of a dirt one
+        float crown=(1.-smoothstep(.22,.62,au))*clay, tuft=smoothstep(.5,.66,texture2D(uRoadN,P/3.1).r*.7+texture2D(uRoadN,vec2(s/26.,.77)).b*.3);
+        col=mix(col,mix(vec3(.03,.06,.025),vec3(.06,.1,.035),st.b),crown*mix(tuft,.4,far));
+        // the edge, which wanders on each side on its own
+        float side=u>0.?0.:.5, wob=texture2D(uRoadN,vec2(s/17.,.13+side)).r*.62+texture2D(uRoadN,vec2(s/4.3,.41+side)).g*.38-.5, rag=hw+wob*(.55+.35*clay);
+        diffuseColor.rgb=col; diffuseColor.a=(1.-smoothstep(rag-.3,rag+.08,au))*vTrackJoin;
+      }`)
+    .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance+=diffuseColor.rgb*.25;');
+};
+const LANE_MESHES = [];
 {
   const y = ROAD_TOP;
   // Paint stops short of a junction or a railroad crossing, and short of the bridge
@@ -2179,7 +2207,7 @@ const SURFACES = { asphalt: roadMat, gravel: triplanar(stoneTex, .2, { roughness
     return out;
   };
   // A strip for one stretch of road. Corners are mitred, and the width comes from roadHalf, so it narrows into the bridge.
-  const strip = (road, pts, s0) => {
+  const stripGeometry = (road, pts, s0, y = ROAD_TOP) => {
     const n = pts.length, pos = new Float32Array(n * 6), nor = new Float32Array(n * 6), mark = new Float32Array(n * 8), idx = [];
     let along = s0;
     for (let i = 0; i < n; i++) {
@@ -2191,18 +2219,19 @@ const SURFACES = { asphalt: roadMat, gravel: triplanar(stoneTex, .2, { roughness
         const ax = x - a[0], az = z - a[1], bx = b[0] - x, bz = b[1] - z, al = Math.hypot(ax, az) || 1, bl = Math.hypot(bx, bz) || 1;
         miter = 1 / Math.max(.5, (tx * ax + tz * az) / al * ((tx * bx + tz * bz) / bl > 0 ? 1 : 1));
       }
-      const paved = roadHalf(road, x, z), ink = inkAt(road, x, z), wide = paved + SHOULDER * ink, half = wide * miter, hw = road.width > 7 ? paved : -paved;
+      const paved = roadHalf(road, x, z), ink = inkAt(road, x, z), wide = paved + SHOULDER * ink, half = wide * miter, hw = road.width > 7 || road.paint ? paved : -paved;
       if (i) along += Math.hypot(x - pts[i - 1][0], z - pts[i - 1][1]);
       pos.set([x + tz * half, y, z - tx * half, x - tz * half, y, z + tx * half], i * 6);
       nor.set([0, 1, 0, 0, 1, 0], i * 6);
-      mark.set([wide, along, hw, ink, -wide, along, hw, ink], i * 8);
+      const inked = road.lane && !road.paint ? -ink : ink;
+      mark.set([wide, along, hw, inked, -wide, along, hw, inked], i * 8);
       if (i < n - 1) { const v = i * 2; idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2); }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('aRoad', new THREE.BufferAttribute(mark, 4)); g.setIndex(idx);
-    const m = new THREE.Mesh(g, SURFACES[road.surface] || roadMat); scene.add(m);
-    return m;
+    return g;
   };
+  const strip = (road, pts, s0) => { const m = new THREE.Mesh(stripGeometry(road, pts, s0), SURFACES[road.surface] || roadMat); scene.add(m); return m; };
   for (const road of MAP.roads) {
     // Stuckey's Bridge has its own deck, and the road comes up to it in short steps so the narrowing is smooth
     let pieces = [road.pts];
@@ -2232,6 +2261,78 @@ const SURFACES = { asphalt: roadMat, gravel: triplanar(stoneTex, .2, { roughness
     const w = Math.max(...n.roads.map((id) => MAP.roadById.get(id).width));
     const round = new THREE.CircleGeometry(w / 2 + 2, 24); round.setAttribute('aRoad', new THREE.BufferAttribute(new Float32Array(round.attributes.position.count * 4).map((_, i) => (i % 4 === 2 ? 99 : 0)), 4));
     const disc = new THREE.Mesh(round, roadMat); disc.rotation.x = -Math.PI / 2; disc.position.set(n.x, y, n.z); scene.add(disc);
+  }
+  // The smaller roads and the drives. There are hundreds and each is only seen from close to, so they're merged by where they are, and only the ones near him are drawn.
+  const LANE_CELL = 240, LANE_PIECE = 120, cells = new Map();
+  const cellFor = (pts) => {
+    const [x, z] = pts[pts.length >> 1], cx = Math.floor(x / LANE_CELL), cz = Math.floor(z / LANE_CELL), k = `${cx},${cz}`;
+    if (!cells.has(k)) cells.set(k, { x: (cx + .5) * LANE_CELL, z: (cz + .5) * LANE_CELL, paved: [], track: [] });
+    return cells.get(k);
+  };
+  const pieces = (pts, each) => {
+    let start = 0, run = 0, along = 0;
+    for (let i = 1; i < pts.length; i++) {
+      run += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      if (run > LANE_PIECE || i === pts.length - 1) { each(pts.slice(start, i + 1), along); along += run; start = i; run = 0; }
+    }
+  };
+  // A paved one starts at the edge of the road it comes off, because it'd fight that road's paint if it went under it
+  const onBigRoad = (x, z) => MAP.roadGrid.within(x, z, (o) => (o.lane ? 0 : o.width / 2));
+  const clipped = (road) => {
+    let pts = road.pts;
+    const pointAt = (list, s) => { let left = s; for (let i = 1; i < list.length; i++) { const L = Math.hypot(list[i][0] - list[i - 1][0], list[i][1] - list[i - 1][1]); if (left <= L) { const t = left / L; return [list[i - 1][0] + (list[i][0] - list[i - 1][0]) * t, list[i - 1][1] + (list[i][1] - list[i - 1][1]) * t, i]; } left -= L; } return null; };
+    for (const end of [0, 1]) {
+      if (end) pts = [...pts].reverse();
+      let s = 0;
+      while (s < 12 && s < road.length / 2) { const p = pointAt(pts, s); if (!p || !onBigRoad(p[0], p[1])) break; s += .5; }
+      if (s > 0 && s < 12) { const p = pointAt(pts, s); if (p) pts = [[p[0], p[1]], ...pts.slice(p[2])]; }
+      if (end) pts = [...pts].reverse();
+    }
+    return pts;
+  };
+  // How wide a track is along its length: it opens out where it leaves another road, and fades into it. If there's no road at the end of it, it closes up.
+  const meets = (road, [x, z]) => { const g = MAP.roadGrid.within(x, z, (o) => (o === road ? 0 : o.width / 2 + .5)); return g ? g.owner.width / 2 : 0; };
+  const trackGeometry = (road, pts, s0, from, to) => {
+    const n = pts.length, pos = new Float32Array(n * 6), nor = new Float32Array(n * 6), mark = new Float32Array(n * 8), join = new Float32Array(n * 2), idx = [], clay = road.surface === 'dirt' ? 1 : 0, half0 = road.width / 2;
+    let along = s0;
+    for (let i = 0; i < n; i++) {
+      const [x, z] = pts[i], a = pts[Math.max(i - 1, 0)], b = pts[Math.min(i + 1, n - 1)];
+      if (i) along += Math.hypot(x - pts[i - 1][0], z - pts[i - 1][1]);
+      let tx = b[0] - a[0], tz = b[1] - a[1]; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+      let miter = 1;
+      if (i > 0 && i < n - 1) { const ax = x - a[0], az = z - a[1], al = Math.hypot(ax, az) || 1; miter = 1 / Math.max(.5, (tx * ax + tz * az) / al); }
+      const left = road.length - along, hw = half0 * (from ? 1 + .55 * (1 - sstep(from, from + 6, along)) : 1) * (to ? 1 : sstep(-.5, 2.5, left)), wide = hw + .7, half = wide * miter;
+      pos.set([x + tz * half, ROAD_TOP - .008, z - tx * half, x - tz * half, ROAD_TOP - .008, z + tx * half], i * 6);
+      nor.set([0, 1, 0, 0, 1, 0], i * 6);
+      mark.set([wide, along, hw, clay, -wide, along, hw, clay], i * 8);
+      const fade = (from ? sstep(from - 1, from + 1.5, along) : 1) * (to ? sstep(to - 1, to + 1.5, left) : 1);
+      join.set([fade, fade], i * 2);
+      if (i < n - 1) { const v = i * 2; idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('aTrack', new THREE.BufferAttribute(mark, 4)); g.setAttribute('aTrackJoin', new THREE.BufferAttribute(join, 1)); g.setIndex(idx);
+    return g;
+  };
+  // points where the width changes, so that it's seen to change
+  const withEnds = (road, from, to) => {
+    const out = [road.pts[0]], L = road.length, marks = [...new Set([from - 1, from, from + 1.5, from + 3, from + 6, L - to - 1.5, L - to + 1, L - 2.5, L - 1])].filter((m) => m > 0 && m < L).sort((a, b) => a - b);
+    for (let i = 1; i < road.pts.length; i++) {
+      const s0 = road.s[i - 1], s1 = road.s[i];
+      for (const m of marks) if (m > s0 + .2 && m < s1 - .2) { const t = (m - s0) / (s1 - s0); out.push([road.pts[i - 1][0] + (road.pts[i][0] - road.pts[i - 1][0]) * t, road.pts[i - 1][1] + (road.pts[i][1] - road.pts[i - 1][1]) * t]); }
+      out.push(road.pts[i]);
+    }
+    return out;
+  };
+  for (const road of MAP.lanes) {
+    if (road.surface === 'asphalt') pieces(dense(clipped(road)), (pts, s0) => cellFor(pts).paved.push(stripGeometry(road, pts, s0, ROAD_TOP + .004)));
+    else { const from = meets(road, road.pts[0]), to = meets(road, road.pts.at(-1)); pieces(withEnds(road, from, to), (pts, s0) => cellFor(pts).track.push(trackGeometry(road, pts, s0, from, to))); }
+  }
+  for (const c of cells.values()) {
+    const group = new THREE.Group();
+    if (c.paved.length) group.add(new THREE.Mesh(mergeGeometries(c.paved), roadMat));
+    if (c.track.length) group.add(new THREE.Mesh(mergeGeometries(c.track), trackMat));
+    scene.add(group); LANE_MESHES.push(group);
+    DISTANT.push({ obj: group, x: c.x, z: c.z, r: LANE_CELL * .71 + LANE_PIECE / 2 + 270 });
   }
 }
 // The Chunky River Bridge: a pin-connected Pratt through truss from 1911, rust all over, the way it looks on Street View. Six panels, so five posts a side:
@@ -2423,15 +2524,18 @@ const SIGNS = [];
 // Where the graph stops but the real road carries on, it's closed, facing the way you'd come from.
 {
   const stripes = textTex([''], 128, 32, '#f1e6cf', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#d76a2c'; for (let x = -32; x < 128; x += 32) { g.beginPath(); g.moveTo(x, 32); g.lineTo(x + 16, 32); g.lineTo(x + 48, 0); g.lineTo(x + 32, 0); g.fill(); } } });
-  const plank = new THREE.MeshStandardMaterial({ map: stripes, roughness: .9 });
-  for (const n of MAP.nodes) if (n.kind === 'clip') {
+  const plank = new THREE.MeshStandardMaterial({ map: stripes, roughness: .9 }), signs = new Map();
+  const signFor = (label) => { const k = label.join(); if (!signs.has(k)) signs.set(k, new THREE.MeshStandardMaterial({ map: textTex(label, 256, 128, '#1b1420', '#f1e6cf', '36px Bungee, Impact, sans-serif'), roughness: .8 })); return signs.get(k); };
+  for (const n of [...MAP.nodes, ...MAP.closedLanes]) if (n.kind === 'clip') {
     const road = MAP.roadById.get(n.roads[0]), s = MAP.sOn(road.id, n.x, n.z), p = MAP.along(road.id, s), out = s < road.length / 2 ? -1 : 1;
     const ox = p.tx * out, oz = p.tz * out, cx = n.x + ox * 1.2, cz = n.z + oz * 1.2, w = road.width + 1;
-    const yaw = Math.atan2(ox, oz), group = new THREE.Group(); group.position.set(cx, Y0, cz); group.rotation.y = yaw; scene.add(group);
+    // not if it does carry on now
+    if (!road.lane && MAP.lanes.some((l) => !l.structure && Math.min(Math.hypot(l.pts[0][0] - n.x, l.pts[0][1] - n.z), Math.hypot(l.pts.at(-1)[0] - n.x, l.pts.at(-1)[1] - n.z)) < 1)) continue;
+    const yaw = Math.atan2(ox, oz), group = new THREE.Group(); group.position.set(cx, Y0, cz); group.rotation.y = yaw; scene.add(group); DISTANT.push({ obj: group, x: cx, z: cz, r: 320 });
     for (const y of [.7, 1.25]) { const m = new THREE.Mesh(boxGeo, plank); m.scale.set(w, .28, .08); m.position.set(0, y, 0); group.add(outline(m, INK, 1.2)); }
     for (const d of [-w / 2 + .3, w / 2 - .3]) { const m = new THREE.Mesh(boxGeo, poleMat); m.scale.set(.1, 1.5, .5); m.position.set(d, .75, 0); group.add(outline(m, INK, 1)); }
     const label = n.connectsTo ? [n.connectsTo, 'CLOSED'] : ['ROAD', 'CLOSED'];
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.5, .75), new THREE.MeshStandardMaterial({ map: textTex(label, 256, 128, '#1b1420', '#f1e6cf', '36px Bungee, Impact, sans-serif'), roughness: .8 }));
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.5, .75), signFor(label));
     sign.position.set(0, 1.95, -.05); sign.rotation.y = Math.PI; group.add(sign);
     const c = Math.abs(ox) > Math.abs(oz) ? [.3, w / 2] : [w / 2, .3];
     breakable('barricade', 1.2, () => solid(cx - c[0], cx + c[0], cz - c[1], cz + c[1], Y0 + 2), { rigid: true, objs: [group], chip: '#d76a2c' });
@@ -3679,6 +3783,8 @@ function onRoad(x, z) {
   const g = MAP.roadGrid.within(x, z, roadHalf);
   return !!g && !(g.owner.id === OPENING_ROAD && Math.abs(x) < ROAD_GAP && Math.abs(z) < 8);
 }
+// Whether it's a paved road here, which is what the tyres and his feet go by. A lane's a road to everything else.
+const pavedAt = (x, z) => onRoad(x, z) && !!MAP.roadGrid.within(x, z, (o) => (o.surface === 'asphalt' ? roadHalf(o, x, z) : 0));
 function floorAt(x, z) {
   let f = groundH(x, z);
   if (onRoad(x, z)) f = Math.max(f, ROAD_TOP);
@@ -3820,7 +3926,8 @@ const vehWheels = vehMesh(vehGeos.wheel.geo, vehMat, VEH_WHEELS); vehWheels.inst
 const vehWheelLines = vehMesh(vehGeos.wheel.line, outlineMat(INK, 1.4), VEH_WHEELS, vehWheels);
 
 // Where they are: where the real buildings say, and a few where the game needs one
-const nearestRoadPoint = (x, z) => { if (MAP.roadGrid.nearest(x, z) === Infinity) return null; const id = MAP.roadGrid.seg.owner.id, p = MAP.along(id, MAP.sOn(id, x, z)); return { x: p.x, z: p.z }; };
+// a building's own drive stops at its wall, so it's the road that drive comes from that counts
+const nearestRoadPoint = (x, z) => { if (MAP.roadGrid.nearest(x, z, (o) => !!o.structure) === Infinity) return null; const id = MAP.roadGrid.seg.owner.id, p = MAP.along(id, MAP.sOn(id, x, z)); return { x: p.x, z: p.z }; };
 function vehicleFits(kind, x, z, yaw) {
   const K = KINDS[kind], fx = Math.sin(yaw), fz = Math.cos(yaw), y = floorAt(x, z), L = K.length / 2 + .35, W = K.width / 2 + .35;
   if (y < .5) return false;
@@ -4062,14 +4169,14 @@ function updateDrive(dt) {
   }
   if (done) wreckedNow(v);
   // dust off the road, and smoke when it's hurting
-  if ((vehPuffT -= dt) <= 0 && speed > 4 && v.grounded && !r.wet && !onRoad(v.x, v.z)) {
+  if ((vehPuffT -= dt) <= 0 && speed > 4 && v.grounded && !r.wet && !pavedAt(v.x, v.z)) {
     vehPuffT = .05 + .4 / speed;
     const side = vehRand() < .5 ? -1 : 1; puff(v.x - fx * K.length * .42 + fz * side * K.track + (vehRand() - .5) * .4, v.y + .12, v.z - fz * K.length * .42 - fx * side * K.track + (vehRand() - .5) * .4, .1 + speed * .012);
   }
   if ((vehSmokeT -= dt) <= 0 && v.hp / K.hp < .4) { vehSmokeT = v.wrecked ? .13 : .26; puff(v.x + fx * K.length * .3 + (vehRand() - .5) * .5, v.y + 1.1, v.z + fz * K.length * .3 + (vehRand() - .5) * .5, .16 + vehRand() * .16, 1.1, 3, .07, .062, .075); }
   arriving(); pickUpCans(2.4); pickUpGas(2.4);
   // what it sounds like
-  const running = !v.wrecked && !v.drowned, k = speed / K.top, tar = onRoad(v.x, v.z);
+  const running = !v.wrecked && !v.drowned, k = speed / K.top, tar = pavedAt(v.x, v.z);
   SFX.loop(`engine.${v.kind}`, running ? .7 + .3 * Math.abs(gas) : 0, .72 + 1.5 * k + .12 * Math.abs(gas));
   SFX.loop('vehicle.road', v.grounded && tar ? Math.min(1, k * 1.4) : 0, .8 + k * .5);
   SFX.loop('vehicle.dirt', v.grounded && !tar ? Math.min(1, k * 1.8) : 0, .8 + k * .5);
@@ -4455,7 +4562,7 @@ function startFree() {
 }
 layOutGas();
 // ================================================================ the map
-const mapData = buildMapData({ roads: MAP.roads, rail: MAP.rail, river: MAP.river, ponds: WATER.ponds.map((p) => p.ring), structures: STRUCTURES, fields: FIELDS });
+const mapData = buildMapData({ roads: MAP.roads, lanes: MAP.lanes, rail: MAP.rail, river: MAP.river, ponds: WATER.ponds.map((p) => p.ring), structures: STRUCTURES, fields: FIELDS });
 const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d') };
 const MAP_PLACES = [
   ["Stuckey's Bridge", 0, 0, 3], ['Chunky River Bridge', WAKE_BRIDGE.x, WAKE_BRIDGE.z, 2], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-64.5, -39.5), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Ball field', ...atTrue(-345, -495), 3], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
@@ -4470,6 +4577,7 @@ const mapPaper = (() => {
   for (let i = 0; i < 180; i++) { const px = r() * 256, py = r() * 256, L = 6 + r() * 26, a = 2.2 + r() * .35; g.strokeStyle = `rgba(169,155,192,${(.03 + r() * .06).toFixed(3)})`; g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(a) * L, py + Math.sin(a) * L); g.stroke(); }
   return c;
 })();
+const NAMED_LANES = MAP.lanes.filter((l) => l.name);
 const canOpenMap = () => S.flags.town && (S.mode === 'town' || S.mode === 'swim' || S.mode === 'drive');
 // The small one, turning with the camera, at most at the game's own 12 frames a second
 function updateMini(step) {
@@ -4498,7 +4606,7 @@ function updateMini(step) {
   // the street you're on
   let name = '';
   const off = MAP.roadGrid.nearest(P.x, P.z), by = MAP.roadGrid.seg?.owner;
-  if (by && off < by.width / 2 + 5) name = by.name;
+  if (by && off < by.width / 2 + 5) name = by.name ?? '';
   setHidden('miniName', !name); setHTML('miniName', name);
 }
 // The whole thing, north up
@@ -4536,7 +4644,7 @@ function drawFullMap() {
     g.fillStyle = MAPC.rust; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.beginPath(); g.rect(x - 3, y - 3, 6, 6); g.stroke(); g.fill();
     drawLabel(g, name, x, ly, SMALL, MAPC.cream);
   }
-  for (const road of MAP.roads) for (const l of roadLabels(road, v, w, h)) { const tw = l.text.length * 10 + 6; if (free(l.x, l.y, Math.max(tw * Math.abs(Math.cos(l.angle)), 16), Math.max(tw * Math.abs(Math.sin(l.angle)), 16))) drawLabel(g, l.text, l.x, l.y, BIG, MAPC.cream, l.angle); }
+  for (const road of [...MAP.roads, ...NAMED_LANES]) for (const l of roadLabels(road, v, w, h)) { const tw = l.text.length * 10 + 6; if (free(l.x, l.y, Math.max(tw * Math.abs(Math.cos(l.angle)), 16), Math.max(tw * Math.abs(Math.sin(l.angle)), 16))) drawLabel(g, l.text, l.x, l.y, BIG, MAPC.cream, l.angle); }
   drawArrow(g, hx, hy, Math.sin(player.yaw), Math.cos(player.yaw), 11);
 }
 function redrawMap() { if (mapOpen && !mapDirty) { mapDirty = true; requestAnimationFrame(() => { mapDirty = false; if (mapOpen) drawFullMap(); }); } }
@@ -4593,7 +4701,7 @@ function surfaceUnder() {
   const P = player.pos;
   if ((P.y > DECK_TOP - .4 && Math.abs(P.x) < 20.6 && Math.abs(P.z) < 4) || fromWake(P.x, P.z) < WAKE_SPAN / 2 + .5 || houseAt(P.x, P.z)) return 'wood';
   if (P.y < .8 || (WATER.look(P.x, P.z) && WATER.d < 1.5)) return 'mud';
-  return onRoad(P.x, P.z) ? 'road' : 'dirt';
+  return pavedAt(P.x, P.z) ? 'road' : 'dirt';
 }
 function footstep(k = 1) { SFX.play(`step.${surfaceUnder()}`, { gain: k, rate: k > 1.2 ? .85 : 1 }); }
 function crowdVoices() {
@@ -4983,7 +5091,7 @@ if (location.hash === '#signs') openSignBoard();
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far) }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
@@ -4998,6 +5106,7 @@ if (TEST) {
         if (everywhere || [0, 1].some((a) => [0, 1].some((b) => MAP.inBounds(ax + a * CH_SIZE, az + b * CH_SIZE)))) chunks.set((ci + 4096) * 8192 + cj + 4096, buildChunk(ci, cj));
       }
       for (const d of DISTANT) d.obj.visible = true;
+      for (const g of LANE_MESHES) g.visible = false;
       // the ground's leaf litter would hide the roads, so it's dimmed and they're drawn flat
       const flat = new THREE.MeshBasicMaterial({ color: '#77778a' }); groundMat.color.setScalar(.45);
       scene.traverse((o) => { if ((o.isInstancedMesh && o !== plankMesh) || o.isPoints || o.isSprite) o.visible = false; if (Object.values(SURFACES).includes(o.material)) o.material = flat; });
