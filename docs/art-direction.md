@@ -34,6 +34,15 @@ This approach came from a failed one. Flat shapes drawn in code and set against 
 
 Other characters use the same construction with their own colours, like Coop, Tre and Miss Odessa in `makeNPC`. Distinct characters must read as different people, not reskins.
 
+## The crowd
+
+What they are is the owner's to decide, so their look is a stand-in that says as little as it can. They share one body so that dozens can be on a phone's screen at once: `crowdBody`, `crowdLimb`, `drawCrowd`.
+
+- Grey scribbled cloth (`#6f6878`, `#938c9c`, `#3d3844`), washed out so the hero's red stays the only hot thing in a crowd, with a slight tint per person.
+- A broken dusk outline, `#a99bc0`. Heads hang forward.
+- No face, just static in the opening. It's dim until they've noticed something, and burns amber once they've noticed him, so you can read who's after you from a distance.
+- Limbs that don't bend, swung from the shoulder and hip on the same 12 fps step as everything else. Most of them limp. When they're after him their arms come up and they lean in.
+
 ## The GIF feel
 
 - **12 fps drawing over a smooth camera.** Pose, hatch and boil step at `Math.floor(time * 12)`. The camera keeps the full frame rate.

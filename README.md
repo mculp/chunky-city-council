@@ -25,4 +25,5 @@ Then open http://localhost:8000. It needs a network connection for three.js and 
 - `tools/smoke.mjs`: plays Chapter 1 in Chrome (`npm i`, then `npm run smoke`)
 - `tools/walk-roads.mjs`: walks every road end to end in Chrome (`npm run walk`)
 - `tools/play-chapter1.mjs`: plays Chapter 1 on foot in Chrome, from the bridge to the final objective (`npm run play`)
+- `tools/play-horde.mjs`: plays against the crowd in Chrome and reports what it costs (`npm run horde`)
 - `tools/map-overlay.mjs`: draws TIGER's lines over a top-down capture of the game and measures the difference (`npm run overlay`)
