@@ -11,7 +11,7 @@ python3 -m http.server
 Then open http://localhost:8000. It needs a network connection for three.js and the fonts.
 
 - **Touch:** left thumb moves, drag to look, and the buttons say what they do.
-- **Keyboard:** WASD or arrows move, hold Shift to run, Space jumps or swims faster, E uses, F swings, Q throws what's in his hand, R switches it, M is the map, drag to look. A strip at the bottom shows the keys that work right now.
+- **Keyboard and mouse:** the mouse looks around with nothing held, WASD or arrows move, hold Shift to run, Space jumps or swims faster, E uses, click swings, right click throws what's in his hand, the wheel switches it, and M is the map. F, Q and R do what the buttons do, `[` and `]` change how fast the mouse turns, and Esc lets the mouse go. A strip at the bottom shows what works right now.
 
 Skip to town on the title card, or `index.html#free`, goes straight to free play: the whole map, the crowd out, three gas cans, some bottles, firecrackers and lighter fluid, and everything in town can be broken.
 
@@ -64,6 +64,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/play-lore.mjs`: goes and looks at what's come from the owner's lore in `docs/lore.md`, like the church signs, and hits them (`npm run lore`)
 - `tools/play-wreck.mjs`: crashes, burns and blows up the town in Chrome and reports what the worst of it costs (`npm run wreck`)
 - `tools/play-hills.mjs`: goes and looks at the hills, up one in a pickup and down it on foot (`npm run hills`)
+- `tools/play-keys.mjs`: plays with real key presses and a real mouse, in a plain page and in an iframe that won't let it take the mouse, and checks that a phone hasn't changed (`npm run keys`)
 - `tools/map-overlay.mjs`: draws TIGER's lines over a top-down capture of the game and measures the difference (`npm run overlay`)
 - `tools/structure-overlay.mjs`: draws the game's buildings over a public-domain aerial of the same ground (`npm run overlay:structures`)
 
