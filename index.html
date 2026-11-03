@@ -131,6 +131,7 @@ body.talking #mute{visibility:hidden}
 #board button{margin:0 6px 6px 0;padding:8px 10px;font-size:12px;background:var(--panel);border:1px solid var(--line);color:var(--cream)}
 #board button.file{border-color:var(--cream)}
 #board button.on{border-color:var(--rust);color:var(--rust)}
+#board img.sign{width:calc(50% - 6px);max-width:300px;margin:0 6px 6px 0;vertical-align:top}
 #flash{position:fixed;inset:0;z-index:3;background:var(--hot);opacity:0;pointer-events:none;transition:opacity .35s}
 @media (max-width:600px){#toast.low{top:calc(env(safe-area-inset-top, 0px) + 150px)}}
 @media (prefers-reduced-motion: reduce){.card,#flash,#toast{transition:none}}
@@ -213,6 +214,7 @@ import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boun
 import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
 import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, rimHit, placeVehicles, settle, speedOf } from './src/vehicles.js';
 import { vehicleGeometries, PAINTS, LAMPS } from './src/vehiclemodels.js';
+import { createSigns, dayOf, paintSign } from './src/signs.js';
 
 const $ = (id) => document.getElementById(id);
 await Promise.race([document.fonts.load('40px Bungee').catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
@@ -1079,6 +1081,8 @@ const SOLIDS = [];   // [x0,x1,z0,z1,top] blocks the player
 function solid(x0, x1, z0, z1, top) { const b = [x0 + OX, x1 + OX, z0 + OZ, z1 + OZ, top]; SOLIDS.push(b); if (PROP) PROP.solids.push(b); }
 const kudzuSpots = [];
 function kudzuOn(x0, x1, y, z0, z1, n) { for (let i = 0; i < n; i++) { if (PROP) PROP.kudzu.push(kudzuSpots.length); kudzuSpots.push([x0 + OX + rnd() * (x1 - x0), y, z0 + OZ + rnd() * (z1 - z0)]); } }
+// The same, in one place, and with nothing taken from rnd(), which the first scene's still drawing on
+function kudzuAt(x, y, z) { if (PROP) PROP.kudzu.push(kudzuSpots.length); kudzuSpots.push([x, y, z, true]); }
 const lit = (c, i = 1) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(i) });
 const Y0 = TOWN_Y;
 // ---------------- every real building: src/structures.js says what they're made of, and data/structures.md where they're from
@@ -1886,6 +1890,55 @@ for (const [x, z] of [[...gasAt(50, 7.4)], [96, -5.5], [BOX.x - 3, BOX.z - 6]]) 
   sign.position.set(cx + p.tx * .06, Y0 + 2.1, cz + p.tz * .06); sign.rotation.y = Math.atan2(p.tx, p.tz); scene.add(sign); townSign.objs.push(sign);
 }
 flushBuckets();
+// ================================================================ the church signs
+// What they say is on a sheet, data/signs.json, and it changes at midnight in Mississippi. How they're built is measured off the three photos
+// the owner sent, with a face 3 m wide, which is bigger than life, as the street signs are, or a phone couldn't read it: a header and a lit board
+// in a white cabinet, on a base half as wide with a post at each end, in a brick planter a little wider than all of it. They stand side-on to the road.
+const SIGN_SHEET = createSigns(await (await fetch('data/signs.json')).json());
+const SIGN_FACE = [3, 3 * 640 / 1024], signPlane = new THREE.PlaneGeometry(...SIGN_FACE), signGlowPlane = new THREE.PlaneGeometry(5, 11);
+const signWhite = new THREE.MeshStandardMaterial({ color: '#cfcbbd', roughness: .85 }), signBrick = new THREE.MeshStandardMaterial({ color: '#6f3a2c', roughness: 1 }), signLeaf = new THREE.MeshStandardMaterial({ color: '#2f5a2a', roughness: 1 }), signFlower = lit('#a8202c');
+const signGlow = new THREE.MeshBasicMaterial({ map: radialTex, color: '#4a4636', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+const CHURCH_SIGNS = SIGN_SHEET.churches.map((c, i) => {
+  const [x, z] = atTrue(c.x, c.z), a = c.facing * Math.PI / 180, nx = Math.sin(a), nz = -Math.cos(a), yaw = Math.atan2(nx, nz), ux = Math.cos(yaw), uz = -Math.sin(yaw), rot = new THREE.Quaternion().setFromAxisAngle(UP, yaw);
+  pad(x - 3, x + 3, z - 3, z + 3, 3);
+  const g = groundH(x, z), top = 1.42 + SIGN_FACE[1] + .24, mid = (1.42 + top) / 2, spot = (u, n) => [x + ux * u + nx * n, z + uz * u + nz * n];
+  const box = (mat, u, y, n, su, sy, sn, ink = 1.2) => { const [bx, bz] = spot(u, n); addBox(mat, bx, g + y, bz, su, sy, sn, ink, rot); };
+  const prop = breakable('sign', 3, () => {
+    box(signBrick, 0, .21, 0, 3.5, .42, 1.05);
+    box(signWhite, 0, .92, 0, 1.55, 1, .24); for (const u of [-.8, .8]) box(signWhite, u, .92, 0, .2, 1, .32);
+    box(signWhite, 0, mid, 0, SIGN_FACE[0] + .24, top - 1.42, .42);
+    for (let k = 0; k < 14; k++) { const u = (hash(i, k, 1) - .5) * 3.2, n = (k % 2 ? 1 : -1) * (.3 + hash(i, k, 2) * .16); box(k % 3 ? signFlower : signLeaf, u, .47 + hash(i, k, 3) * .06, n, .13, .13, .13, .7); }
+    for (const [u, y] of [[-1.72, .4], [1.7, .35]]) { const [kx, kz] = spot(u, 0); kudzuAt(kx, g + y, kz); }
+    // a solid's square to the world, so one at an angle is three of them along it
+    for (const u of [-1.15, 0, 1.15]) { const [sx, sz] = spot(u, 0); solid(sx - .5, sx + .5, sz - .5, sz + .5, g + (u ? .42 : top)); }
+  }, { rigid: true, chip: '#cfcbbd' });
+  const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 640;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const mat = new THREE.MeshBasicMaterial({ map: tex });
+  const faces = [1, -1].map((side) => { const m = new THREE.Mesh(signPlane, mat), [fx, fz] = spot(0, side * .216); m.position.set(fx, g + mid, fz); m.rotation.y = side > 0 ? yaw : yaw + Math.PI; scene.add(m); prop.objs.push(m); return m; });
+  const glow = new THREE.Mesh(signGlowPlane, signGlow); glow.position.set(x, g + .04, z); glow.rotation.set(-Math.PI / 2, 0, yaw); glow.renderOrder = 1; scene.add(glow); prop.hide.push(glow);
+  flushBuckets();
+  return { c, x, z, prop, g: cv.getContext('2d'), tex, mat, faces, glow };
+});
+// Whoever's changing them comes at midnight. A test holds the clock, so that it knows what they say.
+let signNow = TEST ? Date.UTC(2026, 10, 1, 18) : null, signDay = null, signStep = -1;
+function paintChurchSigns() {
+  const day = signNow === null ? dayOf() : dayOf(new Date(signNow));
+  if (day === signDay) return; signDay = day;
+  for (const s of CHURCH_SIGNS) { paintSign(s.g, 1024, 640, s.c, SIGN_SHEET.says(s.c.id, day)); s.tex.needsUpdate = true; }
+}
+paintChurchSigns();
+// They're lit, off tubes on their way out, and knocked over they aren't
+function updateChurchSigns(step) {
+  if (step === signStep) return; signStep = step;
+  if (step % 120 === 0) paintChurchSigns();
+  CHURCH_SIGNS.forEach((s, i) => {
+    const d = Math.hypot(camera.position.x - s.x, camera.position.z - s.z), shown = d < 320;
+    for (const f of s.faces) f.visible = shown;
+    s.glow.visible = !s.prop.down && d < 140;
+    s.mat.color.setScalar(s.prop.down ? .07 : !reduceMotion && hash(step, i, 77) < .025 ? .62 : .96);
+  });
+}
 // ================================================================ the roads, from the graph: each one's width and surface
 // Paved: lighter than the ground, patched and cracked, with paint that's worn where it's worn and a gravel shoulder. By the bridge it's still the
 // first scene's dark road. aRoad is metres across from the centre line, metres along, the pavement's half width (negative for a dashed line),
@@ -2233,7 +2286,7 @@ const SIGNS = [];
 // kudzu: Mississippi's green blanket over everything left standing
 {
   const kz = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: '#3f7a35', roughness: .9, flatShading: true }), kudzuSpots.length);
-  kudzuSpots.forEach(([x, y, z], i) => { const r = .5 + rnd() * .7; _m.compose(_v.set(x, y, z), _q.setFromEuler(new THREE.Euler(rnd() * 3, rnd() * 3, 0)), _s.set(r * 1.3, r * .7, r * 1.3)); kz.setMatrixAt(i, _m); kz.setColorAt(i, new THREE.Color().setHSL(.27 + rnd() * .06, .45, .22 + rnd() * .1)); });
+  kudzuSpots.forEach(([x, y, z, own], i) => { let k = 0; const R = own ? () => hash(Math.floor(x * 16), Math.floor(z * 16), ++k) : rnd, r = .5 + R() * .7; _m.compose(_v.set(x, y, z), _q.setFromEuler(new THREE.Euler(R() * 3, R() * 3, 0)), _s.set(r * 1.3, r * .7, r * 1.3)); kz.setMatrixAt(i, _m); kz.setColorAt(i, new THREE.Color().setHSL(.27 + R() * .06, .45, .22 + R() * .1)); });
   scene.add(kz);
   const ko = new THREE.InstancedMesh(kz.geometry, outlineMat(INK, 1.2, 0), kz.count); ko.instanceMatrix = kz.instanceMatrix; scene.add(ko);
   kudzuMesh = kz;
@@ -4236,7 +4289,7 @@ const mapData = buildMapData({ roads: MAP.roads, rail: MAP.rail, river: MAP.rive
 const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d') };
 const MAP_PLACES = [
   ["Stuckey's Bridge", 0, 0, 3], ['Chunky River Bridge', WAKE_BRIDGE.x, WAKE_BRIDGE.z, 2], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-64.5, -39.5), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Ball field', ...atTrue(-345, -495), 3], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
-  ...STRUCTURES.filter((s) => s.use === 'church').map((s) => ['Church', s.wx, s.wz, 2]),
+  ...SIGN_SHEET.churches.map((c) => ['Church', ...atTrue(c.x, c.z), 2]),
 ].sort((a, b) => b[3] - a[3]);
 let mapOpen = false, mapDirty = false, mapCam = { x: 0, z: 0, scale: .4 };
 // Paper for the big map: scratches, in the game's own hatching, repeating too far apart to notice
@@ -4449,6 +4502,16 @@ function openBoard() {
   group('The score', Object.keys(SFX.data.music), (name, b) => { box.querySelectorAll('button.score').forEach((x) => x.classList.remove('on')); b.classList.add('on', 'score'); SFX.music(name); });
   group('Goes on until you stop it', loops, (name, b) => { const on = b.classList.toggle('on'); SFX.loop(name, on ? 1 : 0); });
   group('Once', SFX.cueNames().filter((n) => !loops.includes(n)), (name) => SFX.play(name));
+}
+// #signs: the whole sheet on one page, painted as it'd be up on the board, so that it can all be read without driving round
+function openSignBoard() {
+  boardOpen = true; const box = $('board'); box.hidden = false; $('title').hidden = true; $('mute').hidden = true;
+  const cv = document.createElement('canvas'), g = cv.getContext('2d'), { churches } = SIGN_SHEET; cv.width = 512; cv.height = 320;
+  const head = (t) => { const h = document.createElement('h2'); h.textContent = t; box.append(h); };
+  const put = (c, rows) => { paintSign(g, 512, 320, c, rows); const i = new Image(); i.className = 'sign'; i.alt = rows.join(' '); i.src = cv.toDataURL('image/jpeg', .85); box.append(i); };
+  head('Today'); for (const c of churches) put(c, SIGN_SHEET.says(c.id, signDay));
+  head('The days they argue'); for (const f of SIGN_SHEET.feuds) for (const id of Object.keys(f)) put(churches.find((c) => c.id === id), f[id]);
+  head('The rest'); SIGN_SHEET.lines.forEach((rows, i) => put(churches[i % churches.length], rows));
 }
 const V = new THREE.Vector3();
 function tick(dt, draw = true) {
@@ -4705,6 +4768,7 @@ function tick(dt, draw = true) {
   updateMini(step);
   sky.position.copy(camera.position);
   updateWorld();
+  updateChurchSigns(step);
   if (crowdOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
   if (S.flags.town) { drawVehicles(step); drawWreck(step); }
   updateParticles(dt, M);
@@ -4738,12 +4802,13 @@ ghost.position.set(-17.5, 1.3, 7.5);
 requestAnimationFrame(loop);
 if (location.hash === '#free') startFree();
 if (location.hash === '#sounds' || location.hash === '#sounds-new') openBoard();
+if (location.hash === '#signs') openSignBoard();
 
 // ================================================================ test hook: index.html?test
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdHoods.count }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.

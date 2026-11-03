@@ -11,6 +11,7 @@
     "drive": "node tools/play-drive.mjs",
     "field": "node tools/play-field.mjs",
     "water": "node tools/play-water.mjs",
+    "lore": "node tools/play-lore.mjs",
     "sound": "node tools/play-sound.mjs",
     "sound:make": "node tools/make-sound.mjs",
     "sound:measure": "node tools/measure-sound.mjs",

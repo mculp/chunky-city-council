@@ -31,6 +31,8 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `data/water.json`: the ponds within reach of those roads, generated from USGS's National Hydrography Dataset and corrections made by eye on a public-domain aerial
 - `data/water.md`: where that data comes from, what's left out and why, and how to regenerate it
 - `data/sound-new.json`: what every sound and part of the score is and how loud, for the music and sounds the game plays, made with ElevenLabs on fal
+- `docs/lore.md`: what the owner has said about Chunky, in their words, and what's been built from it
+- `data/signs.md`: what the church signs say and how to change it, all of it readable at `#signs`
 - `data/sound.md`: how to swap a sound with a file and a line, where voice recordings go, and how to make music and sounds with ElevenLabs on fal
 - `data/sound.json`: the same for the sounds worked out from code, which are kept, with their board at `#sounds` and the game playing them at `#old`
 - `audio/`: the files that sheet plays, with what made each in `audio/manifest.json`
@@ -49,6 +51,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/set-fal-key.sh`: saves a fal key for that, readable only by you
 - `tools/measure-sound.mjs`: measures every file in `audio/` in Chrome and draws their spectrograms, since nothing here can hear (`npm run sound:measure`)
 - `tools/level-sound.mjs`: sets the levels in `data/sound-new.json` to match the old sheet's, so comparing them is about the sound (`npm run sound:level`)
+- `tools/play-lore.mjs`: goes and looks at what's come from the owner's lore in `docs/lore.md`, like the church signs, and hits them (`npm run lore`)
 - `tools/play-wreck.mjs`: crashes, burns and blows up the town in Chrome and reports what the worst of it costs (`npm run wreck`)
 - `tools/map-overlay.mjs`: draws TIGER's lines over a top-down capture of the game and measures the difference (`npm run overlay`)
 - `tools/structure-overlay.mjs`: draws the game's buildings over a public-domain aerial of the same ground (`npm run overlay:structures`)

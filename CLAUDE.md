@@ -4,6 +4,8 @@ A phone-first survival game set in post-apocalyptic Chunky, Mississippi. The bac
 
 Read `docs/art-direction.md` before changing anything visible. `reference/stuckeys-bridge.html` is reference material, not part of the game. Don't edit it.
 
+The owner sends lore for the story. It goes in `docs/lore.md` in their words as soon as it's sent, built or not. Nothing gets added to it.
+
 ## Rules
 
 - All art is procedural three.js. Don't add image, model or texture files.
@@ -30,6 +32,7 @@ Read `docs/art-direction.md` before changing anything visible. `reference/stucke
 
 - Game data is JSON under `data/`, such as `data/roads.json`, with its schema documented alongside it.
 - Dialogue and the relationship meters are in `data/cast.json`, documented in `data/cast.md`.
+- What the church signs say is in `data/signs.json`, documented in `data/signs.md`, and all of it can be read at `#signs`.
 - What every sound and part of the score is, and how loud, is in `data/sound-new.json`, documented in `data/sound.md`. That's what the game plays: music and sounds made with ElevenLabs, which the owner chose. A file in `audio/` and one line there take a sound's place, without touching the code. The sounds worked out from code stay too, and nothing writes over them: `data/sound.json` is their sheet, `#sounds` is their board and `#old` plays the game with them.
 - Scripts that generate it go in `tools/`. Commit the generated JSON. Raw downloads such as TIGER zips go in `data/raw/`, which is gitignored.
 - Python tools run from a `.venv/` at the repo root, also gitignored, with dependencies pinned in `tools/requirements.txt`. Don't install anything globally.
@@ -71,6 +74,8 @@ Then open http://localhost:8000.
 `npm run sound` plays the game with the sound on, in real time: nothing until a touch, the mute, a hidden tab, the score through the opening, his feet on each surface, driving, the crowd, and a track and a voice line swapped in with nothing changed but the sheet, and then every real file in `audio/` on a phone-sized page. It can't say whether any of it sounds good. `-- --old` plays it through with the sounds worked out from code.
 
 `npm run sound:make` says what making the music and sounds with ElevenLabs on fal would cost, and `-- --go` makes them. `npm run sound:measure` then measures every file in `audio/` and fails on one that's silent, clipped, cut short, swells or clicks as it loops, or lands late, and `-- --pictures dir` draws their spectrograms. `npm run sound:level` sets `data/sound-new.json`'s levels to match the old sheet's, so run it after making anything over. The budget is a running total, kept in `audio/manifest.json`. `data/sound.md` has the rest.
+
+`npm run lore` goes and looks at what's come from the lore: every church's sign, what it says today and tomorrow, and what happens when it's hit. It takes `--shots dir`.
 
 `npm run water` walks into a pond and swims across it, floods a pickup in another, and checks that the crowd keeps out, that nothing real ended up under water, and that the ponds are on the map. The ponds are in `data/water.json`, documented in `data/water.md`.
 
