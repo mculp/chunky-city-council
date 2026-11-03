@@ -1717,8 +1717,8 @@ const landing = (trueX, trueZ, localX, localZ) => { const [x, z] = atTrue(trueX,
 const PLACES = {
   // the canopy out front of the old store at the west end of the strip
   gas: landing(-87.85, -31.1, 53, 10),
-  // the little block town hall two doors along, on the corner of Commerce St
-  hall: landing(-64.5, -39.5, 40, -11),
+  // the small brick town hall on Commerce St, set back behind its lot and looking east across it
+  hall: landing(-57.7, -62.1, 40, -11),
   // the south door of the brick church, at Adams and Church St
   church: landing(-311, -211.6, 68.5, -8),
   // on the gravel by the main line, where the sidings were
@@ -1730,16 +1730,17 @@ function around(place, fn) { OX = place.x; OZ = place.z; fn(); OX = OZ = 0; }
 const hallMat = triplanar(woodRed, .5, { roughness: .95 });
 const roofMat = new THREE.MeshStandardMaterial({ color: '#2b2630', roughness: .9 });
 around(PLACES.hall, () => {
-  breakable('counter', 1.5, () => { addBox(roofMat, 38, Y0 + .55, -9.7, 4.5, 1.1, .6); solid(35.8, 40.2, -10, -9.4, Y0 + 1.1); });
-  breakable('shelf', 1.5, () => { addBox(roofMat, 40, Y0 + .8, -12.7, 9, 1.6, .7); solid(35.5, 44.5, -13.05, -12.35, Y0 + 1.6); });
-  breakable('shelf', 1.5, () => { addBox(roofMat, 43, Y0 + .8, -9.7, 4, 1.6, .7); solid(41, 45, -10.05, -9.35, Y0 + 1.6); });
+  pad(46.5, 58, -17, -4, 3);
+  breakable('counter', 1.5, () => { addBox(roofMat, 41.3, Y0 + .55, -9, .6, 1.1, 4.5); solid(41, 41.6, -11.2, -6.8, Y0 + 1.1); });
+  breakable('shelf', 1.5, () => { addBox(roofMat, 38.3, Y0 + .8, -11, .7, 1.6, 9); solid(37.95, 38.65, -15.5, -6.5, Y0 + 1.6); });
+  breakable('shelf', 1.5, () => { addBox(roofMat, 41.3, Y0 + .8, -14, .7, 1.6, 4); solid(40.95, 41.65, -16, -12, Y0 + 1.6); });
   flushBuckets();
 });
-// its sign, on a board in front of the gable, which comes down while he's inside or it'd be all you'd see
-const HALL_HOUSE = houseAt(...atTrue(-64.5, -39.5));
-const hallBoard = new THREE.Mesh(boxGeo, hallMat); hallBoard.scale.set(10.4, 2, .2); hallBoard.position.set(40 + PLACES.hall.x, Y0 + 3.75, -4.72 + PLACES.hall.z); outline(hallBoard, INK, 1.2); scene.add(hallBoard);
+// its sign, on a board over the doors and in front of the roof, which comes down while he's inside or it'd be all you'd see
+const HALL_HOUSE = houseAt(...atTrue(-57.7, -62.1));
+const hallBoard = new THREE.Mesh(boxGeo, hallMat); hallBoard.scale.set(6.4, 1.16, .2); hallBoard.position.set(47.15 + PLACES.hall.x, Y0 + 3.2, -11 + PLACES.hall.z); hallBoard.rotation.y = Math.PI / 2; outline(hallBoard, INK, 1.2); scene.add(hallBoard);
 const hallSign = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ map: textTex(['TOWN HALL'], 1024, 184, '#e4d6b8', '#7a2318', '110px Bungee, Impact, sans-serif', { grime: true }), roughness: .9 }));
-hallSign.scale.set(10 / 10.4, 1.8 / 2, 1); hallSign.position.z = .6; hallBoard.add(hallSign);
+hallSign.scale.set(6.1 / 6.4, 1.04 / 1.16, 1); hallSign.position.z = .6; hallBoard.add(hallSign);
 // the post office's, across Commerce St, is flat on the wall over its door
 const POST_OFFICE = STRUCTURES.find((s) => s.id === 75023296);
 const postBoard = new THREE.Mesh(boxGeo, hallMat);
@@ -4215,7 +4216,7 @@ for (const n of Object.values(NPCS)) if (!n.ghost) solid(n.root.position.x - .4,
 const canLabel = textTex(['BEANS'], 256, 128, '#c8452a', '#f6e8c8', '52px Bungee, Impact, sans-serif');
 const canMat = [new THREE.MeshStandardMaterial({ map: canLabel, roughness: .6, metalness: .2, emissive: '#3a1006' }), new THREE.MeshStandardMaterial({ color: '#c9ccd2', metalness: .9, roughness: .3 })];
 const PICKUPS = [
-  [38.2 + PLACES.hall.x, Y0 + 1.75, -12.7 + PLACES.hall.z], [43 + PLACES.hall.x, Y0 + 1.75, -9.7 + PLACES.hall.z],
+  [38.3 + PLACES.hall.x, Y0 + 1.75, -9.2 + PLACES.hall.z], [41.3 + PLACES.hall.x, Y0 + 1.75, -14 + PLACES.hall.z],
   (() => { const [x, z] = atTrue(-18.8, -54.5); return [x, Y0 + .3, z]; })(), [towerX, Y0 + .3, towerZ], [BOX.x + 1.5, Y0 + .9, BOX.z - 2]
 ].map(([x, y, z]) => {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(.11, .11, .26, 18), [canMat[0], canMat[1], canMat[1]]);
@@ -5369,7 +5370,7 @@ const VEH_SET = [
   // the first one you come to, on the shoulder just past the Chunky River Bridge, and pointing into town
   (() => { const r = 'griffis_fountain_rd', [x, z] = atTrue(-336.76, 490.37), p = MAP.along(r, MAP.sOn(r, x, z) - 34); return ['quad', p.x + p.nx * 5, p.z + p.nz * 5, Math.atan2(-p.tx, -p.tz), .12]; })(),
   // a truck by the pumps, pointing at the road, and a car outside the town hall
-  ['pickup', ...gasAt(60.8, 9.2), 0, .3], ['car', PLACES.hall.x + 41, PLACES.hall.z - .9, -Math.PI / 2, .2],
+  ['pickup', ...gasAt(60.8, 9.2), 0, .3], ['car', PLACES.hall.x + 52.2, PLACES.hall.z - 11, -Math.PI / 2, .2],
   // at the compound on Pine Forest Rd: a white truck by the deck, a dark car along the drive, and two white trucks by the long building
   ['pickup', ...atTrue(1034.1, 640.5), .56, .76], ['car', ...atTrue(1000.6, 652.6), 2.6, .635], ['pickup', ...atTrue(1028.6, 669.1), .1, .76], ['pickup', ...atTrue(1031.9, 669.9), .1, .3],
   // off True Light Rd: the white coupe where you come round the house, nose out and with no rust on it, and a white truck and a white car by the little shed
@@ -6443,7 +6444,7 @@ for (const f of fires) f.burner = burnAt(f.home.x, Y0 + .95, f.home.z, .58, Infi
 const mapData = buildMapData({ roads: MAP.roads, lanes: MAP.lanes, rail: MAP.rail, river: MAP.river, ponds: WATER.ponds.map((p) => p.ring), structures: STRUCTURES, fields: FIELDS });
 const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d') };
 const MAP_PLACES = [
-  ["Stuckey's Bridge", 0, 0, 3], ['Chunky River Bridge', WAKE_BRIDGE.x, WAKE_BRIDGE.z, 2], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-64.5, -39.5), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Ball field', ...atTrue(-345, -495), 3], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
+  ["Stuckey's Bridge", 0, 0, 3], ['Chunky River Bridge', WAKE_BRIDGE.x, WAKE_BRIDGE.z, 2], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-57.7, -62.1), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Ball field', ...atTrue(-345, -495), 3], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
   ...SIGN_SHEET.churches.map((c) => ['Church', ...atTrue(c.x, c.z), 2]),
   ...TRESTLES.map((t) => ['Trestle', t.x, t.z, 2]),
 ].sort((a, b) => b[3] - a[3]);

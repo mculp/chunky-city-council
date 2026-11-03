@@ -144,12 +144,12 @@ d = await talk('coop', 'Coop'); s = await st(); check('paid', s.flags.paid === t
 // the rest of the cans, in through the town hall's door
 const hall = await g(() => { const P = __game.places.hall; return [P.x, P.z]; });
 const at = ([x, z]) => [x + hall[0], z + hall[1]];
-for (const [name, x, z, reach] of [['the town hall door', ...at([42.4, -3.8]), .6], ['inside', ...at([42.4, -7.6]), .5], ['the shelf can', ...at([43, -8.95]), .25]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
+for (const [name, x, z, reach] of [['along the strip', ...at([22.7, 18.1]), 1], ['up behind the block building', ...at([22.7, 6.1]), 1], ['round to the lot', ...at([50.7, 3.1]), 1], ['the town hall door', ...at([47.7, -12.87]), .6], ['inside', ...at([43.9, -12.87]), .5], ['the shelf can', ...at([42.05, -14]), .25]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
 await snap('06-hall');
 check('picked up the can on the near shelf', (await can(1)).got, await can(1));
-for (const [name, x, z, reach] of [['round to the gap', ...at([40.6, -8.2]), .4], ['past the counter', ...at([40.6, -11.3]), .4], ['the back shelf can', ...at([38.2, -11.7]), .3]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
+for (const [name, x, z, reach] of [['round to the gap', ...at([42.8, -11.62]), .4], ['past the counter', ...at([39.7, -11.62]), .4], ['the back shelf can', ...at([39.3, -9.2]), .3]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
 check('picked up the can on the back shelf', (await can(0)).got, await can(0));
-for (const [name, x, z, reach] of [['back past the counter', ...at([40.6, -11.3]), .4], ['and through the gap', ...at([40.6, -8.2]), .4], ['to the door', ...at([42.4, -7.6]), .5], ['out the door', ...at([42.4, -3.8]), .6]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
+for (const [name, x, z, reach] of [['back past the counter', ...at([39.7, -11.62]), .4], ['and through the gap', ...at([42.8, -11.62]), .4], ['to the door', ...at([43.9, -12.87]), .5], ['out the door', ...at([47.7, -12.87]), .6]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
 for (const [i, name] of [[2, 'the can by the mobile home'], [3, 'the can under the water tower']]) {
   const c = await can(i); r = await walkTo(c.x, c.z, .8); blockedCheck(name, r);
   check(`picked up ${name}`, (await can(i)).got, await can(i));
