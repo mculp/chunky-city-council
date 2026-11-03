@@ -2,7 +2,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createFolks, personOf, BE, AFTER, AWAY, TAILING, HOW, WORDS } from './agents.js';
+import { createFolks, personOf, burntDown, BE, AFTER, AWAY, TAILING, HOW, WORDS } from './agents.js';
 import { createHorde, SHAMBLE, HUNTING, SWARM, GRABBING, AVOIDING, TRAILING, STUNNED, TUNING } from './horde.js';
 
 const data = JSON.parse(readFileSync(new URL('../data/folks.json', import.meta.url)));
@@ -72,6 +72,28 @@ describe('who they are', () => {
     // the names take turns, seventeen at a time, so that has to reach all of them
     const gcd = (a, b) => (b ? gcd(b, a % b) : a);
     assert.equal(gcd(data.women.length, 17), 1); assert.equal(gcd(data.men.length, 17), 1);
+  });
+
+  const many = Array.from({ length: 3000 }, (_, i) => personOf(i, data, looks));
+  test('about one in fifteen of the crowd in town have burnt down and one in five from 3 km out, and it\'s the furthest gone who have', () => {
+    const share = (out) => many.filter((w) => burntDown(w, out)).length / many.length;
+    assert.ok(Math.abs(share(0) - 1 / 15) < .012, `${share(0)} in town`); assert.equal(share(800), share(0));
+    assert.ok(Math.abs(share(4000) - 1 / 5) < .02, `${share(4000)} out of town`);
+    assert.ok(share(2000) > share(0) && share(2000) < share(4000), 'and more of them on the way out');
+    assert.ok(many.filter((w) => burntDown(w, 0)).every((w) => w.looks.phase / 6.28 > 14 / 15));
+    assert.ok(!many.some((w) => burntDown({ ...w, calm: true }, 4000)), 'and nobody at home has');
+  });
+
+  test('some of them come after him folded over', () => {
+    const low = many.filter((w) => w.looks.scuttle).length / many.length;
+    assert.ok(Math.abs(low - HOW.scuttles) < .03, `${low}`);
+  });
+
+  test('everyone has something to mutter, by their number, and between them it\'s all of it', () => {
+    assert.equal(data.mutters.length, 20);
+    assert.ok(list.every((w) => data.mutters.includes(w.says)));
+    assert.equal(new Set(list.map((w) => w.says)).size, data.mutters.length);
+    assert.equal(personOf(41, data, looks).says, personOf(41, data, looks).says);
   });
 });
 
@@ -222,6 +244,18 @@ describe('what it does in the crowd', () => {
     run(h, { ...still, canGrab: false }, 3);
     assert.ok(Math.hypot(s(timid).x, s(timid).z) > 6, 'the timid one got away from him');
     assert.ok(Math.hypot(s(bold).x, s(bold).z) < 3, 'the bold one came at him');
+  });
+
+  test('one who\'s gone quiet takes something thrown at them the same way: the bold one comes for him and the timid one keeps away', () => {
+    for (const [like, comes] of [[(w) => w.nerve > .7 && w.temper > .7, true], [(w) => w.nerve < .15, false]]) {
+      const F = folks(), w = someone(F, like), h = createHorde(field(F, { quiet: () => true })), s = bring(h, F, w, 2, 0);
+      run(h, still, .5);
+      assert.equal(s.state, SHAMBLE, 'they leave him be until then');
+      assert.equal(h.provoke(s, 'thrown'), 1); assert.equal(w.hurt, 1); assert.equal(F.mood(w), comes ? AFTER : AWAY);
+      run(h, { ...still, canGrab: false }, 3);
+      if (comes) assert.ok(Math.hypot(s.x, s.z) < 1.5, `came at him, to ${Math.hypot(s.x, s.z).toFixed(1)} m`);
+      else { assert.equal(s.state, AVOIDING); assert.ok(Math.hypot(s.x, s.z) > 6, 'got away from him'); }
+    }
   });
 
   test('someone with a grudge can tell from further off than someone without', () => {

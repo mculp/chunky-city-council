@@ -1,5 +1,6 @@
-// Plays against the crowd in real Chrome with the game's own movement and real key presses: they roam the real map,
-// notice him, run him down and grab him, and he gets away. Fails on anything out of place or a console error.
+// Plays against the crowd in real Chrome with the game's own movement and real key presses: they roam the real map, and the ones
+// who've burnt down notice him, run him down and grab him, and he gets away. Fails on anything out of place or a console error.
+// The ones who've gone quiet are npm run quiet's.
 //
 //   npm i && npm run horde -- [--shots dir]
 import { mkdir } from 'node:fs/promises';
@@ -16,9 +17,9 @@ const snap = async (name) => { if (shots) { await mkdir(shots, { recursive: true
 
 const helpers = () => {
   const G = __game, H = G.horde;
-  // who's around him, in a ring
-  window.crowdRing = (n, r, at = G.player.pos) => {
-    for (let i = 0; i < n; i++) { const a = i / n * 6.28, x = at.x + Math.sin(a) * r, z = at.z + Math.cos(a) * r; H.add(x, z); }
+  // who's around him, in a ring. They're ones who've burnt down, and come for him on sight, unless it says otherwise. npm run quiet has the ones who've gone quiet.
+  window.crowdRing = (n, r, at = G.player.pos, extra = { quiet: false }) => {
+    for (let i = 0; i < n; i++) { const a = i / n * 6.28, x = at.x + Math.sin(a) * r, z = at.z + Math.cos(a) * r; H.add(x, z, extra); }
   };
   window.clearCrowd = () => { H.calm(); H.all.length = 0; H.active.length = 0; };
   window.states = () => { const c = [0, 0, 0, 0, 0, 0]; for (const s of H.all) c[s.state]++; return c; };
@@ -69,10 +70,10 @@ check(`after a few minutes ${roam.moved} of them have wandered`, roam.moved > 40
 check(`and they keep to the streets, at worst ${roam.worst.toFixed(0)} m off one`, roam.worst < 40, roam);
 check('never in the water, out of bounds, inside anything or in the church', !roam.wet && !roam.out && !roam.inside && !roam.church, roam);
 
-// ---------------- senses
+// ---------------- senses, which only the ones who've burnt down use on him
 await g(() => { clearCrowd(); __game.S.beans = 0; __game.place(...__game.map.fromTrue(-64.5, -15)); });
 let r = await g(() => {
-  const G = __game, H = G.horde, P = G.player.pos, one = H.add(P.x + 14, P.z);
+  const G = __game, H = G.horde, P = G.player.pos, one = H.add(P.x + 14, P.z, { quiet: false });
   G.sim(4, 1 / 30);
   return { state: one.state, alert: one.alert };
 });
@@ -87,7 +88,7 @@ check('running at one: it hears him, gets curious, then hunts', r.seen.includes(
 check('and grabs him', r.mode === 'grabbed', r);
 await g(() => { clearCrowd(); __game.S.mode = 'town'; __game.HP.kind = 'run'; });
 r = await g(() => {
-  const G = __game, H = G.horde, P = G.player.pos, one = H.add(P.x + 8, P.z);
+  const G = __game, H = G.horde, P = G.player.pos, one = H.add(P.x + 8, P.z, { quiet: false });
   G.S.beans = 0; G.sim(3, 1 / 30); const none = one.state;
   one.state = 0; one.alert = 0; G.S.beans = 40; G.sim(1.5, 1 / 30);
   return { none, beans: one.state };
@@ -133,7 +134,7 @@ r = await g(() => {
   let caught = false; run(x, z, 12, () => { caught = caught || G.S.mode === 'grabbed'; return caught; });
   return { caught, near: nearest(), mode: G.S.mode };
 });
-check(`he outruns them: ${r.near.toFixed(0)} m clear after running for it`, !r.caught && r.near > 8, r);
+check(`he outruns them: ${r.near.toFixed(1)} m clear after running for it`, !r.caught && r.near > 8, r);
 
 // ---------------- not getting away
 await g(() => { clearCrowd(); __game.S.mode = 'town'; __game.player.inv = 0; __game.S.beans = 3; __game.S.hp = 3; });
@@ -177,7 +178,7 @@ check('inside the church they don\'t notice him and won\'t come in', r.sanctuary
 check(`the bell brings them in anyway: ${r.bell} of 10`, r.bell >= 5, r);
 
 // ---------------- what it costs: thirty and more on screen
-await g(() => { const G = __game; clearCrowd(); G.S.mode = 'town'; G.S.beans = 0; G.player.inv = 0; G.horde.T.grabReach = 0; G.place(...G.map.fromTrue(-64.5, -15)); crowdRing(48, 9); for (let i = 0; i < 48; i++) { const z = G.horde.all[i], d = 3 + i * .8; z.x = G.player.pos.x + ((i * 7) % 11 / 5 - 1) * .2 * (d + 5.4); z.z = G.player.pos.z - d; z.y = G.floorAt(z.x, z.z); z.yaw = 0; } G.look(0, .28); G.step(.5, 1 / 30); });   // down a portrait phone's narrow view
+await g(() => { const G = __game; clearCrowd(); G.S.mode = 'town'; G.S.beans = 0; G.player.inv = 0; G.horde.T.grabReach = 0; G.place(...G.map.fromTrue(-64.5, -15)); crowdRing(48, 9, G.player.pos, {}); for (let i = 0; i < 48; i++) { const z = G.horde.all[i], d = 3 + i * .8; z.x = G.player.pos.x + ((i * 7) % 11 / 5 - 1) * .2 * (d + 5.4); z.z = G.player.pos.z - d; z.y = G.floorAt(z.x, z.z); z.yaw = 0; } G.look(0, .28); G.step(.5, 1 / 30); });   // down a portrait phone's narrow view
 await snap('06-forty-eight');
 c = await g(() => __game.crowd());
 const onScreen = await g(() => { const G = __game, cam = G.camera, v = cam.position.clone(); let n = 0; for (const s of G.horde.all) { v.set(s.x, s.y + 1, s.z).project(cam); if (Math.abs(v.x) < 1 && Math.abs(v.y) < 1 && v.z < 1) n++; } return n; });

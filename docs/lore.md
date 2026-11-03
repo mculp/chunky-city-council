@@ -12,7 +12,7 @@ Real places are by structure id, never an address. Most of these are someone's h
 
 - "Radiating" is read as radium green: cracks that spread from the breastbone, clothes burning through to char, eyes that go from pinpricks to full sockets, and chalk strokes coming off them. The green is a guess, and so is the rest of how it looks.
 - "Varying degrees" is one number for each of them, from nearly a person to not much but char and light. Most are in the middle.
-- How far gone they are only changes how they look, for now. It doesn't change what they do.
+- How far gone they are is mostly how they look. The one thing it changes is that the furthest gone of all come for him on sight, which is below, under leaving him be.
 - Coop, Rocky and Miss Bobby are the least far gone, because they still talk, and they stay a little zombified, as the owner says below. None of them comes for him. Coming for him once he's provoked them isn't built yet.
 - What they're wearing is invented, as ordinary clothes for around here.
 - The gate isn't built, since that's a "may". The hero's the only thing wearing a hood now, so when it comes, only his look has to change.
@@ -20,6 +20,15 @@ Real places are by structure id, never an address. Most of these are someone's h
 Later:
 
 > Maybe not everyone should be zombies. There should be some people to communicate with. Zombies should be less aggressive in general if they are not messed with. Their idle state should be with their torso folded and arms hanging towards the ground. They can also but don't have to chase after you in the folded state.
+
+**In the game, leaving him be:** most of the crowd have gone quiet. They stand folded over at the waist with their arms hanging to the ground and leave him be, however close he walks, until he starts something: knocks one down, hits one with something he's thrown, or picks something up from right at one's feet. Then that one comes for him, and so does anyone gone quiet close by who saw it. Once they've lost him they go quiet again. `data/folks.md` has the numbers. Decided around it:
+
+- "Gone quiet" is what the docs call it. Nobody in the game says zombie.
+- The furthest gone of them have burnt down: about one in fifteen in town, and one in five a few kilometres out. They come for him on sight, the way the whole crowd used to.
+- Some come for him stood up and leaning in, and some, as the owner says they can, come folded over, low and quick, with their arms dragging. Running, he still gets away from either.
+- Close to him, some of the quiet ones mutter something faint over their heads. Each has one line, from twenty the Creative Director wrote.
+- Noises, lures, lights, the church bell and the train still bring them, quiet or not.
+- Coop, Rocky and Miss Bobby still never come for him, and nobody at home does unless he gives them a reason. Provoking the three of them isn't built.
 
 Asked whether Coop, Rocky and Miss Bobby should stop being zombies and be ordinary people:
 

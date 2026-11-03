@@ -24,7 +24,17 @@ export const HOW = {
   shunReach: 20,         // metres they keep off where they were hurt
   wiseAfter: [2, 5],     // how many of the same lure it takes, from the nosiest to the least
   saveEvery: 10,
+  // Out of the crowd, the furthest gone have burnt down, and they're the ones who come for him on sight. The rest have gone quiet.
+  burnt: [1 / 15, 1 / 5],     // how many have burnt down in town, and from out past...
+  burntOut: [1000, 3000],     // ...this far from the middle of town, in true metres, going from one to the other between
+  scuttles: .4,               // how many come after him folded over, low and quick, and not stood up
 };
+
+const smooth = (t) => { const k = Math.max(0, Math.min(1, t)); return k * k * (3 - 2 * k); };
+// How many of the crowd have burnt down, so far out of town
+export const burntShare = (fromTown) => HOW.burnt[0] + (HOW.burnt[1] - HOW.burnt[0]) * smooth((fromTown - HOW.burntOut[0]) / (HOW.burntOut[1] - HOW.burntOut[0]));
+// Whether someone has, by how far gone their number says they are. It's the top of it, so it's the ones it shows on most. Nobody at home has.
+export const burntDown = (w, fromTown) => !w.calm && w.looks.phase / 6.28 > 1 - burntShare(fromTown);
 
 // The same every time for the same number and salt, and nothing to do with crowdRand, which would change what everyone does after it
 const roll = (id, salt) => {
@@ -41,10 +51,12 @@ export function personOf(id, data, looks = []) {
   const first = firsts[(Math.floor(id / 4) * 17 + (id % 4) * 5) % firsts.length];
   // Half of everybody's an Alexander or a Clark, and an eighth are Gressetts, out of the other half
   const family = id % 4 < 2 ? data.families[id % 4] : id % 8 === 2 ? data.families[2] : data.others[Math.floor(roll(id, 4) * data.others.length)];
+  // what they mutter, if they've gone quiet: one of data/folks.json's, by their number
+  const says = data.mutters?.length ? data.mutters[Math.floor(roll(id, 13) * data.mutters.length)] : '';
   return {
-    id, first, family, name: `${first} ${family}`,
+    id, first, family, name: `${first} ${family}`, says,
     temper: roll(id, 5), nerve: roll(id, 6), nosy: roll(id, 7), homebody: roll(id, 8), tagalong: roll(id, 9),
-    looks: { look, phase: roll(id, 10) * 6.28, limp: roll(id, 11) < .5 ? 0 : 1, size: .94 + roll(id, 12) * .12 },
+    looks: { look, phase: roll(id, 10) * 6.28, limp: roll(id, 11) < .5 ? 0 : 1, size: .94 + roll(id, 12) * .12, scuttle: roll(id, 14) < HOW.scuttles },
     hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, fooled: {}, when: 0, seen: 0, met: false, gone: false, shun: null, where: null,
   };
 }

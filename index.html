@@ -64,6 +64,8 @@ body.talking #mini,body.talking #miniName{visibility:hidden}
 #who{position:fixed;left:0;top:0;z-index:3;pointer-events:none;font-size:10px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;color:var(--cream);background:var(--panel);border:1px solid var(--line);padding:2px 6px;will-change:transform}
 #who[hidden]{display:none}
 #who b{font-weight:400;color:var(--rust);font-size:9px;letter-spacing:.04em;margin-left:6px}
+.mutter{position:fixed;left:0;top:0;z-index:3;pointer-events:none;font-size:10px;font-style:italic;letter-spacing:.03em;white-space:nowrap;color:var(--cream);text-shadow:0 0 3px var(--ink),0 1px 1px var(--ink);opacity:0;will-change:transform,opacity}
+.mutter[hidden]{display:none}
 @media (pointer:coarse){.rep-head{min-height:40px}}
 .pips{letter-spacing:2px;font-variant-numeric:tabular-nums}
 #prompt{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom, 0px) + 176px);transform:translateX(-50%);z-index:4;pointer-events:none;
@@ -177,7 +179,7 @@ body.talking #mute{visibility:hidden}
 </div>
 <div id="prompt" hidden></div>
 <div id="toast"></div>
-<div id="who" hidden></div><div id="susMeters"></div>
+<div id="who" hidden></div><div id="susMeters"></div><div id="mutters"></div>
 <div id="sub" hidden></div>
 <div id="flash"></div>
 <div class="card" id="card"><div><h2 id="cardH"></h2><p id="cardP"></p></div></div>
@@ -230,9 +232,9 @@ import { loadHills } from './src/hills.js';
 import { loadSound } from './src/sound.js';
 import { randomFrom } from './src/soundbank.js';
 import { createPeople } from './src/people.js';
-import { drawPerson, drawRadiation, drawAura, degreeOf, PARTS, AURA_CELLS } from './src/looks.js';
-import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED, AVOIDING, TRAILING } from './src/horde.js';
-import { createFolks, AFTER } from './src/agents.js';
+import { drawPerson, drawRadiation, drawAura, degreeOf, farOf, PARTS, AURA_CELLS } from './src/looks.js';
+import { createHorde, SHAMBLE, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED, AVOIDING, TRAILING } from './src/horde.js';
+import { createFolks, burntDown, AFTER, HOW } from './src/agents.js';
 import { createTraffic } from './src/traffic.js';
 import { LURES, ALARM, SWARM as SWARMED, GRAVITY, inHand, nextUp, kindsHeld, rangeOf, throwOf, aimedAt, whoIsSwarmed } from './src/lures.js';
 import { keysFor, buttonsFor, actWord, fastWord, lookBy, edgeTurn, needsCursor, mouseLooks, MOUSE } from './src/controls.js';
@@ -4282,6 +4284,8 @@ const LOOT = (() => {
 // where one of the cast costs forty. Their limbs don't bend, which is most of what those forty pay for. What they had on is on
 // one sheet, with a row for each look, and they read their own off it, along with how far gone they are.
 const CROWD_SHOWN = 48, CROWD_SEE = 110, CROWD_LOOKS = LOOKS.crowd;
+// Nobody's drawn as far gone as the ones who've burnt down, who are the top fifteenth of how far gone in town
+const BURNT_LINE = degreeOf(1 - HOW.burnt[0]);
 const crowdGroup = new THREE.Group(); crowdGroup.visible = false; scene.add(crowdGroup);
 const crowdSheet = canvasFor(512, 256 * CROWD_LOOKS.length, (g) => CROWD_LOOKS.forEach((look, i) => drawPerson(g, 0, (CROWD_LOOKS.length - 1 - i) * 256, 512, 256, look)), false);
 const crowdBody = buildHoodie(.3, 0, 0, 1, 16, ZOMBIE_SHAPE);
@@ -4343,10 +4347,15 @@ const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
 const crowdParts = [crowdBodies, crowdLines(crowdBodies, 2.8, crowdLine), crowdArms, crowdLines(crowdArms, 2.2, crowdLimbLine), crowdLegs, crowdLines(crowdLegs, 2, crowdLimbLine), crowdAura];
 const _cc = new THREE.Color(), _cb = new THREE.Matrix4(), _cu = new THREE.Matrix4(), _cl = new THREE.Matrix4(), _cm = new THREE.Matrix4(), _cp = new THREE.Vector3(), _cq = new THREE.Quaternion(), _cs = new THREE.Vector3(), _ce = new THREE.Euler();
 const GAIT = [3.6, 4.6, 9, 11, 16, 0, 10, 4.6];   // how quickly their limbs go, by state
+// Standing about they're folded over at the waist, and going to look they come up some. The ones after him stand up, unless they're the kind who come low and quick,
+// folded over with their arms dragging. In radians from upright, by state. It's only ever a pose, so whatever stands them up for good can undo it.
+const FOLD = [1.3, .6, 0, 0, 0, 0, 0, 0], SCUTTLE = 1.05, FOLD_LEG = .83;
 const crowdShown = [];
 // How high someone's hips are, sat in each of them, and how their straight limbs go
 const SEATED = { car: { hip: .8, arms: -1.2, legs: -1.3 }, pickup: { hip: 1.04, arms: -1.2, legs: -1.3 }, quad: { hip: 1.02, arms: -1, legs: -.62 } };
 let crowdPicked = -1, crowdDrawn = -1, crowdSeated = 0;
+// Just over the top of someone's head, wherever it's got to, on the screen. Folded over, that's in front of them and not much higher than their hips.
+const overHead = (s, v) => (s.hdy === undefined ? v.set(s.x, s.y + hillUp(s.x, s.z) + 2.05 * s.size * TOWN_SCALE, s.z) : v.set(s.x + s.hdx, s.y + s.hdy + hillUp(s.x, s.z) + .1, s.z + s.hdz)).project(camera);
 // The name of whoever's nearest, over their head, once he's been around them long enough to know it
 const WHO_REACH = 9, whoTag = document.getElementById('who'), _who = new THREE.Vector3();
 let whoNear = null, whoPicked = -1, whoSaid = '';
@@ -4361,7 +4370,7 @@ function drawWho() {
     }
   }
   if (whoNear) {
-    _who.set(whoNear.x, whoNear.y + hillUp(whoNear.x, whoNear.z) + 2.05 * whoNear.size * TOWN_SCALE, whoNear.z).project(camera);
+    overHead(whoNear, _who);
     if (_who.z >= 1) whoNear = null;
   }
   if (!whoNear) { whoTag.hidden = true; return; }
@@ -4369,6 +4378,41 @@ function drawWho() {
   if (said !== whoSaid) { whoSaid = said; whoTag.innerHTML = said; }
   whoTag.hidden = false;
   whoTag.style.transform = `translate(${((_who.x * .5 + .5) * innerWidth).toFixed(1)}px,${((-_who.y * .5 + .5) * innerHeight).toFixed(1)}px) translate(-50%,-100%)`;
+}
+// What the ones who've gone quiet mutter, every so often when he's close on foot: a few words, small and faint over their head, drifting up as they fade.
+// With reduced motion they're just there, and fade. The nearest first, one at a time from each, and never more than two at once. The words are data/folks.json's.
+const MUTTER = { reach: 7, gap: [9, 16], lasts: 3.2, rise: 16 };
+const mutterSlots = Array.from({ length: 2 }, () => { const e = document.createElement('div'); e.className = 'mutter'; e.hidden = true; $('mutters').appendChild(e); return { e, s: null, at: 0 }; }), _mut = new THREE.Vector3();
+let mutterLook = 0;
+const muttering = (s) => s.quiet && (s.state === SHAMBLE || s.state === CURIOUS) && !(s.flat > 0) && s.under === undefined && !s.thrown && s.dead === undefined && !!s.who?.says;
+function drawMutters() {
+  const P = player.pos, on = S.mode === 'town';
+  // someone new twice a second, if there's room
+  if (on && time >= mutterLook) {
+    mutterLook = time + .5;
+    const free = mutterSlots.find((m) => !m.s);
+    let best = null, bd = MUTTER.reach;
+    if (free) for (const s of horde.active) {
+      if (!muttering(s) || time < (s.mutterNext ?? 0) || mutterSlots.some((m) => m.s === s)) continue;
+      const d = Math.hypot(s.x - P.x, s.z - P.z); if (d >= bd) continue;
+      overHead(s, _mut); if (_mut.z >= 1 || Math.abs(_mut.x) > .95 || Math.abs(_mut.y) > .95) continue;
+      best = s; bd = d;
+    }
+    if (best) { free.s = best; free.at = time; free.w = 0; free.e.textContent = best.who.says; best.mutterNext = time + MUTTER.gap[0] + hash2(best.who.id, Math.floor(time)) * (MUTTER.gap[1] - MUTTER.gap[0]); }
+  }
+  for (const m of mutterSlots) {
+    const s = m.s, age = time - m.at;
+    if (!s) continue;
+    if (!on || age > MUTTER.lasts || !muttering(s)) { m.s = null; m.e.hidden = true; continue; }
+    overHead(s, _mut);
+    if (_mut.z >= 1) { m.e.hidden = true; continue; }
+    const fade = Math.min(1, reduceMotion ? 1 : age / .3, MUTTER.lasts - age), up = (reduceMotion ? 0 : age / MUTTER.lasts * MUTTER.rise) + (s === whoNear ? 22 : 4);
+    m.e.hidden = false; m.e.style.opacity = (fade * .72).toFixed(2);
+    // and kept on the screen, for anyone at the edge of it
+    m.w ||= m.e.offsetWidth;
+    const x = Math.min(Math.max((_mut.x * .5 + .5) * innerWidth, m.w / 2 + 6), innerWidth - m.w / 2 - 6);
+    m.e.style.transform = `translate(${x.toFixed(1)}px,${((-_mut.y * .5 + .5) * innerHeight - up).toFixed(1)}px) translate(-50%,-100%)`;
+  }
 }
 // Redrawn on the 12 fps step like everyone else, and they move on it too, which is also why it's cheap
 function drawCrowd(step) {
@@ -4393,30 +4437,39 @@ function poseCrowd(s, i, step) {
     const seat = s.seated;
     // sat where he'd sit, with their hips on the seat, whatever size they are
     if (seat) { toBody(seat); _cp.set(seat.K.seat[0], SEATED[seat.kind].hip + -ZOMBIE_HIP * s.size * TOWN_SCALE, seat.K.seat[2]).applyMatrix4(_vb); s.x = _cp.x; s.y = _cp.y; s.z = _cp.z; s.yaw = seat.yaw; }
-    const st = s.state, after = st === HUNTING || st === SWARM || st === GRABBING, away = st === AVOIDING, still = !s.moving && st !== GRABBING;
-    s.gait += GAIT[st] / 12 * (still ? .2 : 1);
-    const p = s.gait, stride = still ? 0 : after || away ? .62 : .36;
-    const look = s.look % CROWD_LOOKS.length, size = s.size * TOWN_SCALE;
+    const st = s.state, after = st === HUNTING || st === SWARM || st === GRABBING, away = st === AVOIDING, still = !s.moving && st !== GRABBING, low = after && s.scuttle;
+    s.gait += GAIT[st] / 12 * (still ? .2 : 1) * (low ? 1.4 : 1);
     // knocked over: flat on his back, going down quickly and getting up slowly
     const lie = s.flat > 0 ? Math.min(1, (s.flatFor - s.flat) * 7, s.flat * 2.2) : 0;
-    _cb.compose(_cp.set(s.x, seat ? s.y : s.y + 1.43 * size * (1 - lie) + .28 * lie + Math.abs(Math.sin(p)) * .03, s.z), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(size));
+    // folded over, or coming up out of it, a few steps at a time. The hips go back so they don't topple, which tips the legs, and that takes them down a little.
+    const want = seat || lie ? 0 : low ? SCUTTLE : FOLD[st], fold = s.fold = s.fold === undefined ? want : s.fold + (want - s.fold) * .34;
+    const back = fold * .17, tilt = Math.asin(back / FOLD_LEG), drop = FOLD_LEG * (1 - Math.cos(tilt));
+    const p = s.gait, stride = still ? 0 : low ? .44 : after || away ? .62 : .36 - fold * .05;
+    const look = s.look % CROWD_LOOKS.length, size = s.size * TOWN_SCALE;
+    _cb.compose(_cp.set(s.x, seat ? s.y : s.y + (1.43 - drop) * size * (1 - lie) + .28 * lie + Math.abs(Math.sin(p)) * .03, s.z), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(size));
+    if (back) _cb.multiply(_cl.makeTranslation(0, 0, -back));
     if (lie) _cb.multiply(_cl.makeRotationX(-1.45 * lie));
     if (s.tumble) _cb.multiply(_cl.makeRotationX(s.tumble));
     // the top half leans from the hips, so the feet stay on the ground
-    const list = (s.phase - 3.14) * .035;
-    _cl.makeRotationFromEuler(_ce.set(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : .16, 0, list + (st === STUNNED ? Math.sin(step * .9) * .12 : Math.sin(p) * (after ? .05 : .1))));
+    const list = (s.phase - 3.14) * .035, lean = Math.max(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : .16, fold);
+    _cl.makeRotationFromEuler(_ce.set(lean, 0, list + (st === STUNNED ? Math.sin(step * .9) * .12 : Math.sin(p) * (after ? .05 : .1))));
     const e = _cl.elements; _cl.setPosition(-ZOMBIE_HIP * e[4], ZOMBIE_HIP - ZOMBIE_HIP * e[5], -ZOMBIE_HIP * e[6]);
     _cu.multiplyMatrices(_cb, _cl).toArray(bodies, i * 16);
+    // where the top of their head is, for whatever's said over it
+    _cp.set(0, .55, .18).applyMatrix4(_cu); s.hdx = _cp.x - s.x; s.hdy = _cp.y - s.y; s.hdz = _cp.z - s.z; s.lean = lean;
     for (let a = 0; a < 2; a++) {
       const side = a ? 1 : -1, swing = Math.sin(p + (a ? Math.PI : 0));
-      const reach = seat ? SEATED[seat.kind].arms : after ? -1.3 + Math.sin(p * 1.3 + a * 2) * .16 : st === CURIOUS ? -.4 - a * .25 : st === STUNNED ? .15 : away ? -2.1 + a * .35 + swing * .12 : st === TRAILING && still ? -.03 : swing * .18 - .1 - (a === s.limp ? .22 : .04);
+      let reach = seat ? SEATED[seat.kind].arms : after ? -1.3 + Math.sin(p * 1.3 + a * 2) * .16 : st === CURIOUS ? -.4 - a * .25 : st === STUNNED ? .15 : away ? -2.1 + a * .35 + swing * .12 : st === TRAILING && still ? -.03 : swing * .18 - .1 - (a === s.limp ? .22 : .04);
+      // folded over, their arms hang straight down from the shoulder, swinging a little, and drag behind them coming after him like that
+      if (!seat && fold > .05) { const hang = -lean + (after ? (st === GRABBING ? -.6 : .3 + Math.sin(p * 1.3 + a * 2) * .1) : st === CURIOUS ? -.25 - a * .15 : swing * .14 - (a === s.limp ? .06 : 0)); reach += (hang - reach) * Math.min(1, fold / .6); }
+      if (a === 0) s.arm = lean + reach;
       _cl.makeRotationFromEuler(_ce.set(reach, 0, side * (after ? .03 : .07))).setPosition(side * .205, .06, 0);
       _cm.multiplyMatrices(_cu, _cl).toArray(arms, (i * 2 + a) * 16);
-      _cl.makeRotationFromEuler(_ce.set(seat ? SEATED[seat.kind].legs : -swing * stride * (a === s.limp ? .55 : 1), 0, side * (seat ? .1 : .03))).setPosition(side * .1, ZOMBIE_HIP, 0);
+      _cl.makeRotationFromEuler(_ce.set(seat ? SEATED[seat.kind].legs : -swing * stride * (a === s.limp ? .55 : 1) - tilt, 0, side * (seat ? .1 : .03))).setPosition(side * .1, ZOMBIE_HIP, 0);
       _cm.multiplyMatrices(_cb, _cl).toArray(legs, (i * 2 + a) * 16);
     }
-    // how far gone they are comes from a number they already have, since asking for a new one would change what everyone does after it
-    const far = s.far ??= degreeOf(s.phase / 6.28), hot = after ? 1 : st === CURIOUS || st === TRAILING ? .42 : st === STUNNED ? .2 : 0, flip = s.limp;
+    // how far gone they are comes from a number they already have, since asking for a new one would change what everyone does after it. Anyone who's burnt down is past the line, and nobody else.
+    const far = s.far ??= farOf(s.phase / 6.28, !!s.who && s.quiet === false, BURNT_LINE), hot = after ? 1 : st === CURIOUS || st === TRAILING ? .42 : st === STUNNED ? .2 : 0, flip = s.limp;
     crowdZ.setXYZW(i, look, far, hot, flip); zombieLine(far, hot, _cc).toArray(crowdLine.array, i * 3);
     for (let a = 0; a < 2; a++) { crowdLimbZ.setXYZW(i * 2 + a, look, far, hot, flip); _cc.toArray(crowdLimbLine.array, (i * 2 + a) * 3); }
     _cm.makeTranslation(s.x, seat ? seat.y : s.y, s.z).toArray(auras, i * 16); crowdAuraZ.setXYZ(i, far, hot, look);
@@ -5202,6 +5255,8 @@ const folks = createFolks(await (await fetch('data/folks.json')).json(), { store
 addEventListener('pagehide', () => folks.save());
 const horde = createHorde({
   folks,
+  // Most of them have gone quiet, and the ones who've burnt down haven't: more of those the further out of town they came out, which is in src/agents.js
+  quiet: (s) => !burntDown(s.who, Math.hypot(...MAP.toGame(s.x, s.z))),
   blocked: (x, z, y) => blocked(x, z, y) || floorOnce(x, z) - y > .7 || (driving !== null && inVehicle(driving, x, z, .3)),
   water: (x, z) => floorOnce(x, z) < WATER.level(x, z) - .1,
   level: (x, z) => WATER.level(x, z),
@@ -5310,7 +5365,7 @@ function drawSus() {
     list.sort((a, b) => Math.hypot(a.x - P.x, a.z - P.z) - Math.hypot(b.x - P.x, b.z - P.z));
     for (const s of list) {
       if (n >= SUS_N) break;
-      _sus.set(s.x, s.y + hillUp(s.x, s.z) + 2.05 * s.size * TOWN_SCALE, s.z).project(camera);
+      overHead(s, _sus);
       let x = _sus.x, y = _sus.y;
       // behind the camera it comes out the wrong way round
       if (_sus.z >= 1) { x = -x; y = -y; }
@@ -5439,7 +5494,7 @@ const traffic = createTraffic({
     const v = makeVehicle(kind, x, z, yaw, floorAt(x, z)), list = PAINTS[kind];
     v.tone = (who.id * .618034) % 1; v.paint = new THREE.Color(list[Math.floor(v.tone * list.length) % list.length]); v.shownSpin = 0; v.seen = Infinity; settle(v, floorAt);
     const kid = kind === 'quad';
-    v.fig = { seated: v, who, x, y: v.y, z, yaw, state: 0, moving: 0, seen: -1, phase: who.looks.phase, limp: who.looks.limp, look: who.looks.look, size: kid ? .66 : who.looks.size, gait: who.looks.phase, far: kid ? .05 + hash2(who.id, 3) * .1 : degreeOf(who.looks.phase / 6.28) };
+    v.fig = { seated: v, who, x, y: v.y, z, yaw, state: 0, moving: 0, seen: -1, phase: who.looks.phase, limp: who.looks.limp, look: who.looks.look, size: kid ? .66 : who.looks.size, gait: who.looks.phase, far: kid ? .05 + hash2(who.id, 3) * .1 : farOf(who.looks.phase / 6.28, false, BURNT_LINE) };
     VEHICLES.push(v); if (!kid) markVehicle(v, true); vehPicked = -1;
     return v;
   },
@@ -5654,12 +5709,14 @@ function drawHeadlights(v, braking) {
 }
 // he's in town once he's off Griffis Fountain Rd
 function arriving() { if (!S.flags.arrived && Math.hypot(player.pos.x - NPCS.coop.root.position.x, player.pos.z - NPCS.coop.root.position.z) < 400) { S.flags.arrived = true; townObjective(); } }
+// Picking something up from right at the feet of one who's gone quiet is starting something with them, as src/horde.js has it
+const tookFrom = (c) => { if (folkOut) horde.took(c.x, c.z); };
 function pickUpCans(reach) {
-  for (const c of PICKUPS) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; c.m.visible = false; addBeans(1, 'found'); townObjective(); hudVitals(); }
+  for (const c of PICKUPS) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; c.m.visible = false; tookFrom(c); addBeans(1, 'found'); townObjective(); hudVitals(); }
 }
 function pickUpLoot(reach) {
   for (const c of LOOT) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) {
-    c.got = true; c.m.visible = false;
+    c.got = true; c.m.visible = false; tookFrom(c);
     if (c.kind === 'beans') { addBeans(1, 'found'); townObjective(); }
     else { S.items[c.kind] = (S.items[c.kind] ?? 0) + 1; SFX.play('can.clink'); toast(`+1 ${(LURES[c.kind]?.name ?? LOOT_NAMES[c.kind]).toLowerCase()}`); }
     hudVitals();
@@ -6355,9 +6412,13 @@ function updateLures(dt) {
   for (const f of flying) {
     if (!f.on) continue;
     f.px = f.x; f.pz = f.z; f.vy -= GRAVITY * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt; f.turn += dt * 11; lureDirty = true;
-    const fl = floorAt(f.x, f.z), hitSomeone = folkOut && horde.active.some((s) => s.state !== STUNNED && Math.hypot(s.x - f.x, s.z - f.z) < .6 && f.y < s.y + 2);
+    const fl = floorAt(f.x, f.z), hitSomeone = folkOut ? horde.active.find((s) => s.state !== STUNNED && Math.hypot(s.x - f.x, s.z - f.z) < .6 && f.y < s.y + 2) : null;
     if (blocked(f.x, f.z, f.y)) { const car = parkedAt(f.x, f.z, f.y); if (car) soundAlarm(car); f.on = false; landLure(f.kind, f.px, f.y, f.pz); }
-    else if (f.y <= Math.max(fl, WATER.level(f.x, f.z)) + .06 || hitSomeone) { f.on = false; landLure(f.kind, f.x, f.y, f.z); }
+    else if (f.y <= Math.max(fl, WATER.level(f.x, f.z)) + .06 || hitSomeone) {
+      // and whoever it hit takes it as him starting something
+      if (hitSomeone) horde.provoke(hitSomeone, 'thrown');
+      f.on = false; landLure(f.kind, f.x, f.y, f.z);
+    }
   }
   // firecrackers go off in fits
   const flash = !reduceMotion, was = lureGlowsOn; lureGlowsOn = 0;
@@ -6426,7 +6487,7 @@ function drawLures() {
 function pickUpLying(reach) {
   for (const c of lyingNear) {
     if (c.got || (S.items[c.kind] ?? 0) >= LURES[c.kind].carry || Math.hypot(c.x - player.pos.x, c.z - player.pos.z) >= reach || Math.abs(c.y - player.pos.y) >= 2) continue;
-    c.got = true; lureDirty = true; S.items[c.kind] = (S.items[c.kind] ?? 0) + 1; SFX.play('can.clink'); toast(`+1 ${LURES[c.kind].name}`);
+    c.got = true; lureDirty = true; tookFrom(c); S.items[c.kind] = (S.items[c.kind] ?? 0) + 1; SFX.play('can.clink'); toast(`+1 ${LURES[c.kind].name}`);
   }
 }
 function throwOne() {
@@ -6444,7 +6505,7 @@ function switchThrown() {
   if (kind && kind !== S.hand) { S.hand = kind; SFX.play('ui.tap'); }
 }
 function pickUpGas(reach) {
-  for (const c of GAS_CANS) if (!c.got && S.gas < GAS_CARRY && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; gasDirty = true; S.gas++; SFX.play('can.slosh'); toast(`+1 gas can · ${S.gas}`); }
+  for (const c of GAS_CANS) if (!c.got && S.gas < GAS_CARRY && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; gasDirty = true; tookFrom(c); S.gas++; SFX.play('can.slosh'); toast(`+1 gas can · ${S.gas}`); }
 }
 let wreckStep = -1, wreckDrawn = -1;
 function updateWreck(dt, step) {
@@ -7007,7 +7068,7 @@ function tick(dt, draw = true) {
   updateFlies(dt, step);
   if (folkOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
   else if (folkOut) drawSeated(step);
-  if (folkOut) { drawWho(); drawSus(); }
+  if (folkOut) { drawWho(); drawSus(); drawMutters(); }
   if (S.flags.town) { drawVehicles(step); drawWreck(step); if (trainsOn) drawTrain(); }
   updateParticles(dt, M);
   if (bottle.visible) levelLiquid();
@@ -7062,7 +7123,8 @@ if (TEST) {
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },
     compound: { JAM, JAM_SHED, DECK, LAWN, spot: screenSpot, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach },
     lures: { LYING, lyingNear, flying, popping, opened, ALARMS, lureSpots, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
-    horde, folks, traffic, homes: HOMES, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far) }),
+    horde, folks, traffic, homes: HOMES, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }),
+    mutters: () => mutterSlots.filter((m) => m.s && !m.e.hidden).map((m) => ({ says: m.e.textContent, id: m.s.who.id, opacity: +m.e.style.opacity, transform: m.e.style.transform, box: m.e.getBoundingClientRect().toJSON() })),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
     topDown({ x0, z0, x1, z1, scale, everywhere, houses }) {

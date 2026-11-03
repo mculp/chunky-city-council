@@ -380,6 +380,99 @@ describe('shambling with them', () => {
   });
 });
 
+describe('gone quiet', () => {
+  const quiet = (extra = {}) => field({ quiet: () => true, ...extra });
+
+  test('they leave him be, however much noise or light or beans he has on him', () => {
+    const h = createHorde(quiet()), s = h.add(4, 0);
+    run(h, { ...still, noise: 20, light: 12, beans: 12 }, 5);
+    assert.equal(s.state, SHAMBLE); assert.equal(s.alert, 0); assert.equal(h.grab, null);
+  });
+
+  test('walking right past them, the only ones who come for him are the ones who haven\'t', () => {
+    const h = createHorde(quiet()), lot = [-20, -12, -4, 4, 12, 20].flatMap((x) => [h.add(x, 3), h.add(x + 2, -3)]), hunter = h.add(8, 4, { quiet: false });
+    const p = { ...still, x: -30, noise: 14, canGrab: false };
+    for (; p.x < 30; p.x += 4.4 / 30) h.update(1 / 30, p);
+    assert.ok(lot.every((s) => s.state === SHAMBLE), lot.map((s) => s.state).join());
+    assert.ok(hunter.state === HUNTING || hunter.state === SWARM, `the one that hunts is ${hunter.state}`);
+  });
+
+  test('shambling past them, they don\'t look twice', () => {
+    const h = createHorde(quiet()), s = h.add(1, 0);
+    run(h, { ...still, acting: true }, 6);
+    assert.equal(s.state, SHAMBLE); assert.ok(!s.sus);
+  });
+
+  test('hit one and it comes for him, and so does anyone close by who saw it, and not anyone further off', () => {
+    const h = createHorde(quiet()), hit = h.add(1, 0), near = [h.add(4, 3), h.add(-5, -6)], far = h.add(14, 0);
+    run(h, still, .05);
+    h.knock(.5, 0, 1.2, 1);
+    assert.equal(hit.state, STUNNED);
+    assert.ok(near.every((s) => s.state === HUNTING), near.map((s) => s.state).join()); assert.equal(far.state, SHAMBLE);
+    run(h, { ...still, canGrab: false }, 2.5);
+    assert.ok(hit.state === HUNTING || hit.state === SWARM, `and it's up and after him: ${hit.state}`);
+    assert.ok(near.every((s) => Math.hypot(s.x, s.z) < 3), 'and they come right to him, though he\'s made no sound');
+  });
+
+  test('once they\'ve lost him they leave him be again', () => {
+    const h = createHorde(quiet()), hit = h.add(.5, 0), s = h.add(6, 0);
+    run(h, still, .05); h.knock(0, 0, 1, 1);
+    assert.equal(s.state, HUNTING);
+    run(h, { ...still, x: 100, canGrab: false }, TUNING.lostAfter + 8);
+    assert.ok([hit, s].every((o) => o.state === SHAMBLE || o.state === CURIOUS), `${hit.state} ${s.state}`);
+    run(h, { ...still, x: s.x + 3, z: s.z, noise: 20, canGrab: false }, 3);
+    assert.ok([hit, s].every((o) => o.state === SHAMBLE || o.state === CURIOUS), 'even with him right there making all the noise he can');
+  });
+
+  test('something he throws that hits one does the same, and so does picking up what\'s at one\'s feet', () => {
+    const a = createHorde(quiet()), s = a.add(5, 0), by = a.add(9, 2), off = a.add(30, 0);
+    run(a, still, .05);
+    assert.equal(a.provoke(s), 2);
+    assert.equal(s.state, HUNTING); assert.equal(by.state, HUNTING); assert.equal(off.state, SHAMBLE);
+    const b = createHorde(quiet()), t = b.add(5, 0), u = b.add(20, 0);
+    run(b, still, .05);
+    assert.equal(b.took(5.5, .5), 1); assert.equal(t.state, HUNTING); assert.equal(u.state, SHAMBLE);
+    assert.equal(b.took(12, 0), 0, 'and from where nobody\'s standing it\'s nothing');
+  });
+
+  test('a fire knocking one over isn\'t him, and they go back to how they were', () => {
+    const h = createHorde(quiet()), s = h.add(1, 0), by = h.add(5, 0);
+    run(h, still, .05);
+    h.knock(0, 0, 2, 1, 'fire');
+    assert.equal(by.state, SHAMBLE, 'nobody saw him do anything');
+    run(h, { ...still, canGrab: false }, 2);
+    assert.equal(s.state, SHAMBLE); assert.equal(s.alert, 0);
+  });
+
+  test('a lure, a noise and a light still bring them', () => {
+    const h = createHorde(quiet()), s = h.add(20, 0); h.lure(40, 0, 40, 5); run(h, { ...still, x: -20 }, 1);
+    assert.equal(s.state, CURIOUS); assert.equal(s.tx, 40); assert.ok(s.drawn);
+    const n = createHorde(quiet()), t = n.add(20, 0); n.noise(40, 0, 30, 5); run(n, { ...still, x: -20 }, 1);
+    assert.equal(t.state, CURIOUS); assert.equal(t.tx, 40);
+    const l = createHorde(quiet({ wander: (o) => [o.x, o.z] }), { lightPull: 1 }), u = l.add(10, 0); l.lights.push({ x: 20, z: 0, r: 30 });
+    run(l, { ...still, x: -100 }, 20);
+    assert.ok(Math.hypot(u.x - 20, u.z) < 12, `at ${u.x},${u.z}`);
+  });
+
+  test('giving himself away doesn\'t turn them, and a swarm going by doesn\'t call them over', () => {
+    const h = createHorde(quiet()), s = h.add(3, 0), burnt = h.add(-3, 0, { quiet: false });
+    run(h, { ...still, acting: true }, .3);
+    assert.equal(h.unmask({ ...still, acting: true }), 1);
+    assert.equal(s.state, SHAMBLE); assert.equal(burnt.state, HUNTING);
+    const w = createHorde(quiet()), q = w.add(9, 18), pack = [w.add(9, 0, { quiet: false }), w.add(9, 2, { quiet: false }), w.add(9, -2, { quiet: false })];
+    run(w, { ...still, noise: 13 }, 1.4);
+    assert.ok(pack.some((o) => o.state === SWARM), pack.map((o) => o.state).join()); assert.equal(q.state, SHAMBLE);
+  });
+
+  test('the ones who come after him folded over are quicker, and still slower than he runs', () => {
+    const h = createHorde(field()), up = h.add(10, 0), low = h.add(10, 1, { scuttle: true });
+    run(h, { ...still, noise: 14, canGrab: false }, .8);
+    assert.ok(up.state === HUNTING && low.state === HUNTING, `${up.state} ${low.state}`);
+    assert.ok(low.moving > up.moving, `${low.moving} against ${up.moving}`);
+    assert.ok(TUNING.speed[SWARM] * TUNING.scuttle < 4.4);
+  });
+});
+
 describe('run over', () => {
   const hit =(over = {}) => ({ x: 3, z: 0, vx: 10, vz: 0, vy: 6, kills: true, seconds: 30, spin: 8, ...over });
 

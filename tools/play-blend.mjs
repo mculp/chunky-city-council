@@ -25,7 +25,8 @@ await g(() => {
   window.us80 = (t) => G.map.along('us_80', a0 + (a1 - a0) * t);
   window.tOf = (x, z) => (G.map.sOn('us_80', x, z) - a0) / (a1 - a0);
   window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; document.getElementById('fail').hidden = true; };
-  // n of them either side of the road, 3 to 6 m off its middle, and everyone else a long way off
+  // n of them either side of the road, 3 to 6 m off its middle, and everyone else a long way off. They're all ones who've burnt down and come for him on sight,
+  // which is who shambling's for. The ones who've gone quiet wouldn't look twice at him anyway: npm run quiet has them.
   window.crowdOnRoad = (n = 30) => {
     H.calm(); G.S.beans = 0;
     const { all } = H, far = us80(0);
@@ -33,7 +34,7 @@ await g(() => {
       let x, z;
       if (i < n) { const p = us80((i + .5) / n), side = i % 2 ? 1 : -1, off = 3 + (i % 3) * 1.5; x = p.x + p.nx * side * off; z = p.z + p.nz * side * off; }
       else { x = far.x + (i % 2 ? 1 : -1) * (900 + i); z = far.z + 500 + i; }
-      Object.assign(s, { x, z, tx: x, tz: z, homeX: x, homeZ: z, y: G.floorAt(x, z), state: 0, alert: 0, sus: 0, timer: 2, lead: null });
+      Object.assign(s, { x, z, tx: x, tz: z, homeX: x, homeZ: z, y: G.floorAt(x, z), state: 0, alert: 0, sus: 0, timer: 2, lead: null }, i < n ? { quiet: false, far: undefined } : {});
     });
     return all.slice(0, n);
   };

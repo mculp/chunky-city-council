@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { TOPS, BOTTOMS, MARKS, PARTS, BODY, degreeOf } from './looks.js';
+import { TOPS, BOTTOMS, MARKS, PARTS, BODY, degreeOf, farOf } from './looks.js';
 
 const looks = JSON.parse(readFileSync(new URL('../data/looks.json', import.meta.url))), cast = JSON.parse(readFileSync(new URL('../data/cast.json', import.meta.url))).cast;
 const all = [...Object.values(looks.cast), ...looks.crowd], color = (c) => /^#[0-9a-f]{6}$/.test(c);
@@ -56,4 +56,11 @@ test('how far gone the crowd is goes from nearly a person to nearly nothing, and
   assert.ok(middle > 500 && middle < 900, `${middle} of 1000 in the middle`);
   assert.ok(at.filter((d) => d < .2).length > 60, 'some still look like people');
   assert.ok(at.filter((d) => d > .8).length > 60, 'and some are nearly gone');
+});
+
+test('nobody but the ones who\'ve burnt down is drawn as far gone as they are, and in town nobody looks any different for it', () => {
+  const line = degreeOf(14 / 15), ts = Array.from({ length: 1000 }, (_, i) => (i + .5) / 1000);
+  assert.ok(ts.every((t) => farOf(t, false, line) <= line && farOf(t, true, line) >= line));
+  for (const t of ts) assert.equal(farOf(t, t > 14 / 15, line), degreeOf(t), `${t}`);
+  assert.ok(farOf(.85, true, line) > degreeOf(.85), 'and out of town, they\'re taken up to it');
 });

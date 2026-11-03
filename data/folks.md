@@ -8,7 +8,7 @@ There are four kinds of people, and they're all the same people underneath, with
 
 | Who | Numbered from | Where | What's in `src/` |
 |---|---|---|---|
-| The crowd | 0 | The streets of town, once Chapter 1 ends, after him if they can tell he's there | `horde.js` |
+| The crowd | 0 | The streets of town, once Chapter 1 ends. Most have gone quiet and leave him be until he starts something, and the few who've burnt down come for him on sight. | `horde.js` |
 | People at home | 1000 | At their door, in the house and in the yard, as soon as he's in town, and they've got nothing against him | `horde.js`, with `home` |
 | Someone driving | 5000 | Along the real roads, on their own side | `traffic.js` |
 | Kids on four-wheelers | 6000 | The lanes and drives | `traffic.js` |
@@ -84,11 +84,29 @@ And whatever their mood:
 - **Word.** Someone who was there or was hit tells anyone in their family who's within 8 m, for 90 seconds. It only goes one step.
 - **Home.** Once someone's further from home than they'd go, they go back. That's 40 m for a homebody and up to 440 m for someone who isn't.
 
-None of them say anything. They don't have any new lines, and whether they should, with a real AI model, is the owner's call.
+## Gone quiet
+
+Most of the crowd have gone quiet. They stand folded over at the waist with their arms hanging and leave him be however close he walks. They can't make him out by sound, smell, touch or light, don't look twice when he shambles, and don't answer the swarm's call. A noise, a lure, a light, the church bell and the train's horn still bring them to look.
+
+The rest have **burnt down**, and they come for him on sight, as the whole crowd used to. They're the furthest gone of anyone: 1 in 15 out to 1 km from the middle of town, rising smoothly to 1 in 5 at 3 km and beyond, by how far gone each of them is and where they come out. Nobody at home or driving is one. Nobody who's gone quiet looks as far gone as the least of them in town, and further out, where there are more of them, they're drawn at least that far gone.
+
+He **starts something** with one who's gone quiet when he:
+
+- knocks them down: a swing, a blast, or running them down in something he's driving. A fire or the train doesn't count, because nobody thinks of either as something he did.
+- hits them with something he's thrown
+- picks something up from within 1.6 m of their feet, whatever it is
+
+Then that one comes for him, and so does anyone gone quiet within 10 m of it. They know where he is for 5 seconds, the same as when he gives himself away. Anyone he knocks down comes for him when they get up. Being hit, or seeing it, changes how they are with him the same as it would anyone, so anyone it makes the kind to keep away does that instead. Once they've lost him they go quiet again, unless it's left them **after you** or **keeping away**, which nobody gone quiet gets over.
+
+Two in five who come for him come folded over, low and quick, with their arms dragging, 8% quicker than the ones who stand up: 3.2 m/s hunting and 4 m/s in a swarm, against 3 and 3.7. Running, at 4.4, he still gets away from either.
+
+**Muttering.** Within 7 m of him, someone gone quiet who's on the screen says their line over their head, small and faint. It's one of the twenty in `mutters`, picked by their number, which the Creative Director wrote. It lasts 3.2 seconds, drifting up a little as it fades, and the same person doesn't say it again for 9 to 16 seconds. It's two at once at most, with someone new twice a second. With reduced motion it's there at once and fades out without moving. That's all anyone in the crowd says, and nothing new is made up for them. Whether they should say more, with a real AI model, is the owner's call.
+
+The numbers are `HOW.burnt`, `HOW.burntOut` and `HOW.scuttles` in `src/agents.js`, `riled`, `snatch` and `scuttle` in `src/horde.js`, and `MUTTER` in `index.html`. `npm run quiet` plays it in Chrome.
 
 ## Shambling with them
 
-He can pass for one of them: SHAMBLE on a phone, C on a laptop. It holds him to their pace, 1.3 m/s however far the stick's pushed. While it holds, nobody who isn't already after him notices him by sound, smell or touch. The numbers are with the crowd's in `src/horde.js`.
+He can pass for one of them: SHAMBLE on a phone, C on a laptop. It holds him to their pace, 1.3 m/s however far the stick's pushed. While it holds, nobody who isn't already after him notices him by sound, smell or touch. It's for the ones who've burnt down, since anyone who's gone quiet isn't looking at him anyway. The numbers are with the crowd's in `src/horde.js`.
 
 - **Looking twice.** Anyone within 5 m comes to see through it. It's faster the closer he is, at night, the nosier they are, and the more beans he's carrying, since they can smell those. Right up against one with nothing on him it takes about 3 to 8 seconds, and a third of that with twelve cans. It wears off once he's out of reach. When one sees through it, that one comes for him, and the act holds for everyone else.
 - **What gives him away.** Running, a swing, or stepping into a light gives him away to everyone within 14 m at once. They know where he is for 5 seconds, so standing still and quiet doesn't lose them.
@@ -142,6 +160,7 @@ The driver's drawn from the same instances as the crowd, sitting where he'd sit,
 | `others` | Everyone else's family names |
 | `women`, `men` | First names. Their lengths mustn't be divisible by 17, which is how many they skip at a time. |
 | `dressed` | A look that says which list its wearer's name comes from. Anyone else's is either. |
+| `mutters` | What the ones who've gone quiet mutter, one line each, picked by their number. The Creative Director wrote them, and they're the only words anyone in the crowd says. |
 
 ## Adding to it
 

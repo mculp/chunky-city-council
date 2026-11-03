@@ -18,7 +18,7 @@ Everyone in here is a radiating zombie of some degree, which is the owner's word
 | Field | Type | What it is |
 |---|---|---|
 | `id` | string | Unique. Seeds the drawing, so a look comes out the same every time. |
-| `degree` | number | The cast only. How far gone they are, from 0, which is not at all, to 1. The crowd's are worked out person by person (`degreeOf`). |
+| `degree` | number | The cast only. How far gone they are, from 0, which is not at all, to 1. The crowd's are worked out person by person (`degreeOf`), and `farOf` keeps the ones who've burnt down the furthest gone of all, which `data/folks.md` explains. |
 | `skin` | string | The colour of their skin. They've all gone a little grey. |
 | `hair` | string | Optional. Without it they're bald. |
 | `top` | object | What's on top. See below. |

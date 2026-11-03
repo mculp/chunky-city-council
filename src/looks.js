@@ -14,6 +14,9 @@ export const PARTS = { body: [0, .75], arm: [.75, .125], leg: [.875, .125] };
 // How far gone someone in the crowd is, from t going evenly from 0 to 1: from nearly a person to not much but what's coming off
 // them. Most are somewhere in the middle.
 export const degreeOf = (t) => { const c = 2 * t - 1; return .5 + Math.sign(c) * Math.pow(Math.abs(c), 1.7) * .46; };
+// The ones who've burnt down are drawn past `line` and nobody else is, so a player can tell at a glance which ones come for him on sight.
+// In town that's where they are anyway, and out of town more of them have burnt down, so they're taken up to it.
+export const farOf = (t, burnt, line) => (burnt ? Math.max(degreeOf(t), line) : Math.min(degreeOf(t), line));
 
 const seeded = (text) => { let s = 7; for (const c of text) s = (s * 31 + c.charCodeAt(0)) % 2147483647; return () => (s = (s * 16807) % 2147483647) / 2147483647; };
 

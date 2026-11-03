@@ -250,7 +250,8 @@ const hears = await g(async () => {
     // whatever's been left on the road gets moved off it, and nothing else is going off, or this hears that instead of the engine
     for (const o of G.vehicles) if (o !== v && G.onRoad(o.x, o.z)) o.z += 30;
     H.noises.length = 0;
-    const s = H.add(v.x, v.z + 45); v.f = v.K.top * .9; G.sim(4, 1 / 30);
+    // someone who's burnt down, since anyone who's gone quiet wouldn't come for it whatever they heard
+    const s = H.add(v.x, v.z + 45, { quiet: false }); v.f = v.K.top * .9; G.sim(4, 1 / 30);
     r[kind] = { alert: s.alert, state: s.state, d: Math.hypot(s.x - v.x, s.z - v.z) };
   }
   return r;
