@@ -227,3 +227,9 @@ Asked who David and ETB2004 are:
 > ETB2k4 drives a 99 green [make of car] and has spiky hair and lives on the murphey compound (he's from 2004 so he's just an astral projection) he always has a lot of beans and chemistry equipment set up in his cabin. we need to fix the layout of the murphey compound also. it's missing a cabin and the cinema and art studio are in the wrong spots
 
 **In the game:** neither of them is in it yet. Where the cabin, the cinema and the studio really are is under A compound above, and isn't built yet.
+
+## The truck stop
+
+Shown a picture from above of the big building behind a fuel canopy on US 80, about 12 km east of town, and asked what it is. Word for word, with the two shops' names taken out, since they're real:
+
+> Holy shit the map is this big? That's a gigantic gas station with a [sandwich shop], [doughnut shop], full 24 hour restaurant (truck stop), canopy over gas pumps for cars. The blue building is just the truck fuel canopy
