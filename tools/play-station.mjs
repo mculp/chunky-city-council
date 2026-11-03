@@ -129,9 +129,10 @@ check('and there\'s nothing left to bar it with', smashed.act !== 'Bar the door'
 const light = await g(() => {
   const G = __game, H = G.horde, S = G.station, spot = S.spot; G.place(...loc(53, 40));
   const round = () => {
-    H.calm(); H.all.slice(0, 24).forEach((s, i) => { const a = i / 24 * 6.283; s.x = spot.x + Math.cos(a) * 26; s.z = spot.z + Math.sin(a) * 26; s.y = G.floorAt(s.x, s.z); s.state = 0; s.alert = 0; s.timer = 0; s.tx = s.x; s.tz = s.z; });
+    H.calm(); H.all.slice(0, 24).forEach((s, i) => { const a = i / 24 * 6.283; s.x = s.homeX = spot.x + Math.cos(a) * 26; s.z = s.homeZ = spot.z + Math.sin(a) * 26; s.y = G.floorAt(s.x, s.z); s.lead = null; s.state = 0; s.alert = 0; s.timer = 0; s.tx = s.x; s.tz = s.z; });
     let close = 0; const secs = 70; for (let t = 0; t < secs; t += 1 / 5) { G.sim(1 / 5, 1 / 30); for (const s of H.all.slice(0, 24)) if (Math.hypot(s.x - spot.x, s.z - spot.z) < 10) close++; } return Math.round(close / (secs * 5));
   };
+  // where they live is where they're put, or some of them only head home, wherever that happened to be
   // the barrel by the pumps is a light too, so it's the canopy's on its own against none at all
   const on = H.lights.includes(spot), all = [...H.lights];
   H.lights.length = 0; H.lights.push(spot); const withLight = round();
