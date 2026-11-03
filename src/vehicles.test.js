@@ -201,3 +201,29 @@ test('a church that can\'t have its cart out front has it round the side', () =>
   const [p] = placeVehicles([house(1, 'church', 0)], { ...roadSide, free: (kind, x, z) => z < -25 || Math.abs(x) > 5 });
   assert.equal(p.kind, 'golf');
 });
+
+test('what gives way lets it through, and takes some of its speed and a little of the car', () => {
+  let standing = true, asked = null;
+  const world = { ...open, blocked: (x, z) => standing && z > 10 && z < 10.3, ram(x, z, y, speed, dirx, dirz, mass) { asked = { speed, dirz, mass }; standing = false; return { energy: 30000, gone: true }; } };
+  const v = makeVehicle('car', 0, 0, 0, 6); v.f = 20;
+  drive(v, { gas: 0, steer: 0 }, 2, world);
+  assert.ok(v.z > 14, `got to ${v.z}`);
+  assert.ok(v.f < 19, `still doing ${v.f}`);
+  assert.ok(v.hp < 100 && v.hp > 90, `${v.hp} left`);
+  near(asked.dirz, 1, 1e-3); assert.equal(asked.mass, KINDS.car.mass); assert.ok(asked.speed > 18);
+});
+
+test('what holds stops it the way a wall does', () => {
+  const world = { ...open, blocked: (x, z) => z > 10 && z < 10.3, ram: () => ({ energy: 5000, gone: false }) };
+  const v = makeVehicle('car', 0, 0, 0, 6); v.f = 20;
+  drive(v, { gas: 0, steer: 0 }, 2, world);
+  assert.ok(v.z < 9, `got to ${v.z}`);
+  assert.ok(v.hp < 90, `${v.hp} left`);
+});
+
+test('with nothing there to break it hits as it always did', () => {
+  const wall = { ...open, blocked: (x, z) => z > 10 && z < 10.3 }, plain = makeVehicle('car', 0, 0, 0, 6), asked = makeVehicle('car', 0, 0, 0, 6);
+  plain.f = asked.f = 20;
+  drive(plain, { gas: 0, steer: 0 }, 2, wall); drive(asked, { gas: 0, steer: 0 }, 2, { ...wall, ram: () => null });
+  near(plain.z, asked.z); near(plain.hp, asked.hp);
+});

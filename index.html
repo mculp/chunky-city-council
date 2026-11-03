@@ -107,6 +107,8 @@ body.talking #mini,body.talking #miniName{visibility:hidden}
 #bB{width:64px;height:64px;font-size:19px;background:var(--cyan);color:var(--ink);margin-bottom:38px}
 #bR{position:absolute;right:9px;bottom:90px;width:60px;height:60px;font-size:13px;background:var(--cream);color:var(--ink)}
 #bR[hidden]{display:none}
+#bC{position:absolute;right:94px;bottom:110px;width:60px;height:60px;font-size:13px;background:var(--hot);color:var(--ink)}
+#bC[hidden]{display:none}
 .btn{line-height:1}
 #keyStrip{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom, 0px) + 14px);z-index:4;pointer-events:none;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px 14px;width:max-content;max-width:calc(100vw - 32px);background:var(--panel);border:1px solid var(--line);padding:6px 12px;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
 #keyStrip[hidden]{display:none}
@@ -143,7 +145,7 @@ body.talking .ctl{visibility:hidden}
 <div class="card" id="card"><div><h2 id="cardH"></h2><p id="cardP"></p></div></div>
 <div id="keyStrip" hidden></div>
 <div id="stick" class="ctl" aria-hidden="true"><div id="knob"></div></div>
-<div id="btns" class="ctl"><button class="btn" id="bB" aria-label="Boost or jump">B</button><button class="btn" id="bA" aria-label="Act">A</button><button class="btn" id="bR" aria-label="Hold to run" hidden>RUN</button></div>
+<div id="btns" class="ctl"><button class="btn" id="bB" aria-label="Boost or jump">B</button><button class="btn" id="bA" aria-label="Act">A</button><button class="btn" id="bR" aria-label="Hold to run" hidden>RUN</button><button class="btn" id="bC" aria-label="Throw a gas can" hidden>THROW</button></div>
 <div id="map" hidden><canvas id="mapC" aria-label="Map of Chunky"></canvas>
   <div class="map-head"><h2>Chunky,<br><span>Mississippi</span></h2><div class="obj" id="mapObj" hidden></div></div>
   <div class="map-btns"><button id="mapIn" aria-label="Closer">+</button><button id="mapOut" aria-label="Further out">−</button><button id="mapMe" aria-label="Back to where you are">ME</button><button id="mapX" aria-label="Close the map">BACK</button></div>
@@ -154,6 +156,7 @@ body.talking .ctl{visibility:hidden}
     <h1>Chunky <span>2026</span></h1>
     <p>Chapter 1 · Cut Down</p>
     <button class="big" id="start">Start</button>
+    <button class="forget" id="free">Skip to town</button>
     <button class="forget" id="forget" hidden>Forget everyone</button>
     <p class="keys"><span class="k">WASD or arrows move · Shift runs · Space jumps · E uses · M is the map · drag to look</span><span class="t">Left thumb moves · the buttons say what they do · drag to look</span></p>
   </div>
@@ -185,8 +188,9 @@ import { drawCloth, drawSkull } from './src/looks.js';
 import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
 import { keysFor, buttonsFor, actWord, fastWord } from './src/controls.js';
 import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRim, drawArrow, drawLabel, labelSpace, clampCam, zoomAbout, fitScale, COLORS as MAPC } from './src/mapview.js';
-import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, Sheet, PATTERN, hash2 } from './src/structures.js';
-import { KINDS, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, placeVehicles, settle, speedOf } from './src/vehicles.js';
+import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, wallsOf, Sheet, PATTERN, hash2 } from './src/structures.js';
+import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
+import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, rimHit, placeVehicles, settle, speedOf } from './src/vehicles.js';
 import { vehicleGeometries, PAINTS, LAMPS } from './src/vehiclemodels.js';
 
 const $ = (id) => document.getElementById(id);
@@ -529,11 +533,14 @@ const toonGrad = (() => { const d = new Uint8Array([70, 150, 255]); const t = ne
 // collect static boxes per material, then merge them into one mesh each (fewer draw calls on phones)
 const buckets = new Map();
 let OX = 0, OZ = 0;   // what a landmark's own coordinates are relative to
+let PROP = null;      // the breakable thing being built, if any: what's added meanwhile belongs to it
 function addBox(mat, cx, cy, cz, sx, sy, sz, ink = 1.5, rot = null) {
   const m = new THREE.Matrix4().compose(new THREE.Vector3(cx + OX, cy, cz + OZ), rot || new THREE.Quaternion(), new THREE.Vector3(sx, sy, sz));
   const k = mat.uuid + '|' + ink;
-  if (!buckets.has(k)) buckets.set(k, { mat, ink, geos: [] });
-  buckets.get(k).geos.push(boxGeo.clone().applyMatrix4(m));
+  if (!buckets.has(k)) buckets.set(k, { mat, ink, geos: [], held: [] });
+  const b = buckets.get(k), geo = boxGeo.clone().applyMatrix4(m);
+  if (PROP) { geo.computeBoundingBox(); const h = { first: b.geos.length * 24, count: 24, box: geo.boundingBox, mat, g: null }; b.held.push(h); PROP.boxes.push(h); }
+  b.geos.push(geo);
 }
 function addBeam(a, b, w, h, mat = steelMat, ink = 1.6) {
   const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = B.clone().sub(A), L = d.length();
@@ -544,8 +551,9 @@ function addBeam(a, b, w, h, mat = steelMat, ink = 1.6) {
 const DISTANT = [];
 function flushBuckets(range = 300) {
   const group = new THREE.Group(), box = new THREE.Box3(); scene.add(group);
-  for (const { mat, ink, geos } of buckets.values()) {
+  for (const { mat, ink, geos, held } of buckets.values()) {
     const g = mergeGeometries(geos); const m = new THREE.Mesh(g, mat);
+    for (const h of held) h.g = g;
     if (ink) outline(m, INK, ink); group.add(m);
     g.computeBoundingBox(); box.union(g.boundingBox);
   }
@@ -757,7 +765,7 @@ const wrapRope = new THREE.Mesh(new THREE.TorusGeometry(.36, .045, 8, 24), new T
 wrapRope.rotation.y = Math.PI / 2; wrapRope.position.set(0, DY, ZS); scene.add(wrapRope);
 
 // ================================================================ trees (autumn hardwoods + loblolly pines), kept off the roads and the town
-let fillTrees = null;
+let fillTrees = null, treesNear = null, treeBlocks = null, fellTree = null, stepTrees = null, scorchTree = null, treeCrown = null, leafOf = null;
 const swayU = { uTime: { value: 0 } };
 function swayMat(params) {
   const m = new THREE.MeshStandardMaterial(params);
@@ -788,8 +796,12 @@ function swayMat(params) {
   let ti = 0, bi = 0, ci = 0;
   // A tree the map's river or roads took keeps its place in the random sequence and draws at no size, so the rest stay put.
   const seat = (x, z) => { const g = groundH(x, z); return g < 2.2 ? null : g; };
+  // Any of them can come down, and the first scene's are found the same way as the rest
+  const firstCells = new Map(), cellKey = (cx, cz) => (cx + 32768) * 65536 + cz + 32768;
+  const firstTree = (x, z, h, pine, size, ti, ci) => { const k = cellKey(Math.floor(x / 11), Math.floor(z / 11)); if (!firstCells.has(k)) firstCells.set(k, []); firstCells.get(k).push({ x, z, h, pine, size, ti, ci, first: true }); };
   for (const [x, , z, k] of hard) {
     const h = seat(x, z), gone = h === null, th = 3.2 * k; M.compose(P.set(x, h + th / 2, z), Q.identity(), gone ? S.setScalar(0) : S.set(k, th, k)); trunks.setMatrixAt(ti++, M);
+    if (!gone) firstTree(x, z, h, false, k, ti - 1, bi);
     const base = pal[Math.floor(rnd() * pal.length)];
     for (let j = 0; j < 5; j++) {
       const r = (.9 + rnd() * .9) * k;
@@ -800,6 +812,7 @@ function swayMat(params) {
   }
   for (const [x, , z, k] of pines) {
     const h = seat(x, z), gone = h === null, th = 6.5 * k; M.compose(P.set(x, h + th / 2, z), Q.identity(), gone ? S.setScalar(0) : S.set(k * .8, th, k * .8)); trunks.setMatrixAt(ti++, M);
+    if (!gone) firstTree(x, z, h, true, k, ti - 1, ci);
     const c = ppal[Math.floor(rnd() * ppal.length)];
     for (let j = 0; j < 3; j++) { const r = (1.7 - j * .45) * k; M.compose(P.set(x, h + th - .6 * k + j * 1.25 * k, z), Q.identity(), gone ? S.setScalar(0) : S.set(r, 2.4 * k, r)); cones.setMatrixAt(ci, M); cones.setColorAt(ci, c); ci++; }
   }
@@ -827,40 +840,128 @@ function swayMat(params) {
     const first = x > -100 && x < 140 && z > -120 && z < 120 && !(x > 64 && x < 125 && Math.abs(z) < 34);
     if (r(0) < .62 && !first && fbm(x * .012 + 40, z * .012 + 40, 77, 1e6, 2) > .36) {
       const h = groundH(x, z), rd = MAP.roadGrid.nearest(x, z), half = rd < 32 ? MAP.roadGrid.seg.owner.width / 2 : 0;
-      if (h >= 2.2 && rd > half + 4 && MAP.railGrid.nearest(x, z) > 6 && padWeight(x, z) === 0) t = { x, z, h, r, pine: r(3) < .33, k: r(4) };
+      if (h >= 2.2 && rd > half + 4 && MAP.railGrid.nearest(x, z) > 6 && padWeight(x, z) === 0) { const pine = r(3) < .33; t = { x, z, h, r, pine, size: pine ? .8 + r(4) * .7 : .7 + r(4) * .9 }; }
     }
     cache.set(k, t); return t;
   };
-  let lastX = 1e9, lastZ = 1e9;
+  // Where each part of one goes, standing: TM[0] is its trunk and the rest is what's on it
+  const TM = Array.from({ length: 6 }, () => new THREE.Matrix4()), TC = Array.from({ length: 6 }, () => new THREE.Color());
+  function poolTree(t) {
+    const { x, z, h, r } = t, k = t.size;
+    if (t.pine) {
+      const th = 6.5 * k; TM[0].compose(P.set(x, h + th / 2, z), Q.identity(), S.set(k * .8, th, k * .8));
+      const c = ppal[Math.floor(r(5) * ppal.length)];
+      for (let n = 0; n < 3; n++) { const w = (1.7 - n * .45) * k; TM[n + 1].compose(P.set(x, h + th - .6 * k + n * 1.25 * k, z), Q.identity(), S.set(w, 2.4 * k, w)); TC[n + 1].copy(c); }
+    } else {
+      const th = 3.2 * k; TM[0].compose(P.set(x, h + th / 2, z), Q.identity(), S.set(k, th, k));
+      const base = pal[Math.floor(r(5) * pal.length)];
+      for (let n = 0; n < 5; n++) {
+        const q = (u) => r(10 + n * 8 + u), w = (.9 + q(0) * .9) * k;
+        TM[n + 1].compose(P.set(x + (q(1) - .5) * 2.6 * k, h + th + (q(2) - .25) * 2.2 * k, z + (q(3) - .5) * 2.6 * k), Q.setFromEuler(E.set(q(4) * 3, q(5) * 3, q(6) * 3)), S.set(w, w * (.8 + q(7) * .4), w));
+        TC[n + 1].copy(base).offsetHSL((q(1) - .5) * .04, 0, (q(2) - .5) * .12);
+      }
+    }
+  }
+  // The same, for one that's been hit: t.lean is how far it's gone over, t.stump means that's all that's left, and t.burnt that the fire's had its leaves
+  const TURN = new THREE.Matrix4(), PIVOT = new THREE.Vector3(), AXIS = new THREE.Vector3(), NONE = new THREE.Matrix4().makeScale(0, 0, 0), ONE = new THREE.Vector3(1, 1, 1);
+  function brokenTree(t) {
+    const n = t.pine ? 3 : 5;
+    if (t.stump) { TM[0].decompose(P, Q, S); S.y = .45; P.y = t.h + .22; TM[0].compose(P, Q, S); for (let k = 1; k <= n; k++) TM[k].copy(NONE); return; }
+    if (t.burnt) for (let k = 1; k <= n; k++) TM[k].copy(NONE);
+    if (t.lean) {
+      Q.setFromAxisAngle(AXIS.set(t.dirz, 0, -t.dirx), t.lean);
+      PIVOT.set(t.x, t.h, t.z); P.copy(PIVOT).applyQuaternion(Q);
+      TURN.compose(PIVOT.sub(P), Q, ONE);
+      for (let k = 0; k <= n; k++) TM[k].premultiply(TURN);
+    }
+  }
+  function standing(t) {
+    if (!t.first) { poolTree(t); return; }
+    const n = t.pine ? 3 : 5, crown = t.pine ? cones : blobs;
+    if (!t.base) { t.base = new Float32Array(16 * (n + 1)); trunks.getMatrixAt(t.ti, M); M.toArray(t.base, 0); for (let k = 1; k <= n; k++) { crown.getMatrixAt(t.ci + k - 1, M); M.toArray(t.base, k * 16); } }
+    for (let k = 0; k <= n; k++) TM[k].fromArray(t.base, k * 16);
+  }
+  let lastX = 1e9, lastZ = 1e9, filled = 0;
+  function redrawTree(t) {
+    if (!t.first && t.filled !== filled) return;   // it's not one of the ones being drawn right now
+    standing(t); brokenTree(t);
+    const n = t.pine ? 3 : 5, tm = t.first ? trunks : pt, crown = t.first ? (t.pine ? cones : blobs) : (t.pine ? pc : pb);
+    tm.setMatrixAt(t.ti, TM[0]); for (let k = 1; k <= n; k++) crown.setMatrixAt(t.ci + k - 1, TM[k]);
+    tm.instanceMatrix.needsUpdate = crown.instanceMatrix.needsUpdate = true;
+  }
   fillTrees = (cam_x, cam_z) => {
     if (Math.hypot(cam_x - lastX, cam_z - lastZ) < 14) return;
-    lastX = cam_x; lastZ = cam_z;
+    lastX = cam_x; lastZ = cam_z; filled++;
     let ti = 0, bi = 0, ci = 0; const cr = Math.ceil(RANGE / CELL), c0x = Math.floor(cam_x / CELL), c0z = Math.floor(cam_z / CELL);
     for (let i = -cr; i <= cr; i++) for (let j = -cr; j <= cr; j++) {
       if (i * i + j * j > cr * cr || ti >= pt.instanceMatrix.count) continue;
       const t = treeAt(c0x + i, c0z + j); if (!t) continue;
-      const { x, z, h, r } = t;
-      if (t.pine) {
-        if (ci + 3 > pc.instanceMatrix.count) continue;
-        const k = .8 + t.k * .7, th = 6.5 * k; M.compose(P.set(x, h + th / 2, z), Q.identity(), S.set(k * .8, th, k * .8)); pt.setMatrixAt(ti++, M);
-        const c = ppal[Math.floor(r(5) * ppal.length)];
-        for (let n = 0; n < 3; n++) { const w = (1.7 - n * .45) * k; M.compose(P.set(x, h + th - .6 * k + n * 1.25 * k, z), Q.identity(), S.set(w, 2.4 * k, w)); pc.setMatrixAt(ci, M); pc.setColorAt(ci, c); ci++; }
-      } else {
-        if (bi + 5 > pb.instanceMatrix.count) continue;
-        const k = .7 + t.k * .9, th = 3.2 * k; M.compose(P.set(x, h + th / 2, z), Q.identity(), S.set(k, th, k)); pt.setMatrixAt(ti++, M);
-        const base = pal[Math.floor(r(5) * pal.length)];
-        for (let n = 0; n < 5; n++) {
-          const q = (u) => r(10 + n * 8 + u), w = (.9 + q(0) * .9) * k;
-          M.compose(P.set(x + (q(1) - .5) * 2.6 * k, h + th + (q(2) - .25) * 2.2 * k, z + (q(3) - .5) * 2.6 * k), Q.setFromEuler(E.set(q(4) * 3, q(5) * 3, q(6) * 3)), S.set(w, w * (.8 + q(7) * .4), w));
-          pb.setMatrixAt(bi, M); pb.setColorAt(bi, base.clone().offsetHSL((q(1) - .5) * .04, 0, (q(2) - .5) * .12)); bi++;
-        }
-      }
+      if (t.pine ? ci + 3 > pc.instanceMatrix.count : bi + 5 > pb.instanceMatrix.count) continue;
+      poolTree(t); if (t.down || t.burnt) brokenTree(t);
+      t.ti = ti; t.ci = t.pine ? ci : bi; t.filled = filled;
+      pt.setMatrixAt(ti++, TM[0]);
+      if (t.pine) for (let k = 1; k <= 3; k++) { pc.setMatrixAt(ci, TM[k]); pc.setColorAt(ci, TC[k]); ci++; }
+      else for (let k = 1; k <= 5; k++) { pb.setMatrixAt(bi, TM[k]); pb.setColorAt(bi, TC[k]); bi++; }
     }
     pt.count = ti; pb.count = po1.count = bi; pc.count = po2.count = ci;
     for (const m of [pt, pb, pc]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   };
+  // What a car goes through and what stops it: a young tree goes over at a walking pace, and it takes some speed to bring down a big one
+  const isSmall = (t) => t.size < (t.pine ? 1.05 : 1.1), trunkR = (t) => (t.pine ? .16 : .2) * t.size;
+  treesNear = (x, z, r, fn) => {
+    for (let cx = Math.floor((x - r) / CELL), cx1 = Math.floor((x + r) / CELL); cx <= cx1; cx++) for (let cz = Math.floor((z - r) / CELL), cz1 = Math.floor((z + r) / CELL); cz <= cz1; cz++) {
+      const t = treeAt(cx, cz); if (t && !t.down) fn(t);
+      const list = firstCells.get(cellKey(cx, cz)); if (list) for (const q of list) if (!q.down) fn(q);
+    }
+  };
+  treeBlocks = (x, z) => {
+    for (let cx = Math.floor((x - .7) / CELL), cx1 = Math.floor((x + .7) / CELL); cx <= cx1; cx++) for (let cz = Math.floor((z - .7) / CELL), cz1 = Math.floor((z + .7) / CELL); cz <= cz1; cz++) {
+      const t = treeAt(cx, cz); if (t && !t.down && Math.hypot(t.x - x, t.z - z) < trunkR(t) + .3) return t;
+      const list = firstCells.get(cellKey(cx, cz)); if (list) for (const q of list) if (!q.down && Math.hypot(q.x - x, q.z - z) < trunkR(q) + .3) return q;
+    }
+    return null;
+  };
+  treeCrown = (t) => [t.x, t.h + (t.pine ? 6.5 * t.size : 3.2 * t.size + .8 * t.size), t.z];
+  leafOf = (t, c) => { if (t.first) (t.pine ? cones : blobs).getColorAt(t.ci, c); else { poolTree(t); c.copy(TC[1]); } return c; };
+  const falls = [], _leaf = new THREE.Color();
+  fellTree = (t, dx, dz) => {
+    if (t.down) return;
+    t.down = true;
+    if (t.burner) { t.burner.T = 0; t.burner = null; }
+    const l = Math.hypot(dx, dz), a = t.x * 7 + t.z * 3;
+    t.dirx = l ? dx / l : Math.cos(a); t.dirz = l ? dz / l : Math.sin(a);
+    const small = isSmall(t);
+    falls.push({ t, e: 0, T: small ? .34 : 1.15, angle: small ? 1.75 : 1.47, small });
+    if (crowdOut && !small) horde.noise(t.x, t.z, 26, 2);
+  };
+  stepTrees = () => {
+    for (let i = falls.length - 1; i >= 0; i--) {
+      const f = falls[i], t = f.t; f.e += 1 / 12;
+      const k = Math.min(1, f.e / f.T); t.lean = f.angle * k * k;
+      if (k >= 1) {
+        falls.splice(i, 1);
+        const reach = (t.pine ? 5 : 3.4) * t.size, x = t.x + t.dirx * reach, z = t.z + t.dirz * reach; leafOf(t, _leaf);
+        if (f.small) {
+          // it's gone: a stump, and the leaves all over the road
+          t.stump = true; t.lean = 0;
+          spray(x, t.h + .9, z, FEW ? 7 : 14, .2, 4, _leaf.r, _leaf.g, _leaf.b, t.dirx, t.dirz);
+          puff(x, t.h + .8, z, .9 * t.size, .55, .8, _leaf.r * .5, _leaf.g * .5, _leaf.b * .5);
+        } else {
+          spray(x, t.h + .5, z, FEW ? 4 : 8, .18, 3, _leaf.r, _leaf.g, _leaf.b);
+          dust(x, z, t.dirx, t.dirz, t.size * 5, 1.6);
+          if (!reduceMotion && Math.hypot(player.pos.x - x, player.pos.z - z) < 30) cam.shake = Math.max(cam.shake, .2);
+          // and whatever it comes down on knows about it
+          strike(t.x + t.dirx * reach * 1.5, TOWN_Y + 1, t.z + t.dirz * reach * 1.5, 2.2, 2.5, t.dirx, t.dirz);
+        }
+      }
+      redrawTree(t);
+    }
+  };
+  scorchTree = (t) => {
+    t.burnt = true; t.hp = .4; leafOf(t, _leaf); redrawTree(t);
+    const [x, y, z] = treeCrown(t); spray(x, y - 1, z, FEW ? 3 : 6, .12, 1.6, .05, .04, .05);
+  };
 }
-
 // ================================================================ water (no reflection pass, so it stays light on phones)
 const rip = Array.from({ length: 16 }, () => new THREE.Vector4(0, 0, -100, 0)), ripG = new Array(16).fill(0);
 let time = 0, ripI = 0;
@@ -897,9 +998,9 @@ flushBuckets();   // the bridge
 
 // ================================================================ the town: post-apocalyptic Chunky, Mississippi
 const SOLIDS = [];   // [x0,x1,z0,z1,top] blocks the player
-function solid(x0, x1, z0, z1, top) { SOLIDS.push([x0 + OX, x1 + OX, z0 + OZ, z1 + OZ, top]); }
+function solid(x0, x1, z0, z1, top) { const b = [x0 + OX, x1 + OX, z0 + OZ, z1 + OZ, top]; SOLIDS.push(b); if (PROP) PROP.solids.push(b); }
 const kudzuSpots = [];
-function kudzuOn(x0, x1, y, z0, z1, n) { for (let i = 0; i < n; i++) kudzuSpots.push([x0 + OX + rnd() * (x1 - x0), y, z0 + OZ + rnd() * (z1 - z0)]); }
+function kudzuOn(x0, x1, y, z0, z1, n) { for (let i = 0; i < n; i++) { if (PROP) PROP.kudzu.push(kudzuSpots.length); kudzuSpots.push([x0 + OX + rnd() * (x1 - x0), y, z0 + OZ + rnd() * (z1 - z0)]); } }
 const lit = (c, i = 1) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(i) });
 const Y0 = TOWN_Y;
 // ---------------- every real building: src/structures.js says what they're made of, and data/structures.md where they're from
@@ -963,6 +1064,7 @@ houseMat.onBeforeCompile = (sh) => {
 };
 const HOUSE_CELL = 128, HOUSE_RANGE = matchMedia('(pointer:coarse)').matches ? 200 : 240;
 const houseCells = cellsOf(STRUCTURES, HOUSE_CELL);
+for (const c of houseCells) for (const s of c.list) s.cell = c;
 function sheetGeometry(a) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(a.position, 3)); g.setAttribute('normal', new THREE.BufferAttribute(a.normal, 3));
@@ -972,12 +1074,15 @@ function sheetGeometry(a) {
 }
 function buildHouses(cell) {
   const sheet = new Sheet();
-  for (const s of cell.list) writeStructure(sheet, s, TOWN_Y);
+  cell.starts = new Map();
+  for (const s of cell.list) { cell.starts.set(s.index, sheet.n); writeStructure(sheet, s, TOWN_Y); }
   const a = sheet.arrays(), g = sheetGeometry(a);
+  // what's already come down stays down
+  for (const s of cell.list) if (damage.has(s)) layDown(g, cell.starts.get(s.index), s);
   const m = new THREE.Mesh(g, houseMat); outline(m, INK, 1.5, 0, { cut: true }); scene.add(m);
-  cell.mesh = m; cell.pieces = a.pieces;
+  cell.mesh = m;
 }
-function dropHouses(cell) { scene.remove(cell.mesh); cell.mesh.geometry.dispose(); cell.mesh = null; cell.pieces = null; }
+function dropHouses(cell) { scene.remove(cell.mesh); cell.mesh.geometry.dispose(); cell.mesh = null; cell.starts = null; }
 // They only come in once he's off the bridge, so the opening has its forest to itself. One a frame, nearest first.
 function updateHouses(x, z, jumped) {
   if (!S.flags.town) return;
@@ -988,6 +1093,303 @@ function updateHouses(x, z, jumped) {
     else if (d < HOUSE_RANGE + 90) { if (jumped) buildHouses(c); else if (d < nd) { nd = d; near = c; } }
   }
   if (near) buildHouses(near);
+}
+// ---------------- what comes down: src/damage.js says what goes with what, and this is how it looks
+const wreckRand = (() => { let s = 20261101; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+const NOWHERE = new THREE.Matrix4().makeScale(0, 0, 0), STEP_T = 1 / 12, FEW = matchMedia('(pointer:coarse)').matches, _we = new THREE.Euler(), _wc = new THREE.Color(), _wa = new THREE.Vector3(), _wq = new THREE.Quaternion();
+const touch = (attr, at, len) => { attr.addUpdateRange(at, len); attr.needsUpdate = true; };
+// Bits that fly and settle, from a fixed pool. When it runs out the oldest go, and what stays on the ground is the pieces themselves.
+const BIT_N = FEW ? 120 : 220, bitMesh = new THREE.InstancedMesh(boxGeo, new THREE.MeshStandardMaterial({ roughness: .95 }), BIT_N), bitLine = new THREE.InstancedMesh(boxGeo, outlineMat(INK, 1.1, 0), BIT_N);
+bitLine.instanceMatrix = bitMesh.instanceMatrix; bitMesh.setColorAt(0, _wc.set(0));
+for (let i = 0; i < BIT_N; i++) bitMesh.setMatrixAt(i, NOWHERE);
+for (const m of [bitMesh, bitLine]) { m.frustumCulled = false; m.visible = false; scene.add(m); }
+const bits = Array.from({ length: BIT_N }, () => ({ live: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, ry: 0, rz: 0, spin: 0, sx: 0, sy: 0, sz: 0, floor: 0 }));
+let bitNext = 0, bitsMoving = 0, bitsDirty = false;
+function throwBit(x, y, z, vx, vy, vz, sx, sy, sz, r, g, b, floor) {
+  const i = bitNext, t = bits[i]; bitNext = (i + 1) % BIT_N;
+  if (t.live) bitsMoving--;
+  t.live = true; t.x = x; t.y = y; t.z = z; t.vx = vx; t.vy = vy; t.vz = vz; t.sx = sx; t.sy = sy; t.sz = sz; t.floor = floor;
+  t.rx = wreckRand() * 6; t.ry = wreckRand() * 6; t.rz = wreckRand() * 6; t.spin = (wreckRand() - .5) * 14;
+  bitMesh.setColorAt(i, _wc.setRGB(r, g, b)); bitMesh.instanceColor.needsUpdate = true;
+  bitsMoving++; bitsDirty = true; bitMesh.visible = bitLine.visible = true;
+}
+// a handful of bits, thrown up and out from one spot, and along (dirx, dirz) if that's the way it was hit
+function spray(x, y, z, n, size, speed, r, g, b, dirx = 0, dirz = 0) {
+  const floor = floorAt(x, z);
+  for (let i = 0; i < n; i++) {
+    const a = wreckRand() * 6.283, v = speed * (.3 + wreckRand() * .8), k = size * (.55 + wreckRand()), tint = .8 + wreckRand() * .4;
+    throwBit(x + Math.cos(a) * size, y + wreckRand() * size, z + Math.sin(a) * size, Math.cos(a) * v + dirx * speed * .7, speed * (.45 + wreckRand() * .8), Math.sin(a) * v + dirz * speed * .7, k, k * .45, k * (.6 + wreckRand() * .7), r * tint, g * tint, b * tint, floor);
+  }
+}
+function updateBits(dt) {
+  if (!bitsMoving) return;
+  for (const b of bits) {
+    if (!b.live) continue;
+    b.vy -= 15 * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt; b.rx += b.spin * dt; b.rz += b.spin * .6 * dt;
+    const rest = b.floor + b.sy / 2;
+    if (b.y > rest) continue;
+    b.y = rest;
+    if (b.vy < -3) { b.vy *= -.3; b.vx *= .55; b.vz *= .55; b.spin *= .5; }
+    else { b.live = false; bitsMoving--; b.rx = Math.round(b.rx / 3.1416) * 3.1416; b.rz = Math.round(b.rz / 3.1416) * 3.1416; }
+  }
+  bitsDirty = true;
+}
+function drawBits() {
+  if (!bitsDirty) return;
+  bits.forEach((b, i) => { if (b.sx) { _m.compose(_v.set(b.x, b.y, b.z), _q.setFromEuler(_we.set(b.rx, b.ry, b.rz)), _s.set(b.sx, b.sy, b.sz)); bitMesh.setMatrixAt(i, _m); } });
+  bitMesh.instanceMatrix.needsUpdate = true; bitsDirty = bitsMoving > 0;
+}
+// Anything coming down, redrawn on the 12 fps step. A piece of a merged mesh changes in place, and only its own bytes go up.
+// { boxes: [{ g, first, count, from, to, nor, quads }], objs: [{ o, pos, quat }], t, T, and for something that tips: pivot, dirx, dirz, angle, lift }
+const falling = [], FALLING_MAX = FEW ? 40 : 80;
+function stepFalling() {
+  for (let i = falling.length - 1; i >= 0; i--) {
+    const f = falling[i];
+    if (f.cell && (!f.cell.mesh || f.cell.mesh.geometry !== f.boxes[0].g)) { falling.splice(i, 1); continue; }   // its cell's gone, and it'll be written back fallen
+    f.t += STEP_T;
+    if (f.t < 0) continue;
+    if (f.begin) { f.begin(); f.begin = null; }
+    const done = f.t >= f.T, e = done ? 1 : (f.t / f.T) ** 2;
+    for (const b of f.boxes) {
+      const P = b.g.attributes.position, N = b.g.attributes.normal, at = b.first * 3, len = b.count * 3;
+      if (f.pivot) {
+        tip(b.from, P.array.subarray(at, at + len), b.count, f.pivot, f.dirx, f.dirz, f.angle * e, f.lift * e);
+        if (N) { tipNormals(b.nor, N.array.subarray(at, at + len), b.count, f.dirx, f.dirz, f.angle * e); touch(N, at, len); }
+      } else {
+        for (let k = 0; k < len; k++) P.array[at + k] = b.from[k] + (b.to[k] - b.from[k]) * e;
+        if (done && b.quads) { faceNormals(P.array, N.array, b.first, b.count); touch(N, at, len); }
+      }
+      touch(P, at, len);
+    }
+    if (f.objs) {
+      _wa.set(f.dirz, 0, -f.dirx); _wq.setFromAxisAngle(_wa, f.angle * e);
+      for (const { o, pos, quat } of f.objs) { o.position.copy(pos).sub(_v.set(...f.pivot)).applyQuaternion(_wq).add(_v); o.position.y += f.lift * e; o.quaternion.copy(_wq).multiply(quat); }
+    }
+    if (done) { falling.splice(i, 1); f.end?.(); }
+  }
+}
+// ---- a building's pieces
+const damage = createDamage({ base: TOWN_Y, on: {
+  fall(s, p, wasBurning) {
+    const stop = s.stops?.get(p.stop); if (stop) stop[4] = -1e9;
+    if (p.fire) { p.fire.T = 0; p.fire = null; }
+    if (wasBurning && p.kind !== 'kudzu') emberAt(p.x, p.z);
+    if (s.cell.mesh) fallPiece(s, p);
+    buildingTies.get(s.index)?.(s, p);
+    if (crowdOut && time - lastCrash > .3) { lastCrash = time; horde.noise(p.x, p.z, 26, 3); }
+  },
+  // it shows what it's taken, and it stays that way
+  crack(s, p) {
+    const k = Math.min(.55 + .45 * Math.max(0, p.hp / p.max), p.shade ?? 1), ratio = k / (p.shade ?? 1); p.shade = k;
+    if (!s.cell.mesh) return;
+    const g = s.cell.mesh.geometry, first = s.cell.starts.get(s.index) + p.first; shadePiece(g, first, p.count, ratio);
+    const C = g.attributes.color.array; spray(p.x, p.y - .6, p.z, FEW ? 1 : 2, .13, 2.4, C[first * 3], C[first * 3 + 1], C[first * 3 + 2]);
+  },
+  // the frame stays, dark, and the wall behind it's still a wall
+  shatter(s, p) {
+    spray(p.x, p.y, p.z, 3, .08, 2.6, .55, .65, .75);
+    if (s.cell.mesh) unlight(s.cell.mesh.geometry, s.cell.starts.get(s.index) + p.first, p.count, true);
+  },
+  ignite(s, p) { burningHouses.add(s); p.fire = burnAt(p.x, flameFoot(p), p.z, FLAME_SIZE[p.kind] ?? 1, Infinity, { s }); },
+  // it goes dark as it goes, and that stays too
+  char(s, p, k) {
+    const was = p.shade ?? 1; if (k >= was) return;
+    p.shade = k;
+    if (s.cell.mesh) shadePiece(s.cell.mesh.geometry, s.cell.starts.get(s.index) + p.first, p.count, k / was);
+  },
+} });
+let lastCrash = -9;
+function shadePiece(g, first, count, ratio) { const C = g.attributes.color; for (let i = first * 3, e = i + count * 3; i < e; i++) C.array[i] *= ratio; touch(C, first * 3, count * 3); }
+function unlight(g, first, count, live) { const M = g.attributes.aMat; for (let v = first; v < first + count; v++) M.array[v * 3 + 1] = 0; if (live) touch(M, first * 3, count * 3); }
+// it's rubble now, and rubble doesn't go away when the roof it was part of is hidden
+function grounded(g, first, count, live) { const M = g.attributes.aMat; for (let v = first; v < first + count; v++) M.array[v * 3 + 2] = -1; if (live) touch(M, first * 3, count * 3); }
+// Puts a piece straight where it lies, without the fall
+function laid(g, first, s, p, live) {
+  const P = g.attributes.position, N = g.attributes.normal, at = first * 3, len = p.count * 3, from = P.array.slice(at, at + len), how = settlePiece(s, p, TOWN_Y, from, P.array.subarray(at, at + len));
+  if (how.mode === 'topple') tipNormals(N.array.slice(at, at + len), N.array.subarray(at, at + len), p.count, p.dirx, p.dirz, how.angle);
+  else if (how.mode === 'vanish') for (let i = at; i < at + len; i += 3) { N.array[i] = 0; N.array[i + 1] = 1; N.array[i + 2] = 0; }
+  else faceNormals(P.array, N.array, first, p.count);
+  grounded(g, first, p.count, live);
+  if (live) { touch(P, at, len); touch(N, at, len); }
+}
+// everything that's happened to a building, when its cell's written again
+function layDown(g, start, s) {
+  for (const p of damage.state(s).parts) {
+    if (p.gone) laid(g, start + p.first, s, p, false);
+    else { if (p.shade) { const C = g.attributes.color.array; for (let i = (start + p.first) * 3, e = i + p.count * 3; i < e; i++) C[i] *= p.shade; } if (p.cracked) unlight(g, start + p.first, p.count, false); }
+  }
+}
+// how much of a piece flies off when it goes
+const BITS = { wall: [5, .3, 3.2], lintel: [2, .2, 2.4], roof: [2, .34, 2], gable: [3, .3, 2.4], porch: [1, .3, 2], carport: [1, .3, 2], post: [1, .12, 2], door: [1, .22, 2], bay: [2, .3, 2.6], window: [3, .07, 3], shutter: [1, .12, 2], kudzu: [2, .2, 1.6], vent: [1, .14, 2] };
+function fallPiece(s, p) {
+  const cell = s.cell, g = cell.mesh.geometry, first = cell.starts.get(s.index) + p.first, at = first * 3, len = p.count * 3, P = g.attributes.position, C = g.attributes.color.array;
+  const begin = () => {
+    const [n, size, speed] = BITS[p.kind] ?? [1, .2, 2];
+    spray(p.x, Math.max(p.y - 1, TOWN_Y + .4), p.z, FEW ? Math.ceil(n * .6) : n, size, speed, C[at], C[at + 1], C[at + 2], p.dirx, p.dirz);
+    if (p.kind === 'wall' || p.kind === 'roof' || p.kind === 'gable') puff(p.x, TOWN_Y + .5, p.z, .6 + wreckRand() * .5, .7, 1.2, .07, .06, .052);
+  };
+  const from = P.array.slice(at, at + len), to = new Float32Array(len), how = settlePiece(s, p, TOWN_Y, from, to);
+  grounded(g, first, p.count, true);
+  if (!how.T || falling.length >= FALLING_MAX) { begin(); laid(g, first, s, p, true); return; }
+  const f = { cell, t: -(p.delay ?? 0), T: how.T, begin, boxes: [{ g, first, count: p.count, from, to, quads: true }] };
+  if (how.mode === 'topple') Object.assign(f, { pivot: how.pivot, dirx: p.dirx, dirz: p.dirz, angle: how.angle, lift: how.lift }), f.boxes[0].nor = g.attributes.normal.array.slice(at, at + len);
+  falling.push(f);
+}
+// A building can have things hanging on it that aren't part of it: a sign, a steeple, a window
+const buildingTies = new Map();
+function tieTo(s, fn) { if (s) buildingTies.set(s.index, fn); }
+const HOUSE_NEAR = new Set();
+function housesNear(x, z, r) {
+  HOUSE_NEAR.clear();
+  for (let cx = Math.floor((x - r) / 32); cx <= Math.floor((x + r) / 32); cx++) for (let cz = Math.floor((z - r) / 32); cz <= Math.floor((z + r) / 32); cz++) { const list = houseGrid.get((cx + 32768) * 65536 + cz + 32768); if (list) for (const s of list) HOUSE_NEAR.add(s); }
+  return HOUSE_NEAR;
+}
+// ---- everything else that's standing, built by hand further down
+const PROPS = [], propGrid = new Map();
+// What's added inside fn belongs to it. rigid: it goes over in one piece, about its foot. Otherwise it's flattened where it stands.
+function breakable(kind, hp, fn = null, opts = {}) {
+  const p = { kind, hp, max: hp, boxes: [], solids: [], walls: [], kudzu: [], faces: [], objs: [], hide: [], down: false, ...opts };
+  PROP = p; fn?.(); PROP = null; PROPS.push(p); return p;
+}
+const _wb = new THREE.Box3();
+function indexProps() {
+  for (const p of PROPS) {
+    p.box = new THREE.Box3();
+    for (const h of p.boxes) p.box.union(h.box);
+    for (const o of p.objs) p.box.union(_wb.setFromObject(o));
+    for (const o of p.hide) p.box.union(_wb.setFromObject(o));
+    if (p.bounds) p.box.union(p.bounds);
+    if (p.box.isEmpty()) continue;
+    p.cx = p.foot ? p.foot[0] : (p.box.min.x + p.box.max.x) / 2; p.cz = p.foot ? p.foot[1] : (p.box.min.z + p.box.max.z) / 2;
+    p.color = p.chip ? new THREE.Color(p.chip) : (p.boxes[0]?.mat.color ?? new THREE.Color('#555'));
+    for (let cx = Math.floor(p.box.min.x / 16); cx <= Math.floor(p.box.max.x / 16); cx++) for (let cz = Math.floor(p.box.min.z / 16); cz <= Math.floor(p.box.max.z / 16); cz++) { const k = (cx + 32768) * 65536 + cz + 32768; if (!propGrid.has(k)) propGrid.set(k, []); propGrid.get(k).push(p); }
+  }
+}
+function propsNear(x, z, r, fn) {
+  const seen = new Set();
+  for (let cx = Math.floor((x - r) / 16); cx <= Math.floor((x + r) / 16); cx++) for (let cz = Math.floor((z - r) / 16); cz <= Math.floor((z + r) / 16); cz++) { const list = propGrid.get((cx + 32768) * 65536 + cz + 32768); if (list) for (const p of list) if (!p.down && !seen.has(p)) { seen.add(p); fn(p); } }
+}
+// How far from it: along its line if it's long and runs at an angle, like a stretch of fence, or to its box
+const propDist = (p, x, y, z) => {
+  const a = p.box.min, b = p.box.max, dy = Math.max(a.y - y, 0, y - b.y);
+  if (p.line) { const [ax, az, bx, bz] = p.line, dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1e-9, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)); return Math.hypot(x - ax - dx * t, z - az - dz * t, dy); }
+  return Math.hypot(Math.max(a.x - x, 0, x - b.x), dy, Math.max(a.z - z, 0, z - b.z));
+};
+function hitProp(p, power, dx, dz) {
+  if (p.down) return;
+  p.hp -= power;
+  spray(p.cx, Math.min(p.box.max.y, player.pos.y + 1.2), p.cz, FEW ? 1 : 2, .12, 2.4, p.color.r, p.color.g, p.color.b);
+  if (p.hp <= 0) breakProp(p, dx, dz);
+}
+let kudzuMesh = null;
+// Dust where something came down: plenty of small puffs along it, since one big one reads as a boulder
+function dust(x, z, dirx, dirz, long, wide = 1.2) {
+  for (let i = 0, n = Math.min(FEW ? 5 : 9, 2 + Math.round(long)); i < n; i++) {
+    const a = (wreckRand() - .5) * long, c = (wreckRand() - .5) * wide, px = x + dirx * a - dirz * c, pz = z + dirz * a + dirx * c;
+    puff(px, floorAt(px, pz) + .2, pz, .3 + wreckRand() * .35, .55 + wreckRand() * .4, .7, .07, .06, .052);
+  }
+}
+function breakProp(p, dx = 0, dz = 0) {
+  if (p.down) return;
+  p.down = true;
+  const l = Math.hypot(dx, dz), a = (p.cx + p.cz) * 7, { min, max } = p.box;
+  let dirx = l ? dx / l : Math.cos(a), dirz = l ? dz / l : Math.sin(a);
+  // a stretch of fence only goes over one way or the other
+  if (p.falls) { const side = dirx * p.falls[0] + dirz * p.falls[1] >= 0 ? 1 : -1; dirx = p.falls[0] * side; dirz = p.falls[1] * side; }
+  for (const b of p.solids) b[4] = -1e9;
+  for (const w of p.walls) w[4] = -1e9;
+  if (p.kudzu.length) { for (const i of p.kudzu) kudzuMesh.setMatrixAt(i, NOWHERE); kudzuMesh.instanceMatrix.needsUpdate = true; }
+  for (const f of p.faces) { f.im.setMatrixAt(f.i, NOWHERE); f.im.instanceMatrix.needsUpdate = true; }
+  for (const o of p.hide) o.visible = false;
+  // whatever was sitting on it comes down too
+  for (const c of PICKUPS) if (!c.got && c.y > TOWN_Y + .6 && c.x > min.x - 1 && c.x < max.x + 1 && c.z > min.z - 1 && c.z < max.z + 1) c.y = TOWN_Y + .3;
+  const size = Math.max(max.x - min.x, max.y - min.y, max.z - min.z), n = Math.min(FEW ? 4 : 7, 2 + Math.round(size));
+  spray(p.cx, p.rigid ? min.y + .6 : (min.y + max.y) / 2, p.cz, n, Math.min(.42, .1 + size * .04), 3, p.color.r, p.color.g, p.color.b, dirx, dirz);
+  p.broke?.(p, dirx, dirz);
+  if (crowdOut && time - lastCrash > .3) { lastCrash = time; horde.noise(p.cx, p.cz, 26, 3); }
+  const boxes = p.boxes.filter((h) => h.g).map((h) => {
+    const at = h.first * 3, len = h.count * 3, A = h.g.attributes.position.array;
+    return { g: h.g, first: h.first, count: h.count, from: A.slice(at, at + len), nor: h.g.attributes.normal.array.slice(at, at + len), to: new Float32Array(len) };
+  });
+  const land = p.landed && (() => p.landed(p, dirx, dirz));
+  if (p.rigid || p.whole) {
+    const objs = p.objs.map((o) => ({ o, pos: o.position.clone(), quat: o.quaternion.clone() })), high = max.y - min.y;
+    falling.push({ boxes, objs, t: 0, T: p.T ?? Math.min(1.2, .45 + high * .07), pivot: [p.cx, p.pivotY ?? min.y, p.cz], dirx, dirz, angle: Math.PI / 2 - .05, lift: (p.pivotY ? TOWN_Y - p.pivotY + 1 : 0) + .08, end: () => { dust(p.cx + dirx * high * .5, p.cz + dirz * high * .5, dirx, dirz, Math.min(high, 12), 1.6); land?.(); } });
+    return;
+  }
+  const floor = TOWN_Y + .03, squash = p.squash ?? .2;
+  for (const b of boxes) {
+    let lo = Infinity; for (let i = 1; i < b.from.length; i += 3) if (b.from[i] < lo) lo = b.from[i];
+    for (let i = 0; i < b.from.length; i += 3) { b.to[i] = b.from[i]; b.to[i + 1] = floor + (b.from[i + 1] - lo) * squash; b.to[i + 2] = b.from[i + 2]; }
+  }
+  falling.push({ boxes, t: 0, T: Math.min(.8, Math.sqrt(2 * Math.max(min.y - floor, .3) / 9.8) + .08), end: () => { if (size > 2) dust(p.cx, p.cz, dirx, dirz, Math.min(size, 10), Math.min(size, 3)); land?.(); } });
+}
+function dropWires(w) {
+  if (!w || w.down) return; w.down = true;
+  const P = w.g.attributes.position, at = w.first * 3, len = w.count * 3;
+  for (let i = 0; i < len; i += 3) { P.array[at + i] = P.array[at]; P.array[at + i + 1] = P.array[at + 1]; P.array[at + i + 2] = P.array[at + 2]; }
+  touch(P, at, len);
+}
+// ---- what does the breaking
+// A blow at one spot, from a hammer or a bumper. It lands on the nearest thing in reach, and says what it was, how much of the blow that took and whether it's gone.
+function strike(x, y, z, reach, power, dx, dz) {
+  let bd = reach, part = null, house = null, prop = null, tree = null;
+  for (const s of housesNear(x, z, reach)) { const e = damage.nearest(s, x, y, z, bd); if (e && e.d < bd) { bd = e.d; part = e.part; house = s; } }
+  propsNear(x, z, reach, (p) => { const e = propDist(p, x, y, z); if (e < bd) { bd = e; prop = p; part = null; } });
+  treesNear(x, z, reach, (t) => { const e = Math.hypot(t.x - x, t.z - z) - .2; if (e < bd) { bd = e; tree = t; prop = null; part = null; } });
+  if (part) { const had = part.hp; damage.hit(house, part, power, dx, dz); return { thing: part, house, used: Math.min(power, Math.max(had, 0)), gone: part.gone }; }
+  if (prop) { const had = prop.hp; hitProp(prop, power, dx, dz); return { thing: prop, used: Math.min(power, Math.max(had, 0)), gone: prop.down }; }
+  if (tree) { const had = tree.hp ?? treeToughness(tree); hitTree(tree, power, dx, dz); return { thing: tree, used: Math.min(power, Math.max(had, 0)), gone: !!tree.down }; }
+  return null;
+}
+const treeToughness = (t) => (t.burnt ? .4 : t.size < (t.pine ? 1.05 : 1.1) ? .35 : t.size * 4);
+function hitTree(t, power, dx, dz) {
+  if (t.down) return;
+  t.hp = (t.hp ?? treeToughness(t)) - power;
+  leafOf(t, _wc); const [x, y, z] = treeCrown(t); spray(x, y - .6, z, FEW ? 2 : 4, .13, 2.2, _wc.r, _wc.g, _wc.b);
+  if (t.hp <= 0) fellTree(t, dx, dz);
+}
+// ---- gas cans: the orange warning triangle on red, lying around where they'd be, and they go off if anything else does
+const GAS_BLAST = 7, GAS_POWER = 7, GAS_THROWN = 4, GAS_CARRY = 4;
+const gasLabel = textTex([''], 128, 128, '#a62a1c', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#ec803a'; g.beginPath(); g.moveTo(64, 26); g.lineTo(106, 100); g.lineTo(22, 100); g.fill(); g.fillStyle = '#1b1420'; g.fillRect(60, 52, 8, 26); g.fillRect(60, 83, 8, 8); } });
+const gasGeo = mergeGeometries([new THREE.BoxGeometry(.3, .38, .16), new THREE.BoxGeometry(.07, .12, .07).translate(.08, .24, 0)]);
+const GAS_CANS = [];
+const gasMesh = new THREE.InstancedMesh(gasGeo, new THREE.MeshStandardMaterial({ map: gasLabel, roughness: .55, metalness: .25, emissive: '#2a0a04' }), 48), gasLine = new THREE.InstancedMesh(gasGeo, outlineMat(INK, 1.3, 0), 48);
+gasLine.instanceMatrix = gasMesh.instanceMatrix;
+for (let i = 0; i < 48; i++) gasMesh.setMatrixAt(i, NOWHERE);
+for (const m of [gasMesh, gasLine]) { m.frustumCulled = false; m.visible = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(m); }
+const thrown = Array.from({ length: GAS_THROWN }, () => ({ on: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, turn: 0 }));
+let gasDirty = true;
+function drawGas() {
+  if (!gasDirty) return; gasDirty = false;
+  thrown.forEach((c, i) => { if (c.on) { _m.compose(_v.set(c.x, c.y, c.z), _q.setFromEuler(_we.set(c.turn, c.turn * .6, 0)), _s.set(1, 1, 1)); gasMesh.setMatrixAt(i, _m); gasDirty = true; } else gasMesh.setMatrixAt(i, NOWHERE); });
+  GAS_CANS.forEach((c, i) => { if (c.got) gasMesh.setMatrixAt(GAS_THROWN + i, NOWHERE); else { _m.compose(_v.set(c.x, c.y + .19, c.z), _q.setFromAxisAngle(UP, c.yaw), _s.set(1, 1, 1)); gasMesh.setMatrixAt(GAS_THROWN + i, _m); } });
+  gasMesh.instanceMatrix.needsUpdate = true;
+}
+function throwCan() {
+  const c = thrown.find((t) => !t.on); if (!c) return false;
+  const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
+  c.on = true; c.x = player.pos.x + fx * .5; c.y = player.pos.y + 1.7; c.z = player.pos.z + fz * .5; c.vx = fx * 12; c.vy = 5.5; c.vz = fz * 12; c.turn = 0; gasDirty = true;
+  return true;
+}
+function updateThrown(dt) {
+  for (const c of thrown) {
+    if (!c.on) continue;
+    c.vy -= 15 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt; c.turn += dt * 11; gasDirty = true;
+    const fl = floorAt(c.x, c.z), hitSomeone = crowdOut && horde.active.some((s) => s.state !== 5 && Math.hypot(s.x - c.x, s.z - c.z) < .7 && c.y < s.y + 2);
+    if (c.y <= fl + .1 || blocked(c.x, c.z, c.y) || hitSomeone) { c.on = false; gasDirty = true; if (fl < -.1) { addRipple(c.x, c.z, .4, 0); continue; } blastCan(c.x, Math.max(c.y, fl + .2), c.z); }
+  }
+}
+function layOutGas() {
+  const spots = [[...atTrue(-87.85 + 7, -31.1 + 2.4), .3], [...atTrue(-87.85 - 6.5, -31.1 + 2.6), 1.2], [...atTrue(-87.85 + 2, -31.1 + 5), 2.1]];
+  // and beside the door of a shed or a barn, about one in three
+  for (const s of STRUCTURES) {
+    if ((s.use !== 'shed' && s.use !== 'farm') || hash2(s.id | 0, 77) > .34 || spots.length >= 48 - GAS_THROWN) continue;
+    const d = wallsOf(s, TOWN_Y).doors[0]; if (!d) continue;
+    spots.push([d.x + d.nx * 1.1 + d.ex * 1.1, d.z + d.nz * 1.1 + d.ez * 1.1, hash2(s.id | 0, 78) * 6]);
+  }
+  for (const [x, z, yaw] of spots) GAS_CANS.push({ x, y: floorAt(x, z), z, yaw, got: false });
+  gasDirty = true;
 }
 // Each landmark is built in its own coordinates, around an origin on the map. PLACES is that origin.
 const worldX = (trueX) => atTrue(trueX, 0)[0];
@@ -1010,9 +1412,9 @@ function around(place, fn) { OX = place.x; OZ = place.z; fn(); OX = OZ = 0; }
 const hallMat = triplanar(woodRed, .5, { roughness: .95 });
 const roofMat = new THREE.MeshStandardMaterial({ color: '#2b2630', roughness: .9 });
 around(PLACES.hall, () => {
-  addBox(roofMat, 38, Y0 + .55, -9.7, 4.5, 1.1, .6); solid(35.8, 40.2, -10, -9.4, Y0 + 1.1);   // counter
-  addBox(roofMat, 40, Y0 + .8, -12.7, 9, 1.6, .7); solid(35.5, 44.5, -13.05, -12.35, Y0 + 1.6);  // shelves
-  addBox(roofMat, 43, Y0 + .8, -9.7, 4, 1.6, .7); solid(41, 45, -10.05, -9.35, Y0 + 1.6);
+  breakable('counter', 1.5, () => { addBox(roofMat, 38, Y0 + .55, -9.7, 4.5, 1.1, .6); solid(35.8, 40.2, -10, -9.4, Y0 + 1.1); });
+  breakable('shelf', 1.5, () => { addBox(roofMat, 40, Y0 + .8, -12.7, 9, 1.6, .7); solid(35.5, 44.5, -13.05, -12.35, Y0 + 1.6); });
+  breakable('shelf', 1.5, () => { addBox(roofMat, 43, Y0 + .8, -9.7, 4, 1.6, .7); solid(41, 45, -10.05, -9.35, Y0 + 1.6); });
   flushBuckets();
 });
 // its sign, on a board in front of the gable, which comes down while he's inside or it'd be all you'd see
@@ -1030,15 +1432,22 @@ const postBoard = new THREE.Mesh(boxGeo, hallMat);
   postBoard.scale.set(6.4, 1, .16); postBoard.position.set(x + nx * .14, Y0 + 2.85, z + nz * .14); postBoard.rotation.y = Math.atan2(nx, nz); outline(postBoard, INK, 1.2); scene.add(postBoard);
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ map, roughness: .9 })); sign.scale.set(6.1 / 6.4, .86, 1); sign.position.z = .6; postBoard.add(sign);
 }
+// each hangs on the front of its building, and comes down with that
+for (const [board, house] of [[hallBoard, HALL_HOUSE], [postBoard, POST_OFFICE]]) {
+  const prop = breakable('board', 2, null, { rigid: true, objs: [board], chip: board === hallBoard ? '#7a2318' : '#1f3a5c' });
+  tieTo(house, (s, p) => { if (damage.gone(s) > .3 || Math.hypot(p.x - board.position.x, p.z - board.position.z) < 3.2) breakProp(prop, 0, 1); });
+}
 // the gas station's canopy and pumps, in front of the old store they belonged to
 const canopyMat = new THREE.MeshStandardMaterial({ color: '#cfc9bb', roughness: .85 }), canopyPost = new THREE.MeshStandardMaterial({ color: '#a8342a', roughness: .7, metalness: .2 });
+// the canopy stands on four posts and doesn't stay up on one, and the pumps still have something in them
+let canopyProp = null, gasPower = 1, canopyPosts = 0;
+const signProp = {};
 around(PLACES.gas, () => {
   pad(46, 60, 4, 15, 4);
-  addBox(canopyMat, 53, Y0 + 4.6, 10, 10, .35, 8, 1.5);
-  for (const [x, z] of [[48.6, 6.6], [57.4, 6.6], [48.6, 13.4], [57.4, 13.4]]) { addBox(canopyPost, x, Y0 + 2.3, z, .3, 4.6, .3, 1.2); solid(x - .25, x + .25, z - .25, z + .25, Y0 + 4.6); }
-  for (const x of [51, 55]) { addBox(railMat, x, Y0 + .8, 10, .7, 1.6, 1, 1.2); solid(x - .45, x + .45, 9.4, 10.6, Y0 + 1.6); }
-  kudzuOn(48, 58, Y0 + 4.9, 6, 14, 8);
-  addBox(canopyPost, 46.5, Y0 + 3, 13.5, .2, 6, .2, 1);
+  canopyProp = breakable('canopy', 3, () => { addBox(canopyMat, 53, Y0 + 4.6, 10, 10, .35, 8, 1.5); kudzuOn(48, 58, Y0 + 4.9, 6, 14, 8); }, { high: true, broke() { gasPower = 0; gasStrip.visible = false; const i = horde.lights.indexOf(gasSpot); if (i >= 0) horde.lights.splice(i, 1); } });
+  for (const [x, z] of [[48.6, 6.6], [57.4, 6.6], [48.6, 13.4], [57.4, 13.4]]) breakable('post', 1.5, () => { addBox(canopyPost, x, Y0 + 2.3, z, .3, 4.6, .3, 1.2); solid(x - .25, x + .25, z - .25, z + .25, Y0 + 4.6); }, { rigid: true, broke() { if (++canopyPosts >= 2) breakProp(canopyProp); } });
+  for (const x of [51, 55]) breakable('pump', 2, () => { addBox(railMat, x, Y0 + .8, 10, .7, 1.6, 1, 1.2); solid(x - .45, x + .45, 9.4, 10.6, Y0 + 1.6); }, { broke(p) { after(.1, () => blast(p.cx, Y0 + 1, p.cz, 6, 3)); } });
+  signProp.gas = breakable('sign', 1.5, () => { addBox(canopyPost, 46.5, Y0 + 3, 13.5, .2, 6, .2, 1); }, { rigid: true });
   flushBuckets();
 });
 const gasAt = (x, z) => [x + PLACES.gas.x, z + PLACES.gas.z];
@@ -1046,13 +1455,18 @@ const gasLight = new THREE.PointLight('#9fe3ff', 9, 12, 1.6); gasLight.position.
 const gasStrip = new THREE.Mesh(boxGeo, lit('#bfefff', 2.2)); gasStrip.scale.set(8, .05, .2); gasStrip.position.set(gasAt(53, 0)[0], Y0 + 4.4, gasAt(0, 10)[1]); scene.add(gasStrip);
 const gasSign = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.4), new THREE.MeshBasicMaterial({ map: textTex(['GAS'], 256, 150, '#1b1420', '#ff4a6a', '96px Bungee, Impact, sans-serif'), color: new THREE.Color(1.4, 1.4, 1.4) }));
 gasSign.position.set(gasAt(46.5, 0)[0], Y0 + 6.2, gasAt(0, 13.5)[1]); gasSign.rotation.y = -Math.PI / 4; scene.add(gasSign);
+signProp.gas.objs.push(gasSign);
+const gasSpot = { x: gasLight.position.x, z: gasLight.position.z, r: 40 };
 // the church's steps and its tall window on the Adams St end. The rest is the building's own.
 const churchMat = triplanar(woodWhite, .5, { roughness: .9 });
+let steepleProp = null;
 around(PLACES.church, () => {
-  for (let i = 0; i < 3; i++) addBox(stoneMat, 68.5, Y0 + .15 + i * .3, -6.2 - i * .45, 4, .3, 1.4 - i * .45, 1);
+  breakable('steps', 3, () => { for (let i = 0; i < 3; i++) addBox(stoneMat, 68.5, Y0 + .15 + i * .3, -6.2 - i * .45, 4, .3, 1.4 - i * .45, 1); }, { chip: '#7c7570' });
   flushBuckets();
 });
 const churchAt = (x, z) => [x + PLACES.church.x, z + PLACES.church.z];
+const CHURCH_HOUSE = houseAt(...atTrue(-307, -230));
+let churchWindow = null, churchZone = null;
 {
   // leaded glass, lit from inside, under an arch
   const glass = textTex([''], 128, 320, '#14090a', '#000', '12px sans-serif', { after: (g) => {
@@ -1063,18 +1477,28 @@ const churchAt = (x, z) => [x + PLACES.church.x, z + PLACES.church.z];
   const arch = new THREE.Shape(); arch.moveTo(-.9, 0); arch.lineTo(.9, 0); arch.lineTo(.9, 3.4); arch.absarc(0, 3.4, .9, 0, Math.PI, false); arch.lineTo(-.9, 0);
   const geo = new THREE.ShapeGeometry(arch, 12), uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 1.8 + .5, uv.getY(i) / 4.3);
   const win = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: glass, color: new THREE.Color(1.5, 1.5, 1.5) })), [wx, wz] = atTrue(-286.2, -230.2);
-  win.position.set(wx + .06, Y0 + 1.2, wz); win.rotation.y = Math.PI / 2 + .048; scene.add(win);
+  win.position.set(wx + .06, Y0 + 1.2, wz); win.rotation.y = Math.PI / 2 + .048; scene.add(win); churchWindow = win;
 }
 const churchLight = new THREE.PointLight('#ffb347', 10, 13, 1.7); churchLight.position.set(churchAt(68.5, 0)[0], Y0 + 2.6, churchAt(0, -5)[1]); scene.add(churchLight);
+// the window goes with the wall it's in, the steeple with enough of the walls under it, and past that it's no refuge
+tieTo(CHURCH_HOUSE, (s, p) => {
+  if (churchWindow.visible && Math.hypot(p.x - churchWindow.position.x, p.z - churchWindow.position.z) < 2.4) { churchWindow.visible = false; spray(churchWindow.position.x, Y0 + 3, churchWindow.position.z, 6, .12, 3, .9, .5, .2); }
+  const gone = damage.gone(s);
+  if (gone > .4) { churchLight.intensity = 0; if (churchZone) { horde.zones.splice(horde.zones.indexOf(churchZone), 1); churchZone = null; } S.flags.churchDown = true; }
+});
 // the white steeple on the red brick church on US 80: the only one in town, on the ridge behind its front gable
 {
   const [x, z] = atTrue(-315.2, -47), stage = (w, y0, y1) => addBox(churchMat, x, Y0 + (y0 + y1) / 2, z, w, y1 - y0, w, 1.3);
-  stage(3, 4, 11.5); stage(3.5, 11.5, 11.8); stage(2.5, 11.8, 15); stage(3, 15, 15.25);
-  // an arched louvre in each face of the upper stage
-  for (const [dx, dz, wx, wz] of [[1.27, 0, .06, .8], [-1.27, 0, .06, .8], [0, 1.27, .8, .06], [0, -1.27, .8, .06]]) addBox(roofMat, x + dx, Y0 + 13.4, z + dz, wx, 2, wz, 0);
+  // it goes over in one piece once enough of the walls under it have gone, and what it lands on knows about it
+  steepleProp = breakable('steeple', 5, () => {
+    stage(3, 4, 11.5); stage(3.5, 11.5, 11.8); stage(2.5, 11.8, 15); stage(3, 15, 15.25);
+    // an arched louvre in each face of the upper stage
+    for (const [dx, dz, wx, wz] of [[1.27, 0, .06, .8], [-1.27, 0, .06, .8], [0, 1.27, .8, .06], [0, -1.27, .8, .06]]) addBox(roofMat, x + dx, Y0 + 13.4, z + dz, wx, 2, wz, 0);
+  }, { rigid: true, T: 1.5, pivotY: Y0 + 8, chip: '#c9c1b4', landed(p, dirx, dirz) { thud(p.cx + dirx * 9, Y0 + 1, p.cz + dirz * 9, 7, 2.5); } });
+  tieTo(houseAt(x, z), (s) => { if (damage.gone(s) > .35) breakProp(steepleProp, 0, 1); });
   pad(x - 6, x + 6, z - 6, z + 6, 2);
   flushBuckets();
-  const spire = new THREE.Mesh(new THREE.ConeGeometry(1.25, 7, 8), new THREE.MeshStandardMaterial({ color: '#79877c', roughness: .6, metalness: .3 })); spire.position.set(x, Y0 + 18.75, z); outline(spire, INK, 1.4); scene.add(spire);
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(1.25, 7, 8), new THREE.MeshStandardMaterial({ color: '#79877c', roughness: .6, metalness: .3 })); spire.position.set(x, Y0 + 18.75, z); outline(spire, INK, 1.4); scene.add(spire); steepleProp.objs.push(spire);
 }
 // the white house on the north side of Commerce St's bend and its barn: what's around them, from the public aerial
 const PROP_WALLS = [];   // [ax, az, bx, bz, top, radius], the same as a building's walls
@@ -1082,16 +1506,26 @@ const FIELDS = [];       // what the map draws under the buildings: { grass, dir
 const leafGeo = new THREE.DodecahedronGeometry(1, 0);
 // One big tree that stands where it really does: clumps over a dome, one draw call and its ink. The leaves stop above where
 // the camera rides, because from inside one all you'd see is the ink.
-function bigTree(tx, tz, { y0, y1, R, count, size, colors, trunk, also = [] }) {
-  const leaves = [...also], top = (y0 + y1) / 2 - 2.5;
+function bigTree(tx, tz, { y0, y1, R, count, size, colors, trunk, hp = 9 }) {
+  const leaves = [], top = (y0 + y1) / 2 - 2.5;
   for (let i = 0; i < count; i++) { const y = y0 + (i + .5) / count * (y1 - y0), k = (y - top) / (y > top ? y1 + .5 - top : top - y0 + 1.2), r = R * Math.sqrt(Math.max(0, 1 - k * k)), a = i * 2.39996; leaves.push([tx + Math.cos(a) * r * (.9 + hash(i, count, 41) * .2), Y0 + y, tz + Math.sin(a) * r * (.9 + hash(i, count, 42) * .2), size + hash(i, count, 43) * .9]); }
   for (const k of [.3, .55, .8]) leaves.push([tx, Y0 + y0 + (y1 - y0) * k, tz, R * (.62 - k * .2)]);
   const greens = colors.map((c) => new THREE.Color(c)), leaf = new THREE.InstancedMesh(leafGeo, swayMat({ roughness: .85, flatShading: true }), leaves.length), M = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler();
   leaves.forEach(([x, y, z, r], i) => { M.compose(new THREE.Vector3(x, y, z), Q.setFromEuler(E.set(hash(i, 7, 44) * 3, hash(i, 7, 45) * 3, hash(i, 7, 46) * 3)), new THREE.Vector3(r, r * .86, r)); leaf.setMatrixAt(i, M); leaf.setColorAt(i, greens[Math.floor(hash(i, 7, 47) * greens.length)]); });
   const ink = new THREE.InstancedMesh(leafGeo, outlineMat(INK, 1.3, 0), leaves.length); ink.instanceMatrix = leaf.instanceMatrix;
   const stem = new THREE.Mesh(new THREE.CylinderGeometry(.34, .52, trunk, 7), new THREE.MeshStandardMaterial({ color: '#2a2026', roughness: 1 })); stem.position.set(tx, Y0 + trunk / 2, tz); outline(stem, INK, 1.4);
-  solid(tx - .55, tx + .55, tz - .55, tz + .55, Y0 + trunk);
   const tree = new THREE.Group(); tree.add(leaf, ink, stem); scene.add(tree); DISTANT.push({ obj: tree, x: tx, z: tz, r: 310 });
+  breakable('tree', hp, () => solid(tx - .55, tx + .55, tz - .55, tz + .55, Y0 + trunk), { rigid: true, T: 1.7, objs: [tree], line: [tx, tz, tx, tz], foot: [tx, tz], chip: colors[0] });
+}
+// Low shrubs, one draw call and its ink between them, and each flattened on its own
+function shrubs(list, colors) {
+  const greens = colors.map((c) => new THREE.Color(c)), leaf = new THREE.InstancedMesh(leafGeo, swayMat({ roughness: .85, flatShading: true }), list.length), M = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler();
+  list.forEach(([x, y, z, r], i) => {
+    M.compose(new THREE.Vector3(x, y, z), Q.setFromEuler(E.set(hash(i, 8, 44) * 3, hash(i, 8, 45) * 3, hash(i, 8, 46) * 3)), new THREE.Vector3(r, r * .86, r)); leaf.setMatrixAt(i, M); leaf.setColorAt(i, greens[Math.floor(hash(i, 8, 47) * greens.length)]);
+    breakable('shrub', .3, null, { faces: [{ im: leaf, i }], bounds: new THREE.Box3(new THREE.Vector3(x - r, y - r, z - r), new THREE.Vector3(x + r, y + r, z + r)), chip: colors[0] });
+  });
+  const ink = new THREE.InstancedMesh(leafGeo, outlineMat(INK, 1.3, 0), list.length); ink.instanceMatrix = leaf.instanceMatrix;
+  const group = new THREE.Group(); group.add(leaf, ink); scene.add(group); const [x, , z] = list[0]; DISTANT.push({ obj: group, x, z, r: 200 });
 }
 {
   const concrete = new THREE.MeshStandardMaterial({ color: '#a9a69c', roughness: .95 }), whiteMat = new THREE.MeshStandardMaterial({ color: '#c9c5b8', roughness: .9 }), darkMat = new THREE.MeshStandardMaterial({ color: '#17171b', roughness: .7, metalness: .3 }), cartMat = new THREE.MeshStandardMaterial({ color: '#1d2b2a', roughness: .8 });
@@ -1103,20 +1537,22 @@ function bigTree(tx, tz, { y0, y1, R, count, size, colors, trunk, also = [] }) {
   flat(2.3, -497, 8.6, -497, 5.2);
   // the deck under the porch, with a low white block wall along its north end, and the stoop at the door
   flat(-5.59, -494.12, -6.22, -508.11, 2.6, .05);
-  flat(-7.2, -501, -7.52, -508.05, .22, .55, 0, whiteMat, 1.2);
-  { const [ax, az] = atTrue(-7.2, -501), [bx, bz] = atTrue(-7.52, -508.05); PROP_WALLS.push([ax, az, bx, bz, Y0 + .55, .11]); }
+  { const [ax, az] = atTrue(-7.2, -501), [bx, bz] = atTrue(-7.52, -508.05); breakable('wall', 1.5, () => { flat(-7.2, -501, -7.52, -508.05, .22, .55, 0, whiteMat, 1.2); const w = [ax, az, bx, bz, Y0 + .55, .11]; PROP_WALLS.push(w); PROP.walls.push(w); }, { line: [ax, az, bx, bz], chip: '#c9c5b8', squash: .4 }); }
   flat(-1.6, -493.4, .4, -493.4, 1.4, .1);
   // boxwoods in low curbs either side of the door
-  box(whiteMat, -3, .16, -493.4, 2.8, .32, 1.6); box(whiteMat, 1.75, .16, -493.4, 2.7, .32, 1.6);
+  breakable('curb', .8, () => box(whiteMat, -3, .16, -493.4, 2.8, .32, 1.6), { chip: '#c9c5b8' }); breakable('curb', .8, () => box(whiteMat, 1.75, .16, -493.4, 2.7, .32, 1.6), { chip: '#c9c5b8' });
   // the flatbed trailer on the lawn and the two carts by the drive
-  flat(14.6, -491.6, 19.2, -492.1, 2, .1, .55, darkMat, 1.3); flat(19.2, -492.1, 21, -492.3, .14, .1, .5, darkMat, 1.2);
-  flat(14.6, -491.6, 14.4, -491.5, 2, .85, .62, darkMat, 1.3);
-  for (const side of [-1, 1]) box(darkMat, 16.9, .32, -491.85 + side * .95, .62, .62, .2);
-  for (const [x, z] of [[14.2, -480.2], [15.3, -479.8]]) { box(cartMat, x, .52, z, .62, 1.04, .7); box(cartMat, x, 1.08, z, .68, .06, .76, 0); }
+  breakable('trailer', 2.5, () => {
+    flat(14.6, -491.6, 19.2, -492.1, 2, .1, .55, darkMat, 1.3); flat(19.2, -492.1, 21, -492.3, .14, .1, .5, darkMat, 1.2);
+    flat(14.6, -491.6, 14.4, -491.5, 2, .85, .62, darkMat, 1.3);
+    for (const side of [-1, 1]) box(darkMat, 16.9, .32, -491.85 + side * .95, .62, .62, .2);
+  }, { squash: .5, chip: '#17171b' });
+  for (const [x, z] of [[14.2, -480.2], [15.3, -479.8]]) breakable('cart', .8, () => { box(cartMat, x, .52, z, .62, 1.04, .7); box(cartMat, x, 1.08, z, .68, .06, .76, 0); }, { chip: '#1d2b2a' });
   { const [x0, z0] = atTrue(-8, -522), [x1, z1] = atTrue(32, -482); pad(x0, x1, z0, z1, 6, true); }
   flushBuckets();
   // the big magnolia between the house and the road, dark and glossy, and the boxwoods
-  bigTree(...atTrue(8, -483), { y0: 5.2, y1: 16, R: 7.3, count: 64, size: 1.3, colors: ['#1f5a3e', '#27694a', '#1a4d35', '#2f7452'], trunk: 7, also: [[-3.7, -493.4, .72], [-2.4, -493.4, .6], [1, -493.3, .7], [2.4, -493.4, .72]].map(([x, z, r]) => { const [bx, bz] = atTrue(x, z); return [bx, Y0 + .32 + r * .72, bz, r]; }) });
+  bigTree(...atTrue(8, -483), { y0: 5.2, y1: 16, R: 7.3, count: 64, size: 1.3, colors: ['#1f5a3e', '#27694a', '#1a4d35', '#2f7452'], trunk: 7 });
+  shrubs([[-3.7, -493.4, .72], [-2.4, -493.4, .6], [1, -493.3, .7], [2.4, -493.4, .72]].map(([x, z, r]) => { const [bx, bz] = atTrue(x, z); return [bx, Y0 + .32 + r * .72, bz, r]; }), ['#1f5a3e', '#27694a', '#1a4d35', '#2f7452']);
 }
 // ---------------- Chunky's ball field, in the block between School St, Jones St and Adams St. Where it all stands is
 // measured on the public aerial, in true metres, and what it looks like is from looking at it.
@@ -1126,7 +1562,7 @@ function bigTree(tx, tz, { y0, y1, R, count, size, colors, trunk, also = [] }) {
   const postMat = new THREE.MeshStandardMaterial({ color: '#868c91', metalness: .4, roughness: .6 }), chalk = new THREE.MeshStandardMaterial({ color: '#d8d4c8', roughness: 1 }), blue = new THREE.MeshStandardMaterial({ color: '#2f55b0', roughness: .85 }), tin = new THREE.MeshStandardMaterial({ color: '#8f9396', roughness: .6, metalness: .3 }), silver = new THREE.MeshStandardMaterial({ color: '#a4aaaf', roughness: .5, metalness: .5 }), poleMat = new THREE.MeshStandardMaterial({ color: '#4a3a2e', roughness: 1 }), lamp = new THREE.MeshStandardMaterial({ color: '#c3c6c9', roughness: .5 }), bin = new THREE.MeshStandardMaterial({ color: '#27503c', roughness: .8 });
   const line = (a, b, w = .1) => { const [ax, az] = atTrue(...a), [bx, bz] = atTrue(...b); addBeam([ax, Y0 + .06, az], [bx, Y0 + .06, bz], w, .02, chalk, 0); };
   const beam = (a, b, y, w, h, mat, ink = mat === silver ? .9 : mat === postMat ? 1 : mat === chalk ? 0 : 1.2) => { const [ax, az] = atTrue(...a), [bx, bz] = atTrue(...b); addBeam([ax, Y0 + y, az], [bx, Y0 + y, bz], w, h, mat, ink); };
-  const wall = (a, b, top, r = .06) => { const [ax, az] = atTrue(...a), [bx, bz] = atTrue(...b); PROP_WALLS.push([ax, az, bx, bz, Y0 + top, r]); };
+  const wall = (a, b, top, r = .06) => { const [ax, az] = atTrue(...a), [bx, bz] = atTrue(...b), w = [ax, az, bx, bz, Y0 + top, r]; PROP_WALLS.push(w); if (PROP) PROP.walls.push(w); };
   // the skinned infield: a ring of clay and the corner behind home, a little ragged at the edge
   const apex = [-383.1, -460.8], mid = [-363, -475.2], R = 15, away = Math.atan2(apex[1] - mid[1], apex[0] - mid[0]), wrap = Math.acos(R / Math.hypot(apex[0] - mid[0], apex[1] - mid[1])), rim = [apex];
   for (let i = 0; i <= 30; i++) { const a = away + wrap + (6.2832 - 2 * wrap) * i / 30, r = R + (hash(i, 5, 61) - .5) * .5; rim.push([mid[0] + Math.cos(a) * r, mid[1] + Math.sin(a) * r]); }
@@ -1152,49 +1588,62 @@ function bigTree(tx, tz, { y0, y1, R, count, size, colors, trunk, also = [] }) {
   // the soccer lines someone left in the outfield
   for (const [a, b] of [[[-334.8, -495.3], [-318.6, -495.3]], [[-334.8, -495.3], [-334.4, -455]], [[-318.6, -495.3], [-318.4, -480]], [[-318.4, -480], [-308.3, -479.8]], [[-308.3, -479.8], [-308.1, -469.4]]]) line(a, b, .09);
   // chain-link on galvanised posts, with breaks where the gates are
+  // A car takes out a stretch of it and not the whole run: three posts' worth at a time, each going over flat, with the mesh and the kudzu on it
   const links = [];
-  const fence = (pts, high, spacing = 3) => {
+  const fence = (pts, high, spacing = 3, screen = -1) => {
     for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1], b = pts[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / spacing));
-      links.push([...atTrue(...a), ...atTrue(...b), high]);
-      wall(a, b, high);
-      beam(a, b, high, .06, .06, postMat);
-      for (let k = 0; k <= n; k++) { const [x, z] = atTrue(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n); addBox(postMat, x, Y0 + high / 2, z, .09, high, .09, 1); }
+      const a = pts[i - 1], b = pts[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / spacing)), runs = Math.max(1, Math.round(n / 3)), m = Math.max(1, Math.round(n / runs));
+      const along = (t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      for (let r = 0; r < runs; r++) {
+        const p = along(r / runs), q = along((r + 1) / runs), [ax, az] = atTrue(...p), [bx, bz] = atTrue(...q), nx = bz - az, nz = ax - bx, nl = Math.hypot(nx, nz), link = [ax, az, bx, bz, high];
+        link.prop = breakable('fence', high > 3 ? 1.6 : .5, () => {
+          wall(p, q, high);
+          beam(p, q, high, .06, .06, postMat);
+          if (i === screen) beam(p, q, .78, .05, 1.4, blue);
+          for (let k = r ? 1 : 0; k <= m; k++) { const [x, z] = atTrue(p[0] + (q[0] - p[0]) * k / m, p[1] + (q[1] - p[1]) * k / m); addBox(postMat, x, Y0 + high / 2, z, .09, high, .09, 1); }
+        }, { rigid: true, line: [ax, az, bx, bz], falls: [nx / nl, nz / nl], chip: '#868c91' });
+        links.push(link);
+      }
     }
   };
   const LF = [-370.6, -537.8], RF = [-304.4, -450.6];
   fence([[-358, -453.55], [-343.7, -451.7], RF], 1.6);                                                                  // from the first base gate to the corner
-  fence([[-302.05, -456.1], [-295.6, -471.3], [-299.4, -500.6], [-319.4, -527.2], [-345, -540.6], LF, [-378.2, -500], [-380, -488.4]], 1.6);  // past the wide gate, all around the outfield to the third base gate
+  fence([[-302.05, -456.1], [-295.6, -471.3], [-299.4, -500.6], [-319.4, -527.2], [-345, -540.6], LF, [-378.2, -500], [-380, -488.4]], 1.6, 3, 3);  // past the wide gate, all around the outfield to the third base gate
   fence([[-381.5, -478.6], [-384.4, -469]], 1.6); fence([[-375.5, -457.1], [-372, -456.2], [-365.8, -455]], 1.6);
   fence([[-384.4, -469], [-384.4, -462], [-380.6, -458.4], [-375.5, -457.1]], 5.5, 2.4);                                // the backstop
-  beam([-319.3, -527], [-299.5, -500.5], .78, .05, 1.4, blue);                                                      // the blue windscreen across right center
   // the dugouts, each looking out through a gap in the fence
   const dugout = (a, b, deep, outward) => {
     const off = (p, d) => [p[0] + outward[0] * d, p[1] + outward[1] * d], a1 = off(a, deep), b1 = off(b, deep);
-    for (const [p, q] of [[a1, b1], [a, a1], [b, b1]]) { beam(p, q, 1.1, .16, 2.2, blue); wall(p, q, 2.2, .1); }
-    beam(off(a, deep / 2), off(b, deep / 2), 2.26, deep + .5, .1, tin);
-    beam(off(a, deep - .55), off(b, deep - .55), .46, .4, .07, silver);
+    breakable('dugout', 2.5, () => {
+      for (const [p, q] of [[a1, b1], [a, a1], [b, b1]]) { beam(p, q, 1.1, .16, 2.2, blue); wall(p, q, 2.2, .1); }
+      beam(off(a, deep / 2), off(b, deep / 2), 2.26, deep + .5, .1, tin);
+      beam(off(a, deep - .55), off(b, deep - .55), .46, .4, .07, silver);
+    }, { squash: .3, chip: '#2f55b0' });
   };
   dugout([-380.3, -486.8], [-381.5, -478.6], 3, [-.986, -.167]);
   dugout([-365.8, -455], [-359.6, -453.85], 3, [-.186, .983]);
   // the aluminium bleachers, one behind each side
   const bleachers = (c, along, up, wide, rows) => {
     const row = (r, off, y, w, h) => { const p = [c[0] + up[0] * off, c[1] + up[1] * off]; beam([p[0] - along[0] * wide / 2, p[1] - along[1] * wide / 2], [p[0] + along[0] * wide / 2, p[1] + along[1] * wide / 2], y, w, h, silver); };
+    breakable('bleachers', 2, () => {
     for (let r = 0; r < rows; r++) { row(r, r * .62, .44 + r * .36, .3, .05); row(r, r * .62 - .32, .2 + r * .36, .22, .04); }
     for (const e of [-.5, .5]) { const p0 = [c[0] + along[0] * wide * e - up[0] * .5, c[1] + along[1] * wide * e - up[1] * .5], p1 = [p0[0] + up[0] * (rows * .62 + .3), p0[1] + up[1] * (rows * .62 + .3)]; const [ax, az] = atTrue(...p0), [bx, bz] = atTrue(...p1); addBeam([ax, Y0 + .08, az], [bx, Y0 + .28 + rows * .36, bz], .08, .1, silver, .9); }
     const corner = (e, off) => [c[0] + along[0] * wide * e + up[0] * off, c[1] + along[1] * wide * e + up[1] * off], A = corner(-.5, -.5), B = corner(.5, -.5), C = corner(.5, rows * .62), E = corner(-.5, rows * .62);
     for (const [p, q] of [[A, B], [B, C], [C, E], [E, A]]) wall(p, q, 1.3, .08);
+    }, { squash: .25, chip: '#a4aaaf' });
   };
   bleachers([-374.6, -453.2], U, [-V[0], -V[1]], 6.9, 5);
   bleachers([-386.8, -470.5], V, [-U[0], -U[1]], 5.4, 4);
   // the light poles, which have been dark a while
   for (const p of [[-370.6, -537.8], [-345, -540.6], [-319.4, -527.2], [-299.4, -500.6], [-295.6, -471.3], [-343.7, -451.7], [-379.4, -500.6], [-385.6, -465.2], [-377.7, -454.6]]) {
     const [x, z] = atTrue(p[0] + (p[0] < -380 ? -.5 : 0), p[1] + (p[1] > -455 ? .6 : 0)), [ax, az] = [mound[0] - p[0], mound[1] - p[1]], l = Math.hypot(ax, az), sx = -az / l, sz = ax / l;
-    addBox(poleMat, x, Y0 + 9, z, .34, 18, .34, 1.3); solid(x - .25, x + .25, z - .25, z + .25, Y0 + 18);
-    addBeam([x - sx * 1.3, Y0 + 17.5, z - sz * 1.3], [x + sx * 1.3, Y0 + 17.5, z + sz * 1.3], .12, .12, postMat, 1);
-    for (const k of [-1.1, -.37, .37, 1.1]) addBox(lamp, x + sx * k + ax / l * .25, Y0 + 17.85, z + sz * k + az / l * .25, .5, .5, .3, 1);
+    breakable('pole', 3, () => {
+      addBox(poleMat, x, Y0 + 9, z, .34, 18, .34, 1.3); solid(x - .25, x + .25, z - .25, z + .25, Y0 + 18);
+      addBeam([x - sx * 1.3, Y0 + 17.5, z - sz * 1.3], [x + sx * 1.3, Y0 + 17.5, z + sz * 1.3], .12, .12, postMat, 1);
+      for (const k of [-1.1, -.37, .37, 1.1]) addBox(lamp, x + sx * k + ax / l * .25, Y0 + 17.85, z + sz * k + az / l * .25, .5, .5, .3, 1);
+    }, { rigid: true, T: 1.5, line: [x, z, x, z], foot: [x, z], chip: '#4a3640' });
   }
-  { const [x, z] = atTrue(-379.6, -448.5); addBox(bin, x, Y0 + .75, z, 2.1, 1.5, 1.3, 1.4); solid(x - 1.05, x + 1.05, z - .65, z + .65, Y0 + 1.5); }
+  { const [x, z] = atTrue(-379.6, -448.5); breakable('dumpster', 2.5, () => { addBox(bin, x, Y0 + .75, z, 2.1, 1.5, 1.3, 1.4); solid(x - 1.05, x + 1.05, z - .65, z + .65, Y0 + 1.5); }, { squash: .5, chip: '#2f5a3a' }); }
   // ground: mown inside and around the fence, and bare dirt in the lot along Jones St and behind third
   const box = (x0, z0, x1, z1, m, lawn) => { const [ax, az] = atTrue(x0, z0), [bx, bz] = atTrue(x1, z1); pad(ax, bx, az, bz, m, lawn); };
   box(-384, -552, -289, -449, 4, true); box(-400, -447, -290, -432, 4, false); box(-400, -490, -384, -447, 3, false);
@@ -1204,17 +1653,22 @@ function bigTree(tx, tz, { y0, y1, R, count, size, colors, trunk, also = [] }) {
   const pos = [], uvs = [], idx = [];
   for (const [ax, az, bx, bz, high] of links) { const n = pos.length / 3, L = Math.hypot(bx - ax, bz - az) / .32, Vt = high / .32; pos.push(ax, Y0, az, bx, Y0, bz, bx, Y0 + high, bz, ax, Y0 + high, az); uvs.push(0, 0, L, 0, L, Vt, 0, Vt); idx.push(n, n + 1, n + 2, n, n + 2, n + 3); }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const boundsOf = ([ax, az, bx, bz, high]) => new THREE.Box3(new THREE.Vector3(Math.min(ax, bx), Y0, Math.min(az, bz)), new THREE.Vector3(Math.max(ax, bx), Y0 + high, Math.max(az, bz)));
+  links.forEach((l, i) => l.prop.boxes.push({ g, first: i * 4, count: 4, box: boundsOf(l), mat: postMat }));
   const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: '#8d9398', map: tex, alphaTest: .3, side: THREE.DoubleSide, metalness: .3, roughness: .6 }));
   // and the kudzu getting up it, on both sides
   const vines = new Sheet(), leafy = { origin: [0, Y0, 0], axis: [1, 0], pattern: PATTERN.LEAF };
-  links.forEach(([ax, az, bx, bz, high], i) => {
-    const L = Math.hypot(bx - ax, bz - az), ex = (bx - ax) / L, ez = (bz - az) / L;
-    for (let k = 0; k < Math.round(L / 11); k++) {
+  links.forEach((link, i) => {
+    const [ax, az, bx, bz, high] = link, L = Math.hypot(bx - ax, bz - az), ex = (bx - ax) / L, ez = (bz - az) / L;
+    link.vineFirst = vines.n;
+    for (let k = 0; k < Math.max(hash(i, 3, 70) < L / 11 ? 1 : 0, Math.round(L / 11)); k++) {
       const wide = Math.min(L - .2, 2 + hash(i, k, 71) * 3), t = wide / 2 + hash(i, k, 72) * (L - wide), reach = Math.min(high - .25, .8 + hash(i, k, 73) * 2.4), x = ax + ex * t, z = az + ez * t, c = [.05 + hash(i, k, 74) * .05, .16 + hash(i, k, 75) * .13, .035];
       for (const side of [-1, 1]) vines.drape(x, Y0 + .02, z, ex, ez, ez * side, -ex * side, wide, reach, c, i * 40 + k * 2 + (side > 0 ? 1 : 0), leafy);
     }
+    link.vineCount = vines.n - link.vineFirst;
   });
   const vine = new THREE.Mesh(sheetGeometry(vines.arrays()), houseMat);
+  for (const l of links) if (l.vineCount) l.prop.boxes.push({ g: vine.geometry, first: l.vineFirst, count: l.vineCount, box: boundsOf(l), mat: houseMat });
   const field = new THREE.Group(); field.add(dirt, mesh, vine); scene.add(field); const [fx, fz] = atTrue(-345, -495); DISTANT.push({ obj: field, x: fx, z: fz, r: 420 });
   // the oaks
   bigTree(...atTrue(-312, -448), { y0: 3.6, y1: 15, R: 9, count: 46, size: 1.8, colors: ['#b8691f', '#c9802c', '#a4561c', '#8f6a24'], trunk: 8 });
@@ -1259,40 +1713,48 @@ function fillTies(x, z) {
 }
 // rusted boxcar + Tre's spot, on a siding with the tracks behind it
 const BOX = PLACES.boxcar;
+let tankProp = null;
 around(BOX, () => {
   pad(-9, 9, -9, 3);
-  addBox(steelMat, 0, Y0 + 2.4, 0, 13, 3.6, 3.4, 1.6); solid(-6.5, 6.5, -1.7, 1.7, Y0 + 4.2);
-  addBox(roofMat, 1, Y0 + 2.2, -1.75, 3, 2.6, .1, 0);
-  addBox(roofMat, 1, Y0 + .4, -4, .9, .8, 1.4, 1.2); solid(.55, 1.45, -4.7, -3.3, Y0 + 1.5);
+  breakable('boxcar', 7, () => { addBox(steelMat, 0, Y0 + 2.4, 0, 13, 3.6, 3.4, 1.6); solid(-6.5, 6.5, -1.7, 1.7, Y0 + 4.2); addBox(roofMat, 1, Y0 + 2.2, -1.75, 3, 2.6, .1, 0); }, { chip: '#5a3a2c', squash: .34 });
+  tankProp = breakable('tank', .4, () => { addBox(roofMat, 1, Y0 + .4, -4, .9, .8, 1.4, 1.2); solid(.55, 1.45, -4.7, -3.3, Y0 + 1.5); }, { chip: '#cfefff' });
   flushBuckets();
 });
 for (const x of [-5, 5]) for (const z of [-.8, .8]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(.45, .45, .2, 14), roofMat); w.rotation.x = Math.PI / 2; w.position.set(BOX.x + x, Y0 + .5, BOX.z + z); scene.add(w); }
-const tank = new THREE.Mesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#cfefff', transparent: true, opacity: .18, roughness: .1, depthWrite: false })); tank.scale.set(.8, .7, 1.2); tank.position.set(BOX.x + 1, Y0 + 1.15, BOX.z - 4); outline(tank, INK, 1.2); scene.add(tank);
+const tank = new THREE.Mesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#cfefff', transparent: true, opacity: .18, roughness: .1, depthWrite: false })); tank.scale.set(.8, .7, 1.2); tank.position.set(BOX.x + 1, Y0 + 1.15, BOX.z - 4); outline(tank, INK, 1.2); scene.add(tank); tankProp.hide = [tank];
 {
   const pts = []; for (let i = 0; i <= 40; i++) { const a = i / 40 * Math.PI * 4.5, r = .32 - i * .006; pts.push(new THREE.Vector3(BOX.x + 1 + Math.sin(a) * r * .55, Y0 + .88 + i * .004, BOX.z - 4 + Math.cos(a) * r)); }
-  const coil = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, .035, 6), new THREE.MeshStandardMaterial({ map: snakeTex, roughness: .7 })); outline(coil, INK, 1); scene.add(coil);
+  const coil = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, .035, 6), new THREE.MeshStandardMaterial({ map: snakeTex, roughness: .7 })); outline(coil, INK, 1); scene.add(coil); tankProp.hide.push(coil);
 }
 // water tower with the town's name
+// Knock out two of its legs and the whole thing goes over, and what it lands on knows about it
+let towerProp = null, towerLegs = 0, beaconLive = true;
+const towerLegProps = [];
 around(PLACES.tower, () => {
   pad(95, 105, -19, -9);
-  for (const [x, z] of [[-2.2, -2.2], [2.2, -2.2], [-2.2, 2.2], [2.2, 2.2]]) addBeam([100 + x * 1.4, Y0, -14 + z * 1.4], [100 + x, Y0 + 13, -14 + z], .25, .25, steelMat, 1.2);
-  addBeam([97.2, Y0 + 6, -16.8], [102.8, Y0 + 6, -11.2], .1, .1, steelMat, 0); addBeam([102.8, Y0 + 6, -16.8], [97.2, Y0 + 6, -11.2], .1, .1, steelMat, 0);
-  solid(96, 104, -18, -10, Y0 + .2);
+  for (const [x, z] of [[-2.2, -2.2], [2.2, -2.2], [-2.2, 2.2], [2.2, 2.2]]) towerLegProps.push(breakable('leg', 3, () => { addBeam([100 + x * 1.4, Y0, -14 + z * 1.4], [100 + x, Y0 + 13, -14 + z], .25, .25, steelMat, 1.2); }, { low: true, whole: true, broke(p, dirx, dirz) {
+    if (++towerLegs >= 2) { for (const q of towerLegProps) if (!q.down) breakProp(q, dirx, dirz); breakProp(towerProp, dirx, dirz); }
+  } }));
+  towerProp = breakable('tower', 6, () => { addBeam([97.2, Y0 + 6, -16.8], [102.8, Y0 + 6, -11.2], .1, .1, steelMat, 0); addBeam([102.8, Y0 + 6, -16.8], [97.2, Y0 + 6, -11.2], .1, .1, steelMat, 0); solid(96, 104, -18, -10, Y0 + .2); }, { rigid: true, T: 1.9, chip: '#7f8d90', broke(p, dirx, dirz) { beaconLive = false; for (const q of towerLegProps) if (!q.down) breakProp(q, dirx, dirz); }, landed(p, dirx, dirz) { thud(p.cx + dirx * 15, Y0 + 1, p.cz + dirz * 15, 10, 4); } });
   flushBuckets();
 });
 const towerX = 100 + PLACES.tower.x, towerZ = -14 + PLACES.tower.z;
-const towerTank = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 4.6, 32, 1), new THREE.MeshStandardMaterial({ map: textTex(['CHUNKY'], 1024, 256, '#9fb3b8', '#2a1c26', '150px Bungee, Impact, sans-serif', { grime: true }), roughness: .8, metalness: .2 }));
-towerTank.position.set(towerX, Y0 + 15.3, towerZ); towerTank.rotation.y = -Math.PI / 2 - .5; outline(towerTank, INK, 1.6); scene.add(towerTank);
-const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(3.8, 2, 32), roofMat); towerRoof.position.set(towerX, Y0 + 18.6, towerZ); outline(towerRoof, INK, 1.4); scene.add(towerRoof);
-const beacon = new THREE.Mesh(new THREE.SphereGeometry(.18, 10, 8), lit('#ff2a2a', 4)); beacon.position.set(towerX, Y0 + 19.7, towerZ); scene.add(beacon);
+// the name goes round its side and its ends are bare, which shows from below and when it's on its back
+const towerEnd = new THREE.MeshStandardMaterial({ color: '#7d8f95', roughness: .8, metalness: .2 });
+const towerTank = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 4.6, 32, 1), [new THREE.MeshStandardMaterial({ map: textTex(['CHUNKY'], 1024, 256, '#9fb3b8', '#2a1c26', '150px Bungee, Impact, sans-serif', { grime: true }), roughness: .8, metalness: .2 }), towerEnd, towerEnd]);
+towerTank.position.set(towerX, Y0 + 15.3, towerZ); towerTank.rotation.y = -Math.PI / 2 - .5; outline(towerTank, INK, 1.6); scene.add(towerTank); towerProp.objs.push(towerTank);
+const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(3.8, 2, 32), roofMat); towerRoof.position.set(towerX, Y0 + 18.6, towerZ); outline(towerRoof, INK, 1.4); scene.add(towerRoof); towerProp.objs.push(towerRoof);
+const beacon = new THREE.Mesh(new THREE.SphereGeometry(.18, 10, 8), lit('#ff2a2a', 4)); beacon.position.set(towerX, Y0 + 19.7, towerZ); scene.add(beacon); towerProp.objs.push(beacon);
 // burnt cars, power poles, fire barrels, the town sign
 const burnt = new THREE.MeshStandardMaterial({ color: '#2a2024', roughness: 1, metalness: .3 });
 {
   const roadside = (x, side) => { const p = onRoadAt('us_80', x); return [p.x, p.z + side * 5.4]; };
   for (const [[x, z], r] of [[roadside(62, 1), .2], [roadside(worldX(-590), -1), -.15], [roadside(worldX(-395), 1), .4]]) {
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, r, 0));
-    addBox(burnt, x, Y0 + .6, z, 4.2, .9, 1.9, 1.4, q); addBox(burnt, x - .2, Y0 + 1.3, z, 2.2, .7, 1.7, 1.2, q);
-    solid(x - 2.2, x + 2.2, z - 1.1, z + 1.1, Y0 + 1.6); kudzuOn(x - 1.5, x + 1.5, Y0 + 1.7, z - .7, z + .7, 3);
+    breakable('car', 4, () => {
+      addBox(burnt, x, Y0 + .6, z, 4.2, .9, 1.9, 1.4, q); addBox(burnt, x - .2, Y0 + 1.3, z, 2.2, .7, 1.7, 1.2, q);
+      solid(x - 2.2, x + 2.2, z - 1.1, z + 1.1, Y0 + 1.6); kudzuOn(x - 1.5, x + 1.5, Y0 + 1.7, z - .7, z + .7, 3);
+    }, { squash: .4, chip: '#3a2c30' });
   }
 }
 // power poles along the north side of US 80: every 12 m out of the bridge, wider once in town
@@ -1305,9 +1767,12 @@ const wireMat = new THREE.MeshBasicMaterial({ color: '#0c080e' });
     if (Math.abs(x - adamsX) < 8 || (x > canopy0 && x < canopy1)) continue;
     const z = MAP.zAt('us_80', x) - 4.3;
     if (houseAt(x, z) || MAP.roadGrid.within(x, z, (road) => road.id === 'us_80' ? 0 : road.width / 2 + 1.5)) continue;
-    addBox(poleMat, x, Y0 + 4, z, .25, 8, .25, 1.1); addBox(poleMat, x, Y0 + 7.6, z, .12, .12, 2.2, 1); solid(x - .2, x + .2, z - .2, z + .2, Y0 + 8);
+    const j = poles.length;
+    breakable('pole', 2, () => { addBox(poleMat, x, Y0 + 4, z, .25, 8, .25, 1.1); addBox(poleMat, x, Y0 + 7.6, z, .12, .12, 2.2, 1); solid(x - .2, x + .2, z - .2, z + .2, Y0 + 8); }, { rigid: true, chip: '#4a3640', broke() { dropWires(wires[j - 1]); dropWires(wires[j]); } });
     poles.push([x, z]);
   }
+  // when a pole goes, so do the wires either side of it
+  const wires = [];
   // one merged mesh for every eight spans, so wires out of view cost nothing
   for (let i = 0; i < poles.length - 1; i += 8) {
     const geos = [];
@@ -1315,20 +1780,23 @@ const wireMat = new THREE.MeshBasicMaterial({ color: '#0c080e' });
       const a = new THREE.Vector3(poles[j][0], Y0 + 7.65, poles[j][1] + dz), b = new THREE.Vector3(poles[j + 1][0], Y0 + 7.65, poles[j + 1][1] + dz), m = a.clone().lerp(b, .5); m.y -= .9;
       geos.push(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(a, m, b), 12, .02, 4));
     }
-    scene.add(new THREE.Mesh(mergeGeometries(geos), wireMat));
+    const g = mergeGeometries(geos), per = geos[0].attributes.position.count * 2;
+    for (let j = i; j < Math.min(i + 8, poles.length - 1); j++) wires[j] = { g, first: (j - i) * per, count: per };
+    scene.add(new THREE.Mesh(g, wireMat));
   }
 }
 const fires = [];
 for (const [x, z] of [[...gasAt(50, 7.4)], [96, -5.5], [BOX.x - 3, BOX.z - 6]]) {
-  addBox(railMat, x, Y0 + .5, z, .7, 1, .7, 1.2); solid(x - .4, x + .4, z - .4, z + .4, Y0 + 1);
   const fl = new THREE.Mesh(new THREE.ConeGeometry(.3, .9, 8), lit('#ffb040', 3)); fl.position.set(x, Y0 + 1.35, z); scene.add(fl);
   const pl = new THREE.PointLight('#ff8a30', 12, 11, 1.7); pl.position.set(x, Y0 + 1.8, z); scene.add(pl);
-  fires.push({ fl, pl, ph: rnd() * 10 });
+  const f = { fl, pl, ph: rnd() * 10, out: false, duty: false, home: pl.position.clone(), spot: { x, z, r: 30 } };
+  breakable('barrel', 1, () => { addBox(railMat, x, Y0 + .5, z, .7, 1, .7, 1.2); solid(x - .4, x + .4, z - .4, z + .4, Y0 + 1); }, { broke() { f.out = true; pl.intensity = 0; fl.visible = false; const i = horde.lights.indexOf(f.spot); if (i >= 0) horde.lights.splice(i, 1); burnAt(x, Y0 + .04, z, 1.1, 12 + wreckRand() * 8); for (const q of [[1, .4], [-.7, .9], [.2, -1.1]]) burnAt(x + q[0], Y0 + .04, z + q[1], .7, 7 + wreckRand() * 7); } });
+  fires.push(f);
 }
 {
-  addBox(poleMat, 24, Y0 + 1.2, 4.6, .15, 2.4, .15, 1); addBox(poleMat, 26.4, Y0 + 1.2, 4.6, .15, 2.4, .15, 1);
+  const townSign = breakable('sign', 1.5, () => { addBox(poleMat, 24, Y0 + 1.2, 4.6, .15, 2.4, .15, 1); addBox(poleMat, 26.4, Y0 + 1.2, 4.6, .15, 2.4, .15, 1); }, { rigid: true, chip: '#1f5a3a' });
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(3, 1.5), new THREE.MeshStandardMaterial({ map: textTex(['CHUNKY', 'POP. 254'], 512, 256, '#1f5a3a', '#f1e6cf', '64px Bungee, Impact, sans-serif', { after: (g) => { g.strokeStyle = '#ff2a6a'; g.lineWidth = 10; g.beginPath(); g.moveTo(250, 160); g.lineTo(420, 190); g.stroke(); g.fillStyle = '#ff2a6a'; g.font = '62px Bungee, Impact, sans-serif'; g.fillText('41', 440, 220); } }), roughness: .8 }));
-  sign.position.set(25.2, Y0 + 2.1, 4.66); sign.rotation.y = Math.PI; scene.add(sign);
+  sign.position.set(25.2, Y0 + 2.1, 4.66); sign.rotation.y = Math.PI; scene.add(sign); townSign.objs.push(sign);
 }
 flushBuckets();
 // ================================================================ the roads, from the graph: each one's width and surface
@@ -1510,15 +1978,17 @@ const SIGNS = [];
   // the blade's dark backing, and its face on the side that yaw looks out of
   const mount = (b, x, y, z, yaw, h, sides = [0]) => {
     addBox(poleMat, x, y, z, b.long * h + .08, h + .08, .05, 1, new THREE.Quaternion().setFromAxisAngle(UP, yaw));
-    for (const side of sides) b.faces.push({ x: x + Math.sin(yaw + side) * .05, y, z: z + Math.cos(yaw + side) * .05, yaw: yaw + side, h });
+    for (const side of sides) { const face = { x: x + Math.sin(yaw + side) * .05, y, z: z + Math.cos(yaw + side) * .05, yaw: yaw + side, h, im: null, i: 0 }; b.faces.push(face); PROP.faces.push(face); }
   };
   // Beside the road on the right of whoever's walking that way, facing them
   const roadSign = (road, s, dir) => {
     const b = bladeFor(road.name), w = b.long * ROADSIDE, p = MAP.along(road.id, s), off = road.width / 2 + .5 + w / 2;
     const x = p.x + p.nx * dir * off, z = p.z + p.nz * dir * off, yaw = Math.atan2(-p.tx * dir, -p.tz * dir), y = Y0 + 2.9;
-    // the posts stand behind the blade, so they don't cross the letters
-    for (const k of w > 2 ? [-.3, .3] : [0]) addBox(poleMat, x + Math.cos(yaw) * w * k - Math.sin(yaw) * .09, (y + Y0) / 2, z - Math.sin(yaw) * w * k - Math.cos(yaw) * .09, .12, y - Y0, .12, 1);
-    mount(b, x, y, z, yaw, ROADSIDE);
+    breakable('sign', 1.2, () => {
+      // the posts stand behind the blade, so they don't cross the letters
+      for (const k of w > 2 ? [-.3, .3] : [0]) addBox(poleMat, x + Math.cos(yaw) * w * k - Math.sin(yaw) * .09, (y + Y0) / 2, z - Math.sin(yaw) * w * k - Math.cos(yaw) * .09, .12, y - Y0, .12, 1);
+      mount(b, x, y, z, yaw, ROADSIDE);
+    }, { rigid: true, chip: '#1f5a3a' });
     SIGNS.push({ road: road.id, name: road.name, x, z, yaw, kind: 'road' });
   };
   // On one corner of a junction, the south-east if it's clear. Each blade runs along the road it names, as they do.
@@ -1538,13 +2008,15 @@ const SIGNS = [];
       if (!best || score > best.score) best = { x, z, score };
     }
     const { x, z } = best;
-    // the post stops under the blades, which sit one on the other
-    addBox(poleMat, x, Y0 + 1.46, z, .12, 2.92, .12, 1);
-    on.forEach(([road, p], i) => {
-      const yaw = Math.atan2(p.nx, p.nz);
-      mount(bladeFor(road.name), x, Y0 + 3.2 + i * .58, z, yaw, CORNER, [0, Math.PI]);
-      SIGNS.push({ road: road.id, name: road.name, x, z, yaw, kind: 'junction' });
-    });
+    breakable('sign', 1.2, () => {
+      // the post stops under the blades, which sit one on the other
+      addBox(poleMat, x, Y0 + 1.46, z, .12, 2.92, .12, 1);
+      on.forEach(([road, p], i) => {
+        const yaw = Math.atan2(p.nx, p.nz);
+        mount(bladeFor(road.name), x, Y0 + 3.2 + i * .58, z, yaw, CORNER, [0, Math.PI]);
+        SIGNS.push({ road: road.id, name: road.name, x, z, yaw, kind: 'junction' });
+      });
+    }, { rigid: true, chip: '#1f5a3a' });
   };
   for (const n of MAP.nodes) if (n.kind === 'junction') junctionSign(n);
   const nearJunction = (road, s) => MAP.nodes.some((n) => n.kind === 'junction' && n.roads.includes(road.id) && Math.abs(MAP.sOn(road.id, n.x, n.z) - s) < 30);
@@ -1559,7 +2031,7 @@ const SIGNS = [];
   for (const { long, map, faces } of blades.values()) {
     const mat = new THREE.MeshStandardMaterial({ map, roughness: .8, emissive: '#ffffff', emissiveMap: map, emissiveIntensity: .4 });
     const im = new THREE.InstancedMesh(new THREE.PlaneGeometry(long, 1), mat, faces.length);
-    faces.forEach(({ x, y, z, yaw, h }, i) => { _m.compose(_v.set(x, y, z), _q.setFromAxisAngle(UP, yaw), _s.setScalar(h)); im.setMatrixAt(i, _m); });
+    faces.forEach((f, i) => { _m.compose(_v.set(f.x, f.y, f.z), _q.setFromAxisAngle(UP, f.yaw), _s.setScalar(f.h)); im.setMatrixAt(i, _m); f.im = im; f.i = i; });
     scene.add(im);
   }
   flushBuckets(1e6);
@@ -1578,7 +2050,7 @@ const SIGNS = [];
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.5, .75), new THREE.MeshStandardMaterial({ map: textTex(label, 256, 128, '#1b1420', '#f1e6cf', '36px Bungee, Impact, sans-serif'), roughness: .8 }));
     sign.position.set(0, 1.95, -.05); sign.rotation.y = Math.PI; group.add(sign);
     const c = Math.abs(ox) > Math.abs(oz) ? [.3, w / 2] : [w / 2, .3];
-    solid(cx - c[0], cx + c[0], cz - c[1], cz + c[1], Y0 + 2);
+    breakable('barricade', 1.2, () => solid(cx - c[0], cx + c[0], cz - c[1], cz + c[1], Y0 + 2), { rigid: true, objs: [group], chip: '#d76a2c' });
   }
 }
 // kudzu: Mississippi's green blanket over everything left standing
@@ -1587,7 +2059,9 @@ const SIGNS = [];
   kudzuSpots.forEach(([x, y, z], i) => { const r = .5 + rnd() * .7; _m.compose(_v.set(x, y, z), _q.setFromEuler(new THREE.Euler(rnd() * 3, rnd() * 3, 0)), _s.set(r * 1.3, r * .7, r * 1.3)); kz.setMatrixAt(i, _m); kz.setColorAt(i, new THREE.Color().setHSL(.27 + rnd() * .06, .45, .22 + rnd() * .1)); });
   scene.add(kz);
   const ko = new THREE.InstancedMesh(kz.geometry, outlineMat(INK, 1.2, 0), kz.count); ko.instanceMatrix = kz.instanceMatrix; scene.add(ko);
+  kudzuMesh = kz;
 }
+indexProps();
 // Where the town's props leave the random sequence, however many there are, so the lantern and the snakes stay as they were in the opening
 rs = 426193737;
 
@@ -1982,6 +2456,8 @@ const lanternFlame = new THREE.Mesh(new THREE.SphereGeometry(.035, 10, 8), lit('
   const base = new THREE.Mesh(new THREE.CylinderGeometry(.095, .095, .03, 6), frame); base.position.y = -.31; lantern.add(base);
   lanternFlame.position.y = -.2; lanternFlame.scale.y = 1.6; lantern.add(lanternFlame);
 }
+const hammer = new THREE.Group(); hero.body.add(hammer); hammer.visible = false;
+{ const steel = new THREE.MeshStandardMaterial({ color: '#7f868e', metalness: .7, roughness: .45 }), stick = new THREE.Mesh(new THREE.CylinderGeometry(.02, .024, .98, 6), new THREE.MeshStandardMaterial({ color: '#6b4a2c', roughness: .9 })); stick.position.y = .25; hammer.add(outline(stick, INK, 1)); const head = new THREE.Mesh(boxGeo, steel); head.scale.set(.15, .15, .34); head.position.y = .74; hammer.add(outline(head, INK, 1.3)); }
 const broom = new THREE.Group(); hero.body.add(broom); broom.visible = false;
 { const stick = new THREE.Mesh(new THREE.CylinderGeometry(.02, .02, 1.3, 6), new THREE.MeshStandardMaterial({ color: '#8a6a40' })); stick.position.y = -.3; broom.add(outline(stick, INK, 1)); const bristle = new THREE.Mesh(new THREE.ConeGeometry(.14, .3, 8), new THREE.MeshStandardMaterial({ color: '#d4b060' })); bristle.position.y = -.95; broom.add(outline(bristle, INK, 1)); }
 
@@ -1990,6 +2466,9 @@ heroRoot.traverse(o => { o.layers.enable(1); if (o.material && o.material.userDa
 
 // pose the hero; limbs are redrawn 12 times a second (on twos), the body moves every frame
 const HP = { kind: 'hang', phase: 0, speed: 0, cut: 0, lag: 0, t: 0 };
+// A swing, as drawings: up over his shoulder, and down through whatever's in front of him. [hand x, y, z, the handle's turn]
+const SWING_POSES = [[.2, .34, -.2, -2.1], [.15, .5, -.08, -1], [.1, .16, .42, .85], [.08, -.26, .6, 1.75], [.08, -.36, .55, 2.15], [.2, -.46, .34, 2.5]], SWING_T = .46, SWING_AT = .2;
+let swingT = -1, swingHit = false, throwT = 0;
 function poseHero(tq) {
   const k = HP.kind, ph = HP.phase, R = hero, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
   const head = k === 'hang' ? heroHoodHung : k === 'swim' ? heroHoodSwim : heroHood; if (R.hm.geometry !== head.geo) R.setHood(head);
@@ -2052,6 +2531,14 @@ function poseHero(tq) {
       R.leg(i, V3(s * .13, -1.36 + lift, Math.sin(p) * .34 * a), V3(s * .1, -1, .8), lift * 2);
     }
   }
+  // the arms are busy with the hammer whatever the rest of him's doing
+  hammer.visible = swingT >= 0 && (k === 'run' || k === 'air');
+  if (hammer.visible) {
+    const [x, y, z, turn] = SWING_POSES[Math.min(SWING_POSES.length - 1, Math.floor(swingT * 12))];
+    const g = R.arm(1, V3(x, y, z), V3(.7, -.3, -.25), V3(0, 1, .25));
+    R.arm(0, V3(x - .05, y - Math.cos(turn) * .24, z - Math.sin(turn) * .24), V3(-.7, -.3, -.25), V3(0, 1, .25));
+    hammer.position.copy(g); hammer.quaternion.setFromEuler(new THREE.Euler(turn, 0, 0));
+  } else if (throwT > 0 && k === 'run') R.arm(1, V3(.3, .28, .42), V3(.8, -.1, -.2));
   R.strings(tq, k === 'hang' ? HP.lag : Math.sin(ph) * .1 * Math.min(1, HP.speed / 4.2));
 }
 
@@ -2414,11 +2901,11 @@ function renderFrame(dt) {
 }
 
 // ================================================================ input: keyboard, touch stick, buttons, drag to look
-const input = { x: 0, y: 0, a: false, b: false, run: false, aEdge: false, bEdge: false };
+const input = { x: 0, y: 0, a: false, b: false, run: false, aEdge: false, bEdge: false, cEdge: false, sEdge: false };
 const keys = new Set();
 addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
-  const k = e.key.toLowerCase(); if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; }
+  const k = e.key.toLowerCase(); if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; if (k === 'f') input.sEdge = true; if (k === 'q') input.cEdge = true; }
   keys.add(k);
   if (S.mode === 'dialog' && /^[1-4]$/.test(k)) { const b = $('dOpts').children[+k - 1]; if (b) b.click(); }
   if (k === 'm' && !e.repeat) { if (mapOpen) closeMap(); else if (canOpenMap()) openMap(); }
@@ -2437,10 +2924,10 @@ function moveStick(e) {
   touchStick.set(x, -y); knob.style.transform = `translate(${x * 38}px,${y * 38}px)`;
 }
 // RUN stays held a moment after it's let go, so a thumb can slide off it to jump
-const touchBtn = { a: false, b: false, r: false, rUntil: 0 };
-for (const [id, k] of [['bA', 'a'], ['bB', 'b'], ['bR', 'r']]) {
+const touchBtn = { a: false, b: false, c: false, r: false, rUntil: 0 };
+for (const [id, k] of [['bA', 'a'], ['bB', 'b'], ['bR', 'r'], ['bC', 'c']]) {
   const el = $(id);
-  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); touchBtn[k] = true; el.classList.add('on'); if (k === 'a') input.aEdge = true; else if (k === 'b') input.bEdge = true; });
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); touchBtn[k] = true; el.classList.add('on'); if (k === 'a') input.aEdge = true; else if (k === 'b') input.bEdge = true; else if (k === 'c') input.cEdge = true; });
   const up = () => { touchBtn[k] = false; el.classList.remove('on'); if (k === 'r') touchBtn.rUntil = time + .2; };
   el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up);
 }
@@ -2458,7 +2945,7 @@ function readInput() {
 }
 
 // ================================================================ game state + UI
-const S = { mode: 'title', hp: 3, beans: 0, items: {}, flags: {}, collapse: -99, sweep: 0, talkTo: null, removedNoose: false };
+const S = { mode: 'title', hp: 3, beans: 0, gas: 0, items: {}, flags: {}, collapse: -99, sweep: 0, talkTo: null, removedNoose: false };
 // A private window can refuse storage outright, and then nothing's saved
 let saveStore = null; try { saveStore = localStorage; } catch { /* not saved */ }
 const people = createPeople(await (await fetch('data/cast.json')).json(), { store: saveStore });
@@ -2522,11 +3009,11 @@ function setButton(id, label, sizes) {
   el.innerHTML = label.replace(' ', '<br>'); el.style.fontSize = `${sizes[label.includes(' ') ? 2 : label.length < 4 ? 0 : label.length < 5 ? 1 : 2]}px`; el.setAttribute('aria-label', label);
 }
 function updateControls() {
-  const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, now = `${S.mode}|${act}|${map}`;
+  const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, gas = S.gas, now = `${S.mode}|${act}|${map}|${gas}`;
   if (hudCache.controls === now) return; hudCache.controls = now;
   $('stam').classList.toggle('veh', S.mode === 'drive');
-  if (touchUI) { const { a, b, run } = buttonsFor(S.mode, { act }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); return; }
-  const list = keysFor(S.mode, { act, map });
+  if (touchUI) { const { a, b, run, c } = buttonsFor(S.mode, { act, gas }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); setHidden('bC', !c); if (c) $('bC').innerHTML = c.replace(' ', '<br>'); return; }
+  const list = keysFor(S.mode, { act, map, gas });
   setHidden('keyStrip', !list.length); $('keyStrip').innerHTML = list.map(([key, what]) => `<span class="ks"><span class="kc">${key}</span>${what}</span>`).join('');
 }
 function hudVitals() {
@@ -2687,7 +3174,7 @@ function startBridge() {
   deckSnake.reset();
 }
 function startTown() {
-  S.mode = 'town'; S.collapse = 99; S.flags.town = true; vehGroup.visible = true;
+  S.mode = 'town'; S.collapse = 99; S.flags.town = true; vehGroup.visible = true; gasMesh.visible = gasLine.visible = true;
   card('Chunky, <span>Mississippi</span>', '2026', 3.4);
   if (touchUI) after(5, () => { if (S.mode === 'town') toast('Tap the map to open it'); });
   if (HORDE_EARLY) bringOutCrowd();
@@ -2715,7 +3202,9 @@ for (const b of SOLIDS) {
 }
 // walls by cell too, as lines with a thickness, because the real ones don't run square to the map
 const wallCells = new Map();
-for (const w of [...STRUCTURES.flatMap((s) => collidersOf(s, TOWN_Y)), ...PROP_WALLS]) {
+// a building keeps hold of its own, by the name its pieces know them by, so that they stop stopping him when they fall
+for (const s of STRUCTURES) { s.stops = new Map(); for (const w of collidersOf(s, TOWN_Y)) s.stops.set(w[6], w); }
+for (const w of [...STRUCTURES.flatMap((s) => [...s.stops.values()]), ...PROP_WALLS]) {
   const [ax, az, bx, bz, , r] = w, reach = r + .4;
   for (let cx = Math.floor((Math.min(ax, bx) - reach) / 16); cx <= Math.floor((Math.max(ax, bx) + reach) / 16); cx++) for (let cz = Math.floor((Math.min(az, bz) - reach) / 16); cz <= Math.floor((Math.max(az, bz) + reach) / 16); cz++) {
     const k = (cx + 32768) * 65536 + cz + 32768; if (!wallCells.has(k)) wallCells.set(k, []); wallCells.get(k).push(w);
@@ -2746,6 +3235,8 @@ function blocked(x, z, y) {
   if (SPANS.length && y > ROAD_TOP - 1) { const s = spanAt(x, z); if (s && MAP.roadGrid.nearest(x, z) > s.road.width / 2 && MAP.roadGrid.d < s.road.width / 2 + 1) return true; }
   return false;
 }
+// and a tree stops him and anything he's driving, though not the crowd, and not until he's in town
+const blockedInTown = (x, z, y) => blocked(x, z, y) || !!treeBlocks(x, z);
 // ---------------- the crowd: what they do is in src/horde.js
 // They aren't in Chapter 1. They come out when it ends, or as soon as town starts with ?horde.
 const HORDE_EARLY = new URLSearchParams(location.search).has('horde');
@@ -2779,9 +3270,9 @@ let crowdOut = false;
 function bringOutCrowd() {
   if (crowdOut) return; crowdOut = true; crowdGroup.visible = true; S.hp = 3;
   const [cx, cz] = atTrue(-309, -228);
-  horde.zones.push({ x: cx, z: cz, r: 28 });
-  for (const f of fires) horde.lights.push({ x: f.pl.position.x, z: f.pl.position.z, r: 30 });
-  horde.lights.push({ x: gasLight.position.x, z: gasLight.position.z, r: 40 });
+  if (!S.flags.churchDown) { churchZone = { x: cx, z: cz, r: 28 }; horde.zones.push(churchZone); }
+  for (const f of fires) if (!f.out) horde.lights.push(f.spot);
+  if (gasPower) horde.lights.push(gasSpot);
   for (const [id, a, b, n] of CROWD_STREETS) {
     const s0 = MAP.sOn(id, ...a), s1 = MAP.sOn(id, ...b);
     for (let i = 0, tries = 0; i < n && tries < n * 30; tries++) {
@@ -2842,7 +3333,7 @@ function vehicleFits(kind, x, z, yaw) {
   if (y < .5) return false;
   for (let along = -L; along <= L + .01; along += L / 4) for (let across = -W; across <= W + .01; across += W / 2) {
     const px = x + fx * along - fz * across, pz = z + fz * along + fx * across;
-    if (!MAP.inBounds(px, pz) || Math.abs(floorAt(px, pz) - y) > .35 || onRoad(px, pz) || houseAt(px, pz) || blocked(px, pz, y + .6)) return false;
+    if (!MAP.inBounds(px, pz) || Math.abs(floorAt(px, pz) - y) > .35 || onRoad(px, pz) || houseAt(px, pz) || blockedInTown(px, pz, y + .6)) return false;
   }
   return true;
 }
@@ -2935,7 +3426,8 @@ function vehicleInReach() {
   return best;
 }
 function getIn(v) {
-  driving = v; markVehicle(v, false); vehTag.visible = false; vehPicked = -1;
+  if (v.loose) { loose.splice(loose.indexOf(v), 1); v.loose = null; } else markVehicle(v, false);
+  driving = v; vehTag.visible = false; vehPicked = -1;
   S.mode = 'drive'; HP.kind = 'drive'; HP.speed = 0; prompt(null);
   heroRoot.rotation.order = 'YXZ'; hero.body.scale.setScalar(HERO_SCALE * v.K.size);
   player.running = false; player.runK = 0; player.yaw = v.yaw;
@@ -2945,7 +3437,7 @@ function getIn(v) {
 // The way out: his own side first, then the other, then behind and in front
 function getOut(force = false) {
   const v = driving, K = v.K, fx = Math.sin(v.yaw), fz = Math.cos(v.yaw);
-  if (!force && speedOf(v) > 7) { toast('Slow down first'); return false; }
+  if (!force && speedOf(v) > 7 && !v.wrecked) { toast('Slow down first'); return false; }
   const sx = K.width / 2 + .8, sz = K.length / 2 + .8;
   let spot = null;
   for (const [along, across] of [[0, sx], [0, -sx], [-sz, 0], [sz, 0]]) {
@@ -3011,10 +3503,11 @@ function arriving() { if (!S.flags.arrived && player.pos.x > NPCS.coop.root.posi
 function pickUpCans(reach) {
   for (const c of PICKUPS) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; c.m.visible = false; addBeans(1, 'found'); townObjective(); hudVitals(); }
 }
-const DRIVE_WORLD = { blocked, floorAt, road: onRoad, edge: (x, z) => !MAP.inBounds(x, z) };
+const DRIVE_WORLD = { blocked: (x, z, y) => blockedInTown(x, z, y) || !!looseAt(x, z, y), floorAt, road: onRoad, edge: (x, z) => !MAP.inBounds(x, z), ram };
 let vehPuffT = 0, vehClawT = 0, vehSmokeT = 0;
 function wreckedNow(v) {
-  vehDirty = true; toast(v.drowned ? 'Flooded' : 'Wrecked');
+  vehDirty = true;
+  if (v.drowned) toast('Flooded'); else wreckVehicle(v);
   if (!reduceMotion) cam.shake = .6; glitch(.9, .35);
   for (let i = 0; i < 7; i++) puff(v.x + (vehRand() - .5) * 2.4, v.y + .6 + vehRand(), v.z + (vehRand() - .5) * 2.4, .8 + vehRand() * .6, 1 + vehRand() * .5, 3, .09, .08, .095);
   if (crowdOut) horde.noise(v.x, v.z, 60, 2);
@@ -3028,6 +3521,13 @@ function updateDrive(dt) {
   // getting his breath back in the seat
   if (player.ran) { player.stamina = Math.min(1, player.stamina + RUN.rest * dt); if (player.stamina > RUN.recover) player.winded = false; if (player.stamina >= 1) player.ran = false; }
   if (r.edge && !S.flags.toldEdge) { S.flags.toldEdge = true; toast('Nothing that way.'); after(12, () => { S.flags.toldEdge = false; }); }
+  // what it went through
+  if (r.smash > 0) {
+    vehDirty = true;
+    if (!reduceMotion) cam.shake = Math.max(cam.shake, Math.min(.55, .12 + r.smash / SMASH_J * .07));
+    if (r.smash > SMASH_J * 2.5) glitch(.5, .18);
+    if (crowdOut) horde.noise(v.x, v.z, 40, 1.5);
+  }
   // what it hit
   if (r.hit > 1.5) {
     for (const o of vehShown) {
@@ -3035,7 +3535,8 @@ function updateDrive(dt) {
       // another vehicle takes it too, and shoves along if there's room
       const dx = o.x - v.x, dz = o.z - v.z, L = Math.hypot(dx, dz) || 1, push = Math.min(2.4, r.hit * .12 * K.mass / o.K.mass);
       markVehicle(o, false);
-      hurtVehicle(o, damageFrom(o.K, r.hit)); vehDirty = true;
+      if (hurtVehicle(o, damageFrom(o.K, r.hit))) wreckVehicle(o);
+      vehDirty = true;
       const nx = o.x + dx / L * push, nz = o.z + dz / L * push;
       if (!blocked(nx, nz, o.y + .6) && floorAt(nx, nz) > .3) { o.x = nx; o.z = nz; o.y = floorAt(nx, nz); o.yaw += (vehRand() - .5) * push * .3; settle(o, floorAt); }
       markVehicle(o, true);
@@ -3066,10 +3567,383 @@ function updateDrive(dt) {
     const side = vehRand() < .5 ? -1 : 1; puff(v.x - fx * K.length * .42 + fz * side * K.track + (vehRand() - .5) * .4, v.y + .12, v.z - fz * K.length * .42 - fx * side * K.track + (vehRand() - .5) * .4, .1 + speed * .012);
   }
   if ((vehSmokeT -= dt) <= 0 && v.hp / K.hp < .4) { vehSmokeT = v.wrecked ? .13 : .26; puff(v.x + fx * K.length * .3 + (vehRand() - .5) * .5, v.y + 1.1, v.z + fz * K.length * .3 + (vehRand() - .5) * .5, .16 + vehRand() * .16, 1.1, 3, .07, .062, .075); }
-  arriving(); pickUpCans(2.4);
+  arriving(); pickUpCans(2.4); pickUpGas(2.4);
   drawHeadlights(v, braking || gas < -.1);
   if (input.aEdge) getOut();
 }
+// ================================================================ what burns and what goes up
+// Everything that's on fire is on one list, however much of it there is. Only what's nearest the camera is drawn, on the game's own
+// twelve frames: low-poly flames with an ink line, a glow on the ground, smoke and sparks. None of it adds a light.
+const FLAME_N = FEW ? 42 : 90, GLOW_N = FEW ? 10 : 18, SMOKE_N = FEW ? 26 : 48, SPARK_N = FEW ? 24 : 60, BURNERS_MAX = 260;
+const FLAME_SIZE = { wall: 1.9, lintel: .8, roof: 2.1, gable: 1.5, porch: 1.3, carport: 1.3, door: 1, bay: 1.4, post: .6, shutter: .5, vent: .5, kudzu: .8 };
+// three tongues of it, hot at the foot and going to red at the tip, so that its outline's jagged whichever way it's turned
+const flameGeo = (() => {
+  const stops = [[0, 1.3, .8, .17], [.3, 1.1, .42, .05], [.65, .85, .14, .02], [1, .36, .025, .012]];
+  const tongue = (h, r, ox, oz, wob) => {
+    const g = new THREE.ConeGeometry(r, h, 5, 4), P = g.attributes.position, C = new Float32Array(P.count * 3);
+    for (let i = 0; i < P.count; i++) {
+      const y = (P.getY(i) + h / 2) / h;
+      P.setXYZ(i, ox + P.getX(i) + Math.sin(y * 6 + wob) * .1 * y, y * h, oz + P.getZ(i) + Math.cos(y * 5 + wob) * .08 * y);
+      let n = 1; while (n < stops.length - 1 && y > stops[n][0]) n++;
+      const a = stops[n - 1], b = stops[n], k = Math.min(1, (y - a[0]) / (b[0] - a[0]));
+      for (let c = 0; c < 3; c++) C[i * 3 + c] = a[c + 1] + (b[c + 1] - a[c + 1]) * k;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(C, 3)); g.computeVertexNormals();
+    return g;
+  };
+  return mergeGeometries([tongue(1, .42, 0, 0, 0), tongue(.66, .28, .27, .08, 2), tongue(.52, .24, -.25, .14, 4), tongue(.44, .2, .02, -.28, 1)]);
+})();
+const flames = new THREE.InstancedMesh(flameGeo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }), FLAME_N), flameInk = new THREE.InstancedMesh(flameGeo, outlineMat(INK, 1.3, 0), FLAME_N);
+flameInk.instanceMatrix = flames.instanceMatrix; flames.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+const fireGlow = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: radialTex, color: new THREE.Color(1, .42, .12), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }), GLOW_N);
+const smokeMesh = new THREE.InstancedMesh(puffMesh.geometry, puffMat, SMOKE_N); smokeMesh.setColorAt(0, _wc.set(0));
+const sparkPos = new THREE.BufferAttribute(new Float32Array(SPARK_N * 3).fill(-1e4), 3).setUsage(THREE.DynamicDrawUsage);
+const sparks = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', sparkPos), new THREE.PointsMaterial({ map: radialTex, color: new THREE.Color(2.4, 1.1, .3), size: .24, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+for (const m of [flames, flameInk, fireGlow, smokeMesh, sparks]) { m.frustumCulled = false; m.visible = false; scene.add(m); }
+for (let i = 0; i < SMOKE_N; i++) smokeMesh.setMatrixAt(i, NOWHERE);
+const smokes = Array.from({ length: SMOKE_N }, () => ({ on: false, t: 0, T: 1, x: 0, y: 0, z: 0, size: 0, rise: 0, dx: 0, dz: 0, turn: 0 })), sparkList = Array.from({ length: SPARK_N }, () => ({ on: false, t: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 }));
+let smokeNext = 0, sparkNext = 0, sparksOn = 0, smokesOn = 0;
+
+const burners = [], burningHouses = new Set();
+let drawnBurners = [], burnersPicked = -1, fireClock = 0, heatAt = 0;
+function burnAt(x, y, z, size, T = Infinity, owner = null) {
+  const b = { x, y, z, size, T, owner, age: 0, dead: false, floor: floorAt(x, z), seed: wreckRand() * 6.283, seen: 0 };
+  burners.push(b); burnersPicked = -1;
+  return b;
+}
+// What a burning piece leaves behind it where it lands, unless there's plenty alight already
+function emberAt(x, z) { if (burners.length < BURNERS_MAX) burnAt(x + (wreckRand() - .5) * 1.5, floorAt(x, z) + .05, z + (wreckRand() - .5) * 1.5, .55 + wreckRand() * .6, 4 + wreckRand() * 7); }
+// Where a piece's flames stand: from about the middle of it, so that they lick up its face
+const flameFoot = (p) => p.y - (p.kind === 'wall' ? .9 : p.kind === 'kudzu' ? .3 : .2);
+function catchTree(t) {
+  if (t.down || t.burnt || t.burner) return;
+  const [x, y, z] = treeCrown(t);
+  t.burner = burnAt(x, y - 1.2, z, .9 + t.size * .7, 8 + wreckRand() * 7, { tree: t });
+}
+// What fire does to whatever's close to it. Each is looked at about once a second.
+function heatFrom(b) {
+  const P = player.pos, d = Math.hypot(P.x - b.x, P.z - b.z), hot = b.size * .75 + .3;
+  if (S.mode === 'town' && d < hot && Math.abs(P.y + 1 - b.y) < b.size + 1.4) hurtBy('fire', P.x - b.x, P.z - b.z);
+  const low = b.y < b.floor + 2.5;
+  if (low && crowdOut) horde.knock(b.x, b.z, b.size + .4, 1.2);
+  for (const v of vehShown) {
+    if (v === b.owner?.veh || v.exploded || Math.hypot(v.x - b.x, v.z - b.z) > b.size + v.K.length * .6 || !low) continue;
+    if (hurtVehicle(v, 7)) wreckVehicle(v);
+    vehDirty = true;
+  }
+  if (wreckRand() < .22) { let caught = false; treesNear(b.x, b.z, b.size + 4, (t) => { if (!caught && Math.hypot(t.x - b.x, t.z - b.z) < b.size + 4) { catchTree(t); caught = true; } }); }
+  if (wreckRand() < .3) for (const s of housesNear(b.x, b.z, b.size + 3)) if (s !== b.owner?.s && !burningHouses.has(s) && damage.catchNear(s, b.x, b.y, b.z, b.size + 3)) break;
+}
+function updateFire(dt) {
+  for (let i = fuses.length - 1; i >= 0; i--) { const v = fuses[i]; if ((v.fuse -= dt) <= 0) { fuses.splice(i, 1); explodeVehicle(v); } }
+  for (let i = burners.length - 1; i >= 0; i--) {
+    const b = burners[i]; b.age += dt;
+    const v = b.owner?.veh; if (v) { b.x = v.x; b.y = v.y + .7; b.z = v.z; b.floor = v.y; }
+    if (b.T !== Infinity || b.dead) b.T -= dt;
+    if (b.T <= 0 || b.dead) {
+      b.dead = true; burners[i] = burners[burners.length - 1]; burners.pop();
+      const t = b.owner?.tree; if (t && t.burner === b) { t.burner = null; if (!t.down) scorchTree(t); }
+    }
+  }
+  if ((fireClock += dt) < .25) return;
+  const spent = fireClock; fireClock = 0;
+  for (const s of burningHouses) { damage.stepFire(s, spent, wreckRand); if (!damage.burning(s)) burningHouses.delete(s); }
+  // a quarter of them at a time
+  for (let n = Math.ceil(burners.length * spent); n > 0 && burners.length; n--) heatFrom(burners[heatAt++ % burners.length]);
+}
+// The barrels' lights only reach eleven metres, so one nobody's near comes and lights the nearest fire that hasn't got one instead
+function aimFireLights() {
+  const taken = [];
+  for (const f of fires) {
+    let b = null;
+    if (f.out || Math.hypot(f.home.x - camera.position.x, f.home.z - camera.position.z) > 45) b = drawnBurners.find((q) => !q.dead && q.size > .6 && !taken.some((o) => Math.hypot(o.x - q.x, o.z - q.z) < 7));
+    if (b) { taken.push(b); f.pl.position.set(b.x, b.y + b.size + .6, b.z); f.pl.distance = 22; f.duty = true; }
+    else if (f.duty) { f.pl.position.copy(f.home); f.pl.distance = 11; f.duty = false; }
+  }
+}
+function pickBurners() {
+  const X = camera.position.x, Z = camera.position.z;
+  drawnBurners = burners.filter((b) => (b.seen = Math.hypot(b.x - X, b.z - Z)) < 190).sort((a, b) => a.seen - b.seen);
+  aimFireLights();
+}
+function drawFire(step) {
+  if (burnersPicked !== Math.floor(time * 2)) { burnersPicked = Math.floor(time * 2); pickBurners(); }
+  // the flames don't flicker for anyone who's asked for things to hold still, they just change now and then
+  if (!reduceMotion || step % 4 === 0) {
+    let i = 0, g = 0;
+    // the more there is alight, the fewer flames each gets, so that a whole building can be on fire and not just the side nearest you
+    const most = drawnBurners.length * 2 > FLAME_N ? 1 : drawnBurners.length * 3 > FLAME_N ? 2 : 3;
+    for (const b of drawnBurners) {
+      if (b.dead) continue;
+      const size = b.size * Math.min(1, b.age * 3, b.T / 1.5), n = Math.min(most, size < .75 ? 1 : size < 1.4 ? 2 : 3);
+      if (i + n > FLAME_N) break;
+      for (let k = 0; k < n; k++) {
+        const a = b.seed + k * 2.1, off = n > 1 ? size * .42 : 0, h = size * (1.05 + wreckRand() * .8), w = size * (.55 + wreckRand() * .3) * (n > 1 ? 1 : 1.25);
+        _m.compose(_v.set(b.x + Math.cos(a) * off + (wreckRand() - .5) * .1 * size, b.y, b.z + Math.sin(a) * off + (wreckRand() - .5) * .1 * size), _q.setFromAxisAngle(UP, wreckRand() * 6.283), _s.set(w, h, w));
+        flames.setMatrixAt(i++, _m);
+      }
+      if (g < GLOW_N && b.seen < 90) { const r = size * (3.4 + wreckRand() * .8); _m.compose(_v.set(b.x, b.floor + .14, b.z), _q.identity(), _s.set(r, 1, r)); fireGlow.setMatrixAt(g++, _m); }
+    }
+    // and what comes off it, at a steady rate however much is alight
+    const live = drawnBurners.filter((b) => !b.dead && b.seen < 120);
+    if (live.length) {
+      for (let k = FEW ? 1 : 2; k > 0; k--) {
+        const b = live[Math.floor(wreckRand() * live.length)], q = smokes[smokeNext];
+        if (b.size < .6 || wreckRand() < .25) continue;
+        smokeMesh.setColorAt(smokeNext, _wc.setRGB(.05, .044, .052)); smokeMesh.instanceColor.needsUpdate = true;
+        smokeNext = (smokeNext + 1) % SMOKE_N; if (!q.on) smokesOn++;
+        q.on = true; q.t = 0; q.T = 2.6 + wreckRand() * 1.8; q.x = b.x; q.y = b.y + b.size * 1.5; q.z = b.z; q.size = b.size * (.28 + wreckRand() * .2); q.rise = 1.5 + wreckRand() * 1.2; q.dx = .35 + wreckRand() * .3; q.dz = -.2 + wreckRand() * .3; q.turn = wreckRand() * 6;
+      }
+      if (!reduceMotion) for (let k = FEW ? 1 : 2; k > 0; k--) {
+        const b = live[Math.floor(wreckRand() * live.length)], q = sparkList[sparkNext]; sparkNext = (sparkNext + 1) % SPARK_N; if (!q.on) sparksOn++;
+        q.on = true; q.t = 0; q.x = b.x + (wreckRand() - .5) * b.size; q.y = b.y + b.size * wreckRand(); q.z = b.z + (wreckRand() - .5) * b.size; q.vx = (wreckRand() - .5) * 1.2; q.vy = 1.4 + wreckRand() * 2; q.vz = (wreckRand() - .5) * 1.2;
+      }
+    }
+    flames.count = flameInk.count = i; flames.visible = flameInk.visible = i > 0; flames.instanceMatrix.needsUpdate = true;
+    fireGlow.count = g; fireGlow.visible = g > 0; fireGlow.instanceMatrix.needsUpdate = true;
+  }
+  if (smokesOn) {
+    smokes.forEach((q, i) => {
+      if (!q.on) return;
+      q.t += STEP_T; const k = q.t / q.T;
+      if (k >= 1) { q.on = false; smokesOn--; smokeMesh.setMatrixAt(i, NOWHERE); return; }
+      const w = q.size * (.7 + k * 2.4) * (1 - k * k * k * k);
+      _m.compose(_v.set(q.x + q.dx * q.t, q.y + q.rise * q.t, q.z + q.dz * q.t), _q.setFromEuler(_we.set(q.turn, q.turn + k, 0)), _s.set(w, w * .85, w)); smokeMesh.setMatrixAt(i, _m);
+    });
+    smokeMesh.visible = true; smokeMesh.instanceMatrix.needsUpdate = true;
+  } else smokeMesh.visible = false;
+  if (sparksOn) {
+    sparkList.forEach((q, i) => {
+      if (!q.on) return;
+      q.t += STEP_T; q.x += q.vx * STEP_T; q.y += q.vy * STEP_T; q.z += q.vz * STEP_T; q.vx += (wreckRand() - .5) * .8;
+      if (q.t > 1.1) { q.on = false; sparksOn--; sparkPos.setXYZ(i, 0, -1e4, 0); } else sparkPos.setXYZ(i, q.x, q.y, q.z);
+    });
+    sparks.visible = true; sparkPos.needsUpdate = true;
+  } else sparks.visible = false;
+}
+
+// ---- something going off: a ball of fire on the game's own twelve frames, white, then orange, then red and gone, with its glow on the ground.
+// The ghost's light has nothing to do once he's in town, so it lights the first moment of it, unless he's driving and it's his headlights.
+const BOOM_N = FEW ? 3 : 5, boomGeo = new THREE.IcosahedronGeometry(1, 1), boomMats = [lit('#fff3d0', 7), lit('#ffc35a', 5), lit('#ff8a2a', 3.4), lit('#e8541c', 2.2), lit('#7a2414', 1.1)], BOOM_SIZE = [.34, .62, .8, .92, .98];
+const SCORCH_N = 24, scorch = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#080507', transparent: true, opacity: .7, depthWrite: false }), SCORCH_N);
+for (let i = 0; i < SCORCH_N; i++) scorch.setMatrixAt(i, NOWHERE);
+scorch.frustumCulled = false; scorch.visible = false; scene.add(scorch);
+const booms = Array.from({ length: BOOM_N }, () => {
+  const m = new THREE.Mesh(boomGeo, boomMats[0]); m.visible = false; outline(m, INK, 1.8); scene.add(m);
+  const glow = new THREE.Mesh(fireGlow.geometry, new THREE.MeshBasicMaterial({ map: radialTex, color: new THREE.Color(1, .5, .16), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })); glow.visible = false; scene.add(glow);
+  return { m, glow, t: 9, r: 0, x: 0, y: 0, z: 0 };
+});
+let boomNext = 0, scorchNext = 0, boomLight = 0, lastBoomGlitch = -9;
+const _boomAt = new THREE.Vector3();
+function updateBooms(dt) {
+  for (const b of booms) {
+    if (b.t > .9) continue;
+    b.t += dt;
+    const f = Math.floor(b.t * 12), on = f < boomMats.length;
+    b.m.visible = on;
+    if (on) { b.m.material = boomMats[f]; b.m.scale.setScalar(b.r * BOOM_SIZE[f]); b.m.rotation.y = f * 1.3; }
+    const k = Math.max(0, 1 - b.t / .9);
+    b.glow.visible = k > 0; b.glow.material.opacity = k * k;
+  }
+  if (boomLight > 0) {
+    boomLight -= dt;
+    if (driving) boomLight = 0;
+    else if (boomLight <= 0) { gLight.position.set(0, 0, 0); gLight.distance = 12; }
+    else { gLight.position.copy(_boomAt).sub(ghost.position); gLight.intensity = 90 * boomLight / .35; }
+  }
+}
+// What a blast does to everything around it. Something heavy landing does the same without the fire.
+function shock(x, y, z, r, power, skip, fire) {
+  // it takes out what's close, and sets light to the nearest of what's left
+  for (const s of [...housesNear(x, z, r * 1.2)]) { damage.blast(s, x, y, z, r, power); if (fire) for (let i = 0; i < 3; i++) damage.catchNear(s, x, y, z, r * 1.2); }
+  propsNear(x, z, r, (p) => { const e = propDist(p, x, y, z); if (e < r) hitProp(p, power * (1 - e / r) ** 2, p.cx - x, p.cz - z); });
+  treesNear(x, z, r * .85, (t) => { const e = Math.hypot(t.x - x, t.z - z); if (e > r * .85) return; hitTree(t, power * 1.2 * (1 - e / r) ** 2, t.x - x, t.z - z); if (fire && e < r * .7) catchTree(t); });
+  for (const c of GAS_CANS) if (!c.got && Math.hypot(c.x - x, c.z - z) < r * .8) { c.got = true; gasDirty = true; after(.12 + Math.hypot(c.x - x, c.z - z) * .02, () => blastCan(c.x, c.y + .3, c.z)); }
+  for (const v of VEHICLES) {
+    if (v === skip || v.exploded) continue;
+    const dx = v.x - x, dz = v.z - z, d = Math.hypot(dx, dz) || 1;
+    if (d > r) continue;
+    const k = 1 - d / r;
+    if (hurtVehicle(v, power * k * 20)) wreckVehicle(v); else if (v.fuse > 0) v.fuse = Math.min(v.fuse, .25);
+    toss(v, dx / d * k * 9, dz / d * k * 9, 2 + k * 6); vehDirty = true;
+  }
+  if (crowdOut) { horde.knock(x, z, r, 3.2); horde.noise(x, z, r * 9, 6); }
+  const P = player.pos, d = Math.hypot(P.x - x, P.z - z), reach = r * .8;
+  if (S.mode === 'town' && d < reach && Math.abs(P.y - y) < r) { const k = 1 - d / reach; player.vy = Math.max(player.vy, 2.5 + 5 * k); player.grounded = false; hurtBy(fire ? 'blast' : 'hit', P.x - x, P.z - z, 8 + 20 * k); }
+}
+function thud(x, y, z, r, power) {
+  shock(x, y, z, r, power, null, false);
+  if (!reduceMotion) cam.shake = Math.max(cam.shake, .45 * Math.max(.25, 1 - Math.hypot(player.pos.x - x, player.pos.z - z) / (r * 5)));
+}
+function blast(x, y, z, r, power, skip = null) {
+  shock(x, y, z, r, power, skip, true);
+  // what you see of it
+  const d = Math.hypot(player.pos.x - x, player.pos.z - z), fl = floorAt(x, z), b = booms[boomNext]; boomNext = (boomNext + 1) % BOOM_N;
+  b.t = 0; b.r = r * .72; b.m.position.set(x, y + .6, z); b.m.material = boomMats[0]; b.m.scale.setScalar(b.r * BOOM_SIZE[0]); b.m.visible = true;
+  b.glow.position.set(x, fl + .1, z); b.glow.scale.set(r * 3.6, 1, r * 3.6); b.glow.material.opacity = 1; b.glow.visible = true;
+  if (!driving) { _boomAt.set(x, y + 1.5, z); boomLight = .35; gLight.distance = r * 6; }
+  for (let i = 0; i < (FEW ? 3 : 5); i++) { const a = i * 1.26 + wreckRand(), e = r * .28 * wreckRand(); puff(x + Math.cos(a) * e, fl + .8, z + Math.sin(a) * e, r * (.2 + wreckRand() * .14), 1.3, 2.6, .05, .04, .05); }
+  spray(x, fl + .3, z, FEW ? 5 : 9, .22, 5, .09, .07, .06);
+  _m.compose(_v.set(x, fl + .06, z), _q.identity(), _s.set(r * .42, 1, r * .42)); scorch.setMatrixAt(scorchNext, _m); scorchNext = (scorchNext + 1) % SCORCH_N; scorch.instanceMatrix.needsUpdate = true; scorch.visible = true;
+  burnAt(x, fl + .04, z, r * .16, 3 + wreckRand() * 4);
+  if (!reduceMotion) cam.shake = Math.max(cam.shake, .55 * Math.max(.25, 1 - d / (r * 5)));
+  if (d < r * 6 && time - lastBoomGlitch > .8) { lastBoomGlitch = time; glitch(.7, .25); }
+}
+// A can spills as well as going off: it leaves the ground on fire around it for a while
+function blastCan(x, y, z) {
+  blast(x, y, z, GAS_BLAST, GAS_POWER);
+  const fl = floorAt(x, z);
+  for (let i = 0; i < 4; i++) { const a = i * 1.57 + wreckRand(), e = 1 + wreckRand() * 1.8, px = x + Math.cos(a) * e, pz = z + Math.sin(a) * e; if (floorAt(px, pz) > -.1) burnAt(px, fl + .04, pz, .7 + wreckRand() * .5, 7 + wreckRand() * 7); }
+}
+// Fire and blasts knock him about whenever. They only cost him once the hearts are showing, which is once the crowd's out.
+function hurtBy(kind, dx, dz, force = 6) {
+  if (player.inv > 0 || S.mode !== 'town') return;
+  const l = Math.hypot(dx, dz) || 1; player.kb.set(dx / l * force, dz / l * force); player.inv = 1.4;
+  if (!reduceMotion) cam.shake = Math.max(cam.shake, .5); flash(); glitch(.9, .35);
+  if (crowdOut) {
+    S.hp -= 1;
+    if (S.hp <= 0) { fail(kind === 'blast' ? 'You went up with it.' : kind === 'hit' ? 'It came down on you.' : 'You burned.', 'Give it more room.'); return; }
+  }
+  toast(kind === 'blast' ? 'Blown clear' : kind === 'hit' ? 'Knocked flying' : 'Burned');
+}
+
+// ---- vehicles go up: once one's wrecked it burns for a moment, then the tank goes
+const fuses = [], loose = [];
+function wreckVehicle(v) {
+  if (v.drowned || v.exploded || v.fuse !== undefined) return;
+  if (v === driving) toast('Wrecked. Get out!');
+  v.fuse = v === driving ? 3 : .7 + wreckRand() * 1.6; fuses.push(v);
+  v.burner = burnAt(v.x, v.y + .7, v.z, v.K.length * .24, Infinity, { veh: v });
+  vehDirty = true;
+}
+function explodeVehicle(v) {
+  if (v.exploded) return;
+  v.exploded = true; v.fuse = 0; vehDirty = true;
+  const was = v === driving, x = v.x, y = v.y, z = v.z;
+  if (was) { getOut(true); toast('Blown clear'); }
+  blast(x, y + .8, z, 6 + v.K.mass / 500, 4 + v.K.mass / 400, v);
+  toss(v, (wreckRand() - .5) * 3, (wreckRand() - .5) * 3, 6 + wreckRand() * 3);
+  if (v.burner) v.burner.T = 16 + wreckRand() * 12;
+}
+// Thrown about with nobody at the wheel
+function toss(v, vx, vz, vy) {
+  if (v === driving) { v.vy = Math.max(v.vy, vy * .7); v.grounded = false; v.f += vx * Math.sin(v.yaw) + vz * Math.cos(v.yaw); return; }
+  if (!v.loose) { v.loose = { vx: 0, vz: 0, vy: 0, turn: 0, pitch: 0, roll: 0, drag: 7, clear: 0 }; loose.push(v); markVehicle(v, false); }
+  const l = v.loose; l.vx += vx; l.vz += vz; l.vy = Math.max(l.vy, vy); l.turn += (wreckRand() - .5) * 2.4; l.pitch += (wreckRand() - .5) * 3 * Math.min(1, vy / 6); l.roll += (wreckRand() - .5) * 3 * Math.min(1, vy / 6);
+}
+function updateLoose(dt) {
+  for (let i = loose.length - 1; i >= 0; i--) {
+    const v = loose[i], l = v.loose, sp = Math.hypot(l.vx, l.vz);
+    l.vy -= 15 * dt; v.y += l.vy * dt;
+    if (l.clear > 0) l.clear -= dt;
+    const nx = v.x + l.vx * dt, nz = v.z + l.vz * dt, hit = rimHit(v, nx, nz, v.y + .6, blockedInTown);
+    if (!hit) { v.x = nx; v.z = nz; }
+    else {
+      // it can break what it's run into, the same as if it were being driven
+      const r = sp > 2 ? ram(hit[0], hit[1], v.y + .6, sp, l.vx / sp, l.vz / sp, v.K.mass, v) : null;
+      if (r) { const left = Math.sqrt(Math.max(0, sp * sp - 2 * r.energy / v.K.mass)) / sp; l.vx *= left; l.vz *= left; }
+      else { l.vx *= -.3; l.vz *= -.3; }
+    }
+    // and whoever's in the way
+    const P = player.pos;
+    if (sp > 3) {
+      if (crowdOut) horde.knock(v.x, v.z, v.K.length / 2 + .3, 2.6);
+      if (!driving && Math.abs(P.y - v.y) < 1.4 && inVehicle(v, P.x, P.z, .3)) hurtBy('hit', P.x - v.x, P.z - v.z, 7);
+    }
+    v.yaw += l.turn * dt; v.pitch += l.pitch * dt; v.roll += l.roll * dt;
+    const fl = floorAt(v.x, v.z);
+    if (v.y <= fl) {
+      v.y = fl;
+      if (l.vy < -3) { l.vy *= -.32; l.vx *= .6; l.vz *= .6; l.turn *= .5; l.pitch *= -.4; l.roll *= -.4; puff(v.x, fl + .2, v.z, .5 + v.K.length * .08, .7, 1); }
+      else {
+        l.vy = 0; const k = Math.exp(-l.drag * dt); l.vx *= k; l.vz *= k; l.turn *= k; l.pitch = 0; l.roll = 0;
+        v.pitch *= k; v.roll *= k;
+        // it can't come to rest with him inside it, or with what he's driving
+        if (Math.hypot(l.vx, l.vz) < .25 && !(driving && Math.hypot(driving.x - v.x, driving.z - v.z) < (driving.K.length + v.K.length) / 2)) {
+          v.loose = null; settle(v, floorAt); markVehicle(v, true); loose.splice(i, 1);
+          if (!driving && Math.abs(P.y - v.y) < 1.4) { const L = Math.hypot(P.x - v.x, P.z - v.z) || 1, ux = (P.x - v.x) / L, uz = (P.z - v.z) / L; for (let k2 = 0; k2 < 24 && inVehicle(v, P.x, P.z, .32); k2++) { P.x += ux * .25; P.z += uz * .25; } }
+        }
+      }
+    }
+    vehDirty = true;
+  }
+}
+// One that's been thrown, unless it's only just been hit and hasn't had a moment to get going
+function looseAt(x, z, y, self = null) {
+  for (let i = 0; i < loose.length; i++) { const v = loose[i]; if (v !== self && !(v.loose.clear > 0) && y < v.y + 1.4 && y > v.y - .5 && inVehicle(v, x, z, .3)) return v; }
+  return null;
+}
+// One vehicle into another: they leave together as if they'd stuck, the one that was hit a little ahead, and what they lost goes into it. Under a jog it's only a bump.
+const SHOVE_SPEED = 3, SHOVE_HURT = 20;
+function shove(v, speed, dirx, dirz, mass) {
+  const M = v.K.mass, w = v.loose ? v.loose.vx * dirx + v.loose.vz * dirz : 0, closing = speed - w;
+  if (!v.loose && closing < SHOVE_SPEED) return null;
+  if (closing <= 0) { v.loose.clear = .25; return { energy: 0, gone: true }; }
+  const after = (mass * speed + M * w) / (mass + M), heat = .5 * mass * M / (mass + M) * closing * closing;
+  if (hurtVehicle(v, heat / SMASH_J * SHOVE_HURT * Math.sqrt(1500 / M))) wreckVehicle(v);
+  const kick = after * 1.15 - w;
+  toss(v, dirx * kick, dirz * kick, Math.min(2.8, .4 + closing * .09));
+  v.loose.drag = 1.8; v.loose.clear = .25; vehDirty = true;
+  if (closing > 7) { spray(v.x - dirx * v.K.length * .4, v.y + .7, v.z - dirz * v.K.length * .4, FEW ? 3 : 6, .12, 2.6, .2, .19, .2, dirx, dirz); puff(v.x, v.y + .3, v.z, .6, .5, 1); }
+  return { energy: .5 * mass * (speed * speed - after * after), gone: true };
+}
+// Something coming through at speed. A swing's worth of damage takes SMASH_J out of it, so a pickup at thirty goes through brick and a golf cart stops at the fence.
+function ram(x, z, y, speed, dirx, dirz, mass, self = null) {
+  const thrown = looseAt(x, z, y, self);
+  if (thrown) return shove(thrown, speed, dirx, dirz, mass);
+  const parked = vehCells.get((Math.floor(x / 16) + 32768) * 65536 + Math.floor(z / 16) + 32768);
+  if (parked) for (let i = 0; i < parked.length; i++) if (y < parked[i].y + 1.4 && inVehicle(parked[i], x, z, .3)) return shove(parked[i], speed, dirx, dirz, mass);
+  const power = .5 * mass * speed * speed / SMASH_J;
+  if (power < .12) return null;
+  const r = strike(x, y, z, .85, power, dirx, dirz);
+  if (!r) return null;
+  // a hard one shakes what's around it as well
+  if (r.house && power > 5) damage.blast(r.house, x, y + .6, z, 2.6, Math.min(3, power * .2));
+  return { energy: r.used * SMASH_J, gone: r.gone };
+}
+
+// ---- the hammer. It's in his hands for as long as he's swinging it, which is all anyone sees of it.
+function swing() { if (swingT < 0 && S.mode === 'town') { swingT = 0; swingHit = false; } }
+function updateSwing(dt) {
+  if (throwT > 0) throwT -= dt;
+  if (swingT < 0) return;
+  swingT += dt;
+  if (!swingHit && swingT >= SWING_AT) {
+    swingHit = true;
+    const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), P = player.pos, x = P.x + fx * .9, z = P.z + fz * .9, r = strike(x, P.y + 1.1, z, 1.3, 1, fx, fz), n = crowdOut ? horde.knock(x, z, 1.5, 2.4) : 0;
+    if ((r || n) && !reduceMotion) cam.shake = Math.max(cam.shake, .22);
+    if (crowdOut) horde.noise(P.x, P.z, 14, 1);
+  }
+  if (swingT >= SWING_T) swingT = -1;
+}
+function throwOne() {
+  if (S.mode !== 'town' || !(S.gas > 0) || !throwCan()) return;
+  S.gas--; throwT = .25;
+}
+function pickUpGas(reach) {
+  for (const c of GAS_CANS) if (!c.got && S.gas < GAS_CARRY && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; gasDirty = true; S.gas++; toast(`+1 gas can · ${S.gas}`); }
+}
+let wreckStep = -1, wreckDrawn = -1;
+function updateWreck(dt, step) {
+  updateSwing(dt); updateBits(dt); updateThrown(dt); updateBooms(dt); updateFire(dt); updateLoose(dt);
+  if (step !== wreckStep) { wreckStep = step; stepFalling(); stepTrees(); }
+}
+function drawWreck(step) {
+  drawGas();
+  if (step === wreckDrawn) return;
+  wreckDrawn = step; drawBits(); drawFire(step);
+}
+// Straight into town from the title or the address, with some cans and the whole place to wreck
+function startFree() {
+  $('title').hidden = true;
+  nooseRing.visible = knot.visible = false; S.removedNoose = true; ropeTop.visible = false; lantern.visible = false; bottle.visible = false;
+  S.flags.ended = S.flags.arrived = true; S.gas = 3;
+  // on the shoulder of US 80 outside the gas station, with the truck and the cans right there and the town ahead of him
+  const [x, z] = gasAt(57, 15.5);
+  HP.kind = 'run'; player.pos.set(x, floorAt(x, z), z); player.grounded = true; player.yaw = Math.PI / 2; cam.yaw = player.yaw + Math.PI; cam.snap = true; heroRoot.quaternion.identity();
+  startTown(); bringOutCrowd();
+}
+layOutGas();
 // ================================================================ the map
 const mapData = buildMapData({ roads: MAP.roads, rail: MAP.rail, river: MAP.river, structures: STRUCTURES, fields: FIELDS });
 const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d') };
@@ -3269,10 +4143,10 @@ function tick(dt, draw = true) {
     player.kb.multiplyScalar(Math.exp(-dt * 5));
     if (!S.flags.toldEdge && !MAP.inBounds(nx, nz)) { S.flags.toldEdge = true; toast('Nothing that way.'); after(12, () => { S.flags.toldEdge = false; }); }
     if (player.pos.y > DECK_TOP - .4 && Math.abs(nx) < 20.6) nz = clamp(nz, -2.25, 2.25);
-    const fl = floorAt(nx, nz);
-    if (fl - player.pos.y > .6 || blocked(nx, nz, player.pos.y)) {
-      if (!(floorAt(nx, player.pos.z) - player.pos.y > .6 || blocked(nx, player.pos.z, player.pos.y))) nz = player.pos.z;
-      else if (!(floorAt(player.pos.x, nz) - player.pos.y > .6 || blocked(player.pos.x, nz, player.pos.y))) nx = player.pos.x;
+    const fl = floorAt(nx, nz), stops = M === 'town' ? blockedInTown : blocked;
+    if (fl - player.pos.y > .6 || stops(nx, nz, player.pos.y)) {
+      if (!(floorAt(nx, player.pos.z) - player.pos.y > .6 || stops(nx, player.pos.z, player.pos.y))) nz = player.pos.z;
+      else if (!(floorAt(player.pos.x, nz) - player.pos.y > .6 || stops(player.pos.x, nz, player.pos.y))) nx = player.pos.x;
       else { nx = player.pos.x; nz = player.pos.z; }
     }
     player.pos.x = nx; player.pos.z = nz;
@@ -3305,14 +4179,16 @@ function tick(dt, draw = true) {
     }
     if (M === 'town') {
       ghost.position.lerp(new THREE.Vector3(26, -3, 3), Math.min(1, dt * .5));
-      arriving(); pickUpCans(1.15);
+      arriving(); pickUpCans(1.15); pickUpGas(1.15);
       // talk
       let near = null, nd = 2.6;
       for (const [id, n] of Object.entries(NPCS)) { const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z); if (d < nd) { nd = d; near = id; } }
       const ride = near ? null : vehicleInReach();
       S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : null;
       if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else prompt(null);
-      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); }
+      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else swing(); }
+      if (input.sEdge) swing();
+      if (input.cEdge) throwOne();
     }
   }
   // ---------------- sweeping Odessa's steps
@@ -3332,6 +4208,7 @@ function tick(dt, draw = true) {
   }
   if (M === 'drive') updateDrive(dt);
   if (crowdOut) updateCrowd(dt, S.mode);
+  if (S.flags.town) updateWreck(dt, step);
   // ---------------- hero placement
   if (S.mode === 'drive') {
     _v.set(driving.K.seat[0], driving.K.seat[1], driving.K.seat[2]).applyMatrix4(toBody(driving)); heroRoot.position.copy(_v);
@@ -3357,9 +4234,9 @@ function tick(dt, draw = true) {
     n.root.visible = Math.hypot(n.root.position.x - camera.position.x, n.root.position.z - camera.position.z) < 95;
   }
   for (const c of PICKUPS) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
-  for (const f of fires) { const k = .8 + .2 * Math.sin(time * 11 + f.ph) * Math.sin(time * 7.3 + f.ph); f.pl.intensity = 12 * k; f.fl.scale.set(k, .8 + .4 * k, k); }
-  beacon.visible = Math.floor(time * 1.2) % 2 === 0; gasLight.intensity = Math.random() < .02 ? 2 : 9;
-  if (!driving) gLight.intensity = 14 * (.8 + .2 * Math.sin(time * 9.7));
+  for (const f of fires) { const k = .8 + .2 * Math.sin(time * 11 + f.ph) * Math.sin(time * 7.3 + f.ph); f.pl.intensity = (f.duty ? 34 : f.out ? 0 : 12) * k; f.fl.scale.set(k, .8 + .4 * k, k); }
+  beacon.visible = beaconLive && Math.floor(time * 1.2) % 2 === 0; gasLight.intensity = (Math.random() < .02 ? 2 : 9) * gasPower;
+  if (!driving && boomLight <= 0) gLight.intensity = 14 * (.8 + .2 * Math.sin(time * 9.7));
 
   // ---------------- camera
   if (M === 'title' || M === 'hang') {
@@ -3404,7 +4281,7 @@ function tick(dt, draw = true) {
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').classList.remove('show'); }
   if (cardT > 0) { cardT -= dt; if (cardT <= 0) $('card').classList.remove('show'); }
   hudVitals();
-  input.aEdge = false; input.bEdge = false;
+  input.aEdge = false; input.bEdge = false; input.cEdge = false; input.sEdge = false;
 
   sky.material.uniforms.uTime.value = time; waterMat.uniforms.uTime.value = time; swayU.uTime.value = time; gifMat.uniforms.uTime.value = time;
   if (S.flags.town && Math.floor(time * 2) !== vehPicked) pickVehicles();
@@ -3413,7 +4290,7 @@ function tick(dt, draw = true) {
   sky.position.copy(camera.position);
   updateWorld();
   if (crowdOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
-  if (S.flags.town) drawVehicles(step);
+  if (S.flags.town) { drawVehicles(step); drawWreck(step); }
   updateParticles(dt, M);
   if (bottle.visible) levelLiquid();
   renderFrame(dt);
@@ -3435,6 +4312,7 @@ function updateWorld() {
 let paused = TEST;
 function loop() { if (paused) return; if (!mapOpen) tick(Math.min(clock.getDelta(), .05)); requestAnimationFrame(loop); }
 $('start').addEventListener('click', () => { $('title').hidden = true; startHang(); });
+$('free').addEventListener('click', startFree);
 $('forget').hidden = !people.hasSave();
 $('forget').addEventListener('click', () => { people.forget(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
 // first frame: him hanging behind the title
@@ -3442,6 +4320,7 @@ heroRoot.position.copy(ANCHOR); poseHero(0); drawPlanks();
 for (const s of SNAKES) s.update(.016); deckSnake.update(.016);
 ghost.position.set(-17.5, 1.3, 7.5);
 requestAnimationFrame(loop);
+if (location.hash === '#free') startFree();
 
 // ================================================================ test hook: index.html?test
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
@@ -3484,6 +4363,7 @@ if (TEST) {
     },
     npcs: Object.fromEntries(Object.entries(NPCS).map(([k, n]) => [k, { x: n.root.position.x, z: n.root.position.z }])), pickups: PICKUPS,
     vehicles: VEHICLES, vehShown, driving: () => driving, getIn, getOut, kinds: KINDS, vehicleFits, vehicleInReach,
+    wreck: { strike, blast, blastCan, damage, breakProp, props: PROPS, falling, swing, burnAt, burners, catchTree, treesNear, treeBlocks, fellTree, gasCans: GAS_CANS, wreckVehicle, explodeVehicle, startFree, housesNear, trees: (x, z, r) => { const out = []; treesNear(x, z, r, (t) => out.push(t)); return out; } },
     openMap, closeMap, updateMini, mapState: () => ({ open: mapOpen, cam: mapCam, mini: !$('mini').hidden, name: $('miniName').hidden ? '' : $('miniName').textContent }), mapCamTo(c) { mapCam = { ...mapCam, ...c }; drawFullMap(); },
     pause() { paused = true; },
     resume() { if (paused) { paused = false; clock.getDelta(); requestAnimationFrame(loop); } },
@@ -3505,7 +4385,7 @@ if (TEST) {
     },
     place(x, z, y) { player.pos.set(x, y ?? floorAt(x, z), z); player.grounded = true; player.vy = 0; cam.snap = true; return this.state(); },
     look(yaw, pitch) { cam.yaw = yaw; if (pitch !== undefined) cam.pitch = pitch; cam.snap = true; lastLook = time; },
-    key(k, down = true) { k = k.toLowerCase(); if (down) { if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; } keys.add(k); } else keys.delete(k); },
+    key(k, down = true) { k = k.toLowerCase(); if (down) { if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; if (k === 'f') input.sEdge = true; if (k === 'q') input.cEdge = true; } keys.add(k); } else keys.delete(k); },
     stick(x, y) { touchStick.set(x, y); },
     choose(i) { $('dOpts').children[i].click(); return this.state(); },
     burst(pow = 1, dur = .5, hold = true, fine = true) { triggerBurst(pow, dur, hold, fine); },
