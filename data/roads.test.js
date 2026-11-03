@@ -49,13 +49,23 @@ const TICKET_TRESTLES = [
 // with the rounded true metres it printed.
 const US_80_SEQUENCE = [
   { lon: -88.977682, lat: 32.32418, trueX: -4663, trueZ: 183, kind: 'clip', meets: [] },
-  { lon: -88.931069, lat: 32.326036, trueX: -283, trueZ: -23, kind: 'junction', meets: ['adams_st'] },
+  { lon: -88.931069, lat: 32.326036, trueX: -283, trueZ: -23, kind: 'junction', meets: ['adams_st', 'chestnut_st'] },
+  { lon: -88.928956, lat: 32.326033, trueX: -84, trueZ: -23, kind: 'junction', meets: ['mullberry_st'] },
+  { lon: -88.928454, lat: 32.32603, trueX: -37, trueZ: -22, kind: 'junction', meets: ['commerce_st'] },
+  { lon: -88.92762, lat: 32.326025, trueX: 41, trueZ: -22, kind: 'junction', meets: ['poplar_st'] },
+  { lon: -88.918266, lat: 32.327187, trueX: 920, trueZ: -151, kind: 'junction', meets: ['pine_forest_rd'] },
+  { lon: -88.916429, lat: 32.327578, trueX: 1093, trueZ: -194, kind: 'junction', meets: ['clarence_culpepper_rd'] },
   { lon: -88.86625, lat: 32.327776, trueX: 5808, trueZ: -216, kind: 'junction', meets: ['meehan_savoy_rd'] },
   { lon: -88.861459, lat: 32.330993, trueX: 6258, trueZ: -574, kind: 'clip', meets: [] },
 ];
 const ADAMS_STREET_SEQUENCE = [
-  { lon: -88.931069, lat: 32.326036, trueX: -283, trueZ: -23, kind: 'junction', meets: ['us_80'] },
+  { lon: -88.931069, lat: 32.326036, trueX: -283, trueZ: -23, kind: 'junction', meets: ['us_80', 'chestnut_st'] },
   { lon: -88.931047, lat: 32.32762, trueX: -281, trueZ: -199, kind: 'junction', meets: ['church_st'] },
+  { lon: -88.931052, lat: 32.328525, trueX: -281, trueZ: -300, kind: 'junction', meets: ['gallatin_st'] },
+  { lon: -88.93106, lat: 32.329705, trueX: -282, trueZ: -431, kind: 'junction', meets: ['jones_st'] },
+  { lon: -88.931083, lat: 32.330835, trueX: -284, trueZ: -557, kind: 'junction', meets: ['school_st'] },
+  { lon: -88.931131, lat: 32.332017, trueX: -289, trueZ: -688, kind: 'junction', meets: ['wood_st'] },
+  { lon: -88.931083, lat: 32.33446, trueX: -284, trueZ: -960, kind: 'junction', meets: ['alexander_rd'] },
   { lon: -88.931164, lat: 32.340809, trueX: -292, trueZ: -1666, kind: 'clip', meets: [], connectsTo: 'I-20' },
 ];
 
@@ -449,7 +459,7 @@ describe('intersections and turns keep their TIGER order', () => {
         assert.ok(node.roads.includes(road), `${node.id} at ${key} doesn't list ${road}`);
       }
     }
-    assert.equal(shared, 3, 'US 80 with Adams Street and Meehan-Savoy Rd, Adams Street with Church St');
+    assert.equal(shared, data.nodes.filter((node) => node.kind === 'junction').length, 'every junction, and nothing else that two roads share');
   });
 
   test('no two edges touch in game space except at a node they share', () => {

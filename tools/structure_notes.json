@@ -1,7 +1,7 @@
 {
   "structures": {
     "75177617": { "seen": true, "walls": "plank", "wallColor": "brown", "roof": "gable", "roofMat": "metal", "floors": 1, "condition": "worn", "what": "old gas station store", "trimColor": "#a8342a", "doorColor": "#a8342a", "clip": {"axis": "z", "max": -35.6} },
-    "75204375": { "seen": true, "walls": "block", "wallColor": "white", "roof": "gable", "roofMat": "shingle", "floors": 1, "condition": "worn", "doors": 2, "doorFaces": "south", "what": "small block store with two doors", "doorColor": "#c9c1b4" },
+    "75204375": { "seen": true, "walls": "block", "wallColor": "white", "roof": "gable", "roofMat": "shingle", "floors": 1, "condition": "worn", "doors": 2, "doorFaces": "south", "what": "little block town hall with two doors", "doorColor": "#c9c1b4" },
     "75023296": { "seen": true, "walls": "brick", "wallColor": "red", "roof": "flat", "roofMat": "metal", "floors": 1, "what": "small post office", "trimColor": "#c9c1b4" },
     "74864524": { "seen": true, "walls": "siding", "wallColor": "white", "roof": "flat", "roofMat": "metal", "floors": 1, "porch": "front", "what": "long office with steps up to the middle door", "trimColor": "#a78f6c" },
     "76043591": { "seen": true, "walls": "metal", "wallColor": "tan", "roof": "gable", "roofMat": "metal", "floors": 1, "bays": 3, "what": "metal shop with three roll-up doors" },
@@ -9,6 +9,8 @@
     "75008541": { "seen": true, "walls": "siding", "wallColor": "grey", "roof": "gable", "roofMat": "metal", "floors": 1, "what": "shed with a red door", "doorColor": "#a8342a" },
     "76064086": { "seen": true, "use": "church", "walls": "brick", "wallColor": "red", "roof": "gable", "roofMat": "shingle", "floors": 1, "doorFaces": "south", "what": "red brick church with a white steeple and a long low wing", "trimColor": "#c9c1b4", "doorColor": "#c9c1b4" },
     "76026658": { "seen": true, "use": "church", "walls": "brick", "wallColor": "#b39a6c", "roof": "gable", "roofMat": "shingle", "floors": 1, "steep": true, "lit": true, "doorFaces": "south", "what": "tan brick church with a tall arched window, and no steeple" },
+    "75414843": { "seen": true, "walls": "siding", "wallColor": "#d6d2c6", "roof": "gable", "roofMat": "metal", "roofColor": "#46705f", "floors": 1, "doorFaces": "south", "trimColor": "#d6d2c6", "doorColor": "#d6d2c6", "pitch": 0.5, "cross": true, "condition": "sound", "shape": [[-4.14, -9.75], [3.25, -10.09], [3.61, -2.16], [6.0, -2.27], [6.35, 5.32], [3.95, 5.43], [4.15, 9.75], [-3.25, 10.09]], "lean": { "faces": "west", "deep": 2.6, "length": 14, "from": "south" }, "what": "small white house with a dark green tin roof, a gable to the road and to the east, and a long porch down its west side" },
+    "75057300": { "seen": true, "use": "shed", "walls": "metal", "wallColor": "#7d3a3f", "roof": "gable", "roofMat": "metal", "roofColor": "#8d8f8c", "gableColor": "#d6d2c6", "band": 0.6, "vent": true, "eaves": 3.5, "pitch": 0.2, "condition": "sound", "floors": 1, "bays": 2, "doorFaces": "west", "move": [1.4, -3.8], "shape": [[-5.64, 1.71], [3.33, -4.89], [8.23, 1.85], [-0.74, 8.45]], "lean": { "faces": "north", "deep": 4.4, "slope": 0.2, "post": "#4a3524" }, "what": "maroon metal barn with a white gable end and an open bay down one side" },
     "75045235": { "seen": true, "condition": "worn", "what": "shop behind heavy kudzu" },
     "74375049": { "seen": true, "walls": "brick", "wallColor": "tan", "roof": "hip", "roofMat": "shingle", "floors": 1, "carport": true },
     "74379256": { "seen": true, "walls": "mobile", "wallColor": "grey", "roof": "gable", "floors": 1, "porch": "front", "shutters": true },
@@ -142,5 +144,7 @@
     "76106437": { "seen": true, "walls": "mobile", "wallColor": "tan", "floors": 1, "porch": "front" },
     "76108683": { "seen": true, "walls": "siding", "wallColor": "grey", "roof": "gable", "roofMat": "shingle", "floors": 2, "porch": "front" }
   },
-  "extras": []
+  "extras": [
+    { "id": 900001, "x": 17.3, "z": -513.5, "ring": [[-2.2, -2.2], [2.2, -2.2], [2.2, 2.2], [-2.2, 2.2]], "sqm": 19, "use": "shed", "walls": "siding", "roof": "gable", "roofMat": "metal", "floors": 1, "wallColor": "#d6d2c6", "roofColor": "#34383d", "door": 2, "doorColor": "#26231f", "seen": true, "what": "small white shed with a dark door" }
+  ]
 }

@@ -134,7 +134,7 @@ test('the data says where it came from', () => {
 
 test('every field is one the generator knows', () => {
   const color = /^#[0-9a-f]{6}$/;
-  for (const s of data.structures) {
+  for (const s of [...data.structures, ...data.extras]) {
     assert.ok(['house', 'mobile', 'shed', 'farm', 'public', 'shop', 'office', 'church', 'cabin', 'hall'].includes(s.use), `${s.id} ${s.use}`);
     assert.ok(['siding', 'brick', 'block', 'metal', 'plank', 'stucco', 'mobile'].includes(s.walls), `${s.id} ${s.walls}`);
     assert.ok(['gable', 'hip', 'flat', 'shed'].includes(s.roof), `${s.id} ${s.roof}`);
@@ -165,7 +165,7 @@ test('what was written down comes through to the data', () => {
 test('every building keeps its real shape and size', () => {
   for (const s of placed) {
     const a = Math.abs(area(s.pts));
-    if (!data.structures[s.index].clip) assert.ok(a > 10, `${s.id} is ${a}`);
+    assert.ok(a > 10, `${s.id} is ${a}`);
     assert.ok(Number.isFinite(s.wx) && Number.isFinite(s.wz), String(s.id));
     s.pts.forEach(([x, z], i) => { assert.ok(Math.abs(x - s.wx - s.ring[i][0]) < 1e-6 && Math.abs(z - s.wz - s.ring[i][1]) < 1e-6, `${s.id} is rigid`); });
   }

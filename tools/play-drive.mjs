@@ -41,10 +41,16 @@ await g(() => {
   // holds the stick the way a thumb does, steering at a point along a road ahead, for so many seconds
   window.follow = (id, dir, seconds, gas = 1) => {
     const v = G.driving(), M = G.map; let top = 0, hits = 0, far = 0, s0 = M.sOn(id, v.x, v.z), last = v.hp;
+    const L = M.roadById.get(id).length;
     for (let t = 0; t < seconds; t += 1 / 30) {
-      const s = M.sOn(id, v.x, v.z) + dir * (8 + Math.abs(v.f) * .9), p = M.along(id, s);
+      const on = M.sOn(id, v.x, v.z), s = on + dir * (8 + Math.abs(v.f) * .9), p = M.along(id, s);
+      if (dir > 0 ? on > L - 10 : on < 10) break;
       let d = Math.atan2(p.x - v.x, p.z - v.z) - v.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
-      G.stick(Math.max(-1, Math.min(1, -d * 2.4)), gas);
+      // as anyone would, it slows down for a bend it can see coming, and for where the road stops
+      let bend = 0; const a = M.along(id, on), look = 12 + v.f * v.f / 12;
+      for (let k = 6; k <= look; k += 6) { const q = M.along(id, on + dir * k); bend = Math.max(bend, Math.abs(Math.atan2(Math.sin(Math.atan2(q.tx, q.tz) - Math.atan2(a.tx, a.tz)), Math.cos(Math.atan2(q.tx, q.tz) - Math.atan2(a.tx, a.tz))))); }
+      const left = dir > 0 ? L - on : on, want = Math.min(bend > .9 ? 7 : bend > .35 ? 11 : 99, 5 + left * .7);
+      G.stick(Math.max(-1, Math.min(1, -d * 2.4)), Math.abs(v.f) > want ? -1 : gas);
       G.sim(1 / 30, 1 / 30);
       top = Math.max(top, Math.abs(v.f)); if (v.hp < last) { hits++; last = v.hp; } far = Math.max(far, M.roadGrid.nearest(v.x, v.z));
     }
@@ -70,7 +76,7 @@ check(`none parked on top of another: closest ${neighbours.toFixed(1)} m`, neigh
 const firstOne = await g(() => { const G = __game, v = G.vehicles[0]; return { kind: v.kind, x: v.x }; });
 check(`the first one's just past the bridge: a ${firstOne.kind} at x ${firstOne.x}`, firstOne.x > 60 && firstOne.x < 200, firstOne);
 const station = await g(() => { const G = __game, c = G.npcs.coop; return G.vehicles.filter((v) => Math.hypot(v.x - c.x, v.z - c.z) < 40).map((v) => v.kind); });
-check(`there's something to drive at the gas station and the store: ${station}`, station.includes('pickup') && station.includes('car'), station);
+check(`there's something to drive at the gas station and the town hall: ${station}`, station.includes('pickup') && station.includes('car'), station);
 
 // ---------------- a parked one's a solid thing, until he's in it
 const solid = await g(() => { const G = __game, v = G.vehicles[0]; return { body: G.blocked(v.x, v.z, v.y + .2), above: G.blocked(v.x, v.z, v.y + 3) }; });
@@ -118,7 +124,8 @@ check('a four-wheeler barely slows off the road, and a car does', lines.quad.off
 // ---------------- along every road, both ways, in the fastest one
 for (const id of await g(() => __game.map.roads.map((r) => r.id))) {
   const r = await g((id) => { const G = __game, M = G.map; G.vehicles.find((o) => o.kind === 'pickup'); board('pickup'); const R = M.roadById.get(id); const out = []; for (const [at, dir] of [[.15, 1], [.85, -1]]) { const p = M.along(id, R.length * at); move(p.x, p.z, Math.atan2(p.tx * dir, p.tz * dir)); const f = follow(id, dir, Math.min(20, R.length * .6 / 12)); stop(); out.push(f); } G.driving().hp = G.driving().K.hp; window.out(); return out; }, id);
-  check(`${id}: a pickup stays on it both ways: ${r.map((x) => x.s.toFixed(0) + ' m')}`, r.every((x) => x.s > 40 && x.far < 9), r);
+  const whole = await g((id) => __game.map.roadById.get(id).length, id);
+  check(`${id}: a pickup stays on it both ways: ${r.map((x) => x.s.toFixed(0) + ' m')}`, r.every((x) => x.s > Math.min(40, whole * .4) && x.far < 9 && x.hits === 0), r);
 }
 
 // ---------------- into a wall

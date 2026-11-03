@@ -44,6 +44,19 @@ export class SegGrid {
     this.seg = seg; this.t = tb;
     return this.d = seg ? Math.sqrt(best) : Infinity;
   }
+  // The first segment x, z is within half(owner, x, z) of. Where a wide road meets a narrow one the narrow one's
+  // centreline can be the nearer, so nearest alone would put part of the wide road off the road.
+  within(x, z, half) {
+    const list = this.cells.get(this.key(Math.floor(x / this.cell), Math.floor(z / this.cell)));
+    if (list) for (let i = 0; i < list.length; i++) {
+      const g = list[i], px = x - g.ax, pz = z - g.az;
+      let t = g.l2 ? (px * g.dx + pz * g.dz) / g.l2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const ex = px - g.dx * t, ez = pz - g.dz * t, r = half(g.owner, x, z);
+      if (ex * ex + ez * ez < r * r) return g;
+    }
+    return null;
+  }
 }
 
 // Joins a road's edges into one line. Each later edge repeats the node the last one ended on.

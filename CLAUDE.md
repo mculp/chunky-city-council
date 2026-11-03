@@ -54,7 +54,7 @@ Then open http://localhost:8000.
 
 `npm run smoke` plays Chapter 1 in real Chrome and fails on a wrong beat or a console error. It needs `npm i` first and takes `--shots dir` for screenshots and `--touch` for a phone viewport.
 
-`npm run walk` walks all four roads end to end, both ways, with the game's own movement code.
+`npm run walk` walks every road end to end, both ways, with the game's own movement code.
 
 `npm run play` plays Chapter 1 on foot from the bridge to its final objective, following the objective's arrow, and fails if anything's blocked or unreachable. `npm run smoke` teleports between beats, so it can't catch that.
 

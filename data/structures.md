@@ -37,7 +37,7 @@ A footprint never changes shape or size. Where the map compresses a stretch of r
 | `why` | What it means |
 |---|---|
 | `crowded` | A compressed stretch of road pushed it into another building. |
-| `road` | A compressed stretch of road pushed it onto a road. |
+| `road` | It stands on a road, and moving it 8 m wasn't enough to clear it. A building closer than that is moved straight off, because a TIGER line and a footprint are each a few metres out and a real building beside a road shouldn't be lost over it. |
 | `track` | It would stand on the railroad. |
 | `river` | It would stand in the river, on a bend the map has moved. |
 | `opening` | Within 150 m of Stuckey's Bridge in both directions, which has to stay as it was for the opening. |
@@ -52,7 +52,7 @@ A footprint never changes shape or size. Where the map compresses a stretch of r
 | `source` | object | Where each part came from, with the hash and date of the footprints that were fetched. |
 | `outsideTheMap` | number | How many in the source are out of reach. |
 | `structures` | object[] | The buildings. See below. |
-| `extras` | object[] | Anything real that isn't in the source. Empty for now: the old gas station's canopy, the steeple on the US 80 church and the store's sign are built by hand in `index.html`, around the real spot. |
+| `extras` | object[] | Real buildings the source missed, measured on the aerial, with the same fields as `structures`. They come straight from the `extras` in the notes. The old gas station's canopy, the steeple on the US 80 church and the store's sign are built by hand in `index.html`, around the real spot. |
 | `dropped` | object[] | `id`, true `x` and `z`, and `why`. |
 
 ### A structure
@@ -82,7 +82,9 @@ Positions are metres from town center, true metres, before compression. `MAP.fro
 | `steep` | boolean | Optional. Tall walls and a steep roof, for a church. |
 | `lit` | boolean | Optional. Someone's got a light on inside. |
 | `trimColor`, `doorColor` | string | Optional. Hex. |
-| `condition` | string | Optional. `worn` has more kudzu and boarded windows, and `ruin` has walls and roof missing. |
+| `condition` | string | Optional. `worn` has more kudzu and boarded windows, `ruin` has walls and roof missing, and `sound` has nothing fallen in or boarded up. |
+| `lean` | object | Optional. `{ edge, deep, t0, t1 }` and optionally `slope` and `post`: a roof on posts down that ring edge, from `t0` to `t1` metres along it. |
+| `eaves`, `pitch`, `cross`, `gableColor`, `band`, `vent` | | Optional. See the notes below. |
 | `seen` | boolean | Optional. Someone has looked at this one. Without it, how it looks is what's usual for its use and size, chosen by its id. |
 | `what` | string | Optional. A few plain words, when it isn't an ordinary house. |
 
@@ -97,3 +99,9 @@ Positions are metres from town center, true metres, before compression. `MAP.fro
 | `doorFaces` | `north`, `south`, `east` or `west`, to put the door on that side rather than facing the road. |
 | `use` | Replaces the source's use, for one that's plainly something else. |
 | `roofColor` | Hex, in place of the aerial's. |
+| `move` | `[dx, dz]` in metres, for a footprint the aerial shows is out. |
+| `shape` | The footprint's corners relative to the source's middle, where the aerial shows what the source took in or left out. A porch or an open bay comes out of it, and a side wing goes in. |
+| `lean` | `{ "faces": "west", "deep": 2.3 }`, a roof on posts down the wall facing that way, and optionally `length`, `from` (a compass word for which end it starts at), `slope` (its roof's fall per metre, .13 unless it's given) and `post` (hex). |
+| `eaves`, `pitch` | Wall height in metres and the roof's rise over run, in place of what's usual. |
+| `cross` | Each wing after the first turns its ridge across the main one. |
+| `gableColor`, `band`, `vent` | The gable ends in their own colour, that colour across the top of the door wall by `band` metres, and a louvre under the ridge. |
