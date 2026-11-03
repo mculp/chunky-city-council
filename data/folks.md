@@ -79,7 +79,7 @@ And whatever their mood:
 
 - **Vehicles.** Anyone a vehicle's hit gets out of the way of one, even if they'd come at him on foot.
 - **Places.** They won't wander within 20 m of where they were last hurt. A fire or the train counts for this and nothing else, because nobody thinks of either as something he did.
-- **Lures.** A kind of lure stops working on someone after it's fooled them 2 to 5 times, the nosiest soonest. They stay on him, and a different kind still works.
+- **Lures.** A kind of lure stops working on someone after it's fooled them 2 to 5 times, the nosiest soonest. They stay on him, and a different kind still works. The church bell on Church St is a kind of its own, so the same people stop coming to it too.
 - **Family.** The ones who go along with others follow the nearest of their family within 20 m who'd sooner go their own way, which keeps anyone from going in a ring. That's why you see two or three walking together.
 - **Word.** Someone who was there or was hit tells anyone in their family who's within 8 m, for 90 seconds. It only goes one step.
 - **Home.** Once someone's further from home than they'd go, they go back. That's 40 m for a homebody and up to 440 m for someone who isn't.

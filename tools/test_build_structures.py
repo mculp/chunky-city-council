@@ -84,6 +84,11 @@ class Doors(unittest.TestCase):
         self.assertEqual(door_edge(self.RING, self.World(), "east"), 1)
         self.assertEqual(door_edge(self.RING, self.World(), "west"), 3)
 
+    def test_door_goes_where_its_put(self):
+        # in the wall nearest the spot, whichever way it's told to face
+        self.assertEqual(door_edge(self.RING, self.World(), "north", (10.4, 6)), 1)
+        self.assertEqual(door_edge(self.RING, self.World(), None, (3, 9.2)), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

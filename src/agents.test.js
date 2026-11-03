@@ -288,6 +288,16 @@ describe('what it does in the crowd', () => {
     assert.ok(s(fresh).drawn); assert.equal(fresh.fooled.bottle, 1); assert.ok(!s(wise).drawn); assert.equal(wise.fooled.bottle, 2);
   });
 
+  test('the church bell is a lure of its own, and wears off the same way', () => {
+    const F = folks(), wise = someone(F, (w) => w.nosy > .95), fresh = someone(F, (w) => w.nosy > .95, wise.id), order = wise.id < fresh.id ? [wise, fresh] : [fresh, wise];
+    const h = createHorde(field(F)), ss = order.map((w) => bring(h, F, w, 40, 0)), s = (w) => ss[order.indexOf(w)];
+    F.fooled(wise, 'bell'); F.fooled(wise, 'bell');
+    h.bell(45, 0, 160, 10);
+    run(h, { ...still, canGrab: false }, .4);
+    assert.ok(s(fresh).drawn); assert.equal(fresh.fooled.bell, 1); assert.ok(!s(wise).drawn);
+    assert.ok(!F.wise(fresh, 'bottle'), 'and a bottle still works on them');
+  });
+
   test('they go along with their own people', () => {
     const F = folks(), kin = (w) => w.family === 'Clark', lead = someone(F, (w) => kin(w) && w.tagalong < .2), tag = someone(F, (w) => kin(w) && w.tagalong > .7);
     const order = lead.id < tag.id ? [lead, tag] : [tag, lead];

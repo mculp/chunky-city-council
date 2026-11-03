@@ -77,7 +77,8 @@
     "train.clatter": { "gain": 0.75, "loop": true, "file": "audio/sfx/train.clatter.1.mp3" },
     "train.rumble": { "gain": 0.9, "loop": true, "file": "audio/sfx/train.rumble.1.mp3" },
     "train.horn": { "gain": 0.8, "reach": 3200, "max": 1, "gap": 1, "file": "audio/sfx/train.horn.1.mp3", "stereo": true },
-    "train.blast": { "gain": 0.8, "reach": 700, "max": 1, "gap": 1, "file": "audio/sfx/train.blast.1.mp3" }
+    "train.blast": { "gain": 0.8, "reach": 700, "max": 1, "gap": 1, "file": "audio/sfx/train.blast.1.mp3" },
+    "church.bell": { "gain": 0.8, "reach": 900, "max": 3, "gap": 1, "file": ["audio/sfx/church.bell.1.mp3", "audio/sfx/church.bell.2.mp3"] }
   },
   "music": {
     "title": { "bed": 0.55, "air": 0.5, "guitar": 0.6, "file": "audio/music/hang.1.mp3", "gain": 2.712 },

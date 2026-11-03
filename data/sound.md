@@ -14,7 +14,7 @@ There are two sheets, each saying what every sound and part of the score is and 
 
 To put one sound back, copy its line from `data/sound.json` over its line in `data/sound-new.json`. To put them all back, it's the line in `index.html` that picks the sheet.
 
-A sound that came after the old sheet stopped changing is only on the new one. So far that's `amb.flies`, the flies round Robby, the `jam.` sounds, for what's in the shed on Pine Forest Rd, `ball.bump`, `ball.land` and `tramp.spring`, for the yard off True Light Rd, `lure.bottle`, `lure.pop` and `vehicle.alarm`, for what he throws, and `train.rumble`, `train.clatter`, `train.horn`, `train.blast` and `crossing.bell`, for the railroad. They have no worked-out version to fall back on or to be levelled against, so `#old` plays without them, and without saying so. `tools/make-sound.test.js` checks that the new sheet has everything the old one has, and not the other way round.
+A sound that came after the old sheet stopped changing is only on the new one. So far that's `amb.flies`, the flies round Robby, the `jam.` sounds, for what's in the shed on Pine Forest Rd, `ball.bump`, `ball.land` and `tramp.spring`, for the yard off True Light Rd, `lure.bottle`, `lure.pop` and `vehicle.alarm`, for what he throws, `train.rumble`, `train.clatter`, `train.horn`, `train.blast` and `crossing.bell`, for the railroad, and `church.bell`, for the steeple on the church on Church St. They have no worked-out version to fall back on or to be levelled against, so `#old` plays without them, and without saying so. `tools/make-sound.test.js` checks that the new sheet has everything the old one has, and not the other way round.
 
 ## Swapping a sound
 
@@ -82,7 +82,7 @@ The music and everything else dip under it, the words come up, and it plays once
 
 `data/sound-new.json` started as a copy of `data/sound.json`, and nothing ever writes back, so the worked-out sounds and their board stay exactly as they were.
 
-All of it's been made: 11 tracks and 122 takes of the 74 sounds, 21 MB to download. It costs more to hold than the worked-out sounds do. Those come to about 17 MB once worked out. The files come to about 57 MB decoded at a phone's 48 kHz, with the silence off their ends and its loops folded to one channel, and up to another 92 MB for the two longest tracks a phone keeps. Elsewhere, where a loop keeps both channels, the sounds come to about 78 MB. Nobody has tried that on a real phone yet.
+All of it's been made: 11 tracks and 124 takes of the 75 sounds, 21 MB to download. It costs more to hold than the worked-out sounds do. Those come to about 17 MB once worked out. The files come to about 59 MB decoded at a phone's 48 kHz, with the silence off their ends and its loops folded to one channel, and up to another 92 MB for the two longest tracks a phone keeps. Elsewhere, where a loop keeps both channels, the sounds come to about 80 MB. Nobody has tried that on a real phone yet.
 
 It needs a fal key. Run this in a real terminal, because it has to wait for you to type. It keeps the key in `~/.config/chunky/fal-key`, readable only by you, and out of the shell history, the repo and every other program's environment. `FAL_KEY` wins over that file if it's set:
 

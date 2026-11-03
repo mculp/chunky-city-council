@@ -167,4 +167,16 @@ describe('dialogue', () => {
     p.apply(p.line('coop', c).do, c);
     assert.equal(p.get('coop', 'debt'), 0); assert.equal(c.beans, 5); assert.equal(c.items.bag, 0);
   });
+
+  test('the steps are paid for out of the pantry, and she only asks while it has something', () => {
+    const p = createPeople(data), c = ctx(), why = [];
+    c.pantry = 2; c.fromPantry = (w) => { why.push(w); c.beans += c.pantry; c.pantry = 0; };
+    const asks = () => p.line('odessa', c).opts.some((o) => o.to === 'odBeans');
+    assert.ok(asks());
+    p.apply(data.events.swept, c);
+    assert.deepEqual(why, ['Odessa']); assert.equal(c.beans, 2); assert.ok(c.flags.swept);
+    assert.ok(!asks());
+    c.flags.swept = false;
+    assert.ok(!asks(), 'not with nothing on the shelves');
+  });
 });
