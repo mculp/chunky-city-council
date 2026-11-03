@@ -1,0 +1,13 @@
+{
+  "note": "What the National Hydrography Dataset gets wrong, from comparing it by eye with USDA's public-domain NAIP aerial. Never from Google imagery.",
+  "open": [
+    { "id": "{e1b58427-a5be-41e8-b04b-ceee908dcf79}", "seen": "filed as a swamp, and it's a farm pond with a dam, all open water" },
+    { "id": "{be1b4dfc-9ef8-42c6-8143-1811a09433e2}", "seen": "filed as a swamp, and it's an old bend of the river, dark open water all the way round" }
+  ],
+  "ponds": [
+    { "id": "extra-1", "seen": "dark water, about 30 m across, north of a track and west of the open field", "ring": [[-743.3, -176.7], [-731.7, -178.3], [-721.7, -170.7], [-719.3, -160], [-720.7, -146.7], [-733.3, -146], [-746.7, -155], [-747.3, -165]] },
+    { "id": "extra-2", "seen": "green water, about 40 m across, with a small dock on its north side", "ring": [[-599.3, -84], [-576.7, -83.3], [-563.3, -79.3], [-560, -66.7], [-566, -56], [-580, -59.3], [-593.3, -70], [-599.3, -76.7]] },
+    { "id": "extra-3", "seen": "open water with lily pads, the south end of a marsh NHD files whole as a swamp, with forest and floating mat in the rest of it", "ring": [[15316.7, 4183.3], [15391.7, 4116.7], [15466.7, 4075], [15533.3, 4091.7], [15633.3, 4091.7], [15725, 4116.7], [15750, 4166.7], [15741.7, 4233.3], [15716.7, 4291.7], [15666.7, 4316.7], [15691.7, 4358.3], [15666.7, 4416.7], [15641.7, 4441.7], [15600, 4383.3], [15575, 4383.3], [15566.7, 4420.8], [15483.3, 4412.5], [15391.7, 4400], [15316.7, 4375], [15250, 4345.8], [15208.3, 4316.7], [15216.7, 4258.3], [15258.3, 4250], [15308.3, 4233.3]] },
+    { "id": "extra-4", "seen": "the east arm of the lake at about (8750, -1910), open water with reeds at its end, which NHD files as a swamp along with the forest past it", "ring": [[8783, -1980], [8807, -1960], [8823, -1920], [8840, -1873], [8860, -1843], [8893, -1820], [8927, -1793], [8907, -1773], [8867, -1773], [8827, -1763], [8793, -1787], [8760, -1827], [8733, -1867], [8713, -1900], [8767, -1852], [8807, -1855], [8825, -1887], [8795, -1950]] }
+  ]
+}

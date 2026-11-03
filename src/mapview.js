@@ -13,8 +13,8 @@ function cut(line, out) {
   }
 }
 
-export function buildMapData({ roads, rail, river, structures, fields = [] }) {
-  const major = [], minor = [], tracks = [], water = [], houses = [], grass = [], dirt = [];
+export function buildMapData({ roads, rail, river, ponds = [], structures, fields = [] }) {
+  const major = [], minor = [], tracks = [], water = [], lakes = [], houses = [], grass = [], dirt = [];
   for (const r of roads) cut(r.pts, r.width > 7 ? major : minor);
   for (const l of rail) cut(l, tracks);
   for (const l of river) cut(l, water);
@@ -23,11 +23,12 @@ export function buildMapData({ roads, rail, river, structures, fields = [] }) {
     for (const [x, z] of list) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
     return { pts: new Float32Array(list.flat()), x0, x1, z0, z1 };
   };
+  for (const l of ponds) lakes.push(shape(l));
   for (const s of structures) houses.push(shape(s.pts));
   for (const f of fields) { grass.push(shape(f.grass)); dirt.push(shape(f.dirt)); }
   const bounds = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
   for (const p of [...major, ...minor, ...tracks]) { bounds.x0 = Math.min(bounds.x0, p.x0); bounds.x1 = Math.max(bounds.x1, p.x1); bounds.z0 = Math.min(bounds.z0, p.z0); bounds.z1 = Math.max(bounds.z1, p.z1); }
-  return { major, minor, tracks, water, houses, grass, dirt, bounds, roads };
+  return { major, minor, tracks, water, lakes, houses, grass, dirt, bounds, roads };
 }
 
 // World to screen. A yaw of 0 is north up. Any other yaw turns the map with a camera at that yaw, so what's ahead of the camera is up.
@@ -77,6 +78,7 @@ export function drawWorld(g, data, v, dpr, box, { road, houses = true, edges = f
   g.setTransform(dpr * v.a, dpr * v.b, dpr * v.c, dpr * v.d, dpr * v.e, dpr * v.f);
   g.lineCap = g.lineJoin = 'round';
   trace(g, data.water, box); g.strokeStyle = COLORS.river; g.lineWidth = Math.max(3 / s, 24); g.stroke();
+  if (data.lakes.length) { trace(g, data.lakes, box, true); g.fillStyle = COLORS.river; g.fill(); }
   if (data.grass.length) { trace(g, data.grass, box, true); g.fillStyle = COLORS.grass; g.fill(); trace(g, data.dirt, box, true); g.fillStyle = COLORS.dirt; g.fill(); }
   if (houses) { trace(g, data.houses, box, true); g.fillStyle = COLORS.house; g.fill(); if (edges) { g.strokeStyle = COLORS.houseEdge; g.lineWidth = 1 / s; g.stroke(); } }
   trace(g, data.tracks, box); g.lineCap = 'butt'; g.strokeStyle = COLORS.rail; g.lineWidth = 1.6 / s; g.stroke();

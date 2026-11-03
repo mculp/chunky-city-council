@@ -10,6 +10,7 @@
     "horde": "node tools/play-horde.mjs",
     "drive": "node tools/play-drive.mjs",
     "field": "node tools/play-field.mjs",
+    "water": "node tools/play-water.mjs",
     "wreck": "node tools/play-wreck.mjs",
     "overlay:structures": "node tools/structure-overlay.mjs",
     "overlay": "node tools/map-overlay.mjs"

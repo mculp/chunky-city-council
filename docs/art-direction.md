@@ -95,6 +95,7 @@ Night in an abandoned Mississippi town.
 - **Doors stand open.** Any building can be walked into, and its roof comes off while he's inside. Anything between the camera and him opens up around him in a dither, and the roof of whatever the camera backs into comes off too.
 - **Street signs:** green blades with cream Bungee, the colours of the town sign, reading the names in the road graph. Each corner blade runs along the road it names, as real ones do, and the roadside ones face whoever's walking that way. A phone in portrait sees a narrow slice of the road, so they're big enough to read before they slide off screen.
 - **The river:** it takes glowing rings where things hit it. Cottonmouths open white mouths before striking.
+- **The ponds:** the same water as the river, with the sky and the moon in it, each at its own height just under its lowest bank. Dark mud at the edge, and the far bank and its trees black against the sky.
 - **The lantern:** the one from the local legend, a guide light with nobody holding it that leads him across the river.
 
 The brief is a "perfectly 3d modeled city": the real layout and landmarks of Chunky on real street geometry, rendered in this hand-drawn style. Accuracy applies to where things are and what they are. It doesn't mean photorealism. The roads, the railroad and the river come from the road graph, and the buildings from `data/structures.json`.

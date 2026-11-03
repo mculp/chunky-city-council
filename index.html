@@ -183,6 +183,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { loadMap } from './src/map.js';
+import { loadWater } from './src/water.js';
 import { createPeople } from './src/people.js';
 import { drawCloth, drawSkull } from './src/looks.js';
 import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
@@ -567,6 +568,8 @@ const DY = 6.0, TY = 11.6, ZS = 2.8, XE = 20, XP = 15, DECK_TOP = 6.36, ROAD_TOP
 // The opening scene's river. The map's river bends over to it near the bridge.
 const channel = (z) => 3.5 * Math.sin(z * .035);
 const MAP = await loadMap('data/roads.json', { riverAtBridge: channel });
+const WATER = await loadWater('data/water.json', MAP);
+let swimY = 0;   // how high the water he's swimming in is
 // Stuckey Bridge Rd, which is laid along z 0 through the first scene
 const OPENING_ROAD = MAP.opening.road;
 // where things stand, in true metres from town center, so that they move with the map if its bands change
@@ -617,7 +620,8 @@ function roadHalf(road, x, z) {
   if (road.id === WAKE_ROAD) { const w = fromWake(x, z); return w < 26 ? WAKE_HALF + (half - WAKE_HALF) * sstep(16, 26, w) : half; }
   return road.id === OPENING_ROAD && ax < 60 && Math.abs(z) < 8 ? 2.8 + (half - 2.8) * sstep(30, 60, ax) : half;
 }
-function groundH(x, z) {
+// The land as it'd be with no ponds and no buildings
+function landH(x, z) {
   const d = riverDist(x, z);
   let h = -3 + 9.1 * sstep(12, 24, d);
   if (d > 18) h += (fbm((x + 300) * .03, (z + 300) * .03, 61, 1e6, 4) - .5) * 4 * sstep(18, 34, d);
@@ -635,6 +639,23 @@ function groundH(x, z) {
     const td = MAP.railGrid.nearest(x, z);
     if (td < 24) h += (TOWN_Y - h) * (1 - sstep(3.5, 16, td)) * banks;
   }
+  return h;
+}
+// A pond takes the ground down to it over a bank, and goes down from its shore to a floor. The bed of a road or the tracks stays where it is, and the pond stops at it.
+const BANK = 9;
+WATER.settle(landH, TOWN_Y - .5);
+function pondGround(h, x, z) {
+  const p = WATER.pond, d = WATER.d, shore = p.level + .3, low = d > 0 ? shore + (h - shore) * sstep(0, BANK, d) : Math.max(shore + d * .5, p.level - p.deep);
+  let keep = 0;
+  const rd = MAP.roadGrid.nearest(x, z);
+  if (rd < 12) { const half = roadHalf(MAP.roadGrid.seg.owner, x, z); keep = 1 - sstep(half + .4, half + 2.6, rd); }
+  const td = MAP.railGrid.nearest(x, z);
+  if (td < 6) keep = Math.max(keep, 1 - sstep(2.6, 5, td));
+  return low + (h - low) * keep;
+}
+function groundH(x, z) {
+  let h = landH(x, z);
+  if (WATER.look(x, z)) h = pondGround(h, x, z);
   const pw = padWeight(x, z);
   return pw > 0 ? h + (TOWN_Y - h) * pw : h;
 }
@@ -665,6 +686,8 @@ function groundColor(x, z, h, col, i) {
   // sand where the river's cut down under the Chunky River Bridge
   const w = fromWake(x, z);
   if (w < 80) c = lerp3(c, hex('#6f6048'), .85 * (1 - sstep(35, 80, w)) * (1 - sstep(3.5, 6, h)));
+  // mud round a pond and under it
+  if (WATER.look(x, z) && WATER.d < 4) c = lerp3(c, hex('#2a2019'), .9 * (1 - sstep(.5, 4, WATER.d)));
   // mown grass, where someone kept it
   const lawn = padWeight(x, z, true);
   if (lawn > 0) c = lerp3(c, lerp3(hex('#34452a'), hex('#46583a'), n), lawn * .9);
@@ -860,7 +883,7 @@ function swayMat(params) {
     const first = x > -100 && x < 140 && z > -120 && z < 120 && !(x > 64 && x < 125 && Math.abs(z) < 34);
     if (r(0) < .62 && !first && fbm(x * .012 + 40, z * .012 + 40, 77, 1e6, 2) > .36) {
       const h = groundH(x, z), rd = MAP.roadGrid.nearest(x, z), half = rd < 32 ? MAP.roadGrid.seg.owner.width / 2 : 0;
-      if (h >= 2.2 && rd > half + 4 && MAP.railGrid.nearest(x, z) > 6 && padWeight(x, z) === 0) { const pine = r(3) < .33; t = { x, z, h, r, pine, size: pine ? .8 + r(4) * .7 : .7 + r(4) * .9 }; }
+      if (h >= 2.2 && rd > half + 4 && MAP.railGrid.nearest(x, z) > 6 && padWeight(x, z) === 0 && !(WATER.look(x, z) && WATER.d < 2)) { const pine = r(3) < .33; t = { x, z, h, r, pine, size: pine ? .8 + r(4) * .7 : .7 + r(4) * .9 }; }
     }
     cache.set(k, t); return t;
   };
@@ -1013,6 +1036,18 @@ const waterMat = new THREE.ShaderMaterial({
     }`
 });
 const water = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), waterMat); water.rotation.x = -Math.PI / 2; scene.add(water);
+// Each pond has its own flat sheet of the same water, at its own level. One that's down by the river doesn't need one.
+for (const p of WATER.ponds) if (p.level > 0) {
+  const pos = new Float32Array(p.ring.length * 3), idx = [];
+  p.ring.forEach(([x, z], i) => pos.set([x, p.level, z], i * 3));
+  for (const [a, b, c] of THREE.ShapeUtils.triangulateShape(p.ring.map(([x, z]) => new THREE.Vector2(x, z)), [])) {
+    const [ax, az] = p.ring[a], [bx, bz] = p.ring[b], [cx, cz] = p.ring[c];
+    if ((bz - az) * (cx - ax) - (bx - ax) * (cz - az) > 0) idx.push(a, b, c); else idx.push(a, c, b);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx);
+  const sheet = new THREE.Mesh(g, waterMat); scene.add(sheet);
+  DISTANT.push({ obj: sheet, x: p.x, z: p.z, r: Math.hypot(p.x1 - p.x0, p.z1 - p.z0) / 2 + 300 });
+}
 
 flushBuckets();   // the bridge
 
@@ -1397,7 +1432,7 @@ function updateThrown(dt) {
     if (!c.on) continue;
     c.vy -= 15 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt; c.turn += dt * 11; gasDirty = true;
     const fl = floorAt(c.x, c.z), hitSomeone = crowdOut && horde.active.some((s) => s.state !== 5 && Math.hypot(s.x - c.x, s.z - c.z) < .7 && c.y < s.y + 2);
-    if (c.y <= fl + .1 || blocked(c.x, c.z, c.y) || hitSomeone) { c.on = false; gasDirty = true; if (fl < -.1) { addRipple(c.x, c.z, .4, 0); continue; } blastCan(c.x, Math.max(c.y, fl + .2), c.z); }
+    if (c.y <= fl + .1 || blocked(c.x, c.z, c.y) || hitSomeone) { c.on = false; gasDirty = true; if (fl < WATER.level(c.x, c.z) - .1) { addRipple(c.x, c.z, .4, 0); continue; } blastCan(c.x, Math.max(c.y, fl + .2), c.z); }
   }
 }
 function layOutGas() {
@@ -2955,7 +2990,7 @@ let partY = 0, lastDrip = 0;
 function updateParticles(dt, M) {
   const cx = camera.position.x, cz = camera.position.z;
   // on foot they drift around him; at the river they hang over the water
-  partY += ((M === 'land' || M === 'bridge' || M === 'bitten' || M === 'dream' || M === 'wake' || M === 'town' || M === 'drive' || M === 'sweep' || M === 'dialog' ? player.pos.y : 0) - partY) * Math.min(1, dt * .8);
+  partY += ((M === 'land' || M === 'bridge' || M === 'bitten' || M === 'dream' || M === 'wake' || M === 'town' || M === 'drive' || M === 'sweep' || M === 'dialog' ? player.pos.y : M === 'swim' ? swimY : 0) - partY) * Math.min(1, dt * .8);
   // cyan: a stray drop from the bottle while he still has it, and a ring where it lands
   if (bottle.parent === hero.body && bottle.visible && time - lastDrip > 3.1) {
     const d = drips.find(x => !x.on);
@@ -3339,7 +3374,7 @@ function dropProp(obj, glow) {
   scene.attach(obj); obj.traverse(o => { o.layers.disable(1); o.layers.disable(2); }); drops.push({ obj, v: new THREE.Vector3((rnd() - .5) * .5, 0, .3), glow, sink: 0 });
 }
 function startSwim(retry) {
-  S.mode = 'swim'; HP.kind = 'swim';
+  S.mode = 'swim'; HP.kind = 'swim'; swimY = 0;
   if (retry) { player.pos.set(0, 0, 4.4); heroRoot.rotation.set(0, Math.PI, 0); for (const s of SNAKES) s.reset(); }
   else player.pos.set(heroRoot.position.x, 0, heroRoot.position.z);
   player.yaw = -Math.PI / 2 - .25; player.stamina = 1; player.inv = 1.2; S.hp = 3; if (retry) { cam.yaw = player.yaw + Math.PI; cam.snap = true; }
@@ -3456,7 +3491,7 @@ let floorX = NaN, floorZ = NaN, floorY = 0;
 const floorOnce = (x, z) => { if (x !== floorX || z !== floorZ) { floorX = x; floorZ = z; floorY = floorAt(x, z); } return floorY; };
 const horde = createHorde({
   blocked: (x, z, y) => blocked(x, z, y) || floorOnce(x, z) - y > .7 || (driving !== null && inVehicle(driving, x, z, .3)),
-  water: (x, z) => floorOnce(x, z) < -.1,
+  water: (x, z) => floorOnce(x, z) < WATER.level(x, z) - .1,
   floorAt: floorOnce,
   rand: crowdRand,
   // on down whichever street they're nearest
@@ -3487,7 +3522,7 @@ function bringOutCrowd() {
     const s0 = MAP.sOn(id, ...a), s1 = MAP.sOn(id, ...b);
     for (let i = 0, tries = 0; i < n && tries < n * 30; tries++) {
       const p = MAP.along(id, s0 + (s1 - s0) * crowdRand()), x = p.x + (crowdRand() - .5) * 10, z = p.z + (crowdRand() - .5) * 10;
-      if (Math.hypot(x - player.pos.x, z - player.pos.z) < 35 || horde.inSanctuary(x, z) || floorOnce(x, z) < -.1 || blocked(x, z, floorOnce(x, z)) || houseAt(x, z)) continue;
+      if (Math.hypot(x - player.pos.x, z - player.pos.z) < 35 || horde.inSanctuary(x, z) || floorOnce(x, z) < WATER.level(x, z) - .1 || blocked(x, z, floorOnce(x, z)) || houseAt(x, z)) continue;
       horde.add(x, z);
       i++;
     }
@@ -3660,7 +3695,8 @@ function getOut(force = false) {
   heroRoot.rotation.set(0, v.yaw, 0); heroRoot.rotation.order = 'XYZ'; hero.body.scale.setScalar(HERO_SCALE);
   ghost.add(gLight); gLight.position.set(0, 0, 0); gLight.color.set('#ff9a46'); gLight.distance = 12; gLight.decay = 1.8; headlights.visible = false;
   player.pos.set(x, y, z); player.yaw = v.yaw; player.grounded = true; player.vy = 0; player.kb.set(0, 0);
-  if (y < -.3) { player.pos.y = 0; S.mode = 'swim'; HP.kind = 'swim'; objective('Swim to the bank.'); }
+  const lv = WATER.level(x, z);
+  if (y < lv - .3) { swimY = lv; player.pos.y = lv; S.mode = 'swim'; HP.kind = 'swim'; objective('Swim to the bank.'); }
   else { S.mode = 'town'; HP.kind = 'run'; }
   return true;
 }
@@ -3714,13 +3750,13 @@ function arriving() { if (!S.flags.arrived && Math.hypot(player.pos.x - NPCS.coo
 function pickUpCans(reach) {
   for (const c of PICKUPS) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; c.m.visible = false; addBeans(1, 'found'); townObjective(); hudVitals(); }
 }
-const DRIVE_WORLD = { blocked: (x, z, y) => blockedInTown(x, z, y) || !!looseAt(x, z, y), floorAt, road: onRoad, edge: (x, z) => !MAP.inBounds(x, z), ram };
+const DRIVE_WORLD = { blocked: (x, z, y) => blockedInTown(x, z, y) || !!looseAt(x, z, y), floorAt, level: WATER.level, road: onRoad, edge: (x, z) => !MAP.inBounds(x, z), ram };
 let vehPuffT = 0, vehClawT = 0, vehSmokeT = 0;
 function wreckedNow(v) {
   vehDirty = true;
   if (v.drowned) toast('Flooded'); else wreckVehicle(v);
   if (!reduceMotion) cam.shake = .6; glitch(.9, .35);
-  for (let i = 0; i < 7; i++) puff(v.x + (vehRand() - .5) * 2.4, v.y + .6 + vehRand(), v.z + (vehRand() - .5) * 2.4, .8 + vehRand() * .6, 1 + vehRand() * .5, 3, .09, .08, .095);
+  for (let i = 0; i < 7; i++) puff(v.x + (vehRand() - .5) * 2.4, v.y + .6 + vehRand(), v.z + (vehRand() - .5) * 2.4, (.8 + vehRand() * .6) * (v.drowned ? .4 : 1), 1 + vehRand() * .5, v.drowned ? 2 : 3, .09, .08, .095);
   if (crowdOut) horde.noise(v.x, v.z, 60, 2);
 }
 function updateDrive(dt) {
@@ -4004,7 +4040,7 @@ function blast(x, y, z, r, power, skip = null) {
 function blastCan(x, y, z) {
   blast(x, y, z, GAS_BLAST, GAS_POWER);
   const fl = floorAt(x, z);
-  for (let i = 0; i < 4; i++) { const a = i * 1.57 + wreckRand(), e = 1 + wreckRand() * 1.8, px = x + Math.cos(a) * e, pz = z + Math.sin(a) * e; if (floorAt(px, pz) > -.1) burnAt(px, fl + .04, pz, .7 + wreckRand() * .5, 7 + wreckRand() * 7); }
+  for (let i = 0; i < 4; i++) { const a = i * 1.57 + wreckRand(), e = 1 + wreckRand() * 1.8, px = x + Math.cos(a) * e, pz = z + Math.sin(a) * e; if (floorAt(px, pz) > WATER.level(px, pz) - .1) burnAt(px, fl + .04, pz, .7 + wreckRand() * .5, 7 + wreckRand() * 7); }
 }
 // Fire and blasts knock him about whenever. They only cost him once the hearts are showing, which is once the crowd's out.
 function hurtBy(kind, dx, dz, force = 6) {
@@ -4156,7 +4192,7 @@ function startFree() {
 }
 layOutGas();
 // ================================================================ the map
-const mapData = buildMapData({ roads: MAP.roads, rail: MAP.rail, river: MAP.river, structures: STRUCTURES, fields: FIELDS });
+const mapData = buildMapData({ roads: MAP.roads, rail: MAP.rail, river: MAP.river, ponds: WATER.ponds.map((p) => p.ring), structures: STRUCTURES, fields: FIELDS });
 const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d') };
 const MAP_PLACES = [
   ["Stuckey's Bridge", 0, 0, 3], ['Chunky River Bridge', WAKE_BRIDGE.x, WAKE_BRIDGE.z, 2], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-64.5, -39.5), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Ball field', ...atTrue(-345, -495), 3], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
@@ -4329,17 +4365,17 @@ function tick(dt, draw = true) {
       player.pos.z = clamp(player.pos.z, -40, 40);
     }
     HP.speed = sp; HP.phase += dt * (sp * 3 + 2);
-    player.pos.y = Math.sin(time * 2.2) * .04;
+    player.pos.y = swimY + Math.sin(time * 2.2) * .04;
     if (want > .1 && Math.random() < dt * 3) addRipple(player.pos.x, player.pos.z, .08, 0);
     for (const s of SNAKES) s.update(dt);
     // reached the shallows on the west side: climb out
-    if (groundH(player.pos.x, player.pos.z) > -.35) {
+    if (groundH(player.pos.x, player.pos.z) > swimY - (S.flags.town ? .2 : .35)) {
       if (S.flags.town) { S.mode = 'town'; HP.kind = 'run'; player.grounded = true; player.pos.y = floorAt(player.pos.x, player.pos.z); townObjective(); }
       else if (player.pos.x < -8) { S.mode = 'land'; HP.kind = 'run'; player.grounded = true; player.pos.y = floorAt(player.pos.x, player.pos.z);
         objective('Get up to the road.'); if (!S.removedNoose) { S.removedNoose = true; nooseRing.visible = knot.visible = false; ropeTail.visible = false; toast('He takes off the noose.'); } }
       else { player.pos.x -= Math.sin(player.yaw) * sp * dt; player.pos.z -= Math.cos(player.yaw) * sp * dt; }
     }
-    ghost.position.set(-17.5, 1.3 + Math.sin(time * 2) * .12, 7.5);
+    if (!S.flags.town) ghost.position.set(-17.5, 1.3 + Math.sin(time * 2) * .12, 7.5);
   } else if (M !== 'land' && M !== 'bridge') { for (const s of SNAKES) if (s.state !== 'wander' || Math.random() < .3) s.update(dt); }
   // ---------------- on foot (bank, bridge, town)
   if (M === 'land' || M === 'bridge' || M === 'town') {
@@ -4369,9 +4405,10 @@ function tick(dt, draw = true) {
     else { player.vy -= 15 * dt; player.pos.y += player.vy * dt; if (player.pos.y <= f2 && player.vy <= 0) { player.pos.y = f2; player.grounded = true; if (crowdOut) horde.noise(player.pos.x, player.pos.z, 16, .6); } }
     HP.kind = player.grounded ? 'run' : 'air'; HP.speed = sp * (player.grounded ? 1 : 0); HP.phase += dt * (Math.min(sp, 4.4) * 2.4 + Math.max(0, sp - 4.4) * 1.3);
     // into the water from the bank or bridge
-    if (player.pos.y < .05 && f2 < -.3) {
+    const lv = WATER.level(player.pos.x, player.pos.z);
+    if (player.pos.y < lv + .05 && f2 < lv - .3) {
       if (M === 'bridge') fail('The Chunky takes you back.', 'Jump the gaps. Don\'t stop running.');
-      else { S.mode = 'swim'; HP.kind = 'swim'; objective(S.flags.town ? 'Swim to the bank.' : 'Swim to the west bank. Follow the lantern.'); }
+      else { swimY = lv; S.mode = 'swim'; HP.kind = 'swim'; objective(S.flags.town ? 'Swim to the bank.' : 'Swim to the west bank. Follow the lantern.'); }
     }
     if (M === 'land') {
       ghost.position.lerp(new THREE.Vector3(-23, ROAD_TOP + 1.6, 1.5), Math.min(1, dt * 1.2));
@@ -4407,7 +4444,7 @@ function tick(dt, draw = true) {
   // ---------------- held by the crowd: hauled along until he breaks free
   if (M === 'grabbed' && horde.grab) {
     const g = horde.grab, P = player.pos, nx = P.x + g.dx * dt, nz = P.z + g.dz * dt, fl = floorAt(nx, nz);
-    if (!blocked(nx, nz, P.y) && fl > -.1 && fl - P.y < .6) { P.x = nx; P.z = nz; P.y += (fl - P.y) * Math.min(1, dt * 18); }
+    if (!blocked(nx, nz, P.y) && fl > WATER.level(nx, nz) - .1 && fl - P.y < .6) { P.x = nx; P.z = nz; P.y += (fl - P.y) * Math.min(1, dt * 18); }
     player.yaw += angDiff(player.yaw, g.at + Math.PI) * Math.min(1, dt * 8);
     HP.phase += dt * 14;
     if (input.aEdge) horde.mash();
@@ -4493,7 +4530,7 @@ function tick(dt, draw = true) {
     // looking down on him when he's held, or whoever's holding him is all you'd see
     const pitch = M === 'grabbed' ? Math.max(cam.pitch, .9) : cam.pitch;
     V.set(Math.sin(cam.yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(cam.yaw) * Math.cos(pitch)).multiplyScalar(dist).add(tgt);
-    if (V.y < .35) V.y = .35;
+    V.y = Math.max(V.y, .35, WATER.level(V.x, V.z) + .35);
     // talking: over his shoulder, looking between them, or a hood that size is all you'd see of whoever it is
     cam.talk = clamp(cam.talk + (M === 'dialog' && S.talkTo ? dt : -dt) * 2.5, 0, 1);
     if (cam.talk > 0 && S.talkTo) {
@@ -4571,7 +4608,7 @@ if (location.hash === '#free') startFree();
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdHoods.count }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
