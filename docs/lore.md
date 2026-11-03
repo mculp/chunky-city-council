@@ -17,6 +17,12 @@ Real places are by structure id, never an address. Most of these are someone's h
 - What they're wearing is invented, as ordinary clothes for around here.
 - The gate isn't built, since that's a "may". The hero's the only thing wearing a hood now, so when it comes, only his look has to change.
 
+Later:
+
+> Maybe not everyone should be zombies. There should be some people to communicate with. Zombies should be less aggressive in general if they are not messed with. Their idle state should be with their torso folded and arms hanging towards the ground. They can also but don't have to chase after you in the folded state.
+
+> There's no way to kill them, they just get back up, which I guess is ok for now but maybe they should at least be stunned for a while.
+
 ## Charlie Flake
 
 > Charlie Flake: A local resident known for catching a record 56-pound catfish from the Chunky River in 1924
@@ -144,6 +150,10 @@ They sent a picture of this from above too, and it stays out of the repo.
 
 > Can make up their first name
 
+> Buildings and houses should have more things in them. Furniture and people to talk to and TVs and secret items.
+
+> Add gressett as another prominent last name
+
 ## Mr Barber
 
 > An old dead millionaire named Mr Barber lived south of the bridge and owned most of the farmland as soon as you go south of the bridge and had a compound about a mile south of the bridge maybe you can find it on satellite.
@@ -160,3 +170,15 @@ They sent a picture of this from above too, and it stays out of the repo.
 - It's only how it looks. Walking and driving work as they did, so a golf cart doesn't slow down on a climb yet.
 - Past where the fog stops the ground, the same land carries on as a low dark line of far hills under the sky. There's none of it in the first scene.
 - The bank of the river, the first scene and the water are all kept level, and most buildings are on ground that's been levelled for them, as they are in life. A few on the steepest ground still lean a little.
+
+## Rocky and Miss Bobby
+
+> Change tre and odessa's names to rocky and miss bobby. Miss bobby drives a church van and lives next to the town hall. The town hall is still in the wrong spot btw. It should be facing east on commerce st. Miss bobby lives right next to it on the north on commerce st. Rocky lives in trailer across from gas station
+
+## Beans
+
+> Beans is the currency of chunky. There should be a way to buy things with beans.
+
+## Dogs
+
+> Animals, there should be dogs everywhere. Mostly nice. They will follow you. Occasionally one will chase you.
