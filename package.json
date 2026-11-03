@@ -18,6 +18,7 @@
     "hills": "node tools/play-hills.mjs",
     "keys": "node tools/play-keys.mjs",
     "farm": "node tools/play-farm.mjs",
+    "agents": "node tools/play-agents.mjs",
     "water": "node tools/play-water.mjs",
     "lore": "node tools/play-lore.mjs",
     "lanes": "node tools/play-lanes.mjs",
