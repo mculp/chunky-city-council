@@ -164,3 +164,79 @@ export function cap(color = '#a82a2a') {
 export function crate(w = .8, h = .6, d = .6, color = PALE) {
   return [box(0, h / 2, 0, w, h, d, color), box(0, h, 0, w + .03, .03, d + .03, '#8a7f66'), ...both((s) => box(s * (w / 2 + .004), h / 2, 0, .012, h, .06, '#8a7f66'))];
 }
+
+// ---- the back room of a trailer. An old computer on a laminate desk: a tube monitor, a tower, speakers, a keyboard and a mouse. The glass isn't here: GLASS says where the page puts it, lit, in the monitor's front.
+export const GLASS = { y: 1.03, z: .09, w: .31, h: .235 };
+export function computerDesk() {
+  const TOP = '#6b4f38', SIDE = '#54402f', CASE = '#efe8d2', LOW = '#cfc7ae', DARK = '#262228', KEY = '#f5f0de', { y, z, w, h } = GLASS, wide = .065, under = .085, over = .05, front = z + .012;
+  return [
+    box(0, .725, 0, 1.45, .03, .72, TOP), ...both((s) => box(s * .69, .355, 0, .03, .71, .68, SIDE)), box(0, .42, -.33, 1.35, .56, .02, SIDE),
+    // the monitor: its foot, the hump behind, and the bezel round the glass with its buttons and its light
+    box(0, .762, -.06, .24, .024, .24, LOW), box(0, .79, -.06, .11, .04, .11, LOW),
+    box(0, y - .01, -.17, .3, .29, .25, LOW), box(0, y, z - .14, .36, .3, .1, CASE), box(0, y, z - .024, w + .01, h + .01, .02, DARK),
+    box(0, y + h / 2 + over / 2, z - .05, w + wide * 2, over, .124, CASE), box(0, y - h / 2 - under / 2, z - .05, w + wide * 2, under, .124, CASE),
+    ...both((s) => box(s * (w / 2 + wide / 2), y, z - .05, wide, h, .124, CASE)),
+    ...[-.1, -.06, -.02].map((x) => box(x, y - h / 2 - .05, front, .024, .012, .004, LOW)), box(.14, y - h / 2 - .05, front, .012, .012, .004, '#7adf6a'),
+    // the tower standing beside it
+    box(.54, .96, -.05, .19, .44, .44, CASE), box(.54, 1.11, .172, .155, .036, .006, LOW), box(.54, 1.05, .172, .11, .012, .006, DARK), box(.54, .88, .172, .03, .03, .006, LOW), box(.5, .88, .172, .012, .012, .004, '#e8a93a'),
+    // the speakers, the keyboard and the mouse on its pad, with its cord
+    ...both((s) => [box(s * .3, .83, .02, .09, .18, .1, CASE), cylZ(s * .3, .86, .074, .03, .004, DARK, 8)]).flat(),
+    box(-.02, .752, .25, .46, .018, .16, CASE), box(-.07, .764, .25, .32, .006, .125, KEY), box(.17, .764, .25, .075, .006, .125, KEY),
+    box(.34, .742, .25, .2, .004, .2, '#27353f'), box(.34, .756, .25, .06, .024, .1, CASE), bar([.34, .76, .2], [.26, .76, -.12], .008, DARK),
+    // a stack of discs with nothing on them, and a mug
+    cyl(-.56, .762, .12, .06, .045, '#c9ccd2', 12), cyl(-.56, .785, .12, .018, .006, '#6b6e74', 8), cyl(-.5, .79, -.14, .04, .09, '#7a3030', 8),
+  ];
+}
+export function deskChair() {
+  const SEAT = '#26262e', STEEL_DARK = '#4a4a50';
+  return [
+    box(0, .47, 0, .46, .08, .46, SEAT), box(0, .86, -.21, .42, .55, .07, SEAT), bar([0, .62, -.2], [0, .47, -.14], .05, STEEL_DARK), cyl(0, .26, 0, .03, .4, STEEL_DARK, 8),
+    ...[0, 1.257, 2.513, 3.77, 5.027].map((a) => bar([0, .08, 0], [Math.sin(a) * .28, .05, Math.cos(a) * .28], .03, STEEL_DARK)),
+  ];
+}
+// A twin bed, with its head at -z
+export function narrowBed(blanket = '#2f3a4f') {
+  return [
+    box(0, .17, 0, 1, .3, 2, '#3a2c22'), box(0, .36, 0, .96, .14, 1.94, '#8b8778'), box(0, .44, .2, 1, .06, 1.5, blanket), box(.08, .46, -.72, .7, .1, .4, '#b9b3a4'), box(0, .55, -.98, 1, .8, .05, '#3a2c22'),
+  ];
+}
+// A rack of discs, every spine a different color and nothing on any of them
+export function discRack(colors = ['#a33a3a', '#e8a93a', '#2f6f8f', '#d8d2bd', '#3a7a4a', '#7a4a8a', '#c86a2a', '#26262e']) {
+  const spines = [];
+  for (let y = 0; y < 5; y++) for (let i = 0; i < 12; i++) spines.push(box(-.165 + i * .03, .12 + y * .25, .02, .024, .17, .12, colors[(i * 5 + y * 3) % colors.length]));
+  return [box(0, .68, -.06, .42, 1.36, .03, '#3a2c22'), ...both((s) => box(s * .2, .68, 0, .02, 1.36, .16, '#3a2c22')), ...[0, 1, 2, 3, 4, 5].map((y) => box(0, .02 + y * .25, 0, .4, .02, .16, '#3a2c22')), ...spines];
+}
+
+// ---- what stands in a cemetery, from what can be seen from the road. Nothing's written on any of it.
+const GRAVE_GREYS = ['#8d8c88', '#77767a', '#a3a196', '#5e5d62', '#b4b1a4'], BLOOMS = ['#d94a6a', '#f1e6cf', '#e8a93a', '#b03ac0', '#d9402a'];
+export function graveMarker({ kind, tone = 0, flowers = 0, w = 3, d = 3.4 }) {
+  const G = GRAVE_GREYS[Math.floor(tone * GRAVE_GREYS.length) % GRAVE_GREYS.length], BASE = '#83827a', parts = [];
+  const base = (bw, bd = .34, bh = .14, color = BASE) => box(0, bh / 2, 0, bw, bh, bd, color);
+  if (kind === 'low') parts.push(base(.84), box(0, .36, 0, .68, .46, .17, G));
+  if (kind === 'double') parts.push(base(1.36, .38), box(0, .4, 0, 1.14, .52, .2, G), box(0, .68, 0, .94, .05, .16, G));
+  if (kind === 'upright') parts.push(base(.6, .3, .1), box(0, .46, 0, .42, .72, .12, '#4e4d54'));
+  if (kind === 'old') parts.push(...moved([box(0, .4, 0, .38, .8, .07, '#a9a79a'), box(0, .84, 0, .26, .08, .07, '#a9a79a')], { rx: .05 }));
+  if (kind === 'cross') parts.push(base(.5, .3, .2), box(0, .62, 0, .11, .85, .1, G), box(0, .78, 0, .46, .1, .1, G));
+  if (kind === 'slab') parts.push(
+    box(0, .05, 0, w, .1, d, '#a9a79c'), box(0, .09, .1, w - .34, .06, d - .54, '#8b8a80'),
+    ...moved([base(1.6, .4), box(0, .42, 0, 1.3, .56, .22, G), box(0, .72, 0, 1.06, .05, .17, G)], { z: -d / 2 + .2 }),
+  );
+  if (kind === 'obelisk') parts.push(
+    box(0, .14, 0, 1.1, .28, 1.1, BASE), box(0, .42, 0, .8, .3, .8, G),
+    ...moved([cyl(0, 1.5, 0, .22, 1.9, G, 4, .32), cyl(0, 2.6, 0, 0, .3, G, 4, .22)], { ry: Math.PI / 4 }),
+  );
+  // Dark and polished, and whatever's cut in it can only be read from right up close
+  if (kind === 'stone') parts.push(
+    base(1, .42, .16, '#3a383e'), box(0, .6, 0, .8, .88, .16, '#26242a'),
+    ...[.86, .78, .7, .62, .54].map((y, i) => box(0, y, .083, [.5, .56, .44, .54, .34][i], .012, .004, '#9a98a0')),
+  );
+  for (let i = 0; i < flowers; i++) {
+    const x = (i - (flowers - 1) / 2) * .22, z = kind === 'slab' ? -d / 2 + .56 : .26;
+    parts.push(box(x, .1, z, .03, .2, .03, '#3a5230'), box(x, .22, z, .16, .12, .16, BLOOMS[(Math.floor(tone * 97) + i * 2) % BLOOMS.length]));
+  }
+  return parts;
+}
+// All of them in one go. place says where each one stands: [x, z, turn]
+export function cemeteryStones(list, place) {
+  return list.flatMap((g) => { const [x, z, ry] = place(g); return moved(graveMarker(g), { x, z, ry }); });
+}

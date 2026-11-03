@@ -64,6 +64,7 @@ body.talking #mini,body.talking #miniName{visibility:hidden}
 .pips{letter-spacing:2px;font-variant-numeric:tabular-nums}
 #prompt{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom, 0px) + 176px);transform:translateX(-50%);z-index:4;pointer-events:none;
   font-family:var(--f-display);font-size:15px;letter-spacing:.03em;background:var(--panel);border:1px solid var(--line);padding:8px 14px;white-space:nowrap;text-align:center}
+#prompt .words{display:block;white-space:normal;width:min(84vw,520px);text-align:center;line-height:1.35}
 #prompt .bar{display:block;height:5px;margin-top:7px;background:rgba(255,255,255,.14)}
 #prompt .bar i{display:block;height:100%;width:0;background:var(--rust)}
 #toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top, 0px) + 92px);transform:translateX(-50%);z-index:5;pointer-events:none;
@@ -219,7 +220,8 @@ import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boun
 import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
 import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, rimHit, placeVehicles, settle, speedOf } from './src/vehicles.js';
 import { vehicleGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
-import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap } from './src/things.js';
+import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones } from './src/things.js';
+import { CEMETERY, layGraves, graveSolid } from './src/graves.js';
 import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/volley.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
 import { makeLight, stepLight, lightAt } from './src/light.js';
@@ -1075,7 +1077,7 @@ const waterMat = new THREE.ShaderMaterial({
 });
 const water = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), waterMat); water.rotation.x = -Math.PI / 2; scene.add(water);
 // A swimming pool's the same water with something other than mud under it, so it doesn't take much sky
-const POOL_LOOKS = { blue: { deep: [.03, .26, .46], sheen: -.08 } };
+const POOL_LOOKS = { blue: { deep: [.03, .26, .46], sheen: -.08 }, green: { deep: [.04, .3, .11], sheen: -.02 } };
 const poolWater = (look) => { const m = waterMat.clone(), L = POOL_LOOKS[look]; for (const k of Object.keys(waterMat.uniforms)) m.uniforms[k] = waterMat.uniforms[k]; m.uniforms.uDeep = { value: new THREE.Vector3(...L.deep) }; m.uniforms.uSheen = { value: L.sheen }; return m; };
 // Each pond has its own flat sheet of the same water, at its own level. One that's down by the river doesn't need one.
 for (const p of WATER.ponds) if (p.level > 0) {
@@ -1676,6 +1678,7 @@ tieTo(CHURCH_HOUSE, (s, p) => {
 const PROP_WALLS = [];   // [ax, az, bx, bz, top, radius], the same as a building's walls
 // A vehicle tests for walls .6 m up, and a wall counts from .25 under its top, so a low one has to stop higher than it's drawn or a car goes through it without touching it. He can still hop it.
 const LOW_WALL = 1;
+let CHAIN_MAT = null;    // the ball field's chain-link, for any other fence
 const FIELDS = [];       // what the map draws under the buildings: { grass, dirt }, as lists of world points
 const leafGeo = new THREE.DodecahedronGeometry(1, 0);
 // One big tree that stands where it really does: clumps over a dome, one draw call and its ink. The leaves stop above where
@@ -1829,7 +1832,7 @@ function shrubs(list, colors) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.setIndex(idx); g.computeVertexNormals();
   const boundsOf = ([ax, az, bx, bz, high]) => new THREE.Box3(new THREE.Vector3(Math.min(ax, bx), Y0, Math.min(az, bz)), new THREE.Vector3(Math.max(ax, bx), Y0 + high, Math.max(az, bz)));
   links.forEach((l, i) => l.prop.boxes.push({ g, first: i * 4, count: 4, box: boundsOf(l), mat: postMat }));
-  const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: '#8d9398', map: tex, alphaTest: .3, side: THREE.DoubleSide, metalness: .3, roughness: .6 }));
+  const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: '#8d9398', map: tex, alphaTest: .3, side: THREE.DoubleSide, metalness: .3, roughness: .6 })); CHAIN_MAT = mesh.material;
   // and the kudzu getting up it, on both sides
   const vines = new Sheet(), leafy = { origin: [0, Y0, 0], axis: [1, 0], pattern: PATTERN.LEAF };
   links.forEach((link, i) => {
@@ -2689,6 +2692,27 @@ function thing(into, kind, parts, x, z, yaw, hp, o = {}) {
   g.position.set(x, Y0 + (o.y ?? 0), z); g.rotation.y = yaw; into.add(g);
   return breakable(kind, hp, () => { if (top) solid(x - hx, x + hx, z - hz, z + hz, Y0 + top); for (const w of o.walls ?? []) { PROP_WALLS.push(w); PROP.walls.push(w); } }, { rigid: true, objs: [g], foot: [x, z], chip: o.chip, broke: o.broke, hit: o.hit });
 }
+// Chain-link anywhere but the ball field, drawn the same: a stretch goes over at a time, with the mesh on it
+function chainLink(group, pts, high = 1.25, spacing = 3) {
+  const postMat = new THREE.MeshStandardMaterial({ color: '#868c91', metalness: .4, roughness: .6 }), links = [];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / spacing)), runs = Math.max(1, Math.round(n / 3)), m = Math.max(1, Math.round(n / runs)), along = (t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    for (let r = 0; r < runs; r++) {
+      const p = along(r / runs), q = along((r + 1) / runs), [ax, az] = atTrue(...p), [bx, bz] = atTrue(...q), nx = bz - az, nz = ax - bx, nl = Math.hypot(nx, nz), link = [ax, az, bx, bz, high];
+      link.prop = breakable('fence', .5, () => {
+        const w = [ax, az, bx, bz, Y0 + high, .06]; PROP_WALLS.push(w); if (PROP) PROP.walls.push(w);
+        addBeam([ax, Y0 + high, az], [bx, Y0 + high, bz], .05, .05, postMat, 1);
+        for (let k = r ? 1 : 0; k <= m; k++) { const [x, z] = atTrue(p[0] + (q[0] - p[0]) * k / m, p[1] + (q[1] - p[1]) * k / m); addBox(postMat, x, Y0 + high / 2, z, .08, high, .08, 1); }
+      }, { rigid: true, line: [ax, az, bx, bz], falls: [nx / nl, nz / nl], chip: '#868c91' });
+      links.push(link);
+    }
+  }
+  const pos = [], uvs = [], idx = [];
+  for (const [ax, az, bx, bz, h] of links) { const n = pos.length / 3, L2 = Math.hypot(bx - ax, bz - az) / .32, Vt = h / .32; pos.push(ax, Y0, az, bx, Y0, bz, bx, Y0 + h, bz, ax, Y0 + h, az); uvs.push(0, 0, L2, 0, L2, Vt, 0, Vt); idx.push(n, n + 1, n + 2, n, n + 2, n + 3); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.setIndex(idx); g.computeVertexNormals();
+  links.forEach((l, i) => l.prop.boxes.push({ g, first: i * 4, count: 4, box: new THREE.Box3(new THREE.Vector3(Math.min(l[0], l[2]), Y0, Math.min(l[1], l[3])), new THREE.Vector3(Math.max(l[0], l[2]), Y0 + l[4], Math.max(l[1], l[3]))), mat: postMat }));
+  group.add(new THREE.Mesh(g, CHAIN_MAT));
+}
 const nearHere = (tx, tz, r) => { const g = new THREE.Group(), [x, z] = atTrue(tx, tz); scene.add(g); DISTANT.push({ obj: g, x, z, r }); return g; };
 // A fence that goes over a length at a time
 const rails = (F, a, b, high, mat) => {
@@ -2996,6 +3020,139 @@ const GEAR_SHED = 75175622, BAT_AT = (() => {
 })();
 const batInReach = () => !S.flags.bat && !BAT_AT.prop.down && houseAt(player.pos.x, player.pos.z)?.id === GEAR_SHED && Math.hypot(BAT_AT.x - player.pos.x, BAT_AT.z - player.pos.z) < 2;
 function takeBat() { S.flags.bat = true; BAT_AT.prop.objs[0].visible = false; BAT_AT.prop.down = true; SFX.play('can.clink'); toast('The bat, with tape on the grip'); }
+// ===== the second trailer from the left, in the row nearest the ball field. In the back there's an old computer, still on. Nobody's named, on it or anywhere.
+const CRT_TRAILER = 76067242, CRT_W = 512, CRT_H = 384;
+const crtTex = textTex([''], CRT_W * 2, CRT_H, '#0d5d63', '#000', '12px sans-serif', { after: (g) => {
+  const FONT = 'Arial, Helvetica, sans-serif', INKY = '#17131c', PAPER = '#f5f3ea';
+  const panel = (x, y, w, h, fill = '#c8c4b8') => { g.fillStyle = fill; g.fillRect(x, y, w, h); g.fillStyle = '#f2efe6'; g.fillRect(x, y, w, 2); g.fillRect(x, y, 2, h); g.fillStyle = '#56534c'; g.fillRect(x, y + h - 2, w, 2); g.fillRect(x + w - 2, y, 2, h); };
+  const say = (t, x, y, px = 20, color = INKY, bold = false, align = 'left') => { g.font = `${bold ? 'bold ' : ''}${px}px ${FONT}`; g.fillStyle = color; g.textAlign = align; g.fillText(t, x, y); };
+  const windowAt = (x, y, w, h, title, px = 18) => { panel(x, y, w, h); g.fillStyle = '#12296e'; g.fillRect(x + 4, y + 4, w - 8, 28); say(title, x + 10, y + 25, px, PAPER, true); panel(x + w - 27, y + 8, 20, 20); say('x', x + w - 17, y + 24, 15, INKY, true, 'center'); };
+  const open = (x, y) => { g.fillStyle = INKY; g.beginPath(); g.moveTo(x, y - 11); g.lineTo(x + 13, y - 11); g.lineTo(x + 6.5, y - 2); g.closePath(); g.fill(); };
+  for (const [ox, caret] of [[0, true], [CRT_W, false]]) {
+    g.save(); g.translate(ox, 0); g.fillStyle = '#0d5d63'; g.fillRect(0, 0, CRT_W, CRT_H);
+    panel(0, CRT_H - 32, CRT_W, 32); say('2:47 AM', CRT_W - 14, CRT_H - 10, 18, INKY, false, 'right');
+    // the away message, the old default, still up
+    windowAt(14, 58, 272, 176, 'Away Message');
+    g.fillStyle = PAPER; g.fillRect(24, 98, 252, 84); say('I am away from my', 32, 128, 23); say('computer right now.', 32, 160, 23);
+    if (caret) { g.fillStyle = INKY; g.fillRect(238, 141, 3, 24); }
+    panel(96, 192, 108, 32); say("I'm Back", 150, 215, 20, INKY, false, 'center');
+    // and everyone they knew
+    windowAt(298, 12, 204, 330, 'ChunkyNet Messenger', 16);
+    g.fillStyle = '#e8842a'; g.beginPath(); g.moveTo(400, 44); g.lineTo(420, 76); g.lineTo(380, 76); g.closePath(); g.fill(); g.fillStyle = INKY; g.fillRect(398, 54, 4, 12); g.fillRect(398, 69, 4, 4);
+    g.fillStyle = PAPER; g.fillRect(308, 84, 184, 200);
+    open(314, 112); say('People (0/41)', 332, 112, 20, INKY, true);
+    open(328, 146); say('Online (0)', 346, 146, 20);
+    open(328, 180); say('Offline (41)', 346, 180, 20);
+    for (const [i, t] of ['Send', 'Chat', 'Info'].entries()) { panel(308 + i * 62, 294, 58, 38); say(t, 337 + i * 62, 320, 18, INKY, false, 'center'); }
+    // the tube: darker at the corners, and lines
+    const v = g.createRadialGradient(CRT_W / 2, CRT_H / 2, CRT_H * .55, CRT_W / 2, CRT_H / 2, CRT_W * .72); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.26)'); g.fillStyle = v; g.fillRect(0, 0, CRT_W, CRT_H);
+    g.fillStyle = 'rgba(0,0,0,.14)'; for (let y = 0; y < CRT_H; y += 3) g.fillRect(0, y, CRT_W, 1);
+    g.restore();
+  }
+} });
+crtTex.repeat.set(.5, 1); crtTex.minFilter = THREE.LinearFilter; crtTex.generateMipmaps = false;
+const crtMat = new THREE.MeshBasicMaterial({ map: crtTex, color: new THREE.Color(.8, .84, .84) });
+let crtOn = true, crtLook = false;
+const CRT = (() => {
+  const F = tilted(-369.1, -565.77, -57.41), room = nearHere(-360, -575, 80), yaw = F.yaw, faces = yaw - Math.PI / 2, fx = Math.sin(faces), fz = Math.cos(faces);
+  const matte = (color) => new THREE.MeshStandardMaterial({ color, roughness: 1 }), stop = (a, b, top = 1, r = .32) => { const [ax, az] = F.at(...a), [bx, bz] = F.at(...b); PROP_WALLS.push([ax, az, bx, bz, Y0 + top, r]); };
+  const stained = matte('#6b3f2a');
+  // outside: the stained deck at the door, open on the side the path comes from
+  F.box(stained, 12.2, .05, 7.25, 5, .1, 2.6, 1); rails(F, [9.7, 8.55], [14.7, 8.55], .95, stained); rails(F, [14.7, 6.05], [14.7, 8.55], .95, stained);
+  // the floor: worn vinyl up front and thin carpet in the back
+  F.box(matte('#4b4036'), 8.7, .02, 2.99, 17.1, .03, 5.8, 0); F.box(matte('#34343e'), 20.95, .02, 2.99, 7.4, .03, 5.8, 0);
+  // the kitchen end
+  const counter = matte('#7a7362'), cupboard = matte('#54402f');
+  F.box(counter, 3.9, .88, .42, 5.2, .05, .62, 1.2); F.box(cupboard, 3.9, .43, .42, 5, .85, .58, 1.2); F.box(cupboard, 3.9, 1.95, .28, 5, .7, .34, 1.2); stop([1.5, .45], [6.3, .45]);
+  F.box(matte('#b9b5a8'), .72, .85, .55, .78, 1.7, .78, 1.2); stop([.72, .3], [.72, .85], 1.7, .42);
+  // a couch across from the door, and something to put your feet on
+  { const [x, z] = F.at(12, .72); thing(room, 'couch', couch(), x, z, yaw, 2, { solid: [2, .85, .7], chip: '#5a3f33' }); }
+  F.box(cupboard, 12, .32, 2.05, 1.1, .05, .55, 1); for (const [u, v] of [[11.55, 1.85], [12.45, 1.85], [11.55, 2.25], [12.45, 2.25]]) F.box(cupboard, u, .15, v, .05, .3, .05, 0); stop([11.6, 2.05], [12.4, 2.05], .4, .3);
+  // low shelves, as far as a wall goes in here, with a way through to the back
+  for (const [v, w] of [[1.1, 2.2], [4.88, 2.2]]) { F.box(cupboard, 17.2, .6, v, .34, 1.2, w, 1.2); stop([17.2, v - w / 2 + .1], [17.2, v + w / 2 - .1], 1.2, .2); }
+  for (const [v, y, color] of [[.5, 1.32, '#a33a3a'], [1.5, 1.28, '#c8c0a8'], [4.3, 1.3, '#3a5a7a'], [5.4, 1.33, '#6a5a3a']]) F.box(matte(color), 17.2, y, v, .28, .22, .5, 1);
+  // the back: the bed along the wall, the discs and two posters with nothing on them anyone would know
+  { const [x, z] = F.at(21.4, .62); thing(room, 'bed', narrowBed(), x, z, yaw - Math.PI / 2, 2, { walls: [[...F.at(20.4, .62), ...F.at(22.4, .62), Y0 + .6, .5]], chip: '#3a2c22' }); }
+  { const [x, z] = F.at(24.42, 5.55); thing(room, 'discs', discRack(), x, z, faces, 1, { solid: [.42, .2, 1.4], chip: '#3a2c22' }); }
+  F.box(matte('#23202a'), 19.4, 1.6, .07, .62, .9, .02, 0); F.box(matte('#b5472a'), 19.4, 1.68, .09, .4, .4, .01, 0);
+  F.box(matte('#d8d0bc'), 21, 1.62, .07, .62, .9, .02, 0); F.box(matte('#2f55b0'), 21, 1.5, .09, .44, .08, .01, 0); F.box(matte('#2f55b0'), 21, 1.72, .09, .44, .08, .01, 0);
+  // the desk against the far wall, off to one side, so that it can be seen past him coming down the length of the place. The chair's been pushed away from it.
+  const [dx, dz] = F.at(24.28, 4.4), [cx, cz] = F.at(23.2, 2.9);
+  const prop = thing(room, 'computer', computerDesk(), dx, dz, faces, 2, { walls: [[...F.at(24.28, 3.75), ...F.at(24.28, 5.05), Y0 + .9, .42]], chip: '#b8af98', broke() { crtOn = false; crtLook = false; crtMat.color.setRGB(.02, .02, .02); glow.visible = wash.visible = false; } });
+  thing(room, 'chair', deskChair(), cx, cz, faces + 1.1, 1, { solid: [.5, .5, 1], chip: '#26262e' });
+  // the glass, bowed the way a tube is
+  const geo = new THREE.PlaneGeometry(GLASS.w, GLASS.h, 8, 6), pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setZ(i, .012 * (1 - (pos.getX(i) / (GLASS.w / 2)) ** 2 * .5 - (pos.getY(i) / (GLASS.h / 2)) ** 2 * .5));
+  const glass = new THREE.Mesh(geo, crtMat); glass.position.set(0, GLASS.y, GLASS.z); prop.objs[0].add(glass);
+  // what it throws on the floor and the wall behind it. There's no real light in here: they're too dear.
+  const pool = (w, h, color) => new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: radialTex, color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const glow = pool(6.4, 5.6, '#3f8c9c'), wash = pool(3.6, 2.8, '#387f90'), [gx, gz] = F.at(22.6, 4), [wx, wz] = F.at(24.66, 4.4);
+  glow.position.set(gx, Y0 + .06, gz); glow.rotation.set(-Math.PI / 2, 0, yaw, 'YXZ'); wash.position.set(wx, Y0 + 1.25, wz); wash.rotation.y = faces; room.add(glow, wash);
+  flushBuckets(80);
+  return { prop, x: dx, z: dz, fx, fz, gx: dx + fx * GLASS.z, gz: dz + fz * GLASS.z, glass, glow, wash, at: F.at };
+})();
+const crtInReach = () => crtOn && !CRT.prop.down && houseAt(player.pos.x, player.pos.z)?.id === CRT_TRAILER && Math.hypot(CRT.x - player.pos.x, CRT.z - player.pos.z) < 2.2;
+// It runs at the boil's rate, and a still of it for anyone who's asked for less motion
+function stepCrt() {
+  if (!crtOn || !CRT.glass.parent.visible) return;
+  const flick = reduceMotion ? 1 : .94 + .06 * hash(Math.floor(time * 12), 13, 307);
+  crtTex.offset.x = !reduceMotion && Math.floor(time * 1.6) % 2 ? .5 : 0;
+  crtMat.color.setRGB(.8 * flick, .84 * flick, .84 * flick);
+  CRT.glow.material.opacity = CRT.wash.material.opacity = flick;
+}
+// Far enough back that all of the glass fits, whichever way up the phone is
+const _crtEye = new THREE.Vector3(), _crtAt = new THREE.Vector3();
+function crtEye() {
+  const up = Math.tan(55 * Math.PI / 360), d = Math.max(GLASS.h * .62 / up, GLASS.w * .6 / (up * camera.aspect));
+  _crtAt.set(CRT.gx, Y0 + GLASS.y, CRT.gz);
+  return _crtEye.set(CRT.gx + CRT.fx * d, Y0 + GLASS.y + .01, CRT.gz + CRT.fz * d);
+}
+// ===== the community pool, gone green, with the low building on its east side and the bare ground to the north of them
+{
+  clearing(-450, -580, -417, -557, 6); clearing(-446, -603, -388, -578, 8); clearing(-420, -578, -388, -561, 8);
+  const pool = WATER.ponds.find((p) => p.id === 'pool-3'), deck = (x0, z0, x1, z1) => { const [ax, az] = atTrue(x0, z0), [bx, bz] = atTrue(x1, z1); addBox(patioMat, (ax + bx) / 2, Y0, (az + bz) / 2, bx - ax, .1, bz - az, 0); };
+  deck(-447.6, -576.4, -432.3, -574.3); deck(-447.6, -567.6, -432.3, -565.8); deck(-447.6, -574.3, -445.9, -567.6); deck(-433, -574.3, -432.3, -567.6); deck(-447.6, -565.8, -431.3, -561);
+  pool.ring.forEach(([ax, az], i) => { const [bx, bz] = pool.ring[(i + 1) % pool.ring.length]; addBeam([ax, Y0 + .05, az], [bx, Y0 + .05, bz], .4, .1, copingMat, 0); });
+  // steps out at either end
+  const F = tilted(-445.9, -574.3, 0);
+  for (const u of [1.4, 11.5]) breakable('ladder', 1, () => { for (const s of [-1, 1]) F.beam([u + s * .22, -.5, .2], [u + s * .22, .95, -.12], .04, .04, shelfMat, .9); for (const y of [-.3, -.02]) F.box(shelfMat, u, y, .12, .46, .03, .1, 0); }, { rigid: true, foot: F.at(u, -.12), chip: '#4a4650' });
+  flushBuckets(110);
+}
+// ===== the church up the road, and the small steeple at the south end of its ridge
+clearing(-590, -7362, -535, -7318, 8);
+{
+  const F = tilted(-571.8, -7339.4, -9), [x, z] = F.at(5.2, -1.2), stage = (w, y0, y1) => addBox(churchMat, x, Y0 + (y0 + y1) / 2, z, w, y1 - y0, w, 1.2);
+  const steeple = breakable('steeple', 3, () => {
+    stage(1.5, 3.8, 6.2); stage(1.75, 6.2, 6.36);
+    for (const [dx, dz, wx, wz] of [[.77, 0, .04, .5], [-.77, 0, .04, .5], [0, .77, .5, .04], [0, -.77, .5, .04]]) addBox(roofMat, x + dx, Y0 + 5.2, z + dz, wx, 1.1, wz, 0);
+  }, { rigid: true, T: 1.3, pivotY: Y0 + 4.2, chip: '#c9c1b4' });
+  tieTo(houseAt(x, z), (s) => { if (damage.gone(s) > .35) breakProp(steeple, 0, 1); });
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(.82, 3.3, 8), churchMat); spire.position.set(x, Y0 + 8, z); outline(spire, INK, 1.2);
+  nearHere(-566, -7342, 230).add(spire); steeple.objs.push(spire);
+  flushBuckets(230);
+}
+// ===== the cemetery. The fence can go over, but nothing else here breaks: it's somebody's. Nothing on the map says what it is, and nothing points to the stone.
+const GRAVES = layGraves(hash), GRAVE_TURN = Math.atan2(CEMETERY.back[0], CEMETERY.back[1]);
+const STONE_WORDS = await (await fetch('data/stone.json')).json();
+const STONE = { x: atTrue(...CEMETERY.stone)[0], z: atTrue(...CEMETERY.stone)[1] };
+const stoneInReach = () => Math.hypot(STONE.x - player.pos.x, STONE.z - player.pos.z) < 1.8;
+let stoneRead = false;
+const stoneWords = () => `<span class="words">${(STONE_WORDS.words || 'Words from a song, imprinted on the stone.').replace(/</g, '&lt;')}</span>`;
+{
+  // cut back as far as it is on the aerial, in steps, with the woods left standing the other side of the road
+  clearing(-466, -7396, -386, -7358, 8); clearing(-430, -7428, -386, -7396, 6); clearing(-413, -7448, -386, -7428, 6); clearing(-448, -7432, -428, -7408, 3, true);
+  const here = nearHere(-425, -7400, 210), [ox, oz] = atTrue(-425, -7400);
+  const geo = mergeGeometries(cemeteryStones(GRAVES, (g) => { const [x, z] = atTrue(g.x, g.z); return [x - ox, z - oz, GRAVE_TURN + g.turn]; }));
+  const mesh = new THREE.Group(); mesh.add(new THREE.Mesh(geo, thingMat), new THREE.Mesh(smoothed(geo), thingLine)); mesh.position.set(ox, Y0, oz); here.add(mesh);
+  for (const g of GRAVES) { const [sx, sz, half, top] = graveSolid(g, GRAVE_TURN), [x, z] = atTrue(sx, sz); solid(x - half, x + half, z - half, z + half, Y0 + top); }
+  for (const pts of CEMETERY.fences) chainLink(here, pts);
+  // the bench by one of the slabs, the two trees they've left, and the dry ground in the middle of it
+  const B = tilted(-435.6, -7400.4, Math.atan2(CEMETERY.along[1], CEMETERY.along[0]) * 180 / Math.PI);
+  breakable('bench', 1, () => { B.box(benchMat, 0, .44, 0, 1.3, .05, .36, 1); B.box(benchMat, 0, .72, -.16, 1.3, .3, .04, 1); for (const u of [-.55, .55]) B.box(poleMat, u, .22, 0, .05, .44, .3, 0); }, { chip: '#6e5238' });
+  flushBuckets(210);
+  bigTree(...atTrue(-446, -7375), { y0: 2.6, y1: 11, R: 6, count: 30, size: 1.5, colors: ['#3a5230', '#2f4a2c', '#4a5a30'], trunk: 5.5 });
+  bigTree(...atTrue(-422.4, -7404.6), { y0: .9, y1: 2.4, R: 1.5, count: 8, size: .7, colors: ['#6e4a2c', '#5a3f2a', '#4a5a30'], trunk: 1.4 });
+}
 indexProps();
 // Where the town's props leave the random sequence, however many there are, so the lantern and the snakes stay as they were in the opening
 rs = 426193737;
@@ -5617,9 +5774,12 @@ function tick(dt, draw = true) {
       const door = !near && !ride && !meat && atGasDoor();
       const jam = !near && !ride && !meat && !door && jamInReach();
       const ball = !near && !ride && !meat && !door && !jam && ballWants(), gear = !near && !ride && !meat && !door && !jam && !ball && batInReach();
-      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : gear && S.flags.sixInARow ? 'Take the bat' : null;
-      if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
-      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (gear && S.flags.sixInARow) takeBat(); else swing(); }
+      if (crtLook && (Math.hypot(input.x, input.y) > .1 || input.sEdge || input.cEdge)) crtLook = false;
+      const crt = !near && !ride && !meat && !door && !jam && !ball && (crtLook || crtInReach()), stone = !near && !ride && !meat && !door && !jam && !ball && stoneInReach();
+      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : gear && S.flags.sixInARow ? 'Take the bat' : null;
+      if (!stone) stoneRead = false;
+      if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
+      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) stoneRead = true; else if (gear && S.flags.sixInARow) takeBat(); else swing(); }
       if (input.sEdge) swing();
       if (input.cEdge) throwOne();
       if (input.nEdge) switchThrown();
@@ -5693,7 +5853,7 @@ function tick(dt, draw = true) {
   for (const c of PICKUPS) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
   if (lootGroup.visible) for (const c of LOOT) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
   for (const f of fires) { const k = .8 + .2 * Math.sin(time * 11 + f.ph) * Math.sin(time * 7.3 + f.ph); f.pl.intensity = (f.duty ? 34 : f.out ? 0 : 12) * k; }
-  stepScreen();
+  stepScreen(); stepCrt();
   beacon.visible = beaconLive && Math.floor(time * 1.2) % 2 === 0; { const dip = Math.random() < .02 && !reduceMotion; gasLight.intensity = (dip ? 2 : 9) * gasPower; gasStrip.material.color.copy(GAS_STRIP).multiplyScalar(dip ? .25 : 1); }
   if (!driving && boomLight <= 0) gLight.intensity = 14 * (.8 + .2 * Math.sin(time * 9.7));
 
@@ -5732,6 +5892,11 @@ function tick(dt, draw = true) {
       V.lerp(_talk.set(A.x + k * (-ux * TALK.back - uz * side * TALK.out), H.y + TALK.up, A.z + k * (-uz * TALK.back + ux * side * TALK.out)), w);
       tgt.lerp(_talk.set(A.x + ux * L * TALK.along, H.y + TALK.look, A.z + uz * L * TALK.along), w);
     }
+    // right up to the glass, and him out of the way while it's there
+    if (crtLook && M !== 'town') crtLook = false;
+    cam.crt = reduceMotion ? +crtLook : clamp((cam.crt ?? 0) + (crtLook ? dt : -dt) * 2.2, 0, 1);
+    if (cam.crt > 0) { const w = sstep(0, 1, cam.crt), eye = crtEye(); V.lerp(eye, w); tgt.lerp(_crtAt, w); }
+    { const away = cam.crt > .5; if (away !== !!cam.away) { cam.away = away; heroRoot.visible = !away; } }
     if (cam.snap) { camera.position.copy(V); cam.snap = false; } else camera.position.lerp(V, 1 - Math.exp(-dt * (M === 'fall' ? 3 : car ? 12 : 7)));
     if (cam.shake > 0) { cam.shake -= dt; camera.position.x += (Math.random() - .5) * cam.shake * .3; camera.position.y += (Math.random() - .5) * cam.shake * .3; }
     camera.lookAt(tgt); { const fov = 55 + (reduceMotion ? 0 : 5 * player.runK + 12 * Math.min(1, Math.abs(car ? car.f : 0) / 30)); if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); } }
@@ -5748,7 +5913,7 @@ function tick(dt, draw = true) {
       if (hallBoard.visible === (home === HALL_HOUSE)) hallBoard.visible = home !== HALL_HOUSE;
       if (postBoard.visible === (home === POST_OFFICE)) postBoard.visible = home !== POST_OFFICE;
       camera.updateMatrixWorld(); _v.copy(heroRoot.position); _v.y += 1; _v.project(camera);
-      G.uSee.value.set((_v.x * .5 + .5) * G.uRes.value.x, (_v.y * .5 + .5) * G.uRes.value.y, _v.z * .5 + .5, G.uRes.value.y * .18); G.uSeeY.value = heroRoot.position.y + .4;
+      G.uSee.value.set((_v.x * .5 + .5) * G.uRes.value.x, (_v.y * .5 + .5) * G.uRes.value.y, _v.z * .5 + .5, cam.crt > 0 ? 0 : G.uRes.value.y * .18); G.uSeeY.value = heroRoot.position.y + .4;
     }
   }
   // ---------------- HUD timers
@@ -5807,6 +5972,7 @@ if (location.hash === '#signs') openSignBoard();
 if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead },
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },
     compound: { JAM, JAM_SHED, DECK, LAWN, spot: screenSpot, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach },
     lures: { LYING, lyingNear, flying, popping, opened, ALARMS, lureSpots, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
