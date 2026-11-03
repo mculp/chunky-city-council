@@ -200,3 +200,9 @@ test('the axis lies along the longest wall', () => {
   assert.ok(Math.abs(Math.abs(ux) - 1) < 1e-9 && Math.abs(uz) < 1e-9);
   assert.deepEqual(boundsOf([[1, 2], [3, -4]]), { x0: 1, x1: 3, z0: -4, z1: 2 });
 });
+
+test('a porch along the whole of a wall keeps its posts out of the doorway', () => {
+  const s = { pts: [[0, 0], [13, 0], [13, 9], [0, 9]], wx: 6.5, wz: 4.5, door: 0, walls: 'siding', roofMat: 'metal', porch: 'wrap', sqm: 117, floors: 1 };
+  const { doors } = wallsOf(s, 0), { x, z } = doors[0], posts = collidersOf(s, 0).filter((w) => w[6]?.startsWith?.('post') || w[5] < .2);
+  for (const [ax, az] of posts) assert.ok(Math.hypot(ax - x, az - (z - 1.95)) > 1, `a post at ${ax}, ${az}, right in the way of the door at ${x}, ${z}`);
+});

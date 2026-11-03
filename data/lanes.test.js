@@ -30,7 +30,7 @@ test('each row is what it says it is', () => {
     assert.ok(r.width > 0 && surfaces.has(r.surface), `${r.id}: ${r.width} wide, ${r.surface}`);
   }
   for (const d of lanes.drives) { assert.equal(d.generated, true, `${d.id} isn't TIGER's, and has to say so`); assert.equal(d.id, `drive_${d.structure}`); }
-  for (const l of lanes.lanes) assert.ok(l.mtfcc && l.linearId, `${l.id} doesn't say what it is in TIGER`);
+  for (const l of lanes.lanes) if (!l.measured) assert.ok(l.mtfcc && l.linearId, `${l.id} doesn't say what it is in TIGER`);
 });
 
 test('a road with two names in TIGER is only here once', () => {

@@ -8,6 +8,8 @@ export const REACH = 14;             // how far from a shore anything cares, on 
 const CELL = 32, ROW = 6;
 const RIVER_LOW = 1.5;               // a shore that gets this low is down by the river, so it's at the river's level
 const SINKS = .3;                    // how far under the lowest of its shore a pond stands
+const POOL_RISE = .38;               // a swimming pool stands this far over `top`, which is just under the level of the ground, with its coping round it
+const POOL_DEEP = 1.7;
 
 export function buildWater(data, map) {
   const shore = new SegGrid(16, REACH), cells = new Map();
@@ -16,7 +18,7 @@ export function buildWater(data, map) {
     const ring = d.ring.map(([x, z]) => map.fromTrue(x, z));
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-    const p = { id: d.id, source: d.source, area: d.area, ring, x0, x1, z0, z1, x: (x0 + x1) / 2, z: (z0 + z1) / 2, level: 0, deep: Math.max(1.1, Math.min(3, Math.sqrt(d.area) / 18)), rows: [] };
+    const p = { id: d.id, source: d.source, area: d.area, pool: d.pool ?? null, ring, x0, x1, z0, z1, x: (x0 + x1) / 2, z: (z0 + z1) / 2, level: 0, deep: d.pool ? POOL_DEEP : Math.max(1.1, Math.min(3, Math.sqrt(d.area) / 18)), rows: [] };
     // the edges each row of the pond crosses, so asking if a point's in it only looks at a few
     ring.forEach(([ax, az], i) => {
       const [bx, bz] = ring[(i + 1) % ring.length];
@@ -60,6 +62,7 @@ export function buildWater(data, map) {
     // Water finds the lowest place on its shore. `ground` is the land as it is without any ponds, and `top` is as high as one can stand.
     settle(ground, top) {
       for (const p of ponds) {
+        if (p.pool) { p.level = top + POOL_RISE; continue; }
         let low = Infinity;
         p.ring.forEach(([ax, az], i) => {
           const [bx, bz] = p.ring[(i + 1) % p.ring.length], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 5));

@@ -2,7 +2,7 @@
 
 `data/lanes.json` holds the smaller roads that `data/roads.json` leaves out, and a drive to every building that needs one, so that nobody has to go through the woods to get to a house. `tools/build_lanes.py` generates it. `src/map.js` loads it into `MAP.lanes`.
 
-There are 215 lanes, 80.8 km of them, and 910 drives, 37.5 km.
+There are 220 lanes, 81.1 km of them, and 908 drives, 37.2 km.
 
 ## Where it comes from
 
@@ -10,8 +10,9 @@ There are 215 lanes, 80.8 km of them, and 910 drives, 37.5 km.
 |---|---|---|
 | Lanes | [TIGER/Line 2025](https://www2.census.gov/geo/tiger/TIGER2025/), the same files as `data/roads.json` | Public domain |
 | Drives | Generated from where the road and the building are | Ours |
+| Measured drives | Measured on USDA's [NAIP aerial](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer), `measured` in `tools/lane_config.json` | Public domain |
 
-Every vertex of a lane is where TIGER has it. Nothing's traced from any imagery.
+Every vertex of a lane is where TIGER has it, apart from the few that say `measured`. Those are somebody's real drive that TIGER hasn't got and a generated one would miss, like the one into the compound on Pine Forest Rd, measured off NAIP in true metres. They come after TIGER's in the file, so adding one doesn't renumber anything, and each starts from the nearest vertex of a road or a lane so that it's joined up. Nothing comes from Google's imagery.
 
 A drive isn't anybody's survey. It goes from the nearest road to beside the door by the shortest way that misses everything, and it bows a little by a hash of whose it is, so that it isn't ruled. It says `generated`, and so does a stretch of track that's had to find its way round a building TIGER has it going through.
 
@@ -91,6 +92,7 @@ Positions are true metres from town center, one row to a line.
 | `points` | number[][] | `[x, z]`. |
 | `paint` | boolean | If it's there, it's been seen to have lines on it. |
 | `generated` | boolean | If it's there, it's not TIGER's. It goes round a building or joins up a piece that's been cut off. |
+| `measured` | boolean | If it's there, it's not TIGER's either. It's a real drive measured off the aerial, and its `linearId` is null. |
 
 ### A drive
 

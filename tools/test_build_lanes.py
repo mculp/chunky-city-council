@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from build_lanes import clear_of_buildings, closed_ends, crossings_of, lane_spec, moves_buildings, rounded, split_off  # noqa: E402
+from build_lanes import clear_of_buildings, closed_ends, crossings_of, lane_spec, measured_lanes, moves_buildings, rounded, split_off  # noqa: E402
 
 CONFIG = {
     "classes": {"S1400named": {"width": 5.5, "surface": "asphalt"}, "S1400": {"width": 4.2, "surface": "gravel"}, "S1740": {"width": 3.2, "surface": "dirt"}},
@@ -99,6 +99,21 @@ class Corners(unittest.TestCase):
         self.assertEqual(out[0], (0, 0))
         self.assertEqual(out[-1], (10, 10))
         self.assertNotIn((10, 0), out)
+
+
+class TestMeasured(unittest.TestCase):
+    def test_starts_from_the_nearest_vertex(self):
+        config = {"measured": [{"width": 4, "surface": "gravel", "points": [[10, 20], [10, 50]]}, {"width": 3, "surface": "gravel", "points": [[10, 50], [30, 50]]}]}
+        first, second = measured_lanes(ROADS, [], config)
+        self.assertEqual(first["points"][0], [0, 0])
+        self.assertTrue(first["measured"])
+        self.assertIsNone(first["linearId"])
+        # already on one: it isn't joined to itself
+        self.assertEqual(second["points"], [[10, 50], [30, 50]])
+
+    def test_too_far_from_anything_stops_the_build(self):
+        with self.assertRaises(SystemExit):
+            measured_lanes(ROADS, [], {"measured": [{"width": 4, "surface": "gravel", "points": [[500, 500], [510, 500]]}]})
 
 
 if __name__ == "__main__":

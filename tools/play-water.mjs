@@ -34,7 +34,7 @@ await g(() => {
 // ---------------- what's in the data is in the game
 const data = await g(() => {
   const sheets = []; G.scene.traverse((o) => { if (o.isMesh && o.material?.uniforms?.uRipG && o.geometry.type !== 'PlaneGeometry') sheets.push(o); });
-  const levels = W.ponds.map((p) => p.level);
+  const levels = W.ponds.filter((p) => !p.pool).map((p) => p.level);
   return { ponds: W.ponds.length, sheets: sheets.length, river: levels.filter((l) => l === 0).length, low: Math.min(...levels), high: Math.max(...levels) };
 });
 console.log(`     ${data.ponds} ponds, between ${data.low.toFixed(2)} and ${data.high.toFixed(2)} high`);

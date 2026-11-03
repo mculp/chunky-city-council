@@ -90,11 +90,20 @@ Word for word, with the street addresses taken out, as everywhere in this file, 
 
 **In the game:** the ice box is rusted through, with one door hanging open and nothing in it, and the coolers along the back are off. The canopy's light still flickers, because the crowd gathers under it and Coop's still there, whatever the store's done. The store still has no name. Coop stays as he is: that he shares a name with someone real is an accident, and nothing about that person goes in the game.
 
-## The compound on Pine Forest Rd
+## A compound
 
 > [the address] ... The Murpheys have a compound here. Two of them will likely play this game and the dad will probably love seeing it because he loves computers and is a nerd and wrote most of the chunky wikipedia page. we need to make sure we get these houses shaped right. my friend and his wife live in a cabin to the north with an outdoor theater and his wife has an art studio. to the south is the mom and dad's really big, nice house with a swimming pool. and the shed nearest the road is where another of the brothers and I and my brother and other people used to get together and jam out - drums, guitars, keyboards, amps, all that stuff in there
 
 They sent a picture of this from above too, and it stays out of the repo.
+
+**In the game:** it's there, shaped from the public aerial, and the real drive in with it, which the road data hadn't got. Nothing in the game says whose it is, and where it is isn't written next to the name here. Decided around it:
+
+- Which building's which is read off the picture. The big one with the pool is the mom and dad's, the long one across the gravel from it is the cabin, the white one by the fenced lawn is the art studio, and the lawn is the outdoor theater. The cabin's more to the west of the big house than north of it, so that's waiting on a yes.
+- The theater has a screen at the lawn's open end and two rows of lawn chairs, and a projector at the far end runs a film's countdown over and over, because any film would be somebody's. Its light brings the crowd, the same as the gas station's canopy, so they end up standing on the lawn. Breaking the projector ends it.
+- The studio has an easel, a bench of paint and canvases against the wall. The paintings are invented, and they aren't of anything.
+- The room in the shed has drums, a guitar, a bass, a keyboard, amps, mic stands, a couch and moving blankets on the back wall. The button plays whichever one he's by, one hit at a time, and it's loud enough for the crowd to come. There aren't any songs in it.
+- The walls can't be seen from above, so their colors are guesses.
+- The digger, the boat, the propane tank and the parked trucks are all on the picture. They aren't anyone's in particular, and the tank goes up if it's broken.
 
 ## The land
 
