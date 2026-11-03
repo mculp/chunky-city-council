@@ -12,7 +12,7 @@ export const LURES = {
   // a bean can's a smell rather than a noise, and he smells of it that bit less himself afterwards
   can: { name: 'beans', word: 'BEANS', speed: 14, up: 6, reach: 24, seconds: 12 },
 };
-export const ALARM = { reach: 80, seconds: 15, kinds: new Set(['car', 'pickup']) };
+export const ALARM = { reach: 80, seconds: 15, kinds: new Set(['car', 'pickup', 'coupe']) };
 // What a lure does for anyone caught where the crowd ends up. They don't take it well: a point of trust, at most once every couple of minutes.
 export const SWARM = { lure: 16, close: 9, count: 4, remember: 40, again: 120 };
 

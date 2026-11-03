@@ -38,6 +38,7 @@ DRIVE_CLEAR = 1.8  # Past the wall of a building that isn't the one it's going t
 RIVER_GAP = 22  # Past the middle of the river, where the bank has come up to the level of the land.
 OFF_THE_WALL = 3.5  # Where it stops.
 MEASURED_JOIN = 45  # How far the end of a drive measured on the aerial can be from the road it leaves.
+SHORT_GAP = 350  # How long a stretch of one road can be and still be filled in because there's road in the game at both ends of it.
 FRONTING = 3  # Past the road's edge. A building this close doesn't need a drive.
 SHED_NEAR = 35  # A shed this close to a building that's been seen to shares its way in.
 LINK_REACH = 300  # How far a piece of track that's been cut off will look for the rest.
@@ -175,6 +176,20 @@ def choose_roads(roads, network, config, world):
         network.way_back(network.points[fi][k], chosen)
     print("joined up", round(sum(math.dist(network.xz[f][k], network.xz[f][k + 1]) for f, k in chosen) / 1000, 1), "km")
 
+    # A road doesn't stop for a stretch just because nothing on that stretch needed it
+    def fill_short_gaps():
+        by_feature = defaultdict(list)
+        for fi, k in chosen:
+            by_feature[fi].append(k)
+        for fi, ks in by_feature.items():
+            ks.sort()
+            for a, b in zip(ks, ks[1:]):
+                gap = range(a + 1, b)
+                if not gap or any(network.is_kept(fi, k) or not clear_of_the_opening(fi, k) for k in gap):
+                    continue
+                if sum(math.dist(network.xz[fi][k], network.xz[fi][k + 1]) for k in gap) <= SHORT_GAP:
+                    chosen.update((fi, k) for k in gap)
+
     # and then round again for what that brings in, until it stops bringing in any more
     raw, _ = download(bbox_of(roads), False)
     centres = []
@@ -184,6 +199,7 @@ def choose_roads(roads, network, config, world):
             centres.append((cx, cz))
     print("buildings in the source", len(centres))
     for round_no in range(12):
+        fill_short_gaps()
         for fi, k in chosen:
             bound.mark(network.xz[fi][k], network.xz[fi][k + 1])
         here = defaultdict(list)

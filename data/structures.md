@@ -97,6 +97,8 @@ Positions are true metres from town center. `MAP.fromTrue` takes them to the wor
 
 The compound on Pine Forest Rd is the most worked over of these, because it's come to matter that its buildings are the right shape. The source has two footprints there, both wrong, and the rest of it isn't in the source at all, so it's all measured on the aerial as rectangles on the one grid they're laid out on. A building with two roofs is two buildings a few centimetres apart, because `wingsOf` would run one ridge through both. One of them, the long tan building in the clearing, is newer than any public aerial, so it's the one thing here placed by eye off the map and rounded off, and it says so in its `what`. Measure it properly when a newer NAIP comes out. What can't be seen from above, which is mostly the walls, is a guess.
 
+The yard off True Light Rd is measured the same way. The source has its three footprints, about 4 or 5 m south of where the aerial has them, which is about what TIGER's road is off by there too, so it may well be the aerial that's out. They're drawn square on the grid they're laid out on, because `wingsOf` gives up on anything else and puts one roof over the lot. Two more in the source have nothing standing at them on the aerial, so they're marked gone. The walls are a guess here too.
+
 | Field | What it does |
 |---|---|
 | `seen` | Must be `true` for the rest of the note to count. |
