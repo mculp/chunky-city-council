@@ -54,6 +54,7 @@ Night in an abandoned Mississippi town.
 - **Surfaces:** flat-shaded terrain and foliage, ink outlines on buildings and steel, kudzu `#3f7a35` over everything left standing.
 - **The bridge:** a rusted truss with an orange rail (`#d76a2c`).
 - **The town:** the Mercantile, gas station, church, water tower, and a rusted boxcar on a railroad with dark ties (`#2a1d18`).
+- **Street signs:** green blades with cream Bungee, the colours of the town sign, reading the names in the road graph. Each corner blade runs along the road it names, as real ones do, and the roadside ones face whoever's walking that way. A phone in portrait sees a narrow slice of the road, so they're big enough to read before they slide off screen.
 - **The river:** it takes glowing rings where things hit it. Cottonmouths open white mouths before striking.
 - **The lantern:** the one from the local legend, a guide light with nobody holding it that leads him across the river.
 
