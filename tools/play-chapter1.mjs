@@ -18,30 +18,66 @@ const snap = async (name) => { if (shots) { await mkdir(shots, { recursive: true
 await g(() => {
   const G = __game;
   G.pause();
-  // Heads for `next()`, a world position or null when it's done. A wall in the way gets walked around, and only
-  // running out of ways round it, or time, counts as blocked.
-  window.walk = (next, seconds = 400) => {
+  // The way from one place to another on foot, over a half-metre grid, or null if there's no way. It only looks as far as it has to.
+  const CELL = .5;
+  const pathTo = (x0, z0, x1, z1, reach) => {
+    const pass = (i, j) => { const x = i * CELL, z = j * CELL, f = G.floorAt(x, z); return f > 2.2 && !G.blocked(x, z, f); };
+    const key = (i, j) => (i + 32768) * 65536 + j + 32768, S0 = [Math.round(x0 / CELL), Math.round(z0 / CELL)], T = [Math.round(x1 / CELL), Math.round(z1 / CELL)];
+    const came = new Map([[key(...S0), null]]);
+    let now = [S0], found = null;
+    for (let round = 0; round < reach / CELL && now.length && !found; round++) {
+      const next = [];
+      for (const [i, j] of now) {
+        if (Math.abs(i - T[0]) <= 2 && Math.abs(j - T[1]) <= 2) { found = [i, j]; break; }
+        for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const k = key(i + a, j + b);
+          if (came.has(k) || !pass(i + a, j + b)) continue;
+          came.set(k, [i, j]); next.push([i + a, j + b]);
+        }
+      }
+      now = next;
+    }
+    if (!found) return null;
+    const path = [];
+    for (let c = found; c; c = came.get(key(...c))) path.push([c[0] * CELL, c[1] * CELL]);
+    return path.reverse();
+  };
+  const clearLine = (x0, z0, x1, z1) => { const l = Math.hypot(x1 - x0, z1 - z0); for (let t = 0; t <= l; t += .5) { const x = x0 + (x1 - x0) * t / l, z = z0 + (z1 - z0) * t / l, f = G.floorAt(x, z); if (f < 2.2 || G.blocked(x, z, f)) return false; } return true; };
+  // Heads for `next()`, a world position or null when it's done. A wall in the way gets walked around, and it only
+  // counts as blocked if there's no way round it, or it runs out of time.
+  window.walk = (next, seconds = 500) => {
     const P = G.player.pos, dt = 1 / 30, began = G.state().time;
-    let t = 0, last = [P.x, P.z], lastT = 0, side = 1, tries = 0, round = 0;
+    let t = 0, last = [P.x, P.z], lastT = 0, way = null, target = null, rounds = 0;
     G.key('w', true);
     while (t < seconds) {
       const to = next(); if (!to) break;
-      let yaw = Math.atan2(P.x - to[0], P.z - to[1]);    // the camera sits behind the way he's going
-      if (round > 0) { yaw += side * Math.PI / 2; round -= dt; }
-      G.look(yaw); G.sim(dt, dt); t += dt;
-      if (t - lastT > 1) {
-        if (round <= 0 && Math.hypot(P.x - last[0], P.z - last[1]) < 1) { tries++; side = -side; round = 1 + tries * .5; if (tries > 12) { G.key('w', false); return { blocked: true, at: [P.x, P.z], t, tries }; } }
-        last = [P.x, P.z]; lastT = t;
+      // the straight line until it's blocked, then the way round
+      if (!way || Math.hypot(to[0] - target[0], to[1] - target[1]) > 4) {
+        const far = Math.hypot(to[0] - P.x, to[1] - P.z);
+        target = to; way = clearLine(P.x, P.z, to[0], to[1]) ? [to] : null;
+        // a long way off, a leg at a time, and only the whole way if that doesn't get anywhere
+        if (!way && far > 90) way = pathTo(P.x, P.z, P.x + (to[0] - P.x) * 70 / far, P.z + (to[1] - P.z) * 70 / far, 140);
+        if (!way) way = pathTo(P.x, P.z, to[0], to[1], far * 1.6 + 260);
+        if (way && way.length > 1) rounds++;
+        if (!way) { G.key('w', false); return { blocked: true, noWay: true, at: [P.x, P.z], to, t, rounds }; }
       }
+      // on to the furthest point of it he can see from here
+      if (way.length > 1) { let k = 0; for (let i = Math.min(way.length - 1, 40); i > 0; i--) if (clearLine(P.x, P.z, way[i][0], way[i][1])) { k = i; break; } if (k) way.splice(0, k); else if (Math.hypot(way[0][0] - P.x, way[0][1] - P.z) < .35) way.shift(); }
+      const aim = way.length > 1 || !clearLine(P.x, P.z, to[0], to[1]) ? way[0] : to;
+      if (way.length === 1 && aim === way[0] && aim !== to && Math.hypot(aim[0] - P.x, aim[1] - P.z) < .5) way = null;
+      G.look(Math.atan2(P.x - aim[0], P.z - aim[1])); G.sim(dt, dt); t += dt;
+      if (!way) continue;
+      if (t - lastT > 1.5) { if (Math.hypot(P.x - last[0], P.z - last[1]) < 1) { way = null; if (++rounds > 40) break; } last = [P.x, P.z]; lastT = t; }
     }
     G.key('w', false); G.step(.1);
-    return { blocked: t >= seconds, at: [P.x, P.z], t: G.state().time - began, tries };
+    return { blocked: t >= seconds || rounds > 40, at: [P.x, P.z], t: G.state().time - began, tries: rounds };
   };
   window.walkTo = (x, z, reach = .6) => walk(() => (Math.hypot(G.player.pos.x - x, G.player.pos.z - z) > reach ? [x, z] : null));
   // Follows the arrow until it goes away, which means he's got there. It only updates on a drawn step.
   window.followArrow = () => {
     const P = G.player.pos; G.step(.1);
-    return walk(() => { G.step(1 / 12); if (!G.pointer.on) return null; const a = G.cam.yaw - G.pointer.deg * Math.PI / 180; return [P.x - Math.sin(a) * 10, P.z - Math.cos(a) * 10]; });
+    // where it's pointing, from which way and how far
+    return walk(() => { G.step(1 / 12); if (!G.pointer.on) return null; const a = G.cam.yaw - G.pointer.deg * Math.PI / 180, far = Math.max(G.pointer.dist, 1); return [P.x - Math.sin(a) * far, P.z - Math.cos(a) * far]; });
   };
   window.press = (k = 'e') => { G.key(k, true); G.step(.05); G.key(k, false); return G.state(); };
 });
@@ -101,13 +137,13 @@ d = await talk('coop', 'Coop'); s = await st(); check('paid', s.flags.paid === t
 // the rest of the cans, in through the Mercantile's door
 const store = await g(() => { const P = __game.places.store; return [P.x, P.z]; });
 const at = ([x, z]) => [x + store[0], z + store[1]];
-for (const [name, x, z, reach] of [['the Mercantile door', ...at([40, -4]), .6], ['inside', ...at([40.6, -8]), .5], ['the shelf can', ...at([43, -8.7]), .3]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
+for (const [name, x, z, reach] of [['the Mercantile door', ...at([42.4, -3.8]), .6], ['inside', ...at([42.4, -7.6]), .5], ['the shelf can', ...at([43, -8.95]), .25]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
 await snap('06-store');
 check('picked up the can on the near shelf', (await can(1)).got, await can(1));
-for (const [name, x, z, reach] of [['past the counter', ...at([40.6, -11.3]), .4], ['the back shelf can', ...at([38.2, -11.7]), .3]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
+for (const [name, x, z, reach] of [['round to the gap', ...at([40.6, -8.2]), .4], ['past the counter', ...at([40.6, -11.3]), .4], ['the back shelf can', ...at([38.2, -11.7]), .3]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
 check('picked up the can on the back shelf', (await can(0)).got, await can(0));
-for (const [name, x, z, reach] of [['back past the counter', ...at([40.6, -11.3]), .4], ['out the door', ...at([40, -4]), .6]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
-for (const [i, name] of [[2, 'the can by the trailers'], [3, 'the can under the water tower']]) {
+for (const [name, x, z, reach] of [['back past the counter', ...at([40.6, -11.3]), .4], ['and through the gap', ...at([40.6, -8.2]), .4], ['to the door', ...at([42.4, -7.6]), .5], ['out the door', ...at([42.4, -3.8]), .6]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
+for (const [i, name] of [[2, 'the can by the mobile home'], [3, 'the can under the water tower']]) {
   const c = await can(i); r = await walkTo(c.x, c.z, .8); blockedCheck(name, r);
   check(`picked up ${name}`, (await can(i)).got, await can(i));
 }

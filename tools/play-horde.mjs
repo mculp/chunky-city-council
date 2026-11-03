@@ -47,11 +47,11 @@ check('none in the church', placed.every((p) => !p.church), placed.filter((p) =>
 
 // ---------------- left alone they wander, and stay where they should
 const roam = await g(() => {
-  const G = __game, H = G.horde, M = G.map, st = G.places.store;
+  const G = __game, H = G.horde, M = G.map;
   G.S.beans = 0; G.player.inv = 1e4;
   const from = H.all.map((z) => [z.x, z.z]), r = { worst: 0, wet: 0, out: 0, inside: 0, church: 0 };
   // past each part of town in turn, which is what wakes them
-  for (const x of [st.x - 200, st.x, st.x + 200, st.x + 400]) {
+  for (const x of [420, 620, 820, 1020]) {
     G.place(x, 30);
     for (let i = 0; i < 40; i++) {
       G.sim(1, 1 / 30);
@@ -128,7 +128,8 @@ r = await g(() => ({ inv: __game.player.inv, stunned: states()[5], prompt: docum
 check(`they're thrown off and stunned (${r.stunned}), and he gets a moment`, r.stunned >= 1 && r.inv > 0 && r.prompt, r);
 await snap('04-free');
 r = await g(() => {
-  const G = __game, P = G.player.pos, x = P.x - 80, z = P.z;
+  // back onto the road, where there's nothing in his way
+  const G = __game, P = G.player.pos, x = P.x - 80, z = G.map.zAt('us_80', x);
   let caught = false; run(x, z, 12, () => { caught = caught || G.S.mode === 'grabbed'; return caught; });
   return { caught, near: nearest(), mode: G.S.mode };
 });
