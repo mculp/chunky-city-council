@@ -119,7 +119,7 @@ export function createFolks(data, { store = null, looks = [] } = {}) {
 
     mood: moodOf,
     shock,
-    word: (w) => WORDS[moodOf(w)],
+    word: (w) => (w.calm && moodOf(w) === BE ? 'leaves you be' : WORDS[moodOf(w)]),
     // How far off they can make him out. It averages out at what the crowd's tuning says, and someone with a grudge can tell from further.
     senses: (w, mood) => (.85 + w.temper * .3) * (mood === AFTER ? 1 + Math.min(1.5, shock(w)) : 1),
     // How much longer they'll keep going after they've lost him

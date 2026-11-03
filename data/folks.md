@@ -4,6 +4,15 @@ Everyone in the crowd is somebody. `data/folks.json` holds what they can be call
 
 The cast in `data/cast.json` are separate. They've always remembered him, through their meters.
 
+There are four kinds of people, and they're all the same people underneath, with the same list of names and the same memory:
+
+| Who | Numbered from | Where | What's in `src/` |
+|---|---|---|---|
+| The crowd | 0 | The streets of town, once Chapter 1 ends, after him if they can tell he's there | `horde.js` |
+| People at home | 1000 | At their door, in the house and in the yard, as soon as he's in town, and they've got nothing against him | `horde.js`, with `home` |
+| Someone driving | 5000 | Along the real roads, on their own side | `traffic.js` |
+| Kids on four-wheelers | 6000 | The lanes and drives | `traffic.js` |
+
 ## Who they are
 
 Everyone has a number, starting from 0, and everything about who they are comes from that number. Nothing's saved for this, and it never changes:
@@ -76,6 +85,42 @@ And whatever their mood:
 - **Home.** Once someone's further from home than they'd go, they go back. That's 40 m for a homebody and up to 440 m for someone who isn't.
 
 None of them say anything. They don't have any new lines, and whether they should, with a real AI model, is the owner's call.
+
+## People at home
+
+Four in five houses and trailers have someone at home, and three in ten of those have two. That's about 900 people, and they come out when he gets within 190 m of the house, since working out where a door is takes a moment. Nobody's kept out of a house for what's there except:
+
+- the places set aside for how they really are, which is `SET_ASIDE` in `index.html`, the same rectangles that keep parked cars off them
+- two other properties and a trailer, by structure id
+- anything within 400 m of Stuckey's Bridge, which is left quiet for the opening and the light
+
+Which people are at which house comes from their order, and the names are worked out when the game runs. No name's written next to a structure id anywhere.
+
+They go between the door, inside and the yard, staying 8 to 26 seconds in each. The less of a homebody they are, the more often they go off down the road for a bit and come back. Everything else is the same as the crowd, with one difference: **they've got nothing against him until he gives them something.** They can't make him out at all and don't answer the swarm's call, but a noise brings them to look, and being hit or being there when he hits someone changes them just as it would anyone. Then they're after him or keeping away like anyone else, so a fight in somebody's yard is noticed.
+
+## Someone driving
+
+`src/traffic.js` keeps 3 or 4 of them around him, from 150 to 260 m off, on their way towards where he is, and forgets them past 300 m. They use the road graph and not the lanes, and stay off Griffis Fountain Rd, since that's the old truss bridge he wakes on, and off anything within 400 m of Stuckey's Bridge.
+
+They aren't driven by the physics. They follow the line of the road, on their own side, a little behind it, which is what rounds off a junction. So nobody ever drives into a tree. Each one's a real entry in `VEHICLES` to everything else: he walks into it, it's drawn the same way, a truck shoves it and a blast wrecks it.
+
+- **Speed:** 24 m/s on US 80, 15 on the wider streets, 11 on the narrow ones, and 8 off the asphalt, more or less depending on their temper.
+- **Junctions:** a little under half the time, they turn, slowing to 7 m/s.
+- **What's in the road:** every fifth of a second they look along the line ahead for him, anyone else, and anything solid, far enough to stop comfortably.
+- **Going round:** 1.5 to 5 seconds after stopping, soonest for the worst tempers, they go round on the other side at walking pace if it's clear and nobody's coming, then get back over. If there's no way round after 9 seconds, they turn back.
+- **End of the road:** they turn back.
+
+Someone who's **after him** doesn't stop for him. Anyone hit on the road gets out of the way of a truck the same as on foot, which is `truck` in what they remember.
+
+Anything happening to the vehicle puts the driver out of it, on foot, in the road, with what happened to them remembered: being rammed, a blast, a swing at the car, or him getting in once it's stopped. Then it's only a car, and it stays where it is. He can't get into anything that's moving.
+
+The driver's drawn from the same instances as the crowd, sitting where he'd sit, and redrawn every frame with the vehicle. The lights are a point per lamp and a patch of light on the ground, in two draw calls, and a lamp fades out within a few metres of the camera, where a point would fill the screen.
+
+## Kids on four-wheelers
+
+2 or 3 of them, on any lane or drive that isn't paved, 7 to 12 m/s. At the end of one they go on to the next if there's one within 4 m, and otherwise come back.
+
+**Nothing can touch them.** They aren't in `horde.active` or marked as solid, so a swing, a blast or a truck goes through, and they can't be got off the four-wheeler. They get out of his way first: from 16 m on foot or 30 m if he's driving, they go 7 m off the line, away from his side, or turn back if there's no room. They're smaller, and hardly gone at all.
 
 ## Schema of `data/folks.json`
 
