@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "meters": {
+    "trust": { "min": -3, "max": 3 },
+    "fear": { "min": 0, "max": 3 },
+    "debt": { "min": -12, "max": 12 }
+  },
+  "remember": ["metCoop", "metTre", "chain", "tank"],
+  "cast": [
+    { "id": "coop", "name": "Coop", "short": "Coop", "known": true },
+    { "id": "tre", "name": "Tre", "short": "Tre", "known": true },
+    { "id": "odessa", "name": "Miss Odessa", "short": "Odessa", "known": true }
+  ],
+  "ties": [
+    { "when": "coop", "meter": "trust", "then": "odessa", "factor": -0.5 },
+    { "when": "odessa", "meter": "trust", "then": "coop", "factor": -0.5 }
+  ],
+  "events": {
+    "swept": [
+      { "set": "swept" },
+      { "meter": "odessa.trust", "by": 2 },
+      { "beans": 3, "why": "Odessa" }
+    ]
+  },
+  "dialogue": {
+    "coop": {
+      "who": "coop",
+      "opts": [
+        { "say": "I need beans.", "to": "coopBeans", "when": ["!has:bag", "!delivered", "!opened"] },
+        { "say": "Who runs Chunky now?", "to": "coopWho" },
+        { "say": "Nice chain.", "to": "coopChain", "when": ["!chain"] },
+        { "say": "Later." }
+      ],
+      "lines": [
+        {
+          "when": ["opened", "!coopMad"],
+          "say": "You opened my bag? Get off my concrete before I sell you for parts.",
+          "do": [{ "set": "coopMad" }, { "meter": "coop.trust", "by": -1 }],
+          "opts": [{ "say": "Fair." }]
+        },
+        {
+          "when": ["delivered", "!paid"],
+          "say": "Tre says you didn't peek. Respect. Three cans, like I said.",
+          "do": [{ "set": "paid" }, { "beans": 3, "why": "Coop" }, { "meter": "coop.trust", "by": 1 }, { "meter": "coop.debt", "by": 3 }],
+          "opts": [{ "say": "Pleasure doing business." }]
+        },
+        { "when": ["metCoop"], "say": "What you need, river boy?" },
+        { "say": "Look what the river spat out. You smell like catfish and bad decisions.", "do": [{ "set": "metCoop" }] }
+      ]
+    },
+    "coopBeans": {
+      "who": "coop",
+      "lines": [{ "say": "Beans ain't free. Nothing's been free since the grid went down. Three cans for a favor." }],
+      "opts": [{ "say": "What favor?", "to": "coopFavor" }, { "say": "I'll find my own." }]
+    },
+    "coopFavor": {
+      "who": "coop",
+      "lines": [{ "say": "Walk this bag to Tre at the boxcar by the tracks. Don't open it. Don't ask what's in it." }],
+      "opts": [{ "say": "Give me the bag.", "to": "coopBag" }, { "say": "Nah. I'm good.", "to": "coopNah" }]
+    },
+    "coopBag": {
+      "who": "coop",
+      "lines": [{ "say": "Smart. Tracks are south, across the road. Tre bites, so don't.", "do": [{ "item": "bag", "by": 1 }, { "meter": "coop.trust", "by": 1 }] }],
+      "opts": [{ "say": "On it." }]
+    },
+    "coopNah": {
+      "who": "coop",
+      "lines": [{ "say": "Your funeral. Again.", "do": [{ "meter": "coop.trust", "by": -1 }] }],
+      "opts": [{ "say": "..." }]
+    },
+    "coopWho": {
+      "who": "coop",
+      "lines": [{ "say": "Odessa runs the church. Tre runs the tracks. I run the gas. Gas runs everything." }],
+      "opts": [{ "say": "Back", "to": "coop" }]
+    },
+    "coopChain": {
+      "who": "coop",
+      "lines": [{ "say": "Appreciate you. Real recognize real. Still ain't giving you beans.", "do": [{ "set": "chain" }, { "meter": "coop.trust", "by": 1 }] }],
+      "opts": [{ "say": "Back", "to": "coop" }]
+    },
+    "tre": {
+      "who": "tre",
+      "lines": [
+        {
+          "when": ["has:bag"],
+          "say": "That Coop's bag? Hand it here.",
+          "opts": [{ "say": "Here.", "to": "treHand" }, { "say": "Open the bag.", "to": "treOpen" }]
+        },
+        {
+          "when": ["delivered"],
+          "say": "Watch the water, river boy. They remember faces.",
+          "opts": [{ "say": "What's in the tank?", "to": "treTank" }, { "say": "Later." }]
+        },
+        {
+          "when": ["opened"],
+          "say": "Watch the water, river boy. They remember faces.",
+          "opts": [{ "say": "What's in the tank?", "to": "treTank" }, { "say": "Later." }]
+        },
+        {
+          "say": "You climbed out the Chunky with the cottonmouths in it? They let you live. That means something.",
+          "do": [{ "when": ["!metTre"], "meter": "tre.fear", "by": 1 }, { "set": "metTre" }],
+          "opts": [{ "say": "What's in the tank?", "to": "treTank" }, { "say": "Got beans?", "to": "treNo" }, { "say": "Later." }]
+        }
+      ]
+    },
+    "treTank": {
+      "who": "tre",
+      "lines": [{ "say": "Moccasin. I named her Odessa. Don't tell Odessa.", "do": [{ "when": ["!tank"], "meter": "tre.trust", "by": 1 }, { "set": "tank" }] }],
+      "opts": [{ "say": "Back", "to": "tre" }]
+    },
+    "treNo": {
+      "who": "tre",
+      "lines": [{ "say": "Not for strangers. Get right with Coop first." }],
+      "opts": [{ "say": "Back", "to": "tre" }]
+    },
+    "treHand": {
+      "who": "tre",
+      "lines": [{ "say": "Good. Two cans for not being nosy. Go get paid.", "do": [{ "item": "bag", "by": -1 }, { "set": "delivered" }, { "meter": "tre.trust", "by": 1 }, { "beans": 2, "why": "Tre" }, { "meter": "coop.debt", "by": -3 }] }],
+      "opts": [{ "say": "Bet." }]
+    },
+    "treOpen": {
+      "who": "tre",
+      "lines": [{ "say": "...It's beans. It was always beans. Take four, and know Coop ain't gonna love you.", "do": [{ "item": "bag", "by": -1 }, { "set": "opened" }, { "meter": "coop.trust", "by": -2 }, { "meter": "tre.trust", "by": -1 }, { "beans": 4, "why": "the bag" }, { "meter": "coop.debt", "by": 4 }] }],
+      "opts": [{ "say": "Worth it." }]
+    },
+    "odessa": {
+      "who": "odessa",
+      "opts": [
+        { "say": "Can I get some beans?", "to": "odBeans", "when": ["!swept"] },
+        { "say": "Coop gave me a bag for Tre.", "to": "odTold", "when": ["has:bag", "!toldOdessa"] },
+        { "say": "Later." }
+      ],
+      "lines": [
+        { "when": ["swept"], "say": "Stay off that bridge at night, baby. The lantern man walks it." },
+        { "say": "Baby, you look like you've been through it. The Lord loves a quitter who un-quits." }
+      ]
+    },
+    "odBeans": {
+      "who": "odessa",
+      "lines": [{ "say": "Pantry's for folks who help. Grab that broom and sweep my steps." }],
+      "opts": [{ "say": "Sweep the steps.", "do": "sweep" }, { "say": "Not right now." }]
+    },
+    "odTold": {
+      "who": "odessa",
+      "lines": [{ "say": "Mm. Coop's been running that bag since the grid fell. It's beans, sugar. Everybody in Chunky is selling beans.", "do": [{ "set": "toldOdessa" }, { "meter": "odessa.trust", "by": 1 }, { "meter": "coop.trust", "by": -1 }] }],
+      "opts": [{ "say": "Back", "to": "odessa" }]
+    }
+  }
+}

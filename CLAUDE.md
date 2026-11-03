@@ -27,6 +27,7 @@ Read `docs/art-direction.md` before changing anything visible. `reference/stucke
 ## Data
 
 - Game data is JSON under `data/`, such as `data/roads.json`, with its schema documented alongside it.
+- Dialogue and the relationship meters are in `data/cast.json`, documented in `data/cast.md`.
 - Scripts that generate it go in `tools/`. Commit the generated JSON. Raw downloads such as TIGER zips go in `data/raw/`, which is gitignored.
 - Python tools run from a `.venv/` at the repo root, also gitignored, with dependencies pinned in `tools/requirements.txt`. Don't install anything globally.
 

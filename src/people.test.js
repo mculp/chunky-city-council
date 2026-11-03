@@ -1,0 +1,141 @@
+// The relationship system and the cast file it runs on.
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createPeople, checkCast, parseCondition } from './people.js';
+
+const data = JSON.parse(readFileSync(new URL('../data/cast.json', import.meta.url)));
+const memory = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) }; };
+const ctx = () => { const c = { flags: {}, items: {}, beans: 0, addBeans: (n) => { c.beans += n; } }; return c; };
+
+describe('the cast file', () => {
+  test('has nothing that would only go wrong in play', () => assert.deepEqual(checkCast(data), []));
+
+  test('the check can fail', () => {
+    const broken = JSON.parse(JSON.stringify(data));
+    broken.dialogue.coopWho.opts[0].to = 'nowhere';
+    broken.dialogue.coopNah.lines[0].do[0].meter = 'coop.love';
+    assert.equal(checkCast(broken).length, 2);
+  });
+
+  test('every node can be reached from someone you can talk to', () => {
+    const seen = new Set(), walk = (id) => {
+      if (seen.has(id)) return; seen.add(id);
+      for (const o of [...data.dialogue[id].opts || [], ...data.dialogue[id].lines.flatMap((l) => l.opts || [])]) if (o.to) walk(o.to);
+    };
+    for (const c of data.cast) walk(c.id);
+    assert.deepEqual(Object.keys(data.dialogue).filter((id) => !seen.has(id)), []);
+  });
+});
+
+describe('meters', () => {
+  test('stop at their limits', () => {
+    const p = createPeople(data);
+    p.change('tre', 'trust', 99); assert.equal(p.get('tre', 'trust'), 3);
+    p.change('tre', 'fear', -5); assert.equal(p.get('tre', 'fear'), 0);
+  });
+
+  test('helping one person costs you with another, but falling out earns nothing back', () => {
+    const p = createPeople(data);
+    p.change('coop', 'trust', 2); assert.equal(p.get('odessa', 'trust'), -1);
+    p.change('coop', 'trust', -2); assert.equal(p.get('odessa', 'trust'), -1);
+    assert.equal(p.get('tre', 'trust'), 0);
+  });
+
+  test('a tie doesn\'t set off another tie', () => {
+    const p = createPeople(data);
+    p.change('coop', 'trust', 1);
+    assert.equal(p.get('coop', 'trust'), 1);
+  });
+});
+
+describe('saving', () => {
+  test('meters, remembered flags and who you\'ve met survive a reload', () => {
+    const store = memory(), c = ctx(), p = createPeople(data, { store });
+    p.apply([{ meter: 'tre.trust', by: 2 }, { set: 'tank' }, { set: 'delivered' }], c); p.meet('tre');
+    const q = createPeople(data, { store });
+    assert.equal(q.get('tre', 'trust'), 2);
+    assert.deepEqual(q.flags(), { tank: true }, 'a flag that belongs to one run isn\'t kept');
+    assert.ok(q.known().some((x) => x.id === 'tre'));
+  });
+
+  test('a person with no meters yet starts at zero', () => {
+    const store = memory();
+    createPeople(data, { store }).change('tre', 'trust', 1);
+    const more = { ...data, cast: [...data.cast, { id: 'new', name: 'New', short: 'New' }] };
+    const q = createPeople(more, { store });
+    assert.equal(q.get('new', 'trust'), 0); assert.equal(q.get('tre', 'trust'), 1);
+    assert.ok(!q.known().some((x) => x.id === 'new'), 'and they aren\'t shown until you meet them');
+  });
+
+  test('a save that can\'t be read counts as no save', () => {
+    const store = memory(); store.setItem(`chunky.people.v${data.version}`, '{not json');
+    assert.equal(createPeople(data, { store }).get('coop', 'trust'), 0);
+    store.setItem(`chunky.people.v${data.version}`, JSON.stringify({ meters: { coop: { trust: 'lots', fear: 99 } } }));
+    const p = createPeople(data, { store });
+    assert.equal(p.get('coop', 'trust'), 0); assert.equal(p.get('coop', 'fear'), 3);
+  });
+
+  test('a browser that won\'t store anything still plays', () => {
+    const store = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); }, removeItem() { throw new Error('denied'); } };
+    const p = createPeople(data, { store }); p.change('coop', 'trust', 1);
+    assert.equal(p.get('coop', 'trust'), 1); assert.equal(p.hasSave(), false);
+    p.forget(); assert.equal(p.get('coop', 'trust'), 0);
+    const none = createPeople(data); none.change('coop', 'trust', 1); assert.equal(none.get('coop', 'trust'), 1);
+  });
+
+  test('forgetting wipes it', () => {
+    const store = memory(), p = createPeople(data, { store }); p.change('coop', 'trust', 1);
+    assert.ok(p.hasSave()); p.forget(); assert.ok(!p.hasSave());
+    assert.equal(createPeople(data, { store }).get('coop', 'trust'), 0);
+  });
+});
+
+describe('dialogue', () => {
+  test('conditions read flags, items, meters and beans', () => {
+    assert.deepEqual(parseCondition('!metCoop'), { flag: 'metCoop', not: true });
+    assert.deepEqual(parseCondition('has:bag'), { item: 'bag', not: false });
+    assert.deepEqual(parseCondition('coop.trust >= 1'), { who: 'coop', meter: 'trust', op: '>=', value: 1 });
+    assert.deepEqual(parseCondition('beans < 3'), { what: 'beans', op: '<', value: 3 });
+    assert.throws(() => parseCondition('coop.trust !! 3'));
+    const p = createPeople(data), c = ctx(); c.items.bag = 1; c.beans = 3; p.change('tre', 'trust', 1);
+    assert.ok(p.check(['has:bag', '!metCoop', 'tre.trust >= 1', 'beans >= 3'], c));
+    assert.ok(!p.check(['has:bag', 'metCoop'], c));
+    c.items.bag = 0; assert.ok(p.check(['!has:bag'], c));
+  });
+
+  test('the first line whose conditions hold is the one said', () => {
+    const p = createPeople(data), c = ctx();
+    assert.match(p.line('coop', c).say, /Look what the river spat out/);
+    p.apply(p.line('coop', c).do, c);
+    assert.match(p.line('coop', c).say, /What you need, river boy/);
+    c.flags.delivered = true;
+    assert.match(p.line('coop', c).say, /Three cans, like I said/);
+  });
+
+  test('options come and go with their conditions', () => {
+    const p = createPeople(data), c = ctx(), says = () => p.line('coop', c).opts.map((o) => o.say);
+    assert.ok(says().includes('I need beans.')); assert.ok(says().includes('Nice chain.'));
+    c.items.bag = 1; c.flags.chain = true;
+    assert.ok(!says().includes('I need beans.')); assert.ok(!says().includes('Nice chain.'));
+  });
+
+  test('effects move beans, items and meters, and can have conditions of their own', () => {
+    const p = createPeople(data), c = ctx();
+    p.apply(p.line('treHand', c).do, c);
+    assert.equal(c.beans, 2); assert.equal(c.items.bag, -1); assert.ok(c.flags.delivered);
+    assert.equal(p.get('tre', 'trust'), 1); assert.equal(p.get('coop', 'debt'), -3);
+    const first = p.line('tre', ctx());
+    const fresh = createPeople(data), d = ctx();
+    fresh.apply(first.do, d); fresh.apply(first.do, d);
+    assert.equal(fresh.get('tre', 'fear'), 1, 'only the first meeting counts');
+  });
+
+  test('the whole favor nets Coop out of your debt', () => {
+    const p = createPeople(data), c = ctx();
+    for (const id of ['coopBag', 'treHand']) p.apply(p.line(id, c).do, c);
+    assert.equal(p.get('coop', 'debt'), -3);
+    p.apply(p.line('coop', c).do, c);
+    assert.equal(p.get('coop', 'debt'), 0); assert.equal(c.beans, 5); assert.equal(c.items.bag, 0);
+  });
+});

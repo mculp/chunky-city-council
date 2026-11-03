@@ -54,7 +54,7 @@ await g(() => { const c = __game.npcs.coop; __game.place(c.x, c.z - 1.5); });
 st = await step(.1); check('talk prompt', /Coop/.test(st.prompt), st.prompt);
 await key('e'); st = await step(.05); await key('e', false); check('coop talks', st.dialog?.who === 'Coop', st.dialog); await snap('coop');
 st = await g(() => __game.choose(0)); check('beans ask', /Beans ain/.test(st.dialog?.say), st.dialog);
-st = await g(() => __game.choose(0)); st = await g(() => __game.choose(0)); check('got the bag', st.flags.bag === true, st.flags);
+st = await g(() => __game.choose(0)); st = await g(() => __game.choose(0)); check('got the bag', st.items.bag === 1, st.items);
 st = await g(() => __game.choose(0)); check('dialog closed', st.mode === 'town' && /Tre/.test(st.obj), [st.mode, st.obj]);
 await g(() => { const c = __game.npcs.tre; __game.place(c.x + .5, c.z - 1.5); });
 st = await step(.1); await key('e'); st = await step(.05); await key('e', false); check('tre talks', st.dialog?.who === 'Tre', st.dialog);
@@ -72,6 +72,21 @@ const cans = await g(() => __game.pickups.length);
 for (let i = 0; i < cans && st.beans < 12; i++) { await g((i) => { const c = __game.pickups[i]; __game.place(c.x, c.z); }, i); st = await step(.2); }
 check('twelve beans', st.beans >= 12, st.beans);
 st = await step(2); check('chapter ends', st.mode === 'end', st.mode); await snap('end');
+
+// what you've built with people outlasts the page, and a run's own business doesn't
+const before = st.people;
+check('coop and tre moved', before.coop.trust !== 0 && before.tre.trust !== 0, before);
+await page.reload({ waitUntil: 'load' }); await page.waitForFunction(() => window.__game, null, { timeout: 30000 });
+st = await g(() => __game.state());
+check('meters survive a reload', JSON.stringify(st.people) === JSON.stringify(before), [st.people, before]);
+check('a run\'s own flags don\'t', !st.flags.delivered && !st.flags.swept && st.beans === 0, [st.flags, st.beans]);
+check('remembered flags do', st.flags.metCoop === true, st.flags);
+check('the title offers to forget', await page.isVisible('#forget'), null); await snap('title-saved');
+await page.click('#forget');
+st = await g(() => __game.state());
+check('forgetting clears everyone', st.people.coop.trust === 0 && !st.flags.metCoop && !(await page.isVisible('#forget')), st.people);
+await page.reload({ waitUntil: 'load' }); await page.waitForFunction(() => window.__game, null, { timeout: 30000 });
+st = await g(() => __game.state()); check('and it stays forgotten', st.people.coop.trust === 0, st.people);
 
 check('no console errors', errors.length === 0, errors);
 await close();

@@ -33,8 +33,13 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .objpoint[hidden]{display:none}
 .objpoint i{display:block;width:14px;height:18px;background:var(--rust);clip-path:polygon(50% 0,100% 100%,50% 72%,0 100%)}
 .obj{font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);padding:6px 10px;max-width:min(58vw,360px);text-align:right;line-height:1.4}
-.rep{display:grid;grid-template-columns:auto auto;gap:3px 10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);padding:6px 9px}
-.rep span:nth-child(odd){color:var(--dusk)}
+.rep{font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);pointer-events:auto;max-width:min(58vw,360px)}
+.rep-head{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;min-height:30px;padding:4px 9px;margin:0;background:none;border:0;border-radius:0;box-shadow:none;color:var(--cream);font:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.rep-list{display:grid;grid-template-columns:auto auto;gap:3px 10px;padding:0 9px 7px;max-height:38vh;overflow-y:auto;justify-items:end}
+.rep-list[hidden]{display:none}
+.rep-name{color:var(--dusk);justify-self:start}
+.rep-note{grid-column:1/-1;color:var(--dusk);font-size:9px;letter-spacing:.04em;margin-top:-2px}
+@media (pointer:coarse){.rep-head{min-height:40px}}
 .pips{letter-spacing:2px;font-variant-numeric:tabular-nums}
 #prompt{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom, 0px) + 176px);transform:translateX(-50%);z-index:4;pointer-events:none;
   font-family:var(--f-display);font-size:15px;letter-spacing:.03em;background:var(--panel);border:1px solid var(--line);padding:8px 14px;white-space:nowrap;text-align:center}
@@ -59,6 +64,8 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .pbox p{margin:0;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dusk);line-height:1.6}
 .pbox .big{font-family:var(--f-display);font-size:18px;letter-spacing:.04em;background:var(--rust);color:var(--ink);border:3px solid var(--ink);box-shadow:0 5px 0 var(--ink);padding:12px 26px}
 .pbox .big:active{transform:translateY(3px);box-shadow:0 2px 0 var(--ink)}
+.pbox .forget{background:none;border:0;padding:8px 12px;color:var(--dusk);font-size:12px;letter-spacing:.06em;text-decoration:underline;text-underline-offset:3px;-webkit-tap-highlight-color:transparent}
+.pbox .forget[hidden]{display:none}
 .keys .t{display:none}
 @media (pointer:coarse){.keys .k{display:none}.keys .t{display:inline}}
 #dialog{position:fixed;left:0;right:0;bottom:0;z-index:7;padding:0 max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 16px) max(16px, env(safe-area-inset-left, 0px))}
@@ -93,7 +100,7 @@ body.talking .ctl{visibility:hidden}
   <div class="right">
     <div class="obj" id="obj" hidden></div>
     <div class="objpoint" id="objPoint" hidden><i id="objArrow"></i><span id="objDist"></span></div>
-    <div class="rep" id="rep" hidden></div>
+    <div class="rep" id="rep" hidden><button id="repHead" class="rep-head" aria-label="People"></button><div id="repList" class="rep-list"></div></div>
   </div>
 </div>
 <div id="prompt" hidden></div>
@@ -108,6 +115,7 @@ body.talking .ctl{visibility:hidden}
     <h1>Chunky <span>2026</span></h1>
     <p>Chapter 1 · Cut Down</p>
     <button class="big" id="start">Start</button>
+    <button class="forget" id="forget" hidden>Forget everyone</button>
     <p class="keys"><span class="k">WASD or arrows move · E acts · Space boosts and jumps · drag to look</span><span class="t">Left thumb moves · A acts · B boosts and jumps · drag to look</span></p>
   </div>
 </div>
@@ -133,6 +141,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { loadMap } from './src/map.js';
+import { createPeople } from './src/people.js';
 
 const $ = (id) => document.getElementById(id);
 await Promise.race([document.fonts.load('40px Bungee').catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
@@ -1779,7 +1788,13 @@ function readInput() {
 }
 
 // ================================================================ game state + UI
-const S = { mode: 'title', hp: 3, beans: 0, rep: { coop: 0, tre: 0, odessa: 0 }, flags: {}, collapse: -99, sweep: 0, talkTo: null, removedNoose: false };
+const S = { mode: 'title', hp: 3, beans: 0, items: {}, flags: {}, collapse: -99, sweep: 0, talkTo: null, removedNoose: false };
+// A private window can refuse storage outright, and then nothing's saved
+let saveStore = null; try { saveStore = localStorage; } catch { /* not saved */ }
+const people = createPeople(await (await fetch('data/cast.json')).json(), { store: saveStore });
+Object.assign(S.flags, people.flags());
+// what dialogue reads and changes
+const played = { flags: S.flags, items: S.items, get beans() { return S.beans; }, addBeans };
 const player = { pos: new THREE.Vector3(), vy: 0, yaw: Math.PI, grounded: true, inv: 0, stamina: 1, boostT: 0, kb: new THREE.Vector2(), fallV: new THREE.Vector3(), lastSafe: new THREE.Vector3() };
 const cam = { yaw: -.6, pitch: .28, shake: 0, snap: false };
 let toastT = 0, cardT = 0;
@@ -1831,14 +1846,25 @@ function hudVitals() {
   setHidden('stam', S.mode !== 'swim'); $('stamFill').style.transform = `scaleX(${player.stamina.toFixed(2)})`;
   const town = S.mode === 'town' || S.mode === 'dialog' || S.mode === 'sweep' || S.mode === 'end';
   setHidden('beans', !town); setHTML('beans', `Beans ${S.beans}/12`); setHidden('rep', !town);
-  if (town) {
-    const pips = (v) => '■'.repeat(Math.max(0, v + 3)) + '□'.repeat(Math.max(0, 3 - v));
-    setHTML('rep', `<span>Coop</span><span class="pips">${pips(S.rep.coop)}</span><span>Tre</span><span class="pips">${pips(S.rep.tre)}</span><span>Odessa</span><span class="pips">${pips(S.rep.odessa)}</span>`);
-  }
+  if (town) drawPeople();
 }
+const pips = (v) => { const n = clamp(Math.round(v), -3, 3); return '■'.repeat(n + 3) + '□'.repeat(3 - n); };
+// Open on a desktop, shut on a phone, where a shut panel shows whoever just changed for a moment
+let peopleOpen = !touchUI, changedId = null, changedUntil = 0;
+function drawPeople() {
+  if (people.recent) { changedId = people.recent; people.recent = null; changedUntil = time + 3; }
+  const known = people.known(), changed = !peopleOpen && time < changedUntil && people.person(changedId);
+  setHTML('repHead', changed ? `<span class="rep-name">${changed.short}</span><span class="pips">${pips(people.get(changed.id, 'trust'))}</span>` : `<span class="rep-name">People ${known.length}</span><span>${peopleOpen ? '▾' : '▸'}</span>`);
+  setHidden('repList', !peopleOpen);
+  if (peopleOpen) setHTML('repList', known.map((c) => {
+    const fear = Math.round(people.get(c.id, 'fear')), debt = people.get(c.id, 'debt');
+    const note = [fear > 0 && `Afraid of you ${fear}`, debt > 0 && `You owe ${debt}`, debt < 0 && `Owes you ${-debt}`].filter(Boolean).join(' · ');
+    return `<span class="rep-name">${c.short}</span><span class="pips">${pips(people.get(c.id, 'trust'))}</span>${note ? `<span class="rep-note">${note}</span>` : ''}`;
+  }).join(''));
+}
+$('repHead').addEventListener('click', () => { peopleOpen = !peopleOpen; changedUntil = 0; drawPeople(); });
 function flash() { const f = $('flash'); f.style.transition = 'none'; f.style.opacity = '.45'; requestAnimationFrame(() => { f.style.transition = ''; f.style.opacity = '0'; }); }
 function glitch(p, d) { if (!reduceMotion) { triggerBurst(p, d, false, false); stepBurst(); } }
-function rep(who, d) { S.rep[who] = clamp(S.rep[who] + d, -3, 3); }
 function addBeans(n, why) { S.beans += n; toast(`+${n} beans${why ? ' · ' + why : ''}`); if (S.beans >= 12 && !S.flags.ended) { S.flags.ended = true; after(1.4, endChapter); } }
 
 function hurt(dir, kind) {
@@ -1859,53 +1885,18 @@ $('retry').addEventListener('click', () => {
   else if (S.flags.bridgeStarted) startBridge(); else startSwim(true);
 });
 
-// ---------------- dialogue
-const DLG = {
-  coop: () => {
-    if (S.flags.opened && !S.flags.coopMad) return { who: 'Coop', say: 'You opened my bag? Get off my concrete before I sell you for parts.', fx: () => { S.flags.coopMad = true; rep('coop', -1); }, opts: [['Fair.', null]] };
-    if (S.flags.delivered && !S.flags.paid) return { who: 'Coop', say: 'Tre says you didn\'t peek. Respect. Three cans, like I said.', fx: () => { S.flags.paid = true; addBeans(3, 'Coop'); rep('coop', 1); }, opts: [['Pleasure doing business.', null]] };
-    const opts = [];
-    if (!S.flags.bag && !S.flags.delivered && !S.flags.opened) opts.push(['I need beans.', 'coopBeans']);
-    opts.push(['Who runs Chunky now?', 'coopWho']);
-    if (!S.flags.chain) opts.push(['Nice chain.', 'coopChain']);
-    opts.push(['Later.', null]);
-    return { who: 'Coop', say: S.flags.metCoop ? 'What you need, river boy?' : 'Look what the river spat out. You smell like catfish and bad decisions.', fx: () => { S.flags.metCoop = true; }, opts };
-  },
-  coopBeans: () => ({ who: 'Coop', say: 'Beans ain\'t free. Nothing\'s been free since the grid went down. Three cans for a favor.', opts: [['What favor?', 'coopFavor'], ['I\'ll find my own.', null]] }),
-  coopFavor: () => ({ who: 'Coop', say: 'Walk this bag to Tre at the boxcar by the tracks. Don\'t open it. Don\'t ask what\'s in it.', opts: [['Give me the bag.', 'coopBag'], ['Nah. I\'m good.', 'coopNah']] }),
-  coopBag: () => ({ who: 'Coop', say: 'Smart. Tracks are south, across the road. Tre bites, so don\'t.', fx: () => { S.flags.bag = true; rep('coop', 1); }, opts: [['On it.', null]] }),
-  coopNah: () => ({ who: 'Coop', say: 'Your funeral. Again.', fx: () => rep('coop', -1), opts: [['...', null]] }),
-  coopWho: () => ({ who: 'Coop', say: 'Odessa runs the church. Tre runs the tracks. I run the gas. Gas runs everything.', opts: [['Back', 'coop']] }),
-  coopChain: () => ({ who: 'Coop', say: 'Appreciate you. Real recognize real. Still ain\'t giving you beans.', fx: () => { S.flags.chain = true; rep('coop', 1); }, opts: [['Back', 'coop']] }),
-  tre: () => {
-    if (S.flags.bag) return { who: 'Tre', say: 'That Coop\'s bag? Hand it here.', opts: [['Here.', 'treHand'], ['Open the bag.', 'treOpen']] };
-    if (S.flags.delivered || S.flags.opened) return { who: 'Tre', say: 'Watch the water, river boy. They remember faces.', opts: [['What\'s in the tank?', 'treTank'], ['Later.', null]] };
-    return { who: 'Tre', say: 'You climbed out the Chunky with the cottonmouths in it? They let you live. That means something.', opts: [['What\'s in the tank?', 'treTank'], ['Got beans?', 'treNo'], ['Later.', null]] };
-  },
-  treTank: () => ({ who: 'Tre', say: 'Moccasin. I named her Odessa. Don\'t tell Odessa.', fx: () => { if (!S.flags.tank) { S.flags.tank = true; rep('tre', 1); } }, opts: [['Back', 'tre']] }),
-  treNo: () => ({ who: 'Tre', say: 'Not for strangers. Get right with Coop first.', opts: [['Back', 'tre']] }),
-  treHand: () => ({ who: 'Tre', say: 'Good. Two cans for not being nosy. Go get paid.', fx: () => { S.flags.bag = false; S.flags.delivered = true; rep('tre', 1); addBeans(2, 'Tre'); }, opts: [['Bet.', null]] }),
-  treOpen: () => ({ who: 'Tre', say: '...It\'s beans. It was always beans. Take four, and know Coop ain\'t gonna love you.', fx: () => { S.flags.bag = false; S.flags.opened = true; rep('coop', -2); rep('tre', -1); addBeans(4, 'the bag'); }, opts: [['Worth it.', null]] }),
-  odessa: () => {
-    const opts = [];
-    if (!S.flags.swept) opts.push(['Can I get some beans?', 'odBeans']);
-    if (S.flags.bag && !S.flags.toldOdessa) opts.push(['Coop gave me a bag for Tre.', 'odTold']);
-    opts.push(['Later.', null]);
-    return { who: 'Miss Odessa', say: S.flags.swept ? 'Stay off that bridge at night, baby. The lantern man walks it.' : 'Baby, you look like you\'ve been through it. The Lord loves a quitter who un-quits.', opts };
-  },
-  odBeans: () => ({ who: 'Miss Odessa', say: 'Pantry\'s for folks who help. Grab that broom and sweep my steps.', opts: [['Sweep the steps.', '@sweep'], ['Not right now.', null]] }),
-  odTold: () => ({ who: 'Miss Odessa', say: 'Mm. Coop\'s been running that bag since the grid fell. It\'s beans, sugar. Everybody in Chunky is selling beans.', fx: () => { S.flags.toldOdessa = true; rep('odessa', 1); rep('coop', -1); }, opts: [['Back', 'odessa']] })
-};
+// ---------------- dialogue: the words and what they do are in data/cast.json
+const ACTIONS = { sweep: () => startSweep() };
 function openDialog(id) {
-  const node = DLG[id](); if (node.fx) node.fx();
+  const node = people.line(id, played); people.meet(node.whoId); people.apply(node.do, played);
   S.mode = 'dialog'; HP.speed = 0; $('dialog').hidden = false; prompt(null);
   $('dWho').textContent = node.who; $('dSay').textContent = node.say;
   const box = $('dOpts'); box.innerHTML = '';
-  node.opts.forEach(([label, next], i) => {
-    const b = document.createElement('button'); b.textContent = (touchUI ? '' : (i + 1) + '. ') + label;
+  node.opts.forEach((opt, i) => {
+    const b = document.createElement('button'); b.textContent = (touchUI ? '' : (i + 1) + '. ') + opt.say;
     b.addEventListener('click', () => {
-      if (next === '@sweep') { closeDialog(); startSweep(); }
-      else if (next) openDialog(next); else closeDialog();
+      if (opt.do) { closeDialog(); ACTIONS[opt.do](); }
+      else if (opt.to) openDialog(opt.to); else closeDialog();
     });
     box.appendChild(b);
   });
@@ -1918,7 +1909,7 @@ const standing = (npc) => ({ x: npc.root.position.x, z: npc.root.position.z });
 // Where the next beans are: whoever or whatever's nearest. Someone you're standing next to has already had their say.
 function nextBeans() {
   const left = PICKUPS.filter((c) => !c.got).map((c) => ({ x: c.x, z: c.z, hint: '' }));
-  if (!S.flags.bag && !S.flags.delivered && !S.flags.opened) left.push({ ...standing(NPCS.coop), hint: `Coop is at the gas station on ${street('us_80')}` });
+  if (!(S.items.bag > 0) && !S.flags.delivered && !S.flags.opened) left.push({ ...standing(NPCS.coop), hint: `Coop is at the gas station on ${street('us_80')}` });
   if (!S.flags.swept) left.push({ ...standing(NPCS.odessa), hint: `Miss Odessa is at the church on ${street('church_st')}` });
   const away = (o) => Math.hypot(o.x - player.pos.x, o.z - player.pos.z), far = left.filter((o) => away(o) > 6);
   return (far.length ? far : left).sort((a, b) => away(a) - away(b))[0];
@@ -1927,15 +1918,15 @@ function townObjective() {
   if (S.flags.ended) { objective('Chunky is yours. For now.'); return; }
   if (!S.flags.arrived) { objective(`Follow ${street('us_80')} into town`, standing(NPCS.coop)); return; }
   const count = `Stock up on beans (${S.beans}/12)`;
-  if (S.flags.bag) objective(`${count} · Take Coop's bag to Tre at the boxcar, south of ${street('us_80')}`, standing(NPCS.tre));
+  if (S.items.bag > 0) objective(`${count} · Take Coop's bag to Tre at the boxcar, south of ${street('us_80')}`, standing(NPCS.tre));
   else if (S.flags.delivered && !S.flags.paid) objective(`${count} · Go get paid by Coop at the gas station on ${street('us_80')}`, standing(NPCS.coop));
   else { const next = nextBeans(); objective(next.hint ? `${count} · ${next.hint}` : count, next); }
 }
 function startSweep() { S.mode = 'sweep'; S.sweep = 0; HP.kind = 'sweep'; player.pos.set(68.5 + PLACES.church.x, Y0 + .3, -6.9 + PLACES.church.z); player.yaw = 0; }
 function endChapter() {
   S.mode = 'end'; prompt(null); $('dialog').hidden = true;
-  const r = S.rep, best = Object.entries(r).sort((a, b) => b[1] - a[1])[0];
-  $('endP').textContent = `Coop ${r.coop >= 0 ? '+' : ''}${r.coop} · Tre ${r.tre >= 0 ? '+' : ''}${r.tre} · Odessa ${r.odessa >= 0 ? '+' : ''}${r.odessa}. ${best[1] > 0 ? (best[0] === 'odessa' ? 'Miss Odessa' : best[0][0].toUpperCase() + best[0].slice(1)) + ' has your back.' : 'Nobody trusts you yet.'}`;
+  const known = people.known().map((c) => ({ c, trust: Math.round(people.get(c.id, 'trust')) })), best = [...known].sort((a, b) => b.trust - a.trust)[0];
+  $('endP').textContent = `${known.map(({ c, trust }) => `${c.short} ${trust >= 0 ? '+' : ''}${trust}`).join(' · ')}. ${best.trust > 0 ? best.c.name + ' has your back.' : 'Nobody trusts you yet.'}`;
   $('end').hidden = false;
 }
 $('again').addEventListener('click', () => { $('end').hidden = true; S.mode = 'town'; townObjective(); });
@@ -2147,7 +2138,7 @@ function tick(dt, draw = true) {
   if (M === 'sweep') {
     if (input.a) S.sweep = Math.min(1, S.sweep + dt / 3.2);
     prompt(`Hold ${KA} to sweep`, S.sweep); HP.kind = 'sweep';
-    if (S.sweep >= 1) { prompt(null); S.flags.swept = true; rep('odessa', 2); S.mode = 'town'; HP.kind = 'run'; addBeans(3, 'Odessa'); openDialog('odessa'); }
+    if (S.sweep >= 1) { prompt(null); S.mode = 'town'; HP.kind = 'run'; people.apply(people.data.events.swept, played); openDialog('odessa'); }
   }
   // ---------------- hero placement
   if (M === 'swim' || M === 'land' || M === 'bridge' || M === 'town' || M === 'sweep' || M === 'dialog' || M === 'end' || (M === 'fail' && !S.flags.bridgeStarted)) {
@@ -2221,6 +2212,8 @@ function updateWorld() {
 let paused = TEST;
 function loop() { if (paused) return; tick(Math.min(clock.getDelta(), .05)); requestAnimationFrame(loop); }
 $('start').addEventListener('click', () => { $('title').hidden = true; startHang(); });
+$('forget').hidden = !people.hasSave();
+$('forget').addEventListener('click', () => { people.forget(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
 // first frame: him hanging behind the title
 heroRoot.position.copy(ANCHOR); poseHero(0); drawPlanks();
 for (const s of SNAKES) s.update(.016); deckSnake.update(.016);
@@ -2231,7 +2224,7 @@ requestAnimationFrame(loop);
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, pointer, chunks: () => chunks.size,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, pointer, people, chunks: () => chunks.size,
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
     topDown({ x0, z0, x1, z1, scale, everywhere }) {
@@ -2271,7 +2264,7 @@ if (TEST) {
     // the same as step without drawing, for walking long distances
     sim(seconds = 1 / 60, dt = 1 / 60) { paused = true; for (let i = 0, n = Math.max(1, Math.round(seconds / dt)); i < n; i++) tick(dt, false); return this.state(); },
     state() {
-      return { mode: S.mode, time, hp: S.hp, beans: S.beans, rep: { ...S.rep }, flags: { ...S.flags }, kind: HP.kind, cut: HP.cut, pos: player.pos.toArray(), yaw: player.yaw, stamina: player.stamina, grounded: player.grounded, hero: heroRoot.position.toArray(), cam: camera.position.toArray(), burst: burstOn, uBurst: G.uBurst.value, obj: $('obj').textContent, toast: $('toast').classList.contains('show') ? $('toast').textContent : '', card: $('card').classList.contains('show') ? $('cardH').textContent : '', prompt: $('prompt').hidden ? '' : $('prompt').textContent, dialog: $('dialog').hidden ? null : { who: $('dWho').textContent, say: $('dSay').textContent, opts: [...$('dOpts').children].map(b => b.textContent) } };
+      return { mode: S.mode, time, hp: S.hp, beans: S.beans, people: people.snapshot(), items: { ...S.items }, flags: { ...S.flags }, kind: HP.kind, cut: HP.cut, pos: player.pos.toArray(), yaw: player.yaw, stamina: player.stamina, grounded: player.grounded, hero: heroRoot.position.toArray(), cam: camera.position.toArray(), burst: burstOn, uBurst: G.uBurst.value, obj: $('obj').textContent, toast: $('toast').classList.contains('show') ? $('toast').textContent : '', card: $('card').classList.contains('show') ? $('cardH').textContent : '', prompt: $('prompt').hidden ? '' : $('prompt').textContent, dialog: $('dialog').hidden ? null : { who: $('dWho').textContent, say: $('dSay').textContent, opts: [...$('dOpts').children].map(b => b.textContent) } };
     },
     // phases by name, set up the way play reaches them
     jump(phase) {
