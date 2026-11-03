@@ -1,12 +1,41 @@
 // The relationship system and the cast file it runs on.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { createPeople, checkCast, parseCondition } from './people.js';
 
 const data = JSON.parse(readFileSync(new URL('../data/cast.json', import.meta.url)));
 const memory = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) }; };
 const ctx = () => { const c = { flags: {}, items: {}, beans: 0, addBeans: (n) => { c.beans += n; } }; return c; };
+
+// The owner: "the only time in history this set of words was arranged"
+describe('what Robby said', () => {
+  const WORDS = 'hey man, help me get these flies out of here so we can cook some deer meat';
+
+  test('it\'s the owner\'s words, exactly', () => assert.equal(data.dialogue.robby.lines[0].say, WORDS));
+
+  test('and they\'re nowhere else in the game\'s data', () => {
+    for (const f of readdirSync(new URL('../data/', import.meta.url)).filter((n) => n.endsWith('.json'))) {
+      const text = readFileSync(new URL(`../data/${f}`, import.meta.url), 'utf8').toLowerCase(), times = text.split(WORDS).length - 1;
+      assert.equal(times, f === 'cast.json' ? 1 : 0, f);
+      if (f !== 'cast.json') assert.doesNotMatch(text, /deer meat|flies out of here/, f);
+    }
+  });
+
+  test('he says it the once, and that\'s remembered, even after coming back to the game', () => {
+    const store = memory(), c = ctx(), first = createPeople(data, { store }), said = first.line('robby', c);
+    assert.equal(said.say, WORDS);
+    first.apply(said.do, c);
+    assert.equal(first.line('robby', c).say, '...');
+    const back = { ...ctx(), flags: createPeople(data, { store }).flags() };
+    assert.equal(createPeople(data, { store }).line('robby', back).say, '...');
+  });
+
+  test('and he\'s got nothing else to say', () => {
+    assert.equal(data.dialogue.robby.lines.length, 2);
+    assert.deepEqual(data.dialogue.robby.opts, [{ say: '...' }]);
+  });
+});
 
 describe('the cast file', () => {
   test('has nothing that would only go wrong in play', () => assert.deepEqual(checkCast(data), []));

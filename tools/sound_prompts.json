@@ -143,6 +143,7 @@
     "amb.wind": { "seconds": 20, "loop": true, "influence": 0.6, "prompt": "steady wind blowing through dead pine trees at dusk, constant hiss and rustle of needles, close and clear, no birds, no music" },
     "amb.river": { "seconds": 20, "loop": true, "influence": 0.4, "prompt": "slow wide muddy river flowing around old bridge pilings, gentle lapping, no birds, no music" },
     "amb.crickets": { "seconds": 20, "loop": true, "influence": 0.4, "prompt": "Southern summer night, steady chorus of crickets and distant katydids, no frogs, no birds, no music" },
+    "amb.flies": { "seconds": 8, "loop": true, "influence": 0.6, "prompt": "a cloud of flies buzzing in the open air, close up, a steady droning buzz with single flies passing near, no voices, no music, no wind", "uneven": true },
     "amb.fire": { "seconds": 10, "loop": true, "influence": 0.6, "prompt": "large wood fire burning steadily, soft constant roar of flames with lots of crackling and popping all the way through, close up, no wind", "uneven": true },
     "engine.car": { "seconds": 6, "loop": true, "prompt": "old sedan engine idling at constant revs, same loudness from start to finish, no revving, no gear changes, exhaust close up", "influence": 0.6 },
     "engine.pickup": { "seconds": 6, "loop": true, "prompt": "big old V8 pickup truck engine idling steadily, deep rumble, constant revs" },

@@ -53,6 +53,11 @@ test('near something to drive, the button says so, and driving has its own contr
   assert.ok(keysFor('town', { act: 'Get in the pickup' }).some(([k, what]) => k === 'E' && what === 'Get in the pickup'));
 });
 
+test('at the skillet, the button eats', () => {
+  assert.equal(buttonsFor('town', { act: 'Eat the deer meat' }).a, 'EAT');
+  assert.ok(keysFor('town', { act: 'Eat the deer meat' }).some(([k, what]) => k === 'E' && what === 'Eat the deer meat'));
+});
+
 test('prompts on a phone use the word on the button', () => {
   for (const mode of MODES) { const label = buttonsFor(mode).a; if (label) assert.equal(actWord(label, true), label); }
   assert.equal(fastWord(true), buttonsFor('swim').b);

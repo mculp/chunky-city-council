@@ -73,7 +73,8 @@ test('what it makes leaves alone what is there, unless it is named again', () =>
 test('the real sheet covers every sound in the game, within the limits of the models and with no words in the score', () => {
   const items = planOf(SHEET);
   for (const name of Object.keys(REAL.cues)) assert.ok(SHEET.cues[name]?.prompt, `${name} has a prompt`);
-  for (const name of Object.keys(SHEET.cues)) assert.ok(REAL.cues[name], `${name} is a sound in the game`);
+  const newOne = new URL('../data/sound-new.json', import.meta.url), both = { ...REAL.cues, ...(existsSync(newOne) ? JSON.parse(readFileSync(newOne, 'utf8')).cues : {}) };
+  for (const name of Object.keys(SHEET.cues)) assert.ok(both[name], `${name} is a sound in the game`);
   for (const [name, c] of Object.entries(SHEET.cues)) assert.ok(c.seconds >= .5 && c.seconds <= 22, `${name} is ${c.seconds} s`);
   for (const t of Object.values(SHEET.music.tracks)) {
     for (const state of Object.keys(t.states)) assert.ok(REAL.music[state], `${state} is part of the score`);
@@ -94,7 +95,8 @@ test('the sheet the game plays has every sound and part of the score the old one
   const made = new URL('../data/sound-new.json', import.meta.url);
   if (!existsSync(made)) return;
   const sheet = JSON.parse(readFileSync(made, 'utf8'));
-  assert.deepEqual(Object.keys(sheet.cues).sort(), Object.keys(REAL.cues).sort());
+  // it can have more, for things that came after the old sheet stopped changing
+  for (const name of Object.keys(REAL.cues)) assert.ok(sheet.cues[name], name);
   assert.deepEqual(Object.keys(sheet.music).sort(), Object.keys(REAL.music).sort());
 });
 

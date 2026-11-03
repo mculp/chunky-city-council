@@ -93,9 +93,11 @@ test('there are limits on one sound and on them all, and a phone has lower ones'
   assert.equal(n, 12); assert.equal(p.state().voices, 12);
 });
 
-test('every sound the game asks for is in data/sound.json, and every one there can be made', () => {
-  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  for (const m of page.matchAll(/SFX\.(?:play|loop)\('([^']+)'/g)) assert.ok(DATA.cues[m[1]], `${m[1]} is in data/sound.json`);
+test('every sound the game asks for is on a sheet, and every one there can be made', () => {
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8'), made = JSON.parse(readFileSync(new URL('../data/sound-new.json', import.meta.url), 'utf8'));
+  // A new sound only goes on the new sheet, since nothing writes over the old one. The game can't ask for it on the old sheet and be told off, so it has to be a loop.
+  for (const m of page.matchAll(/SFX\.(play|loop)\('([^']+)'/g)) assert.ok(DATA.cues[m[2]] || (m[1] === 'loop' && made.cues[m[2]]), `${m[2]} is on a sheet`);
+  for (const [name, c] of Object.entries(made.cues)) assert.ok(RECIPES[name] || c.file, `${name} on the new sheet has a recipe or a file`);
   for (const [name, c] of Object.entries(DATA.cues)) assert.ok(RECIPES[name] || c.file, `${name} has a recipe or a file`);
   for (const name of ['groan.low', 'groan.hunt', 'groan.grab', 'rope.creak', 'vehicle.road', 'vehicle.dirt', 'vehicle.skid', 'amb.wind', 'amb.crickets', 'amb.river', 'amb.fire', 'engine.car', 'engine.pickup', 'engine.quad', 'engine.golf']) assert.ok(page.includes(name) || name.startsWith('engine'), name);
   for (const m of page.matchAll(/SFX\.music\('([^']+)'/g)) assert.ok(DATA.music[m[1]], `${m[1]} is part of the score`);

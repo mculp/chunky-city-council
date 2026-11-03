@@ -70,7 +70,8 @@ await page.evaluate(setUpInPage);
 // ---------------- effects and loops
 const rows = [], recipePeak = await page.evaluate(async () => Object.fromEntries(Object.entries((await import('/src/soundbank.js')).RECIPES).map(([k, r]) => [k, r.peak])));
 for (const [name, c] of Object.entries(NEW.cues)) {
-  if (!c.file) continue;
+  // a sound that came after the old sheet stopped changing has nothing to be levelled against
+  if (!c.file || !(name in recipePeak)) continue;
   const before = OLD.cues[name]?.gain ?? OLD.defaults.gain;
   const [oldDb, newDb] = await page.evaluate(async ([n, f]) => [await window.oldCue(n), await window.newCue(n, f)], [name, c.file]);
   const most = .98 / ((NEW.levels[c.bus ?? 'effects'] ?? 1) * (recipePeak[name] ?? .9));

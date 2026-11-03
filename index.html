@@ -477,15 +477,18 @@ const asphaltMat = triplanar(asphaltTex, .12, { roughness: 1 });
 const outlineMats = new Map();
 // A wall between the camera and him opens up around him, in the same dither as everything else
 const SEE_THROUGH = `if(uSee.w>0.&&gl_FragCoord.z<uSee.z&&vSeeY>uSeeY){ float seeD=length(gl_FragCoord.xy-uSee.xy)/uSee.w; if(seeD<.68||(seeD<1.&&mod(floor(gl_FragCoord.x/(2.*uPxScale))+floor(gl_FragCoord.y/(2.*uPxScale)),2.)>.5)) discard; }`;
-function outlineMat(color, px, chalk, { spikes = false, tinted = false, cut = false } = {}) {
-  const key = [color, px, chalk, spikes, tinted, cut].join('|');
+// A ghost's drawn in the dither a wall you're seeing through is drawn in: him, the same as anyone, with holes through him that move on the twelve frames.
+// His line has the same holes, or the inside of it would show through them. With reduced motion they hold still, since it's all of him flickering otherwise.
+const ghostHoles = (px, step) => `if(fract(sin(dot(floor(gl_FragCoord.xy/(2.*${px}))+${reduceMotion ? '0.' : step}*3.,vec2(91.7,47.3)))*24634.6345)<.52) discard;`;
+function outlineMat(color, px, chalk, { spikes = false, tinted = false, cut = false, ghost = false } = {}) {
+  const key = [color, px, chalk, spikes, tinted, cut, ghost].join('|');
   if (outlineMats.has(key)) return outlineMats.get(key);
   const uniforms = Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
     uColor: { value: new THREE.Color(color) }, uPx: { value: px }, uChalk: { value: chalk }, uStep: G.uStep, uRes: G.uRes, uPxScale: G.uPxScale, uMask: G.uMask, uSee: G.uSee, uSeeY: G.uSeeY, uHideRoof: G.uHideRoof
   });
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, fog: true, uniforms, userData: { outline: true },
-    defines: { ...(spikes && { SPIKES: 1 }), ...(tinted && { TINTED: 1 }), ...(cut && { CUT: 1 }) },
+    defines: { ...(spikes && { SPIKES: 1 }), ...(tinted && { TINTED: 1 }), ...(cut && { CUT: 1 }), ...(ghost && { GHOST: 1 }) },
     vertexShader: `uniform float uPx, uStep, uChalk, uPxScale; uniform vec2 uRes;
       #ifdef TINTED
       varying vec3 vTint;
@@ -532,6 +535,9 @@ function outlineMat(color, px, chalk, { spikes = false, tinted = false, cut = fa
       float h2(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
       void main(){
         if(uMask>.5){ gl_FragColor=vec4(1.); return; }
+        #ifdef GHOST
+          ${ghostHoles('uPxScale', 'uStep')}
+        #endif
         #ifdef CUT
           ${SEE_THROUGH}
         #endif
@@ -1939,6 +1945,93 @@ function updateChurchSigns(step) {
     s.mat.color.setScalar(s.prop.down ? .07 : !reduceMotion && hash(step, i, 77) < .025 ? .62 : .96);
   });
 }
+// ================================================================ what's left of Robby's house
+// The owner: "the first house on the right after coming off the bridge". Coming north off the Griffis Fountain bridge that's a big mown lawn by the road, with
+// structure 74582285 standing way back at the end of it. "I think the house burned down", and "he didn't die, he moved back to Louisiana". So on the lawn:
+// brick piers with the charred joists fallen off them, the chimney, and the front steps going up to nothing. He stands where the front room's floor used to be.
+const LOT = (() => { const [x, z] = atTrue(-255, 362); return { x, z }; })(), ROBBY = { x: LOT.x - 2.5, y: Y0 + .62, z: LOT.z + .5 }, HEARTH = { x: LOT.x + 2.9, z: LOT.z - 1 };
+const charMat = new THREE.MeshStandardMaterial({ color: '#15110f', roughness: 1 }), concreteMat = new THREE.MeshStandardMaterial({ color: '#615d55', roughness: 1 });
+const burntBrick = (() => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d'); g.fillStyle = '#2c1c18'; g.fillRect(0, 0, 128, 128);
+  for (let y = 0; y < 8; y++) for (let x = -1; x < 4; x++) { g.fillStyle = `hsl(${10 + hash(x + 9, y, 5) * 10},${34 + hash(x + 9, y, 6) * 16}%,${24 + hash(x + 9, y, 7) * 20}%)`; g.fillRect(x * 32 + (y % 2) * 16 + 1, y * 16 + 1, 30, 14); }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return triplanar(t, 1, { roughness: 1 });
+})();
+pad(LOT.x - 17, LOT.x + 30, LOT.z - 16, LOT.z + 16, 6, true);
+around(LOT, () => {
+  const leaning = (x, z) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, 0, z));
+  // Nobody can stand on a solid, so these are as tall as they need to be for a truck to hit them instead of driving through them, which is taller than they look
+  const LOW_TOP = Y0 + .9;
+  // One at a time. The whole floor as one thing would be one big box, and a swing anywhere in it, at the flies say, would bring the lot down
+  for (const x of [-4, -1.4, 1.2, 3.8]) for (const z of [-6.4, -3.2, 0, 3.2, 6.4]) { if (hash(x * 10, z * 10, 11) < .2) continue; const h = .48 + hash(x * 10, z * 10, 12) * .26; breakable('pier', 2, () => { addBox(burntBrick, x, Y0 + h / 2, z, .44, h, .44, 1.1); solid(x - .22, x + .22, z - .22, z + .22, LOW_TOP); }, { chip: '#4a2a22' }); }
+  for (const [a, b] of [[[-4.2, .68, -6.6], [-4.2, .5, 1.5]], [[3.9, .7, -3], [1, .1, -1.9]], [[-3.8, .1, 3.4], [-.8, .7, 4.2]], [[.6, .7, 6.6], [3.6, .52, 6.2]], [[-1.4, .72, -6.4], [-1.4, .1, -2.6]], [[1.4, .1, 2], [2.6, .68, 4.9]]]) breakable('joist', 1, () => addBeam([a[0], Y0 + a[1], a[2]], [b[0], Y0 + b[1], b[2]], .2, .16, charMat, 1.1), { chip: '#2a2320' });
+  for (const [x, z, h, lx, lz] of [[-4.3, -6.5, 1.9, .06, -.04], [3.9, 6.5, 1.4, -.1, .05], [-4.2, 6.4, 2.4, .1, .08], [3.95, -6.4, 1.1, .04, -.09]]) breakable('joist', 1, () => { addBox(charMat, x, Y0 + h / 2, z, .17, h, .17, 1.1, leaning(lx, lz)); solid(x - .09, x + .09, z - .09, z + .09, Y0 + h); }, { rigid: true, chip: '#2a2320' });
+  const chimney = breakable('chimney', 7, () => {
+    addBox(burntBrick, 4.3, Y0 + .9, -1, 1.1, 1.8, 2.3); addBox(burntBrick, 4.35, Y0 + 4.1, -1, .8, 4.6, 1.1); addBox(burntBrick, 4.35, Y0 + 6.5, -1, 1, .2, 1.3);
+    addBox(charMat, 3.73, Y0 + .55, -1, .04, .95, 1.25, 0);
+    solid(3.75, 4.85, -2.15, .15, Y0 + 6.4);
+    kudzuAt(LOT.x + 4.8, Y0 + 1, LOT.z - 2.1); kudzuAt(LOT.x + 4.9, Y0 + 2.4, LOT.z - .7);
+  }, { rigid: true, chip: '#4a2a22' });
+  addBox(concreteMat, 3.1, Y0 + .05, -1, 1.3, .1, 2.3, .9);
+  // the front steps, going up to nothing
+  breakable('steps', 4, () => { for (const [x, h] of [[-6.8, .2], [-6.3, .4], [-5.8, .62]]) addBox(concreteMat, x, Y0 + h / 2, 0, .52, h, 2.3, 1.1); solid(-7.06, -5.54, -1.15, 1.15, LOW_TOP); }, { chip: '#615d55' });
+  // what was the kitchen: the stove's about all that doesn't burn
+  breakable('stove', 3, () => { addBox(steelMat, 1.3, Y0 + .46, 4.2, .76, .92, .68, 1.2); solid(.92, 1.68, 3.86, 4.54, Y0 + .92); }, { rigid: true, chip: '#3a2a22' });
+  // the memorial, out front where you can see it from the road, and it's the owner's words: he didn't die
+  LOT.chimney = chimney;
+  LOT.memorial = breakable('sign', 1.5, () => {
+    for (const z of [-1, 1]) addBox(charMat, -12, Y0 + .85, z, .1, 1.7, .1, 1);
+    solid(-12.05, -11.9, -1.13, 1.13, Y0 + 1.85); solid(-11.65, -11.55, -1.8, -1.7, Y0 + 2.2);
+    addBox(poleMat, -11.96, Y0 + 1.15, 0, .05, 1.4, 2.26, 1);
+    const crossWhite = lit('#b9b5a8'); addBox(crossWhite, -11.6, Y0 + 1.1, -1.75, .1, 2.2, .1, 1); addBox(crossWhite, -11.6, Y0 + 1.55, -1.75, .1, .1, .8, 1);
+    for (let k = 0; k < 8; k++) addBox(k % 2 ? signFlower : lit('#c9a227'), -11.6 + (hash(k, 3, 13) - .5) * .7, Y0 + .1 + hash(k, 4, 13) * .12, -1.75 + (hash(k, 5, 13) - .5) * .8, .1, .1, .1, .6);
+    const tex = textTex([], 640, 400, '#3b2a20', '#e9e3d2', '40px Bungee, Impact, sans-serif', { after: (g) => {
+      for (let i = 1; i < 5; i++) { g.fillStyle = 'rgba(12,8,6,.55)'; g.fillRect(0, i * 80 - 2, 640, 4); }
+      const row = (t, y, px) => { g.font = `${px}px Bungee, Impact, sans-serif`; g.fillStyle = '#e9e3d2'; g.fillText(t, 320, y); };
+      row('IN MEMORY OF', 48, 36); row('ROBBY', 118, 88); row("HE DIDN'T DIE", 210, 52); row('HE MOVED BACK', 282, 52); row('TO LOUISIANA', 350, 52);
+    } });
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.375), new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: '#ffffff', emissiveIntensity: .55, roughness: 1 }));
+    face.position.set(LOT.x - 12.01, Y0 + 1.15, LOT.z); face.rotation.y = -Math.PI / 2; scene.add(face); PROP.objs.push(face);
+  }, { rigid: true, chip: '#3b2a20' });
+});
+flushBuckets();
+// ---- the flies, and the deer meat once they're out. The flies are in the game's own lumps of chalk: dark where he's behind them, and pale where the night is.
+const FLY_N = FEW ? 40 : 70, flyGeo = new THREE.BufferGeometry(), flyPos = new Float32Array(FLY_N * 3), flyCol = new Float32Array(FLY_N * 3);
+for (let i = 0; i < FLY_N; i++) { const v = i % 3 ? .02 : .5; flyCol[i * 3] = v; flyCol[i * 3 + 1] = v; flyCol[i * 3 + 2] = v * .9; }
+flyGeo.setAttribute('position', new THREE.BufferAttribute(flyPos, 3)); flyGeo.setAttribute('color', new THREE.BufferAttribute(flyCol, 3));
+const flies = new THREE.Points(flyGeo, new THREE.PointsMaterial({ size: .05, vertexColors: true, sizeAttenuation: true })); flies.frustumCulled = false; flies.visible = false; scene.add(flies);
+const skillet = new THREE.Group(); skillet.visible = false; scene.add(skillet);
+{
+  const pan = new THREE.Mesh(new THREE.CylinderGeometry(.24, .2, .07, 12), charMat), meat = new THREE.Mesh(new THREE.BoxGeometry(.3, .07, .2), new THREE.MeshStandardMaterial({ color: '#7a2c22', roughness: .7, emissive: '#2a0a06' })), handle = new THREE.Mesh(new THREE.BoxGeometry(.34, .03, .05), charMat);
+  meat.position.y = .06; meat.rotation.y = .4; handle.position.set(-.38, .02, 0); skillet.add(outline(pan, INK, 1), outline(meat, INK, 1), outline(handle, INK, 1));
+  for (const [x, z] of [[-.2, -.2], [.2, -.2], [-.2, .2], [.2, .2]]) { const leg = new THREE.Mesh(boxGeo, charMat); leg.scale.set(.04, .36, .04); leg.position.set(x, -.2, z); skillet.add(leg); }
+  skillet.position.set(HEARTH.x, Y0 + .46, HEARTH.z);
+}
+let fliesLeft = 1, fliesStir = 0, flyStep = -1, cookFire = null;
+// Anywhere the prompt says to swing, a swing counts, whichever way he's facing. Aiming a hammer at flies with a thumb isn't the game.
+const FLY_REACH = 3.6;
+// Something swung at them: they scatter and come back. After he's asked, there's fewer of them each time, and when they're gone the fire's lit.
+function swatFlies(x, z) {
+  if (fliesLeft <= 0 || Math.hypot(x - ROBBY.x, z - ROBBY.z) > FLY_REACH) return;
+  fliesStir = 1;
+  if (!S.flags.robbySaid) return;
+  fliesLeft = Math.max(0, fliesLeft - .25);
+  if (fliesLeft <= 0) { cookFire = burnAt(HEARTH.x + .42, Y0 + .12, HEARTH.z, .38); skillet.visible = true; toast('The flies are out'); }
+}
+function eatDeerMeat() { S.flags.ateDeerMeat = true; skillet.visible = false; S.hp = 3; player.stamina = 1; SFX.play('can.clink'); toast('Deer meat · hearts full'); if (cookFire) cookFire.T = cookFire.age + 6; }
+function updateFlies(dt, step) {
+  const shown = fliesLeft > 0 && Math.hypot(camera.position.x - ROBBY.x, camera.position.z - ROBBY.z) < 70;
+  flies.visible = shown; fliesStir = Math.max(0, fliesStir - dt * 1.4);
+  if (!shown || step === flyStep || (reduceMotion && step % 4)) return; flyStep = step;
+  const n = Math.ceil(FLY_N * fliesLeft), wide = 1 + fliesStir * 1.6; flyGeo.setDrawRange(0, n);
+  for (let i = 0; i < n; i++) {
+    const a = hash(i, 1, 41) * 6.283 + step * (.2 + hash(i, 2, 41) * .5) * (i % 2 ? 1 : -1), r = (.3 + hash(i, 3, 41) * .95) * wide;
+    flyPos[i * 3] = ROBBY.x + Math.cos(a) * r + (hash(i, step, 42) - .5) * .18;
+    flyPos[i * 3 + 1] = ROBBY.y + 1.05 + Math.sin(a * 1.7 + i) * .75 * wide + (hash(i, step, 43) - .5) * .18;
+    flyPos[i * 3 + 2] = ROBBY.z + Math.sin(a) * r + (hash(i, step, 44) - .5) * .18;
+  }
+  flyGeo.attributes.position.needsUpdate = true;
+}
 // ================================================================ the roads, from the graph: each one's width and surface
 // Paved: lighter than the ground, patched and cracked, with paint that's worn where it's worn and a gravel shoulder. By the bridge it's still the
 // first scene's dark road. aRoad is metres across from the centre line, metres along, the pavement's half width (negative for a dashed line),
@@ -2789,20 +2882,41 @@ const canvasFor = (w, h, draw, repeat) => { const cv = document.createElement('c
 const lineBright = (look) => (look.line.style === 'glow' ? 1.25 : .8), lineHex = (look) => '#' + new THREE.Color(look.line.color).multiplyScalar(lineBright(look)).getHexString();
 const townHood = buildHoodie(.08, 0, 0, 3, 32, TOWN_SHAPE);
 const townPantsM = new THREE.MeshToonMaterial({ color: '#2a2436', emissive: '#120e18', gradientMap: toonGrad });
-function makeNPC({ id, name, x, z, yaw, extra }) {
+const paleTrousers = new THREE.MeshToonMaterial({ color: '#8fa9b6', emissive: '#2c3a42', gradientMap: toonGrad }), paleHand = new THREE.MeshToonMaterial({ color: '#b4cdd8', emissive: '#2c3a42', gradientMap: toonGrad });
+function ghostMat(m) {
+  const c = m.clone(), before = m.onBeforeCompile;
+  c.onBeforeCompile = (sh, r) => {
+    before.call(m, sh, r); sh.uniforms.uGhostStep = G.uStep; sh.uniforms.uGhostPx = G.uPxScale;
+    sh.fragmentShader = 'uniform float uGhostStep, uGhostPx;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `${ghostHoles('uGhostPx', 'uGhostStep')}\n#include <clipping_planes_fragment>`);
+  };
+  c.customProgramCacheKey = () => `ghost${m.hasOwnProperty('onBeforeCompile') ? 1 : 0}`;
+  return c;
+}
+function makeGhost(body) {
+  const made = new Map();
+  body.traverse((o) => {
+    if (!o.isMesh) return; const m = o.material;
+    if (m.userData?.outline) { const u = m.uniforms; o.material = outlineMat(`#${u.uColor.value.getHexString()}`, u.uPx.value, u.uChalk.value, { ghost: true }); return; }
+    if (m.isShaderMaterial) return;
+    if (!made.has(m)) made.set(m, ghostMat(m === townPantsM ? paleTrousers : m === darkHand ? paleHand : m));
+    o.material = made.get(m);
+  });
+}
+function makeNPC({ id, name, x, z, y = Y0, yaw, extra, ghost = false, ph = null }) {
   const look = LOOKS.cast[id];
   const hm = clothMat(canvasFor(1024, 512, (g) => drawCloth(g, 0, 0, 1024, 512, look, CLOTH_RANGE), true)), sm = clothMat(canvasFor(256, 256, (g) => drawCloth(g, 0, 0, 256, 256, look, { ...CLOTH_RANGE, sleeve: true }), true));
   const skull = canvasFor(512, Math.round(512 * SKULL_ASPECT), (g) => drawSkull(g, 0, 0, 512, Math.round(512 * SKULL_ASPECT), look), false);
   const rig = makeRig({ hood: townHood, hoodM: hm, sleeveM: sm, pantsM: townPantsM, handM: darkHand, faceM: skullMat(skull, { line: look.line.color, glow: lineBright(look) }), ol: lineHex(look), lineK: 1.15, lineStyle: look.line.style === 'spikes' ? { spikes: true } : undefined, shoulder: [.39, -.07], out: .09, reach: [.31, .3], thick: 1.08, legSize: 1.12, eyelets: [.33, .1], chest: .25, cord: 1.25, cordColor: look.tassels.color });
   rig.setHood(townHood);
-  const root = new THREE.Group(); root.add(rig.body); rig.body.scale.setScalar(TOWN_SCALE); rig.body.position.y = TOWN_HIPS; root.position.set(x, Y0, z); root.rotation.y = yaw; scene.add(root);
+  const root = new THREE.Group(); root.add(rig.body); rig.body.scale.setScalar(TOWN_SCALE); rig.body.position.y = TOWN_HIPS; root.position.set(x, y, z); root.rotation.y = yaw; scene.add(root);
   const V3 = (a, b, c) => new THREE.Vector3(a, b, c);
   rig.arm(0, V3(-.36, -.58, .08), V3(-.7, -.35, -.25)); rig.arm(1, V3(.36, -.58, .08), V3(.7, -.35, -.25));
   rig.leg(0, V3(-.13, -1.36, 0), V3(-.1, -1, .8)); rig.leg(1, V3(.13, -1.36, 0), V3(.1, -1, .8)); rig.strings(0, 0);
   if (extra) extra(rig.body);
+  if (ghost) makeGhost(rig.body);
   const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTex([name.toUpperCase()], 256, 64, 'rgba(0,0,0,0)', '#f1e6cf', '34px Bungee, Impact, sans-serif'), transparent: true, depthTest: false, fog: false }));
   tag.scale.set(1.4, .35, 1); tag.position.set(0, 2.45, 0); tag.renderOrder = 10; root.add(tag);
-  return { name, root, rig, yaw, tag, ph: rnd() * 6 };
+  return { name, root, rig, yaw, tag, ghost, ph: ph ?? rnd() * 6 };
 }
 const gold = new THREE.MeshStandardMaterial({ color: '#e8b54a', metalness: .9, roughness: .3, emissive: '#3a2a08' });
 const NPCS = {
@@ -2813,9 +2927,11 @@ const NPCS = {
   tre: makeNPC({ id: 'tre', name: 'Tre', x: BOX.x + 3.3, z: BOX.z - 3, yaw: Math.PI * .9 }),
   odessa: makeNPC({ id: 'odessa', name: 'Miss Odessa', x: 68.5 + PLACES.church.x, z: -5.8 + PLACES.church.z, yaw: 0,
     extra: (b) => { const hat = new THREE.Mesh(new THREE.CylinderGeometry(.47, .47, .04, 24), new THREE.MeshToonMaterial({ color: '#b8ad96', gradientMap: toonGrad })); hat.position.set(0, .8, -.06); b.add(outline(hat, INK, 1.3));
-      const crown = new THREE.Mesh(new THREE.CylinderGeometry(.2, .24, .18, 18), hat.material); crown.position.set(0, .89, -.07); b.add(outline(crown, INK, 1.2)); } })
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(.2, .24, .18, 18), hat.material); crown.position.set(0, .89, -.07); b.add(outline(crown, INK, 1.2)); } }),
+  // he didn't die, he moved back to Louisiana
+  robby: makeNPC({ id: 'robby', name: 'Robby', x: ROBBY.x, z: ROBBY.z, y: ROBBY.y, yaw: -Math.PI / 2, ghost: true, ph: 1.7 })
 };
-for (const n of Object.values(NPCS)) solid(n.root.position.x - .4, n.root.position.x + .4, n.root.position.z - .4, n.root.position.z + .4, Y0 + 2);
+for (const n of Object.values(NPCS)) if (!n.ghost) solid(n.root.position.x - .4, n.root.position.x + .4, n.root.position.z - .4, n.root.position.z + .4, Y0 + 2);
 
 // ================================================================ bean cans
 const canLabel = textTex(['BEANS'], 256, 128, '#c8452a', '#f6e8c8', '52px Bungee, Impact, sans-serif');
@@ -4249,6 +4365,7 @@ function updateSwing(dt) {
   if (!swingHit && swingT >= SWING_AT) {
     swingHit = true;
     const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), P = player.pos, x = P.x + fx * .9, z = P.z + fz * .9, r = strike(x, P.y + 1.1, z, 1.3, 1, fx, fz), n = crowdOut ? horde.knock(x, z, 1.5, 2.4) : 0;
+    swatFlies(P.x, P.z);
     if (n) SFX.play('hit.flesh');
     if (r && !r.gone) SFX.play(r.house ? (r.house.walls === 'metal' || r.house.walls === 'mobile' ? 'hit.metal' : 'hit.wood') : METAL_PROPS.has(r.thing.kind) ? 'hit.metal' : 'hit.wood');
     if ((r || n) && !reduceMotion) cam.shake = Math.max(cam.shake, .22);
@@ -4471,6 +4588,7 @@ function soundTick(dt, M) {
   for (const b of burners) if (!b.dead) fire = Math.min(fire, Math.hypot(b.x - P.x, b.z - P.z));
   for (const f of fires) if (!f.out) fire = Math.min(fire, Math.hypot(f.home.x - P.x, f.home.z - P.z));
   SFX.loop('amb.fire', 1 - sstep(4, 40, fire));
+  SFX.loop('amb.flies', fliesLeft > 0 ? Math.sqrt(fliesLeft) * (1 - sstep(2, 22, Math.hypot(ROBBY.x - P.x, ROBBY.z - P.z))) : 0);
   // frogs: more of them near water, all round him, and none in the fever
   if (quiet === 1 && (frogT -= .25) <= 0) {
     frogT = (water > .2 ? .4 : 1.6) + soundRand() * (water > .2 ? 1.6 : 4);
@@ -4622,11 +4740,14 @@ function tick(dt, draw = true) {
       arriving(); pickUpCans(1.15); pickUpGas(1.15);
       // talk
       let near = null, nd = 2.6;
-      for (const [id, n] of Object.entries(NPCS)) { const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z); if (d < nd) { nd = d; near = id; } }
+      // Once he's asked, the button by Robby is for the flies: he's said all he's going to, and it's the only button a phone has
+      const lot = Math.hypot(ROBBY.x - player.pos.x, ROBBY.z - player.pos.z), fliesToDo = S.flags.robbySaid && fliesLeft > 0;
+      for (const [id, n] of Object.entries(NPCS)) { if (id === 'robby' && fliesToDo) continue; const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z); if (d < nd) { nd = d; near = id; } }
       const ride = near ? null : vehicleInReach();
-      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : null;
-      if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else prompt(null);
-      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else swing(); }
+      const meat = !near && !ride && skillet.visible && Math.hypot(HEARTH.x - player.pos.x, HEARTH.z - player.pos.z) < 2.2;
+      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : null;
+      if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (fliesToDo && lot < FLY_REACH) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
+      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else swing(); }
       if (input.sEdge) swing();
       if (input.cEdge) throwOne();
     }
@@ -4689,7 +4810,7 @@ function tick(dt, draw = true) {
   }
   // townsfolk idle and turn toward you when you're close
   for (const n of Object.values(NPCS)) {
-    n.ph += dt; n.rig.body.position.y = TOWN_HIPS + Math.sin(n.ph * 1.6) * .012;
+    n.ph += dt; n.rig.body.position.y = TOWN_HIPS + Math.sin(n.ph * 1.6) * (n.ghost ? .05 : .012);
     const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z);
     const want = d < 7 && (M === 'town' || M === 'dialog' || M === 'drive') ? Math.atan2(player.pos.x - n.root.position.x, player.pos.z - n.root.position.z) : n.yaw;
     n.root.rotation.y += angDiff(n.root.rotation.y, want) * Math.min(1, dt * 3); n.tag.visible = d < 14 && M !== 'title' && M !== 'dialog';
@@ -4769,6 +4890,7 @@ function tick(dt, draw = true) {
   sky.position.copy(camera.position);
   updateWorld();
   updateChurchSigns(step);
+  updateFlies(dt, step);
   if (crowdOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
   if (S.flags.town) { drawVehicles(step); drawWreck(step); }
   updateParticles(dt, M);
@@ -4808,7 +4930,7 @@ if (location.hash === '#signs') openSignBoard();
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, sound: SFX, surfaceUnder, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     horde, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdHoods.count }),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.

@@ -105,6 +105,14 @@
       "request": "01a198c4-90ec-77c3-86ce-a1dbc5f52c37",
       "date": "2026-11-01T20:19:47.866Z"
     },
+    "audio/sfx/amb.flies.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 8,
+      "bytes": 129192,
+      "sha256": "6c68c65063cff7e2a43390223d472285b41cda45bcdf9e25a627436b13ca30ae",
+      "request": "01a19920-fb56-7e63-bbe7-92df4fc001ce",
+      "date": "2026-11-01T22:00:42.806Z"
+    },
     "audio/sfx/amb.river.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
       "seconds": 20,
@@ -883,7 +891,7 @@
     }
   },
   "spent": {
-    "likely": 11.2636,
-    "most": 16.4836
+    "likely": 11.2796,
+    "most": 16.4996
   }
 }

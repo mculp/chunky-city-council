@@ -5,11 +5,12 @@
     "fear": { "min": 0, "max": 3 },
     "debt": { "min": -12, "max": 12 }
   },
-  "remember": ["metCoop", "metTre", "chain", "tank"],
+  "remember": ["metCoop", "metTre", "chain", "tank", "robbySaid"],
   "cast": [
     { "id": "coop", "name": "Coop", "short": "Coop", "known": true },
     { "id": "tre", "name": "Tre", "short": "Tre", "known": true },
-    { "id": "odessa", "name": "Miss Odessa", "short": "Odessa", "known": true }
+    { "id": "odessa", "name": "Miss Odessa", "short": "Odessa", "known": true },
+    { "id": "robby", "name": "Robby", "short": "Robby" }
   ],
   "ties": [
     { "when": "coop", "meter": "trust", "then": "odessa", "factor": -0.5 },
@@ -144,6 +145,14 @@
       "who": "odessa",
       "lines": [{ "say": "Mm. Coop's been running that bag since the grid fell. It's beans, sugar. Everybody in Chunky is selling beans.", "do": [{ "set": "toldOdessa" }, { "meter": "odessa.trust", "by": 1 }, { "meter": "coop.trust", "by": -1 }] }],
       "opts": [{ "say": "Back", "to": "odessa" }]
+    },
+    "robby": {
+      "who": "robby",
+      "lines": [
+        { "when": ["!robbySaid"], "say": "hey man, help me get these flies out of here so we can cook some deer meat", "do": [{ "set": "robbySaid" }] },
+        { "say": "..." }
+      ],
+      "opts": [{ "say": "..." }]
     }
   }
 }
