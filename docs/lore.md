@@ -29,7 +29,9 @@ Real places are by structure id, never an address. Most of these are someone's h
 
 > I think the house burned down so it could just be a memorial ghost in that spot (he didn't die, he moved back to Louisiana)
 
-**In the game:** his lot is the first thing on the right coming north off the Griffis Fountain bridge, on the big mown lawn in front of structure 74582285, which is left as it is. What's there is brick piers with the charred joists off them, a chimney, a stove and the front steps going up to nothing, with a memorial out front saying IN MEMORY OF ROBBY / HE DIDN'T DIE / HE MOVED BACK / TO LOUISIANA. He stands where the front room's floor used to be, as a ghost, in a cloud of flies. Decided around it:
+> I found out Robby moved to California not Louisiana.
+
+**In the game:** his lot is the first thing on the right coming north off the Griffis Fountain bridge, on the big mown lawn in front of structure 74582285, which is left as it is. What's there is brick piers with the charred joists off them, a chimney, a stove and the front steps going up to nothing, with a memorial out front saying IN MEMORY OF ROBBY / HE DIDN'T DIE / HE MOVED / TO CALIFORNIA. He stands where the front room's floor used to be, as a ghost, in a cloud of flies. Decided around it:
 
 - "The bridge" is read as the Griffis Fountain bridge, because that's where you wake and how you first come into town. If it's the US 80 bridge, the first house on the right heading west is structure 75204065.
 - He says the line once, ever, and that's saved. After that he says "...", and so does the only reply, because nobody's written anything for the hero to say back.
@@ -132,6 +134,27 @@ They sent a picture of this from above too, and it stays out of the repo.
 - The walls can't be seen from above, so their colors are guesses.
 - The digger, the boat, the propane tank and the parked trucks are all on the picture. They aren't anyone's in particular, and the tank goes up if it's broken.
 
+## Who lives here
+
+> I think each npc should be an agent with personality and memory
+
+> We should start filling the town and houses with npc/agents. Other people driving cars. Kids riding 4 wheelers.
+
+> Half of the people in chunky should have Alexander or Clark as their last name.
+
+> Can make up their first name
+
+## Mr Barber
+
+> An old dead millionaire named Mr Barber lived south of the bridge and owned most of the farmland as soon as you go south of the bridge and had a compound about a mile south of the bridge maybe you can find it on satellite.
+
 ## The land
 
 > we should look a bit into altitude and hills. there aren't a lot but many are very prominent
+
+**In the game:** they're the real hills, at their real height, from the US Geological Survey. Decided around it:
+
+- Town's about 3 m over the floodplain, the compound on Pine Forest Rd about 20 m, the cemetery up Chunky Duffee Rd about 49 m, and the highest any road gets is 66 m, on the way down to Stuckey's Bridge. Nothing's exaggerated.
+- It's only how it looks. Walking and driving work as they did, so a golf cart doesn't slow down on a climb yet.
+- Past where the fog stops the ground, the same land carries on as a low dark line of far hills under the sky. There's none of it in the first scene.
+- The bank of the river, the first scene and the water are all kept level, and most buildings are on ground that's been levelled for them, as they are in life. A few on the steepest ground still lean a little.

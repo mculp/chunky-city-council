@@ -33,6 +33,7 @@ The owner sends lore for the story. It goes in `docs/lore.md` in their words as 
 - Game data is JSON under `data/`, such as `data/roads.json`, with its schema documented alongside it.
 - The smaller roads and a drive to every building are in `data/lanes.json`, documented in `data/lanes.md`. To everything that asks what road is here they're roads, but `MAP.roads` stays the graph.
 - Dialogue and the relationship meters are in `data/cast.json`, documented in `data/cast.md`.
+- How high the land stands is in `data/hills.json`, documented in `data/hills.md`. The world's flat, and it's only what's drawn that goes up and down. A new `ShaderMaterial` with a vertex shader of its own has to `#include <hill_pars>` and use `hillOver`, or define `FLAT_WORLD`, and anything long goes through `HILLS.follow`.
 - What the church signs say is in `data/signs.json`, documented in `data/signs.md`, and all of it can be read at `#signs`.
 - What one stone in the cemetery says is in `data/stone.json`, documented in `data/stone.md`. It's empty, and it's the owner's to fill in: nobody else types those words.
 - What every sound and part of the score is, and how loud, is in `data/sound-new.json`, documented in `data/sound.md`. That's what the game plays: music and sounds made with ElevenLabs, which the owner chose. A file in `audio/` and one line there take a sound's place, without touching the code. The sounds worked out from code stay too, and nothing writes over them: `data/sound.json` is their sheet, `#sounds` is their board and `#old` plays the game with them.
@@ -82,6 +83,8 @@ Then open http://localhost:8000.
 `npm run lanes` drives up a gravel lane and a dirt drive to somebody's door with the phone's stick, and checks that nothing stands on the lanes, the woods are cleared off them, what's underfoot, and no barricade across a road that carries on. `data/lanes.test.js` checks that they all join up and that every building has a way in.
 
 `npm run lore` goes and looks at what's come from the lore: every church's sign, what it says today and tomorrow, and what happens when it's hit, then Charlie Flake's marker, then Robby's lot, walking there from where he wakes, what Robby says and that he only says it once, the flies, the deer meat, and what a truck does to it, and then the light on Stuckey's Bridge: that it isn't in the opening, that it comes when he goes back on foot or driving, goes through him, and that it all goes quiet while it does. It takes `--shots dir`.
+
+`npm run hills` goes and looks at the hills: that the first scene is at the bottom of them, that the graphics card draws what `src/hills.js` says, that every material in the scene goes up with them, then a pickup up US 80's biggest hill with the phone's stick and back down it on foot, swimming under a bluff and in a pool on top of one. It takes `--shots dir`.
 
 `npm run water` walks into a pond and swims across it, floods a pickup in another, and checks that the crowd keeps out, that nothing real ended up under water, and that the ponds are on the map. The ponds are in `data/water.json`, documented in `data/water.md`.
 
