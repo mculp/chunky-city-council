@@ -81,11 +81,13 @@ check('standing still with nothing on him, he goes unnoticed at 14 m', r.state =
 r = await g(() => {
   const G = __game, H = G.horde, P = G.player.pos, one = H.all[0], seen = new Set();
   one.x = P.x + 22; one.z = P.z; one.y = G.floorAt(one.x, one.z); one.state = 0; one.alert = 0;
-  run(P.x + 100, P.z, 6, () => { seen.add(one.state); return G.S.mode === 'grabbed'; });
+  run(P.x + 100, P.z, 6, () => { seen.add(one.state); return one.state === 2; });
+  // and once he stands still it gets hold of him. Running, he'd be past it before it could.
+  for (let t = 0; t < 4 && G.S.mode !== 'grabbed'; t += 1 / 30) { G.sim(1 / 30, 1 / 30); seen.add(one.state); }
   return { seen: [...seen], mode: G.S.mode, near: away(one) };
 });
 check('running at one: it hears him, gets curious, then hunts', r.seen.includes(1) && r.seen.includes(2), r);
-check('and grabs him', r.mode === 'grabbed', r);
+check('and grabs him once he stands still', r.mode === 'grabbed', r);
 await g(() => { clearCrowd(); __game.S.mode = 'town'; __game.HP.kind = 'run'; });
 r = await g(() => {
   const G = __game, H = G.horde, P = G.player.pos, one = H.add(P.x + 8, P.z, { quiet: false });
@@ -129,9 +131,9 @@ r = await g(() => ({ inv: __game.player.inv, stunned: states()[5], prompt: docum
 check(`they're thrown off and stunned (${r.stunned}), and he gets a moment`, r.stunned >= 1 && r.inv > 0 && r.prompt, r);
 await snap('04-free');
 r = await g(() => {
-  // back onto the road, where there's nothing in his way
+  // back onto the road, where there's nothing in his way. The low and quick ones swarm at 4 m/s to his 4.4, so it takes a while to put much road between them.
   const G = __game, P = G.player.pos, x = P.x - 80, z = G.map.zAt('us_80', x);
-  let caught = false; run(x, z, 12, () => { caught = caught || G.S.mode === 'grabbed'; return caught; });
+  let caught = false; run(x, z, 15, () => { caught = caught || G.S.mode === 'grabbed'; return caught; });
   return { caught, near: nearest(), mode: G.S.mode };
 });
 check(`he outruns them: ${r.near.toFixed(1)} m clear after running for it`, !r.caught && r.near > 8, r);
@@ -140,7 +142,7 @@ check(`he outruns them: ${r.near.toFixed(1)} m clear after running for it`, !r.c
 await g(() => { clearCrowd(); __game.S.mode = 'town'; __game.player.inv = 0; __game.S.beans = 3; __game.S.hp = 3; });
 r = await g(() => {
   const G = __game, P = G.player.pos, one = G.horde.add(P.x + .6, P.z);
-  one.state = 2; G.sim(.1, 1 / 30);
+  one.state = 2; G.sim(.1 + G.horde.T.windUp, 1 / 30);
   const held = G.S.mode;
   G.sim(7.2, 1 / 30);
   return { held, mode: G.S.mode, hp: G.S.hp, beans: G.S.beans };
@@ -208,7 +210,7 @@ await close();
 // ---------------- on a phone: the same thing with the A button
 const phone = await serveAndOpen({ touch: true, query: '?test&horde' });
 await phone.page.evaluate(helpers);
-await phone.page.evaluate(() => { const G = __game; G.pause(); G.jump('town'); clearCrowd(); G.place(...G.map.fromTrue(-64.5, -15)); const one = G.horde.add(G.player.pos.x + .6, G.player.pos.z); one.state = 2; G.step(.2, 1 / 30); });
+await phone.page.evaluate(() => { const G = __game; G.pause(); G.jump('town'); clearCrowd(); G.place(...G.map.fromTrue(-64.5, -15)); const one = G.horde.add(G.player.pos.x + .6, G.player.pos.z); one.state = 2; G.step(.2 + G.horde.T.windUp, 1 / 30); });
 let t = await phone.page.evaluate(() => __game.state());
 check('on a phone it says to mash FREE', t.mode === 'grabbed' && /^Mash FREE to break free/.test(t.prompt), t);
 let taps = 0;

@@ -104,6 +104,17 @@ Two in five who come for him come folded over, low and quick, with their arms dr
 
 The numbers are `HOW.burnt`, `HOW.burntOut` and `HOW.scuttles` in `src/agents.js`, `riled`, `snatch` and `scuttle` in `src/horde.js`, and `MUTTER` in `index.html`. `npm run quiet` plays it in Chrome.
 
+## Knocked down
+
+Nobody dies. Knocked down, they're down a while and get up again.
+
+- **The swing** lands 0.2 seconds after it starts, on anyone within 1.5 m of a point 0.9 m in front of him, or 1.9 m with the bat, so it reaches about 2.4 m. As it starts it turns him to the nearest one he could reach, within 2.8 m and sooner someone who's after him than someone who isn't, by up to a metre. On a phone that's anyone on his side of a right angle. With a mouse, where the camera looks is the aim, so it's only someone within 0.5 rad of it.
+- **Getting hold of him** takes them `windUp`, half a second of being within 0.95 m of him, with their hands coming up over their heads. A hit in that time stops it, and whoever's been reaching longest gets him first. So standing his ground and swinging at one coming straight at him lands first.
+- **How long they're down**, getting up included, is `DOWN_FOR` in `index.html`: 10 seconds from a swing, whatever's in his hand, and 14 from a blast. A vehicle keeps them down 8 seconds and half a second more for every m/s it was doing, up to 20. A fire's still a second or so.
+- **Asking.** `horde.down(s)` says how long someone has left, and it's nothing for anyone on their feet. `horde.keepDown(s, seconds)` keeps them down at least that much longer, for anything that needs them to stay put, and says whether they were down. They're up again the moment it runs out.
+
+`npm run swing` tries it on a phone and a laptop.
+
 ## Shambling with them
 
 He can pass for one of them: SHAMBLE on a phone, C on a laptop. It holds him to their pace, 1.3 m/s however far the stick's pushed. While it holds, nobody who isn't already after him notices him by sound, smell or touch. It's for the ones who've burnt down, since anyone who's gone quiet isn't looking at him anyway. The numbers are with the crowd's in `src/horde.js`.

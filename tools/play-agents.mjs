@@ -65,14 +65,15 @@ console.log(`     hitting ${ids.names[0]} and ${ids.names[1]}, and leaving ${ids
 await swingAt('timid');
 const hit1 = await g(() => ({ hurt: timid.who.hurt, flat: timid.flat, mood: moodOf(timid) }));
 check('a tap of A knocks one of them down, and they remember it', hit1.hurt === 1 && hit1.flat > 0 && hit1.mood === AWAY, hit1);
-await g(() => { __game.sim(4.5, 1 / 30); __game.step(.1); });
+// down for as long as a swing puts anyone down, and then a moment
+await g(() => { const G = __game; while (G.horde.down(timid) > 0) G.sim(1 / 30, 1 / 30); G.sim(2, 1 / 30); G.step(.1); });
 await snap('1-keeps-away');
 const ran = await g(() => ({ state: timid.state, d: dist(timid) }));
 check(`and when they get up they get away from him, ${ran.d.toFixed(1)} m off`, ran.state === AVOIDING && ran.d > 4, ran);
 await swingAt('bold');
 const hit2 = await g(() => ({ hurt: bold.who.hurt, flat: bold.flat, mood: moodOf(bold) }));
 check('the same blow on someone bolder', hit2.hurt === 1 && hit2.flat > 0 && hit2.mood === AFTER, hit2);
-await g(() => { __game.sim(3, 1 / 30); __game.step(.1); });
+await g(() => { const G = __game; while (G.horde.down(bold) > 0) G.sim(1 / 30, 1 / 30); G.sim(.5, 1 / 30); G.step(.1); });
 const came = await g(() => ({ state: bold.state, d: dist(bold), grab: !!__game.horde.grab }));
 check('and they get up and come for him', came.grab || came.state === HUNTING || came.state === SWARM, came);
 await snap('2-after-you');

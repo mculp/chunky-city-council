@@ -36,6 +36,11 @@ Asked whether Coop, Rocky and Miss Bobby should stop being zombies and be ordina
 
 > There's no way to kill them, they just get back up, which I guess is ok for now but maybe they should at least be stunned for a while.
 
+**In the game, stunned:** a swing knocks one down for about ten seconds, getting up included, and they still can't be killed. They go over where they were hit, lie there, and get up slowly, on to their knees folded over first. A swing reaches further than they can grab, and it takes them half a second to get hold of him once they're close enough, so standing his ground and swinging lands first. Decided around it:
+
+- Ten seconds is from the hammer or the bat. A blast keeps them down longer, and so does a pickup, the faster it was going. How long each weapon keeps them down is to come.
+- What the train and the river do to them is as it was, and whether "nobody dies" covers those is with the Creative Director.
+
 ## Charlie Flake
 
 > Charlie Flake: A local resident known for catching a record 56-pound catfish from the Chunky River in 1924

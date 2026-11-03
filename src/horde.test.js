@@ -35,6 +35,21 @@ describe('knocked over', () => {
     run(h, still, 1.5);
     assert.ok(!(s.flat > 0)); assert.ok(s.state === HUNTING || s.state === SWARM || s.state === GRABBING, `state ${s.state}`);
   });
+
+  test('down as long as the hit says, getting up included, and anything can ask how long that is or keep them there', () => {
+    const h = createHorde(field()), s = h.add(1, 0), up = h.add(30, 0);
+    run(h, still, .05); s.state = HUNTING; h.knock(0, 0, 3, 10);
+    assert.equal(s.hitAs, HUNTING); assert.equal(s.fromX, 1); assert.ok(s.x > 1.5, 'and drawn going over from where they were');
+    assert.equal(h.down(s), 10); assert.equal(h.down(up), 0); assert.equal(h.keepDown(up, 5), false);
+    run(h, { ...still, canGrab: false }, 5);
+    assert.equal(s.state, STUNNED); assert.ok(Math.abs(h.down(s) - 5) < .05, `${h.down(s)} left`);
+    assert.equal(h.keepDown(s, 8), true); assert.ok(Math.abs(h.down(s) - 8) < .05);
+    run(h, { ...still, canGrab: false }, 7.8);
+    assert.equal(s.state, STUNNED, 'still down'); assert.ok(h.down(s) > 0);
+    // and up the moment it's over, not whenever they'd next have looked around
+    for (let n = 0; n < 60 && h.down(s) > 0; n++) h.update(1 / 30, { ...still, canGrab: false });
+    assert.equal(h.down(s), 0); assert.notEqual(s.state, STUNNED, 'up in the same moment');
+  });
 });
 
 describe('senses', () => {
@@ -268,11 +283,23 @@ describe('the church', () => {
 });
 
 describe('grabbing', () => {
-  const caught = (tuning, on) => { const h = createHorde(field(), tuning, on), s = h.add(.5, 0); s.state = HUNTING; h.update(1 / 30, still); return { h, s }; };
+  // in reach and long enough to get hold of him
+  const caught = (tuning, on) => { const h = createHorde(field(), tuning, on), s = h.add(.5, 0); s.state = HUNTING; run(h, still, TUNING.windUp + .05); return { h, s }; };
 
   test('in reach, they grab rather than kill', () => {
     let grabbed = 0; const { h, s } = caught({}, { grab: () => grabbed++ });
     assert.equal(grabbed, 1); assert.equal(s.state, GRABBING); assert.ok(h.grab);
+  });
+  test('it takes them a moment to get hold, and a hit in that moment stops it', () => {
+    const h = createHorde(field()), s = h.add(.5, 0); s.state = HUNTING;
+    run(h, still, TUNING.windUp - .1);
+    assert.equal(h.grab, null, 'not yet'); assert.ok(s.reaching > 0, 'but they\'re reaching');
+    run(h, still, .15);
+    assert.ok(h.grab, 'and then they have him');
+    const g = createHorde(field()), t = g.add(.5, 0); t.state = HUNTING;
+    run(g, still, TUNING.windUp * .7); g.knock(0, 0, 1.5, 10);
+    run(g, still, 1);
+    assert.equal(g.grab, null); assert.equal(t.state, STUNNED); assert.equal(t.reaching, 0);
   });
   test('they don\'t grab someone who can\'t be grabbed', () => {
     const h = createHorde(field()), s = h.add(.5, 0); s.state = HUNTING; h.update(1 / 30, { ...still, canGrab: false });
@@ -297,7 +324,7 @@ describe('grabbing', () => {
     const { h, s } = caught(); for (let i = 0; i < 6; i++) h.mash();
     s.state = HUNTING; s.x = .5; s.z = 0; h.update(1 / 30, still);
     assert.equal(h.grab, null);
-    run(h, still, TUNING.mercy + .1); assert.ok(h.grab, 'and then it\'s over');
+    run(h, still, TUNING.mercy + TUNING.windUp + .1); assert.ok(h.grab, 'and then it\'s over');
   });
   test('slowly mashing doesn\'t get there, and running out of time costs you', () => {
     let over = 0; const { h } = caught({}, { overrun: () => over++ });
@@ -499,12 +526,12 @@ describe('run over', () => {
     assert.equal(h.all.length, n - 1, 'gone');
   });
 
-  test('if it didn\'t, they get up', () => {
+  test('if it didn\'t, they get up, and not while they\'re still down', () => {
     const h = createHorde(field()), s = h.add(1, 0), n = h.all.length;
     run(h, still, .05);
     h.runOver((x) => (x < 2 ? hit({ kills: false, seconds: 3 }) : null));
-    run(h, still, 6);
-    assert.notEqual(s.state, STUNNED); assert.equal(h.all.length, n); assert.equal(s.dead, undefined);
+    for (let t = 0; t < 6; t += 1 / 30) { h.update(1 / 30, still); if (h.down(s) > 0) assert.equal(s.state, STUNNED, `up with ${h.down(s)} s still to go`); }
+    assert.notEqual(s.state, STUNNED); assert.equal(h.down(s), 0); assert.equal(h.all.length, n); assert.equal(s.dead, undefined);
   });
 
   test('a wall stops them flying through it', () => {
@@ -530,7 +557,7 @@ describe('run over', () => {
     let freed = 0;
     const h = createHorde(field(), {}, { free: () => freed++, grab() {} }), s = h.add(.3, 0);
     s.state = HUNTING;
-    run(h, { ...still, y: 0 }, .4);
+    run(h, { ...still, y: 0 }, .4 + TUNING.windUp);
     assert.ok(h.grab, 'he\'s held');
     h.runOver(() => hit());
     assert.equal(h.grab, null); assert.equal(freed, 1);

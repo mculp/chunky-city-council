@@ -24,6 +24,7 @@ export const TUNING = {
   lostAfter: 5,                    // seconds a hunter keeps going after losing you
   swarmSize: 3, swarmReach: 10, callReach: 20,
   grabReach: .95, grabbers: 3, dragSpeed: .7,
+  windUp: .5,                      // seconds it takes them to get hold of him once they're close enough, and a hit in that time stops it
   mash: .17, mashFade: .12, grabHold: 7,   // one press, how fast it slips back, and how long you've got
   stun: 1.6, shove: 2.6, mercy: 1.6,       // what breaking free buys you
   personalSpace: .95,
@@ -142,6 +143,8 @@ export function createHorde(world, tuning = {}, on = {}) {
       const dx = s.x - x, dz = s.z - z, d = hypot(dx, dz);
       if (d >= r || s.flat > 0) continue;
       s.started = his || (s.started ?? false) || s.state === HUNTING || s.state === SWARM;
+      // and what they were doing and where they were, which is how they're drawn for a moment before they go over
+      s.hitAs = s.state; s.fromX = s.x; s.fromZ = s.z; s.reaching = 0;
       s.state = STUNNED; s.timer = seconds; s.alert = 1; s.moving = 0; s.flat = s.flatFor = seconds; n++;
       const k = 1 + (1 - d / r) * 2.4, nx = s.x + dx / (d || 1) * k, nz = s.z + dz / (d || 1) * k;
       if (open(s, nx, nz)) { s.x = nx; s.z = nz; s.y = world.floorAt(nx, nz); }
@@ -150,6 +153,15 @@ export function createHorde(world, tuning = {}, on = {}) {
     if (n && F && by !== 'fire') for (const o of active) if (o.who && !(o.flat > 0) && hypot(o.x - x, o.z - z) < T.witness) F.wasThere(o.who);
     if (n && his) rile(x, z);
     return n;
+  };
+  // How much longer someone's down for, getting up included. It's nothing for anyone on their feet.
+  h.down = (s) => (s.flat > 0 && !s.thrown && s.dead === undefined && s.under === undefined ? s.flat : 0);
+  // and keeping someone who's down there for at least this much longer, for anything that needs them to stay put. It says whether they were down.
+  h.keepDown = (s, seconds) => {
+    if (!h.down(s)) return false;
+    const more = Math.max(0, seconds - s.flat);
+    s.flat += more; s.flatFor += more; s.timer = Math.max(s.timer, s.flat);
+    return true;
   };
   // Run down by something that isn't him, so nobody holds it against him, though they'll keep off the spot. at(x, z, y) says what's happened to anyone in its way:
   // where they're knocked to, how they fly, how long they're down for, and whether they get up again. It says how many.
@@ -160,7 +172,7 @@ export function createHorde(world, tuning = {}, on = {}) {
       const hit = at(s.x, s.z, s.y);
       if (!hit) continue;
       if (h.grab?.who.includes(s)) { h.grab.who.splice(h.grab.who.indexOf(s), 1); if (!h.grab.who.length) { h.grab = null; mercy = T.mercy; h.on.free?.(); } }
-      s.x = hit.x; s.z = hit.z; s.thrown = { vx: hit.vx, vz: hit.vz, vy: hit.vy, kills: hit.kills, spin: hit.spin ?? 0 }; s.tumble = 0;
+      s.x = hit.x; s.z = hit.z; s.thrown = { vx: hit.vx, vz: hit.vz, vy: hit.vy, kills: hit.kills, spin: hit.spin ?? 0 }; s.tumble = 0; s.hitAs = undefined; s.reaching = 0;
       s.started = s.state === HUNTING || s.state === SWARM || s.state === GRABBING;
       s.state = STUNNED; s.timer = hit.seconds; s.alert = 1; s.moving = 0; s.flat = s.flatFor = hit.seconds + 1;
       if (s.who) F.hurt(s.who, s.x, s.z, by);
@@ -257,7 +269,8 @@ export function createHorde(world, tuning = {}, on = {}) {
 
     if (s.state === STUNNED) {
       s.timer -= T.thinkEvery;
-      if (s.timer > 0) return;
+      // nobody's up while they've still got time down, which is what anything asking how long that is goes by
+      if (s.timer > 0 || s.flat > 0) return;
       // up again, and after him if it was him. Anyone who'd leave him be and has no reason not to goes back to it.
       if (!scared && !s.started && (s.quiet || w?.calm) && mood !== AFTER) { s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.tx = s.x; s.tz = s.z; }
       else { s.state = scared ? AVOIDING : HUNTING; s.lost = 0; s.tx = p.x; s.tz = p.z; }
@@ -383,7 +396,8 @@ export function createHorde(world, tuning = {}, on = {}) {
       if (s.thrown) { fly(s, dt); continue; }
       if (s.dead !== undefined) { if ((s.dead -= dt) <= 0) { s.dead = undefined; s.under = T.goesUnder; } continue; }
       s.next -= dt;
-      if (s.flat > 0) s.flat -= dt;
+      // and up the moment the time they're down for is over, rather than whenever they next look around
+      if (s.flat > 0 && (s.flat -= dt) <= 0 && s.state === STUNNED) { s.timer = 0; s.next = 0; }
       if (s.next <= 0) { s.next += T.thinkEvery; think(s, p); }
       walk(s, dt);
       if (s.wading && s.state !== GRABBING && world.water(s.x, s.z)) {
@@ -395,15 +409,17 @@ export function createHorde(world, tuning = {}, on = {}) {
     // The water can have as many as it likes and the town doesn't empty: another wanders in for each, in time, from somewhere he isn't
     if (owed && (comeIn -= dt) <= 0) { const at = world.comeFrom?.(p); if (at) { h.add(at[0], at[1]); owed--; } comeIn = T.comeIn; }
     if (h.grab) { h.grab.x = p.x; h.grab.z = p.z; holdOn(dt, p); return; }
-    if (mercy > 0 || !p.canGrab) return;
+    // Close enough, they reach for him, and it takes them a moment to get hold. Whoever's been at it longest gets there first.
+    const can = mercy <= 0 && p.canGrab;
+    let first = null;
     for (const s of active) {
-      if ((s.state === HUNTING || s.state === SWARM) && hypot(s.x - p.x, s.z - p.z) < T.grabReach) {
-        s.state = GRABBING;
-        h.grab = { who: [s], time: 0, progress: 0, at: Math.atan2(s.x - p.x, s.z - p.z), x: p.x, z: p.z, dx: 0, dz: 0 };
-        h.on.grab?.(h.grab);
-        return;
-      }
+      if (can && (s.state === HUNTING || s.state === SWARM) && hypot(s.x - p.x, s.z - p.z) < T.grabReach) { s.reaching = (s.reaching ?? 0) + dt; if (s.reaching >= T.windUp && (!first || s.reaching > first.reaching)) first = s; }
+      else if (s.reaching) s.reaching = 0;
     }
+    if (!first) return;
+    first.reaching = 0; first.state = GRABBING;
+    h.grab = { who: [first], time: 0, progress: 0, at: Math.atan2(first.x - p.x, first.z - p.z), x: p.x, z: p.z, dx: 0, dz: 0 };
+    h.on.grab?.(h.grab);
   };
   return h;
 }

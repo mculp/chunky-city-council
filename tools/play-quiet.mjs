@@ -132,7 +132,7 @@ check('except someone the kind to keep out of his way, who does', r.timid === 6,
 check(`and nobody further off (${swing.further.join(', ')} m) comes for him`, r.further.every((st) => st <= 1), { ...r, ...swing });
 const lows = r.leans.filter((l) => l.low).map((l) => l.lean), ups = r.leans.filter((l) => !l.low).map((l) => l.lean);
 check(`some come for him stood up, leaning ${ups.map((l) => l.toFixed(2)).join(' and ')}, and some folded over and low, ${lows.map((l) => l.toFixed(2)).join(' and ')}`, ups.every((l) => l < .5) && lows.every((l) => l > .9), r.leans);
-r = await g(() => { const was = dist(hit); G.sim(3.5, T); return { state: hit.state, was, now: dist(hit) }; });
+r = await g(() => { const was = dist(hit); while (H.down(hit) > 0) G.sim(T, T); G.sim(1, T); return { state: hit.state, was, now: dist(hit) }; });
 check(`the one he hit gets up and comes for him: from ${r.was.toFixed(1)} m to ${r.now.toFixed(1)} m`, r.state >= 2 && r.state <= 4 && r.now < r.was, r);
 
 // ---- low and quick

@@ -239,8 +239,9 @@ const crowd = await g(() => {
 check(`driving through nine knocks them flat (${crowd.hit}) and costs a little`, crowd.hit >= 5 && crowd.hp < crowd.hp0 && crowd.hp > crowd.hp0 * .7, crowd);
 check('nobody grabs him in it', crowd.mode === 'drive' && !crowd.canGrab, crowd);
 await snap('crowd-flat');
-const up = await g(() => { const G = __game, H = G.horde, v = G.driving(); stop(); move(v.x + 60, v.z, v.yaw); G.sim(7, 1 / 30); return { flat: H.all.filter((s) => s.flat > 0).length, standing: H.all.filter((s) => !(s.flat > 0)).length }; });
-check('they get up again', up.flat === 0 && up.standing === 9, up);
+// a pickup keeps them down longer the faster it was going, up to twenty seconds
+const up = await g(() => { const G = __game, H = G.horde, v = G.driving(); stop(); move(v.x + 60, v.z, v.yaw); let t = 0; for (; t < 25 && H.all.some((s) => s.flat > 0); t += .5) G.sim(.5, 1 / 30); return { t, flat: H.all.filter((s) => s.flat > 0).length, standing: H.all.filter((s) => !(s.flat > 0)).length }; });
+check(`they get up again, the last of them ${up.t} s later`, up.flat === 0 && up.standing === 9 && up.t <= 20.5, up);
 // an engine carries, and a golf cart's barely there
 const hears = await g(async () => {
   const G = __game, H = G.horde, r = {};
@@ -261,7 +262,8 @@ check(`a pickup's heard from 45 m, and a golf cart isn't`, hears.pickup.alert > 
 const claw = await g(() => {
   const G = __game, H = G.horde, v = G.driving(); H.calm(); H.all.length = 0; v.hp = v.K.hp; v.f = v.s = 0;
   for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; H.add(v.x + Math.sin(a) * 4, v.z + Math.cos(a) * 4, { state: 3, alert: 1 }); }
-  const hp0 = v.hp; G.sim(10, 1 / 30);
+  // until they've done it some harm, and not so long that it's wrecked and he's out of it before the rest of this
+  const hp0 = v.hp; for (let t = 0; t < 10 && v.hp > hp0 / 2; t += 1 / 30) G.sim(1 / 30, 1 / 30);
   const inside = H.all.filter((s) => { const dx = s.x - v.x, dz = s.z - v.z, a = dx * Math.sin(v.yaw) + dz * Math.cos(v.yaw), c = dx * Math.cos(v.yaw) - dz * Math.sin(v.yaw); return Math.abs(a) < v.K.length / 2 && Math.abs(c) < v.K.width / 2; }).length;
   return { hp0, hp: v.hp, inside, mode: G.S.mode };
 });

@@ -253,6 +253,9 @@ import { createPantry, PANTRY } from './src/pantry.js';
 import { makeLight, stepLight, lightAt } from './src/light.js';
 
 const $ = (id) => document.getElementById(id);
+// Every version of the work link, and of a local server, comes from the same address, so a browser that kept the last one's data would mix it with this
+// one's code and fall over on load. What's in data/ is always checked with the server first, which costs a round trip and nothing else when it hasn't changed.
+{ const get = window.fetch.bind(window); window.fetch = (url, opts) => get(url, typeof url === 'string' && url.startsWith('data/') && !opts?.cache ? { ...opts, cache: 'no-cache' } : opts); }
 await Promise.race([document.fonts.load('40px Bungee').catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ?test adds window.__game (see the bottom of this file) and seeds Math.random, so a run can be repeated
@@ -4084,6 +4087,10 @@ heroRoot.traverse(o => { o.layers.enable(1); if (o.material && o.material.userDa
 const HP = { kind: 'hang', phase: 0, speed: 0, cut: 0, lag: 0, t: 0 };
 // A swing, as drawings: up over his shoulder, and down through whatever's in front of him. [hand x, y, z, the handle's turn]
 const SWING_POSES = [[.2, .34, -.2, -2.1], [.15, .5, -.08, -1], [.1, .16, .42, .85], [.08, -.26, .6, 1.75], [.08, -.36, .55, 2.15], [.2, -.46, .34, 2.5]], SWING_T = .46, SWING_AT = .2;
+// It turns him toward the nearest one he can reach in front of him: anywhere on his side of a right angle on a phone, and close to where he's looking with a mouse
+const SWING_REACH = 2.8, SWING_CONE = { stick: Math.cos(1.25), mouse: Math.cos(.5) };
+// How long a hit keeps one of them down, getting up included: about ten seconds from the hammer or the bat, and longer the harder anything else hits. Nobody's ever worse off than down.
+const DOWN_FOR = { swing: 10, blast: 14 }, downByTruck = (speed) => Math.min(20, 8 + speed * .5);
 let swingT = -1, swingHit = false, throwT = 0;
 function poseHero(tq) {
   const k = HP.kind, ph = HP.phase, R = hero, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -4306,8 +4313,9 @@ const crowdWear = (part) => zombieMat(crowdSheet, part, { rows: CROWD_LOOKS.leng
 const crowdBodies = crowdMesh(crowdBody.geo, crowdWear('body'), CROWD_SHOWN);
 const crowdArms = crowdMesh(crowdArmGeo, crowdWear('arm'), CROWD_SHOWN * 2), crowdLegs = crowdMesh(crowdLegGeo, crowdWear('leg'), CROWD_SHOWN * 2);
 // What's coming off them. Two quads for each of them, one facing you and one flat on the ground, in one draw call, and nothing
-// at all from someone who's not far enough gone unless they've noticed you.
-const AURA_CELL = 256, auraMap = canvasFor(AURA_CELL * AURA_CELLS, AURA_CELL, (g) => drawAura(g, AURA_CELL), false); auraMap.colorSpace = THREE.NoColorSpace;
+// at all from someone who's not far enough gone unless they've noticed you. The one facing you is this high over the one on the
+// ground, times however much their instance is stretched upward, which is less for someone who's down.
+const AURA_UP = .92, AURA_CELL = 256, auraMap = canvasFor(AURA_CELL * AURA_CELLS, AURA_CELL, (g) => drawAura(g, AURA_CELL), false); auraMap.colorSpace = THREE.NoColorSpace;
 const auraGeo = new THREE.BufferGeometry();
 auraGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0, -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1], 3));
 auraGeo.setIndex([0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6]);
@@ -4322,7 +4330,7 @@ const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
       vQ=position.xy; vA=iAura; vFlat=position.z;
       vec3 feet=(instanceMatrix*vec4(0.,0.,0.,1.)).xyz; float far=max(iAura.x,iAura.y*.55);
       vec4 mvPosition;
-      if(position.z<.5){ mvPosition=viewMatrix*vec4(feet+vec3(0.,.92,0.),1.); mvPosition.xy+=position.xy*vec2(1.25,1.45); }
+      if(position.z<.5){ mvPosition=viewMatrix*vec4(feet+vec3(0.,${AURA_UP}*instanceMatrix[1].y,0.),1.); mvPosition.xy+=position.xy*vec2(1.25,1.45); }
       else mvPosition=viewMatrix*vec4(feet+vec3(position.x,0.,position.y)*(.7+far*1.2)+vec3(0.,.05,0.),1.);
       mvPosition.xyz+=viewMatrix[1].xyz*hillOver(feet.xz);
       gl_Position=projectionMatrix*mvPosition;
@@ -4350,6 +4358,8 @@ const GAIT = [3.6, 4.6, 9, 11, 16, 0, 10, 4.6];   // how quickly their limbs go,
 // Standing about they're folded over at the waist, and going to look they come up some. The ones after him stand up, unless they're the kind who come low and quick,
 // folded over with their arms dragging. In radians from upright, by state. It's only ever a pose, so whatever stands them up for good can undo it.
 const FOLD = [1.3, .6, 0, 0, 0, 0, 0, 0], SCUTTLE = 1.05, FOLD_LEG = .83;
+// Knocked down: held a step as they were, gone over in a third of a second, and getting up at the end of it, which takes at most this long, with their legs this far back on their knees
+const HIT_HOLD = 1 / 12, HIT_FALL = .3, GET_UP = 2.4, KNEEL = 1.05, SMOOTH = (t) => THREE.MathUtils.smoothstep(t, 0, 1);
 const crowdShown = [];
 // How high someone's hips are, sat in each of them, and how their straight limbs go
 const SEATED = { car: { hip: .8, arms: -1.2, legs: -1.3 }, pickup: { hip: 1.04, arms: -1.2, legs: -1.3 }, quad: { hip: 1.02, arms: -1, legs: -.62 } };
@@ -4437,42 +4447,55 @@ function poseCrowd(s, i, step) {
     const seat = s.seated;
     // sat where he'd sit, with their hips on the seat, whatever size they are
     if (seat) { toBody(seat); _cp.set(seat.K.seat[0], SEATED[seat.kind].hip + -ZOMBIE_HIP * s.size * TOWN_SCALE, seat.K.seat[2]).applyMatrix4(_vb); s.x = _cp.x; s.y = _cp.y; s.z = _cp.z; s.yaw = seat.yaw; }
-    const st = s.state, after = st === HUNTING || st === SWARM || st === GRABBING, away = st === AVOIDING, still = !s.moving && st !== GRABBING, low = after && s.scuttle;
-    s.gait += GAIT[st] / 12 * (still ? .2 : 1) * (low ? 1.4 : 1);
-    // knocked over: flat on his back, going down quickly and getting up slowly
-    const lie = s.flat > 0 ? Math.min(1, (s.flatFor - s.flat) * 7, s.flat * 2.2) : 0;
+    // Knocked down by something: held a step as they were, then folding over as they go down where they were thrown, and getting up slowly, first to their knees, folded
+    // over, and then up into the fold they stand in. Anyone the train threw, or who's lying dead, is just flat.
+    const downed = s.flat > 0, since = downed ? s.flatFor - s.flat : 0, struck = downed && s.hitAs !== undefined, held = struck && since < HIT_HOLD;
+    const fell = !downed ? 0 : struck ? Math.min(1, Math.max(0, since - HIT_HOLD) / HIT_FALL) : Math.min(1, since * 7);
+    const getUp = downed && !s.thrown && s.dead === undefined ? Math.min(GET_UP, s.flatFor * .4) : 0, rise = getUp ? Math.max(0, 1 - s.flat / getUp) : 0;
+    const lie = downed ? Math.min(SMOOTH(fell), 1 - SMOOTH(rise * 2)) : 0, kneel = rise < .5 ? SMOOTH(rise * 2) : 1 - SMOOTH(rise * 2 - 1);
+    const st = held ? s.hitAs : s.state, after = st === HUNTING || st === SWARM || st === GRABBING, away = st === AVOIDING, still = !s.moving && st !== GRABBING, low = after && s.scuttle;
+    s.gait += held ? 0 : GAIT[st] / 12 * (still ? .2 : 1) * (low ? 1.4 : 1);
+    // reaching for him, with their hands coming up over their heads, until they've got hold or something stops them
+    const grip = after && s.reaching > 0 ? Math.min(1, s.reaching / horde.T.windUp) : 0;
     // folded over, or coming up out of it, a few steps at a time. The hips go back so they don't topple, which tips the legs, and that takes them down a little.
-    const want = seat || lie ? 0 : low ? SCUTTLE : FOLD[st], fold = s.fold = s.fold === undefined ? want : s.fold + (want - s.fold) * .34;
-    const back = fold * .17, tilt = Math.asin(back / FOLD_LEG), drop = FOLD_LEG * (1 - Math.cos(tilt));
+    const want = seat || lie > .5 ? 0 : kneel > 0 ? FOLD[SHAMBLE] : low ? SCUTTLE : FOLD[st], fold = s.fold = s.fold === undefined ? want : s.fold + (want - s.fold) * .34;
+    const back = fold * .17, tilt = Math.asin(back / FOLD_LEG), legs0 = kneel * KNEEL - tilt, drop = FOLD_LEG * (1 - Math.cos(legs0));
     const p = s.gait, stride = still ? 0 : low ? .44 : after || away ? .62 : .36 - fold * .05;
     const look = s.look % CROWD_LOOKS.length, size = s.size * TOWN_SCALE;
-    _cb.compose(_cp.set(s.x, seat ? s.y : s.y + (1.43 - drop) * size * (1 - lie) + .28 * lie + Math.abs(Math.sin(p)) * .03, s.z), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(size));
+    // and drawn where they were struck until they've gone over, sliding to where they were thrown as they do
+    const slide = struck ? 1 - SMOOTH(fell) : 0, px = s.x + ((s.fromX ?? s.x) - s.x) * slide, pz = s.z + ((s.fromZ ?? s.z) - s.z) * slide;
+    _cb.compose(_cp.set(px, seat ? s.y : s.y + (1.43 - drop) * size * (1 - lie) + .28 * lie + Math.abs(Math.sin(p)) * .03, pz), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(size));
     if (back) _cb.multiply(_cl.makeTranslation(0, 0, -back));
     if (lie) _cb.multiply(_cl.makeRotationX(-1.45 * lie));
     if (s.tumble) _cb.multiply(_cl.makeRotationX(s.tumble));
-    // the top half leans from the hips, so the feet stay on the ground
-    const list = (s.phase - 3.14) * .035, lean = Math.max(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : .16, fold);
-    _cl.makeRotationFromEuler(_ce.set(lean, 0, list + (st === STUNNED ? Math.sin(step * .9) * .12 : Math.sin(p) * (after ? .05 : .1))));
+    // the top half leans from the hips, so the feet stay on the ground. It doubles over going down, rears back a little reaching for him, and wobbles on its knees.
+    const crumple = struck && fell > 0 && fell < 1 ? Math.sin(fell * Math.PI) * .8 : 0;
+    const list = (s.phase - 3.14) * .035, lean = Math.max(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : .16, fold) + crumple - grip * .25;
+    _cl.makeRotationFromEuler(_ce.set(lean, 0, list + (st === STUNNED ? Math.sin(step * .9) * .12 + kneel * Math.sin(step * .7 + s.phase) * .16 : Math.sin(p) * (after ? .05 : .1))));
     const e = _cl.elements; _cl.setPosition(-ZOMBIE_HIP * e[4], ZOMBIE_HIP - ZOMBIE_HIP * e[5], -ZOMBIE_HIP * e[6]);
     _cu.multiplyMatrices(_cb, _cl).toArray(bodies, i * 16);
     // where the top of their head is, for whatever's said over it
-    _cp.set(0, .55, .18).applyMatrix4(_cu); s.hdx = _cp.x - s.x; s.hdy = _cp.y - s.y; s.hdz = _cp.z - s.z; s.lean = lean;
+    _cp.set(0, .55, .18).applyMatrix4(_cu); s.hdx = _cp.x - s.x; s.hdy = _cp.y - s.y; s.hdz = _cp.z - s.z; s.lean = lean; s.lie = lie; s.kneel = kneel;
     for (let a = 0; a < 2; a++) {
       const side = a ? 1 : -1, swing = Math.sin(p + (a ? Math.PI : 0));
       let reach = seat ? SEATED[seat.kind].arms : after ? -1.3 + Math.sin(p * 1.3 + a * 2) * .16 : st === CURIOUS ? -.4 - a * .25 : st === STUNNED ? .15 : away ? -2.1 + a * .35 + swing * .12 : st === TRAILING && still ? -.03 : swing * .18 - .1 - (a === s.limp ? .22 : .04);
       // folded over, their arms hang straight down from the shoulder, swinging a little, and drag behind them coming after him like that
       if (!seat && fold > .05) { const hang = -lean + (after ? (st === GRABBING ? -.6 : .3 + Math.sin(p * 1.3 + a * 2) * .1) : st === CURIOUS ? -.25 - a * .15 : swing * .14 - (a === s.limp ? .06 : 0)); reach += (hang - reach) * Math.min(1, fold / .6); }
+      if (grip) reach += (-2.3 + a * .15 - reach) * grip;
       if (a === 0) s.arm = lean + reach;
       _cl.makeRotationFromEuler(_ce.set(reach, 0, side * (after ? .03 : .07))).setPosition(side * .205, .06, 0);
       _cm.multiplyMatrices(_cu, _cl).toArray(arms, (i * 2 + a) * 16);
-      _cl.makeRotationFromEuler(_ce.set(seat ? SEATED[seat.kind].legs : -swing * stride * (a === s.limp ? .55 : 1) - tilt, 0, side * (seat ? .1 : .03))).setPosition(side * .1, ZOMBIE_HIP, 0);
+      _cl.makeRotationFromEuler(_ce.set(seat ? SEATED[seat.kind].legs : -swing * stride * (a === s.limp ? .55 : 1) + legs0, 0, side * (seat ? .1 : .03))).setPosition(side * .1, ZOMBIE_HIP, 0);
       _cm.multiplyMatrices(_cb, _cl).toArray(legs, (i * 2 + a) * 16);
     }
     // how far gone they are comes from a number they already have, since asking for a new one would change what everyone does after it. Anyone who's burnt down is past the line, and nobody else.
     const far = s.far ??= farOf(s.phase / 6.28, !!s.who && s.quiet === false, BURNT_LINE), hot = after ? 1 : st === CURIOUS || st === TRAILING ? .42 : st === STUNNED ? .2 : 0, flip = s.limp;
     crowdZ.setXYZW(i, look, far, hot, flip); zombieLine(far, hot, _cc).toArray(crowdLine.array, i * 3);
     for (let a = 0; a < 2; a++) { crowdLimbZ.setXYZW(i * 2 + a, look, far, hot, flip); _cc.toArray(crowdLimbLine.array, (i * 2 + a) * 3); }
-    _cm.makeTranslation(s.x, seat ? seat.y : s.y, s.z).toArray(auras, i * 16); crowdAuraZ.setXYZ(i, far, hot, look);
+    // what's coming off them goes down with them, out of the middle of them as they lie or kneel, with the glow on the ground under that
+    if (downed) { _cp.set(0, AURA_UP / TOWN_SCALE - 1.43, 0).applyMatrix4(_cb); _cm.makeScale(1, Math.max(.1, (_cp.y - s.y) / AURA_UP), 1).setPosition(_cp.x, s.y, _cp.z); }
+    else _cm.makeTranslation(px, seat ? seat.y : s.y, pz);
+    _cm.toArray(auras, i * 16); crowdAuraZ.setXYZ(i, far, hot, look);
   }
 }
 
@@ -5774,7 +5797,7 @@ function updateDrive(dt) {
   // the crowd: anyone in front goes over, and it costs a little. Sitting still, they get at it.
   if (folkOut) {
     if (speed > 3) {
-      const dir = v.f < 0 ? -1 : 1, n = horde.knock(v.x + fx * dir * K.length * .35, v.z + fz * dir * K.length * .35, K.width / 2 + .8, 2.6 + speed * .12, 'truck') + horde.knock(v.x, v.z, K.width / 2 + .6, 2.6 + speed * .12, 'truck');
+      const dir = v.f < 0 ? -1 : 1, n = horde.knock(v.x + fx * dir * K.length * .35, v.z + fz * dir * K.length * .35, K.width / 2 + .8, downByTruck(speed), 'truck') + horde.knock(v.x, v.z, K.width / 2 + .6, downByTruck(speed), 'truck');
       if (n) { SFX.play('hit.flesh'); v.f *= Math.pow(.97, n); if (hurtVehicle(v, .5 * n)) done = true; vehDirty = true; if (!reduceMotion) cam.shake = Math.max(cam.shake, .18); }
     } else if ((vehClawT -= dt) <= 0) {
       vehClawT = .5;
@@ -5996,7 +6019,7 @@ function shock(x, y, z, r, power, skip, fire) {
     if (hurtVehicle(v, power * k * 20)) wreckVehicle(v); else if (v.fuse > 0) v.fuse = Math.min(v.fuse, .25);
     toss(v, dx / d * k * 9, dz / d * k * 9, 2 + k * 6); vehDirty = true;
   }
-  if (folkOut) { horde.knock(x, z, r, 3.2, 'blast'); horde.noise(x, z, r * 9, 6); }
+  if (folkOut) { horde.knock(x, z, r, DOWN_FOR.blast, 'blast'); horde.noise(x, z, r * 9, 6); }
   const P = player.pos, d = Math.hypot(P.x - x, P.z - z), reach = r * .8;
   if (S.mode === 'town' && d < reach && Math.abs(P.y - y) < r) { const k = 1 - d / reach; player.vy = Math.max(player.vy, 2.5 + 5 * k); player.grounded = false; hurtBy(fire ? 'blast' : 'hit', P.x - x, P.z - z, 8 + 20 * k); }
 }
@@ -6077,7 +6100,7 @@ function updateLoose(dt) {
     // and whoever's in the way
     const P = player.pos;
     if (sp > 3) {
-      if (folkOut) horde.knock(v.x, v.z, v.K.length / 2 + .3, 2.6, 'truck');
+      if (folkOut) horde.knock(v.x, v.z, v.K.length / 2 + .3, downByTruck(sp), 'truck');
       if (!driving && Math.abs(P.y - v.y) < 1.4 && inVehicle(v, P.x, P.z, .3)) hurtBy('hit', P.x - v.x, P.z - v.z, 7);
     }
     v.yaw += l.turn * dt; v.pitch += l.pitch * dt; v.roll += l.roll * dt;
@@ -6300,16 +6323,31 @@ function updateTrains(dt) {
 // With the mouse, what he swings at or throws at is what the camera's looking at. He keeps going the way he was going while he does.
 let aimT = 0;
 function aimWithCamera() { if (mouseHeld()) { player.yaw = cam.yaw + Math.PI; aimT = .35; } }
-function swing() { if (swingT < 0 && S.mode === 'town') { giveAway(); aimWithCamera(); swingT = 0; swingHit = false; SFX.play('swing'); } }
+function swing() { if (swingT < 0 && S.mode === 'town') { giveAway(); aimWithCamera(); faceNearest(); swingT = 0; swingHit = false; SFX.play('swing'); } }
+// the nearest one in front of him he can reach, and sooner one who's coming for him than one who isn't
+function faceNearest() {
+  if (!folkOut) return;
+  const P = player.pos, fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), cone = aimT > 0 ? SWING_CONE.mouse : SWING_CONE.stick;
+  let best = null, bd = Infinity;
+  for (const s of horde.active) {
+    if (s.flat > 0 || s.under !== undefined || s.thrown || s.dead !== undefined) continue;
+    const dx = s.x - P.x, dz = s.z - P.z, d = Math.hypot(dx, dz);
+    if (d > SWING_REACH || d < .05 || (dx * fx + dz * fz) / d < cone) continue;
+    const k = d - (s.state >= HUNTING && s.state <= GRABBING ? 1 : 0);
+    if (k < bd) { best = s; bd = k; }
+  }
+  if (best) player.yaw = Math.atan2(best.x - P.x, best.z - P.z);
+}
 function updateSwing(dt) {
   if (throwT > 0) throwT -= dt;
   if (swingT < 0) return;
   swingT += dt;
   if (!swingHit && swingT >= SWING_AT) {
     swingHit = true;
-    const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), P = player.pos, x = P.x + fx * .9, z = P.z + fz * .9, car = parkedAt(x, z, P.y + 1), r = car ? null : strike(x, P.y + 1.1, z, 1.3, 1, fx, fz), n = folkOut ? horde.knock(x, z, S.flags.bat ? 1.9 : 1.5, 2.4) : 0;
+    const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), P = player.pos, x = P.x + fx * .9, z = P.z + fz * .9, car = parkedAt(x, z, P.y + 1), r = car ? null : strike(x, P.y + 1.1, z, 1.3, 1, fx, fz), n = folkOut ? horde.knock(x, z, S.flags.bat ? 1.9 : 1.5, DOWN_FOR.swing) : 0;
     swatFlies(P.x, P.z);
-    if (n) SFX.play('hit.flesh');
+    // and landing on someone, the picture holds a frame and tears, like a drawing being hit
+    if (n) { SFX.play('hit.flesh'); if (!reduceMotion) { triggerBurst(.45, .1, true, false); stepBurst(); } }
     if (car) { SFX.play('hit.metal'); spray(x, P.y + 1.1, z, FEW ? 2 : 4, .05, 2.4, .8, .75, .65); soundAlarm(car); if (car.ai && !car.kid) traffic.letGo(car.ai, 'hit'); }
     if (r && !r.gone) SFX.play(r.house ? (r.house.walls === 'metal' || r.house.walls === 'mobile' ? 'hit.metal' : 'hit.wood') : METAL_PROPS.has(r.thing.kind) ? 'hit.metal' : 'hit.wood');
     if ((r || n || car) && !reduceMotion) cam.shake = Math.max(cam.shake, .22);
