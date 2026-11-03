@@ -20,7 +20,7 @@ Everything is procedural three.js. The game has no image, model or texture files
 | `writeStructure`, `houseMat` | Every real building: `src/structures.js` writes its pieces, and one material draws the siding, brick, block, ribs, shingle, windows and doors from what's in the vertices |
 | `swayMat` | Foliage that moves |
 | `gifMat`, `renderFrame` | The final look: dither, grain, vignette and glitches |
-| `triggerBurst`, `glitch` | Glitch bursts: `glitch` for hits, `triggerBurst` for the timed ones |
+| `triggerBurst`, `glitch` | Glitch bursts: `glitch` for hits, `triggerBurst` for the rare timed one |
 | `updateParticles` | Leaves, fireflies, cyan drips and mist, wrapped around the camera |
 
 This approach came from a failed one. Flat shapes drawn in code and set against painted frames looked like clip art and were thrown out. Building a real 3D scene and making it feel hand-drawn is what worked, so don't go back to flat sprites or paste painted images into the scene.
@@ -67,7 +67,7 @@ What they are is the owner's to decide, so nothing here says. They share one bod
 - **Limited colour.** `UnrealBloomPass` (strength .5, radius .45, threshold .92), then `OutputPass`, then `gifMat`: an 8×8 Bayer dither to 30 levels per channel, grain, a vignette and slight chromatic aberration.
 - **Glitches.** Scanline tears, block shifts and colour crush down to 9 levels. They respect `prefers-reduced-motion`.
   - **Hits** (`glitch`) fire on the cut, the splash and a bite: big blocks that slide. These are what the trailer shows.
-  - **Timed bursts** fire every 4 to 11 seconds: finer blocks that swap colour, and about half of them hold, freezing and smearing blocks of the previous frame.
+  - **Timed bursts** fire about every five minutes, on the owner's say: finer blocks that swap colour, and about half of them hold, freezing and smearing blocks of the previous frame. The reference fires one every 4 to 11 seconds.
   - **He stays clean.** A mask pass keeps him and his outlines out of the break-up. The mask and the hold buffers are only drawn during a burst, so calm frames cost no extra passes.
 - **Particles.** Falling leaves, fireflies, mist, and a stray cyan drop from the bottle that rings the water where it lands. Phones get 140 leaves, 70 fireflies and 5 mist sprites instead of 380, 180 and 10.
 
@@ -79,7 +79,7 @@ Night in an abandoned Mississippi town.
 - **Sky:** horizon `#e0662a`, clouds `#1d1230`, moonlight `#c9d4ff`, purple fog `#2a1838`.
 - **Surfaces:** flat-shaded terrain and foliage, ink outlines on buildings and steel, kudzu `#3f7a35` over everything left standing.
 - **The bridge:** a rusted truss with an orange rail (`#d76a2c`).
-- **The town:** the real one. Every building is at its real position, with its real footprint, in siding, brick, block or ribbed metal, and with kudzu on it. See `data/structures.md`. The Mercantile is the little block store, the gas station's canopy stands in front of the old store it belonged to, and Miss Odessa's church is the brick one at Adams and Church St. Real businesses go under invented names.
+- **The town:** the real one. Every building is at its real position, with its real footprint, in siding, brick, block or ribbed metal, and with kudzu on it. See `data/structures.md`. The store is the little block one, the gas station's canopy stands in front of the old store it belonged to, and Miss Odessa's church is the brick one at Adams and Church St. Real businesses go under invented names.
 - **Props that aren't real:** the water tower, and the rusted boxcar on a railroad with dark ties (`#2a1d18`).
 - **Doors stand open.** Any building can be walked into, and its roof comes off while he's inside. Anything between the camera and him opens up around him in a dither, and the roof of whatever the camera backs into comes off too.
 - **Street signs:** green blades with cream Bungee, the colours of the town sign, reading the names in the road graph. Each corner blade runs along the road it names, as real ones do, and the roadside ones face whoever's walking that way. A phone in portrait sees a narrow slice of the road, so they're big enough to read before they slide off screen.
@@ -110,7 +110,7 @@ The game has the reference's clean character, holds, timed bursts, full bottle, 
 
 ## Controls
 
-Touch comes first, because the game is played on a phone. Left thumb moves, A acts, B boosts or jumps, and dragging looks around. WASD or arrows, E and Space cover desktop.
+Touch comes first, because the game is played on a phone. Left thumb moves, A acts, B boosts or jumps, holding RUN runs, and dragging looks around. WASD or arrows, E, Space and Shift cover desktop.
 
 ## What stays out of this repo
 

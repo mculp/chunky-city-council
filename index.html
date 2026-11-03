@@ -85,6 +85,8 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .btn{border-radius:50%;border:3px solid var(--ink);font-family:var(--f-display);display:grid;place-items:center;touch-action:none;box-shadow:0 4px 0 var(--ink);padding:0}
 #bA{width:78px;height:78px;font-size:24px;background:var(--rust);color:var(--ink)}
 #bB{width:64px;height:64px;font-size:19px;background:var(--cyan);color:var(--ink);margin-bottom:38px}
+#bR{position:absolute;right:9px;bottom:90px;width:60px;height:60px;font-size:13px;background:var(--cream);color:var(--ink)}
+#bR[hidden]{display:none}
 .btn.on{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
 @media (pointer:coarse){#stick{display:block}#btns{display:flex}}
 body.talking .ctl{visibility:hidden}
@@ -110,7 +112,7 @@ body.talking .ctl{visibility:hidden}
 <div id="flash"></div>
 <div class="card" id="card"><div><h2 id="cardH"></h2><p id="cardP"></p></div></div>
 <div id="stick" class="ctl" aria-hidden="true"><div id="knob"></div></div>
-<div id="btns" class="ctl"><button class="btn" id="bB" aria-label="Boost or jump">B</button><button class="btn" id="bA" aria-label="Act">A</button></div>
+<div id="btns" class="ctl"><button class="btn" id="bB" aria-label="Boost or jump">B</button><button class="btn" id="bA" aria-label="Act">A</button><button class="btn" id="bR" aria-label="Hold to run" hidden>RUN</button></div>
 <div id="dialog" hidden><div class="box"><div class="who" id="dWho"></div><div class="say" id="dSay"></div><div class="opts" id="dOpts"></div></div></div>
 <div class="panel" id="title">
   <div class="pbox">
@@ -957,7 +959,7 @@ const PLACES = {
   tower: landing(-330, 15, 100, -14),
 };
 function around(place, fn) { OX = place.x; OZ = place.z; fn(); OX = OZ = 0; }
-// Chunky Mercantile: what's inside the real store. The walls and roof are the building's own.
+// What's inside the real store. The walls and roof are the building's own.
 const storeMat = triplanar(woodRed, .5, { roughness: .95 });
 const roofMat = new THREE.MeshStandardMaterial({ color: '#2b2630', roughness: .9 });
 around(PLACES.store, () => {
@@ -969,7 +971,7 @@ around(PLACES.store, () => {
 // its sign, on a board in front of the gable, which comes down while he's inside or it'd be all you'd see
 const STORE_HOUSE = houseAt(...atTrue(-64.5, -39.5));
 const storeBoard = new THREE.Mesh(boxGeo, storeMat); storeBoard.scale.set(10.4, 2, .2); storeBoard.position.set(40 + PLACES.store.x, Y0 + 3.75, -4.72 + PLACES.store.z); outline(storeBoard, INK, 1.2); scene.add(storeBoard);
-const storeSign = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ map: textTex(['CHUNKY MERCANTILE'], 1024, 184, '#e4d6b8', '#7a2318', '76px Bungee, Impact, sans-serif', { grime: true }), roughness: .9 }));
+const storeSign = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ map: textTex(['GROCERY'], 1024, 184, '#e4d6b8', '#7a2318', '110px Bungee, Impact, sans-serif', { grime: true }), roughness: .9 }));
 storeSign.scale.set(10 / 10.4, 1.8 / 2, 1); storeSign.position.z = .6; storeBoard.add(storeSign);
 // the gas station's canopy and pumps, in front of the store it belonged to
 const canopyMat = new THREE.MeshStandardMaterial({ color: '#cfc9bb', roughness: .85 }), canopyPost = new THREE.MeshStandardMaterial({ color: '#a8342a', roughness: .7, metalness: .2 });
@@ -1741,7 +1743,7 @@ function poseHero(tq) {
     R.arm(0, V3(-.44, -.12 + f, .3), V3(-.7, -.2, -.2)); R.arm(1, V3(.44, -.12 - f, .3), V3(.7, -.2, -.2));
     R.leg(0, V3(-.2, -1.3, .3 + f * .5), V3(-.1, -1, .8), .2); R.leg(1, V3(.16, -1.36, -.22), V3(.1, -1, .8));
   } else {
-    const a = Math.min(1, HP.speed / 4.2);
+    const a = Math.min(1, HP.speed / 4.2) + .5 * player.runK;
     for (let i = 0; i < 2; i++) {
       const s = i ? 1 : -1, p = ph + (i ? Math.PI : 0);
       R.arm(i, V3(s * .36, -.6 + .05 * a, .05 - Math.sin(p) * .28 * a), V3(s * .7, -.35, -.25));
@@ -2077,11 +2079,12 @@ function sizeAll() {
   rtA.setSize(bufSize.x, bufSize.y); rtB.setSize(bufSize.x, bufSize.y); maskRT.setSize(Math.ceil(bufSize.x / 2), Math.ceil(bufSize.y / 2));
 }
 sizeAll(); addEventListener('resize', sizeAll);
-// bursts: a hit (glitch) slides big blocks across the frame at a steady level. The timed ones are finer, boil with the 12fps step and sometimes hold.
-let nextBurst = 5 + Math.random() * 4, burstEnd = 0, burstHold = 0, burstPow = 0, burstFine = 0, burstSeed = 0, burstOn = false, burstFrames = 0;
+// bursts: a hit (glitch) slides big blocks across the frame at a steady level. The timed one is finer, boils with the 12fps step and sometimes holds, and it's rare: about every five minutes.
+const BURST_EVERY = 300;
+let nextBurst = BURST_EVERY + Math.random() * 30, burstEnd = 0, burstHold = 0, burstPow = 0, burstFine = 0, burstSeed = 0, burstOn = false, burstFrames = 0;
 function triggerBurst(pow, dur, hold, fine) { burstPow = pow; burstEnd = time + dur; burstHold = hold ? 1 : 0; burstFine = fine ? 1 : 0; burstSeed = fine ? Math.random() * 100 : 0; }
 function stepBurst() {
-  if (!reduceMotion && time > nextBurst) { if (time >= burstEnd) triggerBurst(.5 + Math.random() * .5, .12 + Math.random() * .4, Math.random() < .45, true); nextBurst = time + 4 + Math.random() * 7; }
+  if (!reduceMotion && time > nextBurst) { if (time >= burstEnd) triggerBurst(.5 + Math.random() * .5, .12 + Math.random() * .4, Math.random() < .45, true); nextBurst = time + BURST_EVERY - 15 + Math.random() * 30; }
   const active = time < burstEnd, u = gifMat.uniforms;
   G.uBurst.value = active ? burstPow * (burstFine ? .55 + .45 * Math.random() : 1) : 0; u.uSeed.value = burstSeed; u.uFine.value = burstFine;
   if (active !== burstOn) { burstOn = active; burstFrames = 0; document.body.classList.toggle('burst', active); }
@@ -2107,11 +2110,11 @@ function renderFrame(dt) {
 }
 
 // ================================================================ input: keyboard, touch stick, buttons, drag to look
-const input = { x: 0, y: 0, a: false, b: false, aEdge: false, bEdge: false };
+const input = { x: 0, y: 0, a: false, b: false, run: false, aEdge: false, bEdge: false };
 const keys = new Set();
 addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
-  const k = e.key.toLowerCase(); if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ' || k === 'shift') input.bEdge = true; }
+  const k = e.key.toLowerCase(); if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; }
   keys.add(k);
   if (S.mode === 'dialog' && /^[1-4]$/.test(k)) { const b = $('dOpts').children[+k - 1]; if (b) b.click(); }
 });
@@ -2127,11 +2130,12 @@ function moveStick(e) {
   const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; }
   touchStick.set(x, -y); knob.style.transform = `translate(${x * 38}px,${y * 38}px)`;
 }
-const touchBtn = { a: false, b: false };
-for (const [id, k] of [['bA', 'a'], ['bB', 'b']]) {
+// RUN stays held a moment after it's let go, so a thumb can slide off it to jump
+const touchBtn = { a: false, b: false, r: false, rUntil: 0 };
+for (const [id, k] of [['bA', 'a'], ['bB', 'b'], ['bR', 'r']]) {
   const el = $(id);
-  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); touchBtn[k] = true; el.classList.add('on'); if (k === 'a') input.aEdge = true; else input.bEdge = true; });
-  const up = () => { touchBtn[k] = false; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); touchBtn[k] = true; el.classList.add('on'); if (k === 'a') input.aEdge = true; else if (k === 'b') input.bEdge = true; });
+  const up = () => { touchBtn[k] = false; el.classList.remove('on'); if (k === 'r') touchBtn.rUntil = time + .2; };
   el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
 }
 let lookId = null, lookX = 0, lookY = 0, lastLook = -99;
@@ -2144,7 +2148,7 @@ function readInput() {
   if (keys.has('a') || keys.has('arrowleft')) x -= 1; if (keys.has('d') || keys.has('arrowright')) x += 1;
   if (keys.has('w') || keys.has('arrowup')) y += 1; if (keys.has('s') || keys.has('arrowdown')) y -= 1;
   const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; }
-  input.x = x; input.y = y; input.a = touchBtn.a || keys.has('e') || keys.has('enter'); input.b = touchBtn.b || keys.has(' ') || keys.has('shift');
+  input.x = x; input.y = y; input.a = touchBtn.a || keys.has('e') || keys.has('enter'); input.run = touchBtn.r || time < touchBtn.rUntil || keys.has('shift'); input.b = touchBtn.b || keys.has(' ') || input.run;
 }
 
 // ================================================================ game state + UI
@@ -2155,7 +2159,7 @@ const people = createPeople(await (await fetch('data/cast.json')).json(), { stor
 Object.assign(S.flags, people.flags());
 // what dialogue reads and changes
 const played = { flags: S.flags, items: S.items, get beans() { return S.beans; }, addBeans };
-const player = { pos: new THREE.Vector3(), vy: 0, yaw: Math.PI, grounded: true, inv: 0, stamina: 1, boostT: 0, kb: new THREE.Vector2(), fallV: new THREE.Vector3(), lastSafe: new THREE.Vector3() };
+const player = { pos: new THREE.Vector3(), vy: 0, yaw: Math.PI, grounded: true, inv: 0, stamina: 1, running: false, winded: false, ran: false, runK: 0, boostT: 0, kb: new THREE.Vector2(), fallV: new THREE.Vector3(), lastSafe: new THREE.Vector3() };
 const cam = { yaw: -.6, pitch: .28, shake: 0, snap: false, talk: 0 };
 // over his shoulder when he's talking: how far back, how far out, how high, how high it looks, and how far along towards them
 const TALK = { back: 3, out: 1.7, up: 2.45, look: 1.5, along: .27 }, _talk = new THREE.Vector3();
@@ -2200,12 +2204,13 @@ const touchUI = matchMedia('(pointer:coarse)').matches;
 const KA = touchUI ? 'A' : 'E', KB = touchUI ? 'B' : 'SPACE';
 function setHTML(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; $(id).innerHTML = v; } }
 function setHidden(id, v) { if (hudCache['h' + id] !== v) { hudCache['h' + id] = v; $(id).hidden = v; } }
+const RUN = { speed: 8, tire: .05, rest: .125, recover: .3, ease: 7 };   // m/s, and how much breath a second: 20 s of running, 8 s to get it all back
 function hudVitals() {
   const talk = S.mode === 'dialog' || S.mode === 'end' || S.mode === 'fail' || S.mode === 'title';
   if (hudCache.talk !== talk) { hudCache.talk = talk; document.body.classList.toggle('talking', talk); }
   setHidden('hearts', !(S.mode === 'swim' || S.mode === 'bridge' || S.mode === 'land' || S.mode === 'grabbed' || (crowdOut && S.mode === 'town')));
   setHTML('hearts', '♥'.repeat(Math.max(0, S.hp)) + '♡'.repeat(Math.max(0, 3 - S.hp)));
-  setHidden('stam', S.mode !== 'swim'); $('stamFill').style.transform = `scaleX(${player.stamina.toFixed(2)})`;
+  setHidden('stam', S.mode !== 'swim' && !player.ran); setHidden('bR', !(S.mode === 'land' || S.mode === 'bridge' || S.mode === 'town')); $('stamFill').style.transform = `scaleX(${player.stamina.toFixed(2)})`;
   const town = S.mode === 'town' || S.mode === 'grabbed' || S.mode === 'dialog' || S.mode === 'sweep' || S.mode === 'end';
   setHidden('beans', !town); setHTML('beans', `Beans ${S.beans}/12`); setHidden('rep', !town);
   if (town) drawPeople();
@@ -2355,6 +2360,7 @@ function startBridge() {
 function startTown() {
   S.mode = 'town'; S.collapse = 99; S.flags.town = true;
   card('Chunky, <span>Mississippi</span>', '2026', 3.4);
+  if (!touchUI) toast('Hold SHIFT to run');
   if (HORDE_EARLY) bringOutCrowd();
   townObjective(); hudVitals();
 }
@@ -2536,7 +2542,12 @@ function tick(dt, draw = true) {
   // ---------------- on foot (bank, bridge, town)
   if (M === 'land' || M === 'bridge' || M === 'town') {
     const dir = moveDir(); const want = Math.min(1, dir.length());
-    const sp = 4.4 * want;
+    // Holding RUN: faster, until he's out of breath, and he gets it back once he lets up. In the air he keeps what he left the ground with.
+    if (player.grounded) player.running = input.run && want > .1 && !player.winded;
+    if (player.running) { player.ran = true; player.stamina -= RUN.tire * dt; if (player.stamina <= 0) { player.stamina = 0; player.winded = true; player.running = false; } }
+    else if (player.ran) { player.stamina += RUN.rest * dt; if (player.winded && player.stamina > RUN.recover) player.winded = false; if (player.stamina >= 1) { player.stamina = 1; player.ran = false; } }
+    player.runK += ((player.running ? 1 : 0) - player.runK) * Math.min(1, dt * RUN.ease); if (player.runK < .002) player.runK = 0;
+    const sp = (4.4 + (RUN.speed - 4.4) * player.runK) * want;
     if (want > .1) player.yaw += angDiff(player.yaw, Math.atan2(dir.x, dir.z)) * Math.min(1, dt * 10);
     let nx = player.pos.x + (Math.sin(player.yaw) * sp + player.kb.x) * dt, nz = player.pos.z + (Math.cos(player.yaw) * sp + player.kb.y) * dt;
     player.kb.multiplyScalar(Math.exp(-dt * 5));
@@ -2554,7 +2565,7 @@ function tick(dt, draw = true) {
     if (player.grounded && f2 < player.pos.y - .5) player.grounded = false;
     if (player.grounded) { player.pos.y += (f2 - player.pos.y) * Math.min(1, dt * 18); player.vy = 0; }
     else { player.vy -= 15 * dt; player.pos.y += player.vy * dt; if (player.pos.y <= f2 && player.vy <= 0) { player.pos.y = f2; player.grounded = true; if (crowdOut) horde.noise(player.pos.x, player.pos.z, 16, .6); } }
-    HP.kind = player.grounded ? 'run' : 'air'; HP.speed = sp * (player.grounded ? 1 : 0); HP.phase += dt * sp * 2.4;
+    HP.kind = player.grounded ? 'run' : 'air'; HP.speed = sp * (player.grounded ? 1 : 0); HP.phase += dt * (Math.min(sp, 4.4) * 2.4 + Math.max(0, sp - 4.4) * 1.3);
     // into the water from the bank or bridge
     if (player.pos.y < .05 && f2 < -.3) {
       if (M === 'bridge') fail('The Chunky takes you back.', 'Jump the gaps. Don\'t stop running.');
@@ -2608,7 +2619,7 @@ function tick(dt, draw = true) {
   if (M === 'swim' || M === 'land' || M === 'bridge' || M === 'town' || M === 'grabbed' || M === 'sweep' || M === 'dialog' || M === 'end' || (M === 'fail' && !S.flags.bridgeStarted)) {
     heroRoot.position.copy(player.pos); heroRoot.rotation.set(0, player.yaw, 0);
     if (HP.kind === 'swim') { hero.body.position.set(0, .2, 0); hero.body.rotation.set(.95, 0, Math.sin(HP.phase) * .08); }
-    else { const bob = Math.abs(Math.sin(HP.phase)) * .05 * Math.min(1, HP.speed / 4); hero.body.position.set(0, HERO_HIPS + bob, 0); hero.body.rotation.set(HP.kind === 'struggle' ? .32 : .1 * Math.min(1, HP.speed / 4), 0, 0); }
+    else { const bob = Math.abs(Math.sin(HP.phase)) * .05 * Math.min(1, HP.speed / 4); hero.body.position.set(0, HERO_HIPS + bob, 0); hero.body.rotation.set(HP.kind === 'struggle' ? .32 : .1 * Math.min(1, HP.speed / 4) + .22 * player.runK, 0, 0); }
   }
   hero.body.visible = !(player.inv > 0 && Math.floor(time * 16) % 2 === 0 && player.inv < 1.3);
   // dropped props: lantern and bottle fall, float, sink glowing
@@ -2654,7 +2665,7 @@ function tick(dt, draw = true) {
     }
     if (cam.snap) { camera.position.copy(V); cam.snap = false; } else camera.position.lerp(V, 1 - Math.exp(-dt * (M === 'fall' ? 3 : 7)));
     if (cam.shake > 0) { cam.shake -= dt; camera.position.x += (Math.random() - .5) * cam.shake * .3; camera.position.y += (Math.random() - .5) * cam.shake * .3; }
-    camera.lookAt(tgt); if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
+    camera.lookAt(tgt); { const fov = 55 + (reduceMotion ? 0 : 5 * player.runK); if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); } }
     if (S.flags.town) {
       // Indoors the roof's out of the way, and so is the roof of whatever the camera's backed into, or that'd be all you'd see.
       // Anything else between the camera and him opens up around him, down to his knees.
@@ -2765,7 +2776,7 @@ if (TEST) {
     },
     place(x, z, y) { player.pos.set(x, y ?? floorAt(x, z), z); player.grounded = true; player.vy = 0; cam.snap = true; return this.state(); },
     look(yaw, pitch) { cam.yaw = yaw; if (pitch !== undefined) cam.pitch = pitch; cam.snap = true; lastLook = time; },
-    key(k, down = true) { k = k.toLowerCase(); if (down) { if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ' || k === 'shift') input.bEdge = true; } keys.add(k); } else keys.delete(k); },
+    key(k, down = true) { k = k.toLowerCase(); if (down) { if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; } keys.add(k); } else keys.delete(k); },
     stick(x, y) { touchStick.set(x, y); },
     choose(i) { $('dOpts').children[i].click(); return this.state(); },
     burst(pow = 1, dur = .5, hold = true, fine = true) { triggerBurst(pow, dur, hold, fine); },
