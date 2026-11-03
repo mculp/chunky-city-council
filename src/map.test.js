@@ -9,6 +9,41 @@ const sine = (z) => 3.5 * Math.sin(z * .035);
 const map = buildMap(data, { riverAtBridge: sine });
 const near = (a, b, tol = .01, msg = '') => assert.ok(Math.abs(a - b) <= tol, `${msg} ${a} isn't within ${tol} of ${b}`);
 
+describe('the lanes', () => {
+  const [x0, z0] = [data.edges[0].points[0][0], data.edges[0].points[0][1]];
+  const lanes = {
+    lanes: [{ id: 'lane_1', name: 'Long Rd', width: 5.5, surface: 'asphalt', points: [[x0, z0], [x0 + 400, z0 + 300]] }, { id: 'lane_2', name: null, width: 4.2, surface: 'gravel', generated: true, points: [[x0 + 400, z0 + 300], [x0 + 500, z0 + 300]] }],
+    drives: [{ id: 'drive_7', structure: 7, generated: true, width: 3, surface: 'dirt', points: [[x0 + 500, z0 + 300], [x0 + 500, z0 + 340]] }],
+    crossings: [{ road: 'lane_1', with: 'railroad', x: x0 + 100, z: z0 + 75 }],
+    closed: [{ road: 'lane_2', x: x0 + 500, z: z0 + 300 }],
+  };
+  const m = buildMap(data, { riverAtBridge: sine, lanes });
+  test('the graph stays the graph, and they\'re roads to whatever asks', () => {
+    assert.equal(m.roads.length, map.roads.length);
+    assert.equal(m.lanes.length, 3);
+    assert.equal(m.roadById.get('drive_7').structure, 7);
+    const [x, z] = m.toWorld(x0 + 500, z0 + 320);
+    near(m.roadGrid.nearest(x, z), 0);
+    assert.equal(m.roadGrid.seg.owner.id, 'drive_7');
+    near(m.along('lane_1', 500).x, m.toWorld(x0 + 400, 0)[0]);
+  });
+  test('their crossings and where they stop come along with them', () => {
+    assert.equal(m.crossings.length, map.crossings.length + 1);
+    assert.deepEqual(m.closedLanes.map((c) => c.roads), [['lane_2']]);
+    near(m.closedLanes[0].x, m.toWorld(x0 + 500, 0)[0]);
+    assert.equal(m.closedLanes[0].kind, 'clip');
+  });
+  test('the map reaches 280 m past them', () => {
+    const [x, z] = m.toWorld(x0 + 500, z0 + 340);
+    assert.ok(m.inBounds(x, z + 200));
+    assert.ok(!map.inBounds(x + 50000, z));
+  });
+  test('without any, nothing\'s different', () => {
+    assert.deepEqual(map.lanes, []);
+    assert.deepEqual(map.closedLanes, []);
+  });
+});
+
 describe('the world frame', () => {
   test('Stuckey\'s Bridge is the origin, where TIGER has its road cross the river', () => {
     const c = map.crossings.find((x) => x.road === map.opening.road && x.with === 'river');

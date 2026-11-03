@@ -31,8 +31,13 @@ The owner sends lore for the story. It goes in `docs/lore.md` in their words as 
 ## Data
 
 - Game data is JSON under `data/`, such as `data/roads.json`, with its schema documented alongside it.
+- The smaller roads and a drive to every building are in `data/lanes.json`, documented in `data/lanes.md`. To everything that asks what road is here they're roads, but `MAP.roads` stays the graph.
+- The big farm south of the Chunky River Bridge, where the woods stop and its fences, is in `data/farm.json`, documented in `data/farm.md`.
 - Dialogue and the relationship meters are in `data/cast.json`, documented in `data/cast.md`.
+- Everyone in town has a name, a personality and a memory of what he's done: `data/folks.json`, `src/agents.js`, documented in `data/folks.md`. None of it comes from `rnd()` or `crowdRand`, and half of everybody's an Alexander or a Clark, which is the owner's. Most houses have someone at home, there's someone driving on the real roads and there are kids on four-wheelers on the lanes, which is in `src/traffic.js` and the same document. With `?test` all of those stay away until `fillTown()`, so that every test that isn't about them is left alone.
+- How high the land stands is in `data/hills.json`, documented in `data/hills.md`. The world's flat, and it's only what's drawn that goes up and down. A new `ShaderMaterial` with a vertex shader of its own has to `#include <hill_pars>` and use `hillOver`, or define `FLAT_WORLD`, and anything long goes through `HILLS.follow`.
 - What the church signs say is in `data/signs.json`, documented in `data/signs.md`, and all of it can be read at `#signs`.
+- What one stone in the cemetery says is in `data/stone.json`, documented in `data/stone.md`. It's empty, and it's the owner's to fill in: nobody else types those words.
 - What every sound and part of the score is, and how loud, is in `data/sound-new.json`, documented in `data/sound.md`. That's what the game plays: music and sounds made with ElevenLabs, which the owner chose. A file in `audio/` and one line there take a sound's place, without touching the code. The sounds worked out from code stay too, and nothing writes over them: `data/sound.json` is their sheet, `#sounds` is their board and `#old` plays the game with them.
 - Scripts that generate it go in `tools/`. Commit the generated JSON. Raw downloads such as TIGER zips go in `data/raw/`, which is gitignored.
 - Python tools run from a `.venv/` at the repo root, also gitignored, with dependencies pinned in `tools/requirements.txt`. Don't install anything globally.
@@ -71,17 +76,39 @@ Then open http://localhost:8000.
 
 `npm run field` walks onto the ball field from Adams St, runs the bases, and checks that the fence and backstop stop him and that the gates let him through, on foot and in a pickup.
 
+`npm run station` goes round the gas station on a phone-sized page: in through the door, along the shelves and the counter for what's on them, bars the door with the crowd outside, breaks the boards with a hammer, and checks that the crowd gathers under the canopy's light and stops once it's out. It takes `--shots dir`.
+
 `npm run sound` plays the game with the sound on, in real time: nothing until a touch, the mute, a hidden tab, the score through the opening, his feet on each surface, driving, the crowd, and a track and a voice line swapped in with nothing changed but the sheet, and then every real file in `audio/` on a phone-sized page. It can't say whether any of it sounds good. `-- --old` plays it through with the sounds worked out from code.
 
 `npm run sound:make` says what making the music and sounds with ElevenLabs on fal would cost, and `-- --go` makes them. `npm run sound:measure` then measures every file in `audio/` and fails on one that's silent, clipped, cut short, swells or clicks as it loops, or lands late, and `-- --pictures dir` draws their spectrograms. `npm run sound:level` sets `data/sound-new.json`'s levels to match the old sheet's, so run it after making anything over. The budget is a running total, kept in `audio/manifest.json`. `data/sound.md` has the rest.
 
-`npm run lore` goes and looks at what's come from the lore: every church's sign, what it says today and tomorrow, and what happens when it's hit, then Charlie Flake's marker, then Robby's lot, walking there from where he wakes, what Robby says and that he only says it once, the flies, the deer meat, and what a truck does to it. It takes `--shots dir`.
+`npm run lanes` drives up a gravel lane and a dirt drive to somebody's door with the phone's stick, and checks that nothing stands on the lanes, the woods are cleared off them, what's underfoot, and no barricade across a road that carries on. `data/lanes.test.js` checks that they all join up and that every building has a way in.
+
+`npm run lore` goes and looks at what's come from the lore: every church's sign, what it says today and tomorrow, and what happens when it's hit, then Charlie Flake's marker, then Robby's lot, walking there from where he wakes, what Robby says and that he only says it once, the flies, the deer meat, and what a truck does to it, and then the light on Stuckey's Bridge: that it isn't in the opening, that it comes when he goes back on foot or driving, goes through him, and that it all goes quiet while it does. It takes `--shots dir`.
+
+`npm run hills` goes and looks at the hills: that the first scene is at the bottom of them, that the graphics card draws what `src/hills.js` says, that every material in the scene goes up with them, then a pickup up US 80's biggest hill with the phone's stick and back down it on foot, swimming under a bluff and in a pool on top of one. It takes `--shots dir`.
+
+`npm run keys` plays with real key presses and a real mouse: looking with nothing held, WASD with the camera, a click that hits what's in the middle of the screen and a right click that throws there, what lets the mouse go, in a pickup, all of it again in an iframe that won't let a page take the mouse, and that a phone hasn't changed. It takes `--shots dir`. Chrome won't give a headless page the mouse, so that one part is stood in for.
 
 `npm run water` walks into a pond and swims across it, floods a pickup in another, and checks that the crowd keeps out, that nothing real ended up under water, and that the ponds are on the map. The ponds are in `data/water.json`, documented in `data/water.md`.
 
+`npm run farm` goes from the Chunky River Bridge down the gravel to the farm south of it on foot, then looks at what's growing where, gets stopped by a fence, jumps it, knocks it down and drives through it, swims the pond and walks its dock. It also reports what it costs to draw. It takes `--shots dir`.
+
 `npm run wreck` wrecks the town with real key presses and taps: through a house and through brick in a pickup, over a young tree and into a big one, into a parked car, a hammer through a wall, a can through a window, cars going up and a house burning down, then that it all stays down after going away and coming back. It also reports what the worst of it costs.
 
-The crowd comes out when Chapter 1 ends. `index.html?horde` brings it out as soon as town starts, which is the quick way to try it. `index.html#free`, or Skip to town on the title card, goes straight to town with the crowd out and three gas cans. It's an anchor because that's the only part of an address the shared link passes on.
+`npm run lures` moves the crowd without fighting it, with real taps: each lure thrown off US 80 and how many are left on the road, through three lots of them with three kinds of lure, hunters taken off him, a car alarm set off from across a lot, into the river after a bottle, and someone who ends up with them all around. What each lure does is in `src/lures.js`.
+
+`npm run compound` goes round the compound on Pine Forest Rd on a phone-sized page: up the measured drive from the road, in through every door, plays the drums, guitar, bass and keyboard with real taps and the crowd listening, swims the pool, watches the screen, and breaks the projector and the propane tank. It takes `--shots dir`. What's in it is under "the compound on Pine Forest Rd" in `index.html`, and `src/things.js` has what things look like that aren't vehicles.
+
+`npm run yard` goes round the yard off True Light Rd on a phone-sized page: up the measured drive from the road, across the pool, gets stopped by the net and goes round it, keeps the ball up six times in a row with the stick and real taps, takes the bat that gets him, bounces on the trampoline, and gets in the coupe and drives it. What keeping the ball up does is in `src/volley.js`.
+
+`npm run stumble` goes and finds what's only there for anyone who stumbles on it, on a phone-sized page with real taps: in from School St to the second trailer from the left, across its deck and down its length to the computer in the back, up to the screen and away again, breaks it, swims the green pool, drives a pickup up Chunky Duffee Rd from where the map used to stop, walks up the gravel loop and through the gate, finds its way between the stones to the one with words on it, and reads it. It takes `--shots dir`.
+
+`npm run town` goes round the filled town on a phone-sized page: people at home who leave him be until he gives them a reason, someone coming and going, a drive along US 80 past people on their own side of the road, standing in the road, ramming one and taking another's car, and the kids, who can't be touched. It also reports what the busiest of it costs, and takes `--shots dir`.
+
+`npm run agents` treats people differently with real taps and checks they behave differently afterwards, and still do after a reload: the same blow leaving one keeping away and another coming for him, someone who was there, a lure that stops working, someone following him about, and the families going around together. It takes `--shots dir`.
+
+The crowd comes out when Chapter 1 ends. `index.html?horde` brings it out as soon as town starts, which is the quick way to try it. `index.html#free`, or Skip to town on the title card, goes straight to town with the crowd out and something of everything to throw. It's an anchor because that's the only part of an address the shared link passes on.
 
 Chapter 1's bridge run ends in a moccasin bite, a fever dream and waking on the Chunky River Bridge at the edge of town: the modes `bitten`, `dream` and `wake`. `jump('town')` puts him where he wakes.
 

@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / "data" / "raw" / "structures"
 ROADS = ROOT / "data" / "roads.json"
 NOTES = Path(__file__).parent / "structure_notes.json"
+LANE_CONFIG = Path(__file__).parent / "lane_config.json"
 OUT = ROOT / "data" / "structures.json"
 
 SERVICE = "https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/USA_Structures_View/FeatureServer/0/query"
@@ -55,7 +56,7 @@ WALL_DEFAULT = {"brick": "#8a4a38", "block": "#9a9488", "metal": "#8d8f8c", "mob
 ROOF_DEFAULT = {"shingle": "#3d3a3c", "metal": "#7b7f80"}
 USES = {
     "Single Family Dwelling": "house", "Manufactured Home": "mobile", "Unclassified": "shed", "Agriculture": "farm", "General Services": "public",
-    "Retail Trade": "shop", "Professional/Technical Services": "office", "Religious": "church", "Temporary Lodging": "cabin", "Entertainment and Recreation": "hall",
+    "Retail Trade": "shop", "Professional/Technical Services": "office", "Religious": "church", "Temporary Lodging": "cabin", "Entertainment and Recreation": "hall", "Institutional Dormitory": "public", "Personal and Repair Services": "shop", "Light": "shop",
 }
 
 
@@ -100,6 +101,25 @@ def download(bbox, refresh):
         text = json.dumps({"fetched": time.strftime("%Y-%m-%d"), "bbox": bbox, "features": features}, indent=0)
         cache.write_text(text)
     return json.loads(text), hashlib.sha256(text.encode()).hexdigest()
+
+
+def everything(roads, refresh=False):
+    """What's in the box round the road graph, and in any box a road taken further than that needs. It says what it fetched."""
+    raw, sha = download(bbox_of(roads), refresh)
+    seen, also = {f["attributes"]["OBJECTID"] for f in raw["features"]}, []
+    for reach in json.loads(LANE_CONFIG.read_text()).get("reachOut", []):
+        if "box" not in reach:   # what the road's own box has already fetched will do
+            continue
+        x0, z0, x1, z1 = reach["box"]
+        west, south = to_lonlat(x0, z1)
+        east, north = to_lonlat(x1, z0)
+        box = (round(west, 5), round(south, 5), round(east, 5), round(north, 5))
+        more, more_sha = download(box, refresh)
+        new = [f for f in more["features"] if f["attributes"]["OBJECTID"] not in seen]
+        seen |= {f["attributes"]["OBJECTID"] for f in new}
+        raw["features"] += new
+        also.append({"fetched": more["fetched"], "sha256": more_sha, "bbox": list(box), "features": len(more["features"])})
+    return raw, sha, also
 
 
 # ---------------------------------------------------------------- shapes
@@ -194,7 +214,7 @@ def rings_touch(ring_a, ring_b, gap):
 class World:
     """toWorld from src/map.js: the true map moved over so the bridge is the origin, with its one bent road."""
 
-    def __init__(self, roads):
+    def __init__(self, roads, lanes=()):
         self.bands = roads["compression"]
         edges = {e["id"]: e for e in roads["edges"]}
         opening = roads["opening"]
@@ -204,6 +224,14 @@ class World:
         for r in roads["roads"]:
             line = [self.point(*p) for p in self.walk(r, edges)]
             self.roads.append((r["width"], self.bend(line, opening) if r["id"] == opening["road"] else line))
+        # the smaller roads: a building moves off a real road, but somebody's track gives way to the building (build_lanes.py)
+        self.tracks = []
+        for lane in lanes:
+            line = [self.point(*p) for p in lane["points"]]
+            if lane["name"] or lane["mtfcc"] == "S1200":
+                self.roads.append((lane["width"], line))
+            else:
+                self.tracks.append((lane["width"], line))
         self.rail = [[self.point(*p) for p in l["points"]] for l in roads["reference"]["railroad"]["lines"]]
         self.river = [[self.point(*p) for p in l["points"]] for l in roads["reference"]["river"]["lines"]]
 
@@ -234,7 +262,7 @@ class World:
 
     def nearest_road(self, px, pz):
         best, width, on = math.inf, 0, None
-        for w, l in self.roads:
+        for w, l in [*self.roads, *self.tracks]:
             for a, b in zip(l, l[1:]):
                 d = seg_dist(px, pz, a, b)
                 if d < best:
@@ -474,9 +502,11 @@ def main():
     args = parser.parse_args()
 
     roads = json.loads(ROADS.read_text())
-    world = World(roads)
+    from build_lanes import CONFIG, build_tiger_lanes  # Here because it uses what's in this file.
+    from build_roads import read_road_records
+    world = World(roads, build_tiger_lanes(roads, read_road_records(), json.loads(CONFIG.read_text())))
     bbox = bbox_of(roads)
-    raw, sha = download(bbox, args.refresh)
+    raw, sha, also = everything(roads, args.refresh)
     notes = json.loads(NOTES.read_text()) if NOTES.exists() else {"structures": {}, "extras": []}
     print("box", bbox, "features", len(raw["features"]), "sha", sha[:12], "notes", len(notes["structures"]))
 
@@ -493,7 +523,7 @@ def main():
             ring = [(ox + dx, oz + dz) for dx, dz in note["shape"]]
         cx, cz = centroid(ring)
         wx, wz = world.from_true(cx, cz)
-        far = min(world.nearest(wx, wz, [l for _, l in world.roads]), world.nearest(wx, wz, world.rail))
+        far = min(world.nearest(wx, wz, [l for _, l in [*world.roads, *world.tracks]]), world.nearest(wx, wz, world.rail))
         if far > BOUND:
             outside += 1
             continue
@@ -584,7 +614,7 @@ def main():
     print("roofs from the aerial", sum(1 for s in structures if s["roofColor"] not in ROOF_DEFAULT.values()), "tiles", len(tiles))
 
     source = {
-        "footprints": {"name": "USA Structures", "by": ATTRIBUTION, "license": LICENSE, "url": ITEM, "fetched": raw["fetched"], "sha256": sha, "bbox": list(bbox), "features": len(raw["features"])},
+        "footprints": {"name": "USA Structures", "by": ATTRIBUTION, "license": LICENSE, "url": ITEM, "fetched": raw["fetched"], "sha256": sha, "bbox": list(bbox), "features": len(raw["features"]), **({"also": also} if also else {})},
         "roofs": {"name": "National Agriculture Imagery Program", "by": "USDA Farm Production and Conservation", "license": "public domain", "url": NAIP},
         "byEye": "tools/structure_notes.json: what's written down from looking at Street View. Nothing is traced or copied from it.",
     }

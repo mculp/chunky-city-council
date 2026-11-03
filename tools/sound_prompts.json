@@ -151,6 +151,17 @@
     "engine.golf": { "seconds": 6, "loop": true, "prompt": "electric golf cart motor running at constant speed, steady whine and hum, same loudness from start to finish, close up", "influence": 0.6 },
     "vehicle.road": { "seconds": 6, "loop": true, "prompt": "constant steady tire noise on asphalt at one speed, heard from inside the car, same loudness from start to finish, nothing passing, no engine", "influence": 0.6 },
     "vehicle.dirt": { "seconds": 6, "loop": true, "prompt": "constant sound of car tires rolling over gravel at one steady speed, stones crunching evenly, same loudness from start to finish, no engine", "influence": 0.6 },
-    "vehicle.skid": { "seconds": 3, "loop": true, "prompt": "car tires skidding on asphalt, one long steady screech, same loudness from start to finish, no impact", "influence": 0.6 }
+    "vehicle.skid": { "seconds": 3, "loop": true, "prompt": "car tires skidding on asphalt, one long steady screech, same loudness from start to finish, no impact", "influence": 0.6 },
+    "lure.bottle": { "takes": 2, "seconds": 1.2, "prompt": "empty glass beer bottle thrown and smashing on pavement, one sharp shatter with shards skittering away, outdoors at night, no echo" },
+    "lure.pop": { "takes": 3, "seconds": 0.5, "influence": 0.6, "prompt": "one single small firecracker going off on the ground outdoors, one sharp dry crack, close up, no echo, no other sound" },
+    "vehicle.alarm": { "seconds": 6, "loop": true, "influence": 0.7, "prompt": "old car alarm going off outdoors, loud electronic siren whooping up and down in a steady repeating pattern, constant, same loudness from start to finish, no voices" },
+    "jam.drum": { "takes": 2, "seconds": 2.5, "influence": 0.6, "prompt": "loud short rough fill on an old acoustic drum kit in a small wooden shed, four quick hits on the snare and toms, starts right away, close microphones, nothing else playing" },
+    "jam.cymbal": { "seconds": 3, "prompt": "one loud crash cymbal hit with a bass drum under it in a small wooden shed, ringing out and dying away, nothing else playing" },
+    "jam.guitar": { "takes": 2, "seconds": 3, "influence": 0.7, "prompt": "one thick low power chord on an overdriven electric guitar through a big speaker cabinet, warm chunky midrange, the pick hits right at the very start, rings for two seconds and stops, no feedback, no squeal, no high whine, no drums, no melody" },
+    "jam.bass": { "seconds": 2.5, "prompt": "two low electric bass guitar notes through a small amp in a small room, thick and slightly buzzy, no drums, no melody" },
+    "jam.keys": { "seconds": 3, "prompt": "one big held chord on an old electric organ keyboard through a small amp in a small room, warbly and slightly out of tune, one chord only, no drums, no melody" },
+    "ball.bump": { "takes": 2, "seconds": 1, "prompt": "one firm bump of a volleyball off a person's forearms outdoors, a short hollow leather thud, nothing else" },
+    "ball.land": { "seconds": 1, "prompt": "one volleyball dropping on hard packed dirt and bouncing once, short and hollow, outdoors at night, nothing else" },
+    "tramp.spring": { "seconds": 1, "prompt": "one bounce on a backyard trampoline, a quick creak of steel springs and a soft thump of the mat, nothing else" }
   }
 }

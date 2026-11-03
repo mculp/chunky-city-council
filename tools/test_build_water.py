@@ -63,9 +63,9 @@ class Build(unittest.TestCase):
         out = run([feature("a", 900, 300)])
         self.assertEqual((out["ponds"], out["left"]["byTheBridge"]), ([], 1))
 
-    def test_an_island_is_an_error_until_something_handles_one(self):
-        with self.assertRaises(SystemExit):
-            run([feature("a", 100, 50, holes=[square(105, 55, 5)])])
+    def test_an_island_comes_through_with_its_pond(self):
+        pond = run([feature("a", 100, 50, holes=[square(105, 55, 5)])])["ponds"][0]
+        self.assertEqual(pond["islands"], [[[105, 55], [110, 55], [110, 60], [105, 60]]])
 
     def test_the_extras_come_through_marked_and_in_order(self):
         out = run([feature("z", 100, 50)], {"ponds": [{"id": "b", "ring": square(0, 30)[:-1]}, {"id": "a", "ring": square(30, 30)[:-1]}]})

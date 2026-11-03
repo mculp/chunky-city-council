@@ -34,7 +34,7 @@ await g(() => {
 // ---------------- what's in the data is in the game
 const data = await g(() => {
   const sheets = []; G.scene.traverse((o) => { if (o.isMesh && o.material?.uniforms?.uRipG && o.geometry.type !== 'PlaneGeometry') sheets.push(o); });
-  const levels = W.ponds.map((p) => p.level);
+  const levels = W.ponds.filter((p) => !p.pool).map((p) => p.level);
   return { ponds: W.ponds.length, sheets: sheets.length, river: levels.filter((l) => l === 0).length, low: Math.min(...levels), high: Math.max(...levels) };
 });
 console.log(`     ${data.ponds} ponds, between ${data.low.toFixed(2)} and ${data.high.toFixed(2)} high`);
@@ -49,7 +49,7 @@ const surface = await g(() => {
     for (let x = p.x0; x <= p.x1; x += 4) for (let z = p.z0; z <= p.z1; z += 4) {
       if (!W.look(x, z)) continue;
       const d = W.d, floor = G.floorAt(x, z), onBed = G.map.roadGrid.nearest(x, z) < 8 || G.map.railGrid.nearest(x, z) < 6;
-      if (d < -3 && W.in(x, z)) { out.water++; if (floor >= p.level - .3 && !onBed && !G.houseAt(x, z)) out.dry.push([Math.round(x), Math.round(z), +floor.toFixed(2)]); }
+      if (d < -3 && W.in(x, z)) { out.water++; if (floor >= p.level - .3 && !onBed && !G.houseAt(x, z) && !G.onDock(x, z)) out.dry.push([Math.round(x), Math.round(z), +floor.toFixed(2)]); }
       else if (d > 2 && d < 4 && !W.in(x, z)) { out.land++; if (floor < p.level) out.flooded.push([Math.round(x), Math.round(z), +floor.toFixed(2)]); }
     }
   }

@@ -16,7 +16,7 @@ test('flat out on the road each kind gets near its own top speed, and no further
 
 test('they\'re not all the same: speed, pull and weight differ', () => {
   const tops = Object.values(KINDS).map((k) => k.top), weights = Object.values(KINDS).map((k) => k.mass), grips = Object.values(KINDS).map((k) => k.grip);
-  assert.equal(new Set(tops).size, 4); assert.equal(new Set(weights).size, 4); assert.equal(new Set(grips).size, 4);
+  const n = Object.keys(KINDS).length; assert.equal(new Set(tops).size, n); assert.equal(new Set(weights).size, n); assert.equal(new Set(grips).size, n);
   // a four-wheeler leaves a car standing, then the car catches it
   const q = makeVehicle('quad', 0, 0, 0, 6), c = makeVehicle('car', 0, 0, 0, 6);
   drive(q, { gas: 1, steer: 0 }, 1); drive(c, { gas: 1, steer: 0 }, 1); assert.ok(q.f > c.f);

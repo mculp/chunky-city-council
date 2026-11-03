@@ -23,7 +23,11 @@ Google Maps is for comparing by eye and for noticing what's missing. No geometry
 
 An outline with an island in it stops the build, since nothing handles one. None of those it keeps has one.
 
-`ponds` in `tools/water_extras.json` are real ones NHD hasn't got, outlined by eye to the nearest few metres. There are four: two small ones west of town, the open water at the south end of the big marsh east of the railroad at about (15450, 4250), and the east arm of a lake at about (8820, -1830). NHD files the last two as swamp, and most of those outlines are forest and floating mat.
+`reached` in `tools/water_extras.json` takes in ponds of NHD's that are further than that from the roads, but which a lane now goes past. The farm south of the Chunky River Bridge has three of them, and says that the big one's `look` is `algae`, because it's bright green on the aerial.
+
+`ponds` in `tools/water_extras.json` are real ones NHD hasn't got, outlined by eye to the nearest few metres. There are seven: the long dark one in a gully on that farm, and three small ones west of town, the open water at the south end of the big marsh east of the railroad at about (15450, 4250), the east arm of a lake at about (8820, -1830), and a square farm pond by True Light Rd. NHD files the last two as swamp, and most of those outlines are forest and floating mat.
+
+`pools` in `tools/water_extras.json` are swimming pools, which NHD wouldn't have, measured on the aerial. A pool isn't a pond with a level from the ground around it. Its water stands 12 cm under the level of the ground, with straight sides and a floor 1.7 m under that, its ground isn't mud and a pad doesn't fill it in. There are three, by the big house on Pine Forest Rd, by the house with the red roof off True Light Rd, and the community pool west of the trailer park, which has gone bright green.
 
 ### Corrections to file
 
@@ -53,6 +57,9 @@ Each of `ponds`:
 | `ring` | [x, z][] | The shore, to 0.1 m. It doesn't repeat its first point |
 | `lonlat` | [lon, lat][] | The same points, as the source had them or as projected back |
 | `name` | string | NHD's name, where it has one |
+| `pool` | string | What sort of swimming pool it is, if it is one. `index.html` has what each looks like |
+| `look` | string | A pond whose water isn't the usual colour takes the look of one of those. |
+| `islands` | [x, z][][] | Dry land in the middle of it, as NHD has it. Its edges count as shore, and being on one is crossing an even number of edges, so nothing else has to know about it. |
 
 ## What the game does with it
 

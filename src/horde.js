@@ -2,13 +2,16 @@
 //
 // They've got no eyes to speak of: sound, light and the smell of beans are all they go on, and all of it's
 // sharper at night. What they are is in docs/lore.md, and how far gone each of them is only changes how they look so far.
+// What each of them is like and what they remember of him is in src/agents.js.
 
-export const SHAMBLE = 0, CURIOUS = 1, HUNTING = 2, SWARM = 3, GRABBING = 4, STUNNED = 5;
-export const STATE_NAMES = ['shamble', 'curious', 'hunting', 'swarm', 'grabbing', 'stunned'];
+import { AFTER, AWAY, TAILING } from './agents.js';
+
+export const SHAMBLE = 0, CURIOUS = 1, HUNTING = 2, SWARM = 3, GRABBING = 4, STUNNED = 5, AVOIDING = 6, TRAILING = 7;
+export const STATE_NAMES = ['shamble', 'curious', 'hunting', 'swarm', 'grabbing', 'stunned', 'avoiding', 'trailing'];
 
 export const TUNING = {
   active: 150,                     // further from the player than this, they wait
-  speed: [.75, 1.15, 3, 3.7, 0, 0],   // m/s by state. The player runs at 4.4, so the open ground is always an escape.
+  speed: [.75, 1.15, 3, 3.7, 0, 0, 2.8, 1.5],   // m/s by state. The player runs at 4.4, so the open ground is always an escape.
   thinkEvery: .2,                  // seconds between looks around
   smellBase: 1.5, smellPerBean: .45,  // metres. A full twelve reaches about ten at night, so standing still among them still means something.
   touch: 2,                        // metres, for someone standing dead still with nothing on them
@@ -25,32 +28,55 @@ export const TUNING = {
   personalSpace: .95,
   feelAlong: 8,                    // seconds along a wall before trying the other way
   lightPull: .35,                  // the chance a shambler heads for a light it's near, at full night
+  comeIn: 40,                      // seconds between new ones wandering in, while the water's had some that haven't been replaced
+  drowned: 3.5,                    // metres. While a lure's going they can't make out anything further off than this
+  lured: 2,                        // m/s, going to one, which is quicker than going to look
+  wading: .55,                     // how much of that they keep in the water
+  bite: [3, 7],                    // seconds in the water before the cottonmouths have them
+  goesUnder: 1.2,                  // seconds to go down after that
+  meet: 8,                         // metres. Closer than this counts as being around him.
+  witness: 18,                     // metres. Further off than this, they didn't notice him hurt anyone.
+  tell: 8,                         // metres. How close they've got to be to pass it on.
+  startle: 6,                      // metres. Someone who's scared of him gets going at this, even if he's quiet.
+  backOff: 6,                      // metres past that before they settle down
+  cornered: 2.2,                   // metres. With nowhere left to go, this is when even they'll turn on him.
+  turnsFor: 3,                     // seconds of that
+  trail: 30, trailGap: [7, 13],    // metres. How far off someone starts following him, and how far back they keep.
+  tagalong: .55, tagReach: 20, tagLost: 30,   // who goes along with their own people, how far off they'll notice, and how far before they give up
+  afterHim: .5,                    // the chance someone with a grudge heads his way when they've got nothing else to go on
+  atHome: [8, 26],                 // seconds someone at home stays where they've got to
 };
 
 const hypot = Math.hypot, TRY = [0, .8, 1.6, 2.4, 3.1];
 function turn(from, to, k) { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return from + d * k; }
 
-// world: { blocked(x, z, y), water(x, z), floorAt(x, z), wander(s) -> [x, z], rand() }
+// world: { blocked(x, z, y), water(x, z), floorAt(x, z), wander(s) -> [x, z], rand(), comeFrom(p) -> [x, z] or nothing, folks: src/agents.js's, or nothing and they're nobody }
 // on: { grab(grab), free(), overrun() }
 export function createHorde(world, tuning = {}, on = {}) {
-  const T = { ...TUNING, ...tuning }, all = [], active = [], noises = [], lights = [], zones = [];
+  const T = { ...TUNING, ...tuning }, all = [], active = [], noises = [], lights = [], zones = [], F = world.folks;
   let clock = 0, bellUntil = -1, mercy = 0;
   const h = { all, active, noises, lights, zones, T, grab: null, on };
+  let owed = 0, comeIn = T.comeIn;
 
   h.inSanctuary = (x, z) => zones.some((a) => hypot(x - a.x, z - a.z) < a.r);
   // Off limits unless the bell's ringing. Anyone caught inside when it stops can still walk out.
   const offLimits = (s, x, z) => clock >= bellUntil && zones.some((a) => { const d = hypot(x - a.x, z - a.z); return d < a.r && d <= hypot(s.x - a.x, s.z - a.z); });
-  const open = (s, x, z) => !world.blocked(x, z, s.y) && !world.water(x, z) && !offLimits(s, x, z);
+  const open = (s, x, z) => !world.blocked(x, z, s.y) && (s.wading || !world.water(x, z)) && !offLimits(s, x, z);
 
   h.add = (x, z, extra = {}) => {
     const s = { x, z, y: world.floorAt(x, z), yaw: world.rand() * 6.28, state: SHAMBLE, tx: x, tz: z, alert: 0, timer: 0, lost: 0, moving: 0, stuck: 0, side: 0, clear: 0, next: world.rand() * T.thinkEvery, phase: world.rand() * 6.28, gait: world.rand() * 6.28, limp: world.rand() < .5 ? 0 : 1, look: Math.floor(world.rand() * 1000), size: .94 + world.rand() * .12, ...extra };
+    // Everyone's somebody, and what they look like goes with who they are
+    if (F) { const who = extra.who ?? F.next(); Object.assign(s, who.looks, extra); s.who = who; who.body = s; s.homeX = x; s.homeZ = z; s.mood = 0; }
     all.push(s); return s;
   };
   // Something loud: anyone in reach goes to look, and at a bell they forget the church is off limits
   h.noise = (x, z, r, seconds) => { noises.push({ x, z, r, until: clock + seconds }); };
   h.bell = (x, z, r, seconds) => { h.noise(x, z, r, seconds); bellUntil = clock + seconds; };
-  // Knocked flat: anyone within r goes over, thrown clear, and lies there a while. It says how many.
-  h.knock = (x, z, r, seconds) => {
+  // Something thrown to draw them. While it's going it's all they can make out, unless he's right on top of them, and they go to it quicker than they'd go to look.
+  // One that's landed in the water takes them in after it, and that's the last anyone sees of them.
+  h.lure = (x, z, r, seconds, wet = false, kind = 'lure') => { noises.push({ x, z, r, until: clock + seconds, lure: true, wet, kind }); };
+  // Knocked flat: anyone within r goes over, thrown clear, and lies there a while. It says how many. They remember it, and so does whoever was there.
+  h.knock = (x, z, r, seconds, by = 'hit') => {
     let n = 0;
     for (const s of active) {
       const dx = s.x - x, dz = s.z - z, d = hypot(dx, dz);
@@ -58,7 +84,9 @@ export function createHorde(world, tuning = {}, on = {}) {
       s.state = STUNNED; s.timer = seconds; s.alert = 1; s.moving = 0; s.flat = s.flatFor = seconds; n++;
       const k = 1 + (1 - d / r) * 2.4, nx = s.x + dx / (d || 1) * k, nz = s.z + dz / (d || 1) * k;
       if (open(s, nx, nz)) { s.x = nx; s.z = nz; s.y = world.floorAt(nx, nz); }
+      if (s.who) F.hurt(s.who, s.x, s.z, by);
     }
+    if (n && F && by !== 'fire') for (const o of active) if (o.who && !(o.flat > 0) && hypot(o.x - x, o.z - z) < T.witness) F.wasThere(o.who);
     return n;
   };
   h.calm = () => {
@@ -70,35 +98,94 @@ export function createHorde(world, tuning = {}, on = {}) {
 
   function nearestNoise(s) {
     let best = null, bd = Infinity;
-    for (const n of noises) { const d = hypot(n.x - s.x, n.z - s.z); if (d < n.r && d < bd) { bd = d; best = n; } }
+    // the nearest, and a lure over anything that isn't one
+    for (const n of noises) { if (n.lure && s.who && F.wise(s.who, n.kind)) continue; const d = hypot(n.x - s.x, n.z - s.z), k = n.lure ? d - 1e4 : d; if (d < n.r && k < bd) { bd = k; best = n; } }
     return best;
   }
+  // Someone at home goes between the house, the door and the yard and stays a while, and if they're the kind, goes off down the road and comes back
+  function homeStop(s) {
+    const H = s.home, r = world.rand(), door = hypot(s.x - H.door[0], s.z - H.door[1]) < 3;
+    s.timer = T.atHome[0] + world.rand() * (T.atHome[1] - T.atHome[0]);
+    if (s.inside) { s.inside = false; [s.tx, s.tz] = H.door; }
+    else if (door && r < .35) { s.inside = true; [s.tx, s.tz] = H.inside; }
+    else if (r > .55 + s.who.homebody * .45) { [s.tx, s.tz] = world.wander(s); s.timer = hypot(s.tx - s.x, s.tz - s.z) / T.speed[SHAMBLE] + 3; }
+    else if (hypot(s.x - s.homeX, s.z - s.homeZ) > 30 || r < .5) [s.tx, s.tz] = H.door;
+    else { const out = 2 + world.rand() * 5, by = (world.rand() - .5) * 10; s.tx = H.door[0] + H.nx * out + H.nz * by; s.tz = H.door[1] + H.nz * out - H.nx * by; }
+  }
+  // Where someone goes next, once they've got nothing better to do, is up to them
+  function nextStop(s, p) {
+    const w = s.who;
+    if (!w) { [s.tx, s.tz] = world.wander(s); return; }
+    if (s.home && s.mood !== AFTER) { homeStop(s); return; }
+    // along with their own people, if they're the kind who would. It's always someone who'd sooner go their own way, so nobody ends up going round in a ring.
+    if (w.tagalong > T.tagalong) {
+      if (s.lead && (s.lead.under !== undefined || hypot(s.lead.x - s.x, s.lead.z - s.z) > T.tagLost)) s.lead = null;
+      if (!s.lead) {
+        let bd = T.tagReach;
+        for (const o of active) if (o !== s && o.who && o.who.family === w.family && o.who.tagalong < w.tagalong) { const q = hypot(o.x - s.x, o.z - s.z); if (q < bd) { bd = q; s.lead = o; } }
+      }
+      if (s.lead) { s.tx = s.lead.x + Math.cos(s.phase) * 2.5; s.tz = s.lead.z + Math.sin(s.phase) * 2.5; s.timer = 1.5 + world.rand() * 2; return; }
+    }
+    const fromHome = hypot(s.x - s.homeX, s.z - s.homeZ);
+    if (fromHome > F.roam(w)) { s.tx = s.homeX + (world.rand() - .5) * 10; s.tz = s.homeZ + (world.rand() - .5) * 10; s.timer = fromHome / T.speed[SHAMBLE] + 2; }
+    else if (s.mood === AFTER && world.rand() < T.afterHim) { s.tx = p.x + (world.rand() - .5) * 20; s.tz = p.z + (world.rand() - .5) * 20; }
+    else [s.tx, s.tz] = world.wander(s);
+    // the other way, if that takes them back where they were hurt, or closer to him when they're scared of him
+    const closer = s.mood === AWAY && hypot(s.tx - p.x, s.tz - p.z) < hypot(s.x - p.x, s.z - p.z);
+    if (closer || F.shuns(w, s.tx, s.tz)) { s.tx = s.x * 2 - s.tx; s.tz = s.z * 2 - s.tz; }
+  }
   function think(s, p) {
-    const d = hypot(s.x - p.x, s.z - p.z), sharp = 1 + (T.nightSense - 1) * p.night;
-    const reach = p.hidden ? 0 : Math.max(p.noise * sharp, (T.smellBase + T.smellPerBean * p.beans) * sharp, p.light * sharp, T.touch);
+    const w = s.who, mood = w ? (s.mood = F.mood(w)) : 0;
+    const d = hypot(s.x - p.x, s.z - p.z), sharp = 1 + (T.nightSense - 1) * p.night, loud = nearestNoise(s);
+    // the people who live here have got nothing against him, until he gives them something
+    const reach = p.hidden || (w?.calm && !mood) ? 0 : Math.min(Math.max(p.noise * sharp, (T.smellBase + T.smellPerBean * p.beans) * sharp, p.light * sharp, T.touch) * (w ? F.senses(w, mood) : 1), loud?.lure ? T.drowned : Infinity);
     const sensed = d < reach;
-    if (sensed) s.alert = Math.min(1, s.alert + T.thinkEvery * (T.alertRate[0] + (T.alertRate[1] - T.alertRate[0]) * (1 - d / reach)));
+    if (sensed) s.alert = Math.min(1, s.alert + T.thinkEvery * (T.alertRate[0] + (T.alertRate[1] - T.alertRate[0]) * (1 - d / reach)) * (mood === AFTER ? 2 : 1));
     else s.alert = Math.max(0, s.alert - T.thinkEvery * T.alertFade);
-    const loud = nearestNoise(s);
+    s.drawn = !!loud?.lure;
+    if (w) {
+      if (d < T.meet) F.close(w, T.thinkEvery);
+      if (loud?.lure && s.lureSeen !== loud) { s.lureSeen = loud; F.fooled(w, loud.kind); }
+      // and it gets around, one of them at a time, among their own people
+      if (F.hasNews(w)) { const o = active[Math.floor(world.rand() * active.length)]; if (o?.who && hypot(o.x - s.x, o.z - s.z) < T.tell) F.tell(w, o.who); }
+    }
+    const scared = mood === AWAY || (w?.truck > 0 && p.driving);
+    // once they've set off after one in the water they go all the way, and anyone who hasn't got there by the time something else comes up stays out
+    if (loud?.wet) s.wading = true; else if (s.wading && s.state !== CURIOUS && !world.water(s.x, s.z)) s.wading = false;
 
-    if (s.state === STUNNED) { s.timer -= T.thinkEvery; if (s.timer <= 0) { s.state = HUNTING; s.lost = 0; s.tx = p.x; s.tz = p.z; } return; }
+    if (s.state === STUNNED) { s.timer -= T.thinkEvery; if (s.timer <= 0) { s.state = scared ? AVOIDING : HUNTING; s.lost = 0; s.tx = p.x; s.tz = p.z; } return; }
     // caught inside the church when the bell stopped: out they go
     if (clock >= bellUntil) for (const a of zones) {
       const d = hypot(s.x - a.x, s.z - a.z);
       if (d < a.r) { s.state = SHAMBLE; s.timer = 4; s.tx = a.x + (s.x - a.x) / (d || 1) * (a.r + 3); s.tz = a.z + (s.z - a.z) / (d || 1) * (a.r + 3); return; }
     }
-    if (s.state === SHAMBLE) {
+    const startled = Math.max(reach * 1.5, T.startle);
+    if (s.turned > 0) s.turned -= T.thinkEvery;
+    else if (scared && !p.hidden && d < startled && s.state !== AVOIDING && s.state !== GRABBING) { s.state = AVOIDING; s.lost = 0; }
+    if (mood === TAILING && s.state <= CURIOUS && !loud && !p.hidden && d < T.trail) s.state = TRAILING;
+    if (s.state === AVOIDING) {
+      if (!scared || p.hidden || d > startled + T.backOff) { s.state = SHAMBLE; s.timer = 0; return; }
+      if (d < T.cornered && s.stuck > 1) { s.state = HUNTING; s.lost = 0; s.tx = p.x; s.tz = p.z; s.turned = T.turnsFor; return; }
+      const k = 14 / (d || 1); s.tx = s.x + (s.x - p.x) * k; s.tz = s.z + (s.z - p.z) * k;
+    } else if (s.state === TRAILING) {
+      if (mood !== TAILING || loud || p.hidden || d > T.trail + 10) { s.state = SHAMBLE; s.timer = 0; return; }
+      // it's always the same distance for the same person, and when they're there they stop and face him
+      const gap = T.trailGap[0] + (T.trailGap[1] - T.trailGap[0]) * w.temper;
+      if (d > gap + 1.5 || d < gap - 2) { const k = gap / (d || 1); s.tx = p.x + (s.x - p.x) * k; s.tz = p.z + (s.z - p.z) * k; }
+      else { s.tx = s.x; s.tz = s.z; s.yaw = turn(s.yaw, Math.atan2(p.x - s.x, p.z - s.z), .35); }
+    } else if (s.state === SHAMBLE) {
       if (loud) { s.state = CURIOUS; s.tx = loud.x; s.tz = loud.z; s.timer = T.lookAround; return; }
       if (s.alert >= T.curiousAt) { s.state = CURIOUS; s.tx = p.x; s.tz = p.z; s.timer = T.lookAround; return; }
       s.timer -= T.thinkEvery;
-      if (s.timer <= 0 || hypot(s.tx - s.x, s.tz - s.z) < .6 || s.stuck > 1) {
+      if (s.timer <= 0 || (!s.home && hypot(s.tx - s.x, s.tz - s.z) < .6) || s.stuck > 1) {
         s.stuck = 0; s.timer = 6 + world.rand() * 10;
         const near = lights.find((l) => hypot(l.x - s.x, l.z - s.z) < l.r);
-        if (near && world.rand() < T.lightPull * p.night) { const a = world.rand() * 6.28, r = 2 + world.rand() * 5; s.tx = near.x + Math.cos(a) * r; s.tz = near.z + Math.sin(a) * r; }
-        else [s.tx, s.tz] = world.wander(s);
+        // and it keeps going until it's there
+        if (near && !s.home && world.rand() < T.lightPull * p.night) { const a = world.rand() * 6.28, r = 2 + world.rand() * 5; s.tx = near.x + Math.cos(a) * r; s.tz = near.z + Math.sin(a) * r; s.timer = hypot(s.tx - s.x, s.tz - s.z) / T.speed[SHAMBLE] + 2; }
+        else nextStop(s, p);
       }
     } else if (s.state === CURIOUS) {
-      if (s.alert >= 1) { s.state = HUNTING; s.lost = 0; return; }
+      if (s.alert >= 1) { s.state = scared ? AVOIDING : HUNTING; s.lost = 0; return; }
       if (loud) { s.tx = loud.x; s.tz = loud.z; s.timer = T.lookAround; }
       else if (sensed) { s.tx = p.x; s.tz = p.z; s.timer = T.lookAround; }
       if (s.stuck > T.feelAlong) { s.stuck = 0; s.state = SHAMBLE; s.timer = 0; }   // can't get there
@@ -109,23 +196,23 @@ export function createHorde(world, tuning = {}, on = {}) {
       else {
         s.lost += T.thinkEvery;
         if (loud) { s.state = CURIOUS; s.alert = T.curiousAt; s.tx = loud.x; s.tz = loud.z; s.timer = T.lookAround; return; }
-        if (s.lost >= T.lostAfter) { s.state = CURIOUS; s.alert = T.curiousAt; s.timer = T.lookAround; return; }
+        if (s.lost >= T.lostAfter + (w ? F.holdsOn(w, mood) : 0)) { s.state = CURIOUS; s.alert = T.curiousAt; s.timer = T.lookAround; return; }
       }
       let pack = 1;
       for (const o of active) if (o !== s && (o.state === HUNTING || o.state === SWARM) && hypot(o.x - s.x, o.z - s.z) < T.swarmReach) pack++;
       s.state = pack >= T.swarmSize ? SWARM : HUNTING;
-      if (s.state === SWARM) for (const o of active) if ((o.state === SHAMBLE || o.state === CURIOUS) && hypot(o.x - s.x, o.z - s.z) < T.callReach) { o.alert = Math.min(1, o.alert + T.thinkEvery); if (o.state === SHAMBLE) { o.state = CURIOUS; o.timer = T.lookAround; } o.tx = s.tx; o.tz = s.tz; }
+      if (s.state === SWARM) for (const o of active) if ((o.state === SHAMBLE || o.state === CURIOUS) && hypot(o.x - s.x, o.z - s.z) < T.callReach && !(o.who && (o.who.calm || F.mood(o.who) >= AWAY))) { o.alert = Math.min(1, o.alert + T.thinkEvery); if (o.state === SHAMBLE) { o.state = CURIOUS; o.timer = T.lookAround; } o.tx = s.tx; o.tz = s.tz; }
     }
   }
   function walk(s, dt) {
-    const sp = T.speed[s.state];
+    const sp = (s.drawn && s.state === CURIOUS ? T.lured : T.speed[s.state]) * (s.soaked > 0 ? T.wading : 1);
     s.moving = 0; if (!sp) return;
     let dx = s.tx - s.x, dz = s.tz - s.z, l = hypot(dx, dz);
     if (l < .35) return;
     dx /= l; dz /= l;
-    // keep out of each other's way, so they crowd rather than stack
-    for (const o of active) {
-      if (o === s) continue;
+    // keep out of each other's way, so they crowd rather than stack, except someone who's scared, who goes straight past anybody
+    if (s.state !== AVOIDING) for (const o of active) {
+      if (o === s || o.state === AVOIDING) continue;
       const ax = s.x - o.x, az = s.z - o.z;
       if (Math.abs(ax) > T.personalSpace || Math.abs(az) > T.personalSpace) continue;
       const q = hypot(ax, az); if (q > 0 && q < T.personalSpace) { const k = (T.personalSpace - q) / T.personalSpace * 1.4; dx += ax / q * k; dz += az / q * k; }
@@ -160,6 +247,7 @@ export function createHorde(world, tuning = {}, on = {}) {
   }
   function release(broke) {
     const g = h.grab; h.grab = null; mercy = T.mercy;
+    if (F) for (const s of g.who) if (s.who) { if (broke) F.slipped(s.who); else F.got(s.who); }
     // everyone close gets thrown off, or they'd only grab straight back on
     for (const s of active) {
       const dx = s.x - g.x, dz = s.z - g.z, d = hypot(dx, dz) || 1;
@@ -171,18 +259,26 @@ export function createHorde(world, tuning = {}, on = {}) {
     if (broke) h.on.free?.(); else h.on.overrun?.();
   }
 
-  // p: { x, z, y, noise, light, beans, night, hidden, canGrab }
+  // p: { x, z, y, noise, light, beans, night, hidden, canGrab, driving }
   h.update = (dt, p) => {
-    clock += dt; mercy = Math.max(0, mercy - dt);
+    clock += dt; mercy = Math.max(0, mercy - dt); F?.tick(dt);
     for (let i = noises.length - 1; i >= 0; i--) if (noises[i].until < clock) noises.splice(i, 1);
     active.length = 0;
     for (const s of all) if (hypot(s.x - p.x, s.z - p.z) < T.active) active.push(s);
     for (const s of active) {
+      if (s.under !== undefined) { s.under -= dt; s.y -= dt * 1.5; s.moving = 0; continue; }
       s.next -= dt;
       if (s.flat > 0) s.flat -= dt;
       if (s.next <= 0) { s.next += T.thinkEvery; think(s, p); }
       walk(s, dt);
+      if (s.wading && s.state !== GRABBING && world.water(s.x, s.z)) {
+        s.soaked = (s.soaked ?? 0) + dt; s.biteAt ??= T.bite[0] + world.rand() * (T.bite[1] - T.bite[0]);
+        if (s.soaked >= s.biteAt) { s.under = T.goesUnder; h.on.bitten?.(s); }
+      }
     }
+    for (let i = all.length - 1; i >= 0; i--) if (all[i].under <= 0) { const w = all[i].who; if (w) F.gone(w); all.splice(i, 1); if (!w?.calm) owed++; }
+    // The water can have as many as it likes and the town doesn't empty: another wanders in for each, in time, from somewhere he isn't
+    if (owed && (comeIn -= dt) <= 0) { const at = world.comeFrom?.(p); if (at) { h.add(at[0], at[1]); owed--; } comeIn = T.comeIn; }
     if (h.grab) { h.grab.x = p.x; h.grab.z = p.z; holdOn(dt, p); return; }
     if (mercy > 0 || !p.canGrab) return;
     for (const s of active) {

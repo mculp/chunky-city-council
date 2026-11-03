@@ -1,0 +1,98 @@
+{
+  "notes": {
+    "classes": "TIGER has no width or surface. These are assumed by class, the same as tools/road_config.json does for the bigger roads. S1400named is a local road with a name, and S1400 is one without.",
+    "byName": "A road by its TIGER name, for what's been looked at by eye on Street View. paint is for one with lines on it, which the paved ones haven't got otherwise.",
+    "leaveOut": "TIGER names that aren't taken.",
+    "drive": "What a generated drive is. None of it is surveyed.",
+    "reachOut": "A road taken past where the map would have stopped, as far as north in true metres, which is just past the church and the cemetery. box is what footprints to fetch for it, x0, z0, x1, z1 in true metres. Or as far as south or east, by name or by TIGER's id for one with no name, and without a box if what's been fetched already has them.",
+    "ownDrive": "Buildings with a drive or a forecourt of their own, already built by hand in index.html or measured below: the owner's house and barn, the gas station and the town hall, and the compound on Pine Forest Rd.",
+    "measured": "Somebody's real drive that TIGER hasn't got and a generated one would miss, measured off the NAIP aerial, in true metres. Each starts from the nearest vertex of a road or a lane, so it's joined up."
+  },
+  "classes": {
+    "S1200": {
+      "width": 7.3,
+      "surface": "asphalt"
+    },
+    "S1400named": {
+      "width": 5.5,
+      "surface": "asphalt"
+    },
+    "S1400": {
+      "width": 4.2,
+      "surface": "gravel"
+    },
+    "S1500": {
+      "width": 3,
+      "surface": "dirt"
+    },
+    "S1640": {
+      "width": 5,
+      "surface": "asphalt"
+    },
+    "S1730": {
+      "width": 3.5,
+      "surface": "gravel"
+    },
+    "S1740": {
+      "width": 3.2,
+      "surface": "dirt"
+    },
+    "S1750": {
+      "width": 3.2,
+      "surface": "dirt"
+    },
+    "S1780": {
+      "width": 5,
+      "surface": "gravel"
+    }
+  },
+  "byName": {
+    "Point Wanita Lake Rd": {
+      "width": 6.5,
+      "surface": "asphalt",
+      "paint": true
+    },
+    "Griffis Fountain Rd": {
+      "width": 6,
+      "surface": "gravel"
+    },
+    "Johnson Rd": {
+      "width": 5,
+      "surface": "gravel"
+    }
+  },
+  "leaveOut": [],
+  "drive": {
+    "width": 3,
+    "surface": "dirt"
+  },
+  "reachOut": [
+    { "names": ["Chunky Duffee Rd"], "north": -7640, "box": [-1100, -7950, 450, -1800] },
+    { "names": ["Griffis Fountain Rd"], "ids": ["110168394306", "110168394417", "110168394633"], "south": 2420 },
+    { "names": ["Johnson Rd"], "south": 2420, "east": -640 }
+  ],
+  "ownDrive": [75414843, 75057300, 75177617, 75204375, 75099630, 75190940, 900004, 900005, 900006, 900007, 900009, 900010, 900011, 900012, 900013, 74875999, 74725728, 75175622, 900014, 76030447, 900015, 74756684, 74466261, 74647050, 74447926, 75046441, 74434542, 900016],
+  "measured": [
+    { "width": 4.5, "surface": "gravel", "points": [[875, 734], [905, 731.9], [909, 731.6], [940, 718.6], [959, 705.6], [981, 696], [994, 679.6], [997, 668.4], [1003.4, 657.3], [1013.6, 643.4], [1027.6, 632.2], [1037, 625]] },
+    { "width": 8, "surface": "gravel", "points": [[1013.6, 643.4], [1025.8, 636.5], [1035, 626.5]] },
+    { "width": 3.5, "surface": "gravel", "points": [[906, 722], [911, 715]] },
+    { "width": 3.5, "surface": "gravel", "points": [[977, 688]] },
+    { "width": 3.5, "surface": "gravel", "points": [[1025.5, 652], [1027, 662]] },
+    {"width": 4, "surface": "gravel", "points": [[-1634.7, -609.3], [-1629.3, -615.3], [-1620, -634], [-1613.3, -647.3], [-1608, -666], [-1603.3, -680.7], [-1599.3, -696.7], [-1593.3, -712.7], [-1584, -728.7], [-1566.5, -752.5], [-1566, -762], [-1564, -772], [-1561, -780], [-1556, -789], [-1551, -797], [-1545, -806], [-1542, -815], [-1535, -820], [-1528, -820]]},
+    {"width": 9, "surface": "gravel", "points": [[-1551, -797], [-1546.5, -793]]},
+    {"width": 4, "surface": "gravel", "points": [[-466, -7396], [-460.2, -7398.6], [-447, -7409.4], [-435, -7420.8], [-424.2, -7435.2], [-420.6, -7445.4], [-418.2, -7453.8], [-414, -7476]]},
+    {"width": 4, "surface": "gravel", "points": [[-424.2, -7435.2], [-411, -7429.8]]},
+    {"width": 6, "surface": "gravel", "points": [[-499, -7322], [-520, -7323], [-550, -7325], [-585, -7329]]},
+    {"width": 14, "surface": "gravel", "points": [[-552, -7331], [-582, -7331]]},
+    {"width": 5, "surface": "gravel", "points": [[-286, -594], [-300, -594.5], [-320, -596], [-340, -595], [-362, -597]]},
+    {"width": 9, "surface": "gravel", "points": [[-558, 1725], [-530, 1722], [-505, 1726], [-470, 1728], [-450, 1722]]},
+    {"width": 3.2, "surface": "dirt", "points": [[-450, 1722], [-442, 1690], [-458, 1672], [-477, 1651], [-491, 1610], [-490, 1560], [-450, 1530], [-417, 1513], [-417, 1450], [-445, 1357], [-450, 1207]]},
+    {"width": 3.2, "surface": "dirt", "points": [[-442, 1690], [-400, 1660], [-300, 1633]]},
+    {"width": 3.2, "surface": "dirt", "points": [[-450, 1722], [-470, 1790], [-488, 1846], [-522, 1862], [-545, 1881], [-557, 1925]]},
+    {"width": 3.2, "surface": "dirt", "points": [[-488, 1846], [-420, 1885], [-345, 1935]]},
+    {"width": 3.2, "surface": "dirt", "points": [[-567, 637], [-571, 697], [-536, 781], [-473, 844], [-410, 893], [-319, 956], [-273, 984], [-267, 1000], [-267, 1200], [-268, 1329], [-268, 1400], [-270, 1590]]},
+    {"width": 3.2, "surface": "dirt", "points": [[-267, 1205], [-450, 1207], [-676, 1204]]},
+    {"width": 3.2, "surface": "dirt", "points": [[-268, 1329], [-21, 1328], [-10, 1312], [9, 1230], [27, 1140], [39, 1072], [42, 990], [46, 975], [185, 971], [207, 980], [252, 962], [350, 990], [447, 1022], [395, 1100], [342, 1175], [324, 1242], [326, 1298]]},
+    {"width": 3.2, "surface": "dirt", "points": [[-273, 984], [-262, 960], [-262, 746], [-205, 720], [-130, 745], [-70, 700], [-20, 640], [40, 610]]}
+  ]
+}

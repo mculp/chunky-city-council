@@ -5,22 +5,22 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const PAINT = '#ffffff', DARK = '#17131c', TRIM = '#3a3840', LIGHT = '#f3e8b4', TAIL = '#8a1a14', SEAT = '#4a3a30', CREAM = '#c9bd9e', TIRE = '#0d0b10', HUB = '#6d6a72';
 
-function painted(geo, color) {
+export function painted(geo, color) {
   const g = geo.index ? geo.toNonIndexed() : geo, c = new THREE.Color(color), n = g.attributes.position.count, a = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
   g.setAttribute('color', new THREE.BufferAttribute(a, 3)); g.deleteAttribute('uv');
   g.computeVertexNormals();
   return g;
 }
-const box = (x, y, z, w, h, d, color = PAINT) => painted(new THREE.BoxGeometry(w, h, d).translate(x, y, z), color);
+export const box = (x, y, z, w, h, d, color = PAINT) => painted(new THREE.BoxGeometry(w, h, d).translate(x, y, z), color);
 // a bar from one point to another
-function bar(a, b, w, color = PAINT) {
+export function bar(a, b, w, color = PAINT) {
   const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), L = A.distanceTo(B);
   const g = new THREE.BoxGeometry(w, L, w).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize())).translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
   return painted(g, color);
 }
 // A side view swept across the width: `profile` is [along, up] pairs going clockwise from the back, seen from the driver's side
-function prism(profile, x0, x1, color = PAINT) {
+export function prism(profile, x0, x1, color = PAINT) {
   const pos = [], n = profile.length;
   let cz = 0, cy = 0; for (const [z, y] of profile) { cz += z / n; cy += y / n; }
   for (let i = 0; i < n; i++) {
@@ -32,7 +32,7 @@ function prism(profile, x0, x1, color = PAINT) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
   return painted(g, color);
 }
-const both = (fn) => [fn(1), fn(-1)];
+export const both = (fn) => [fn(1), fn(-1)];
 // the dark shape round a wheel, on each side
 const arches = (z, r, x) => both((s) => prism([[z - r, .32], [z - r, .55], [z - r * .55, r + .4], [z + r * .55, r + .4], [z + r, .55], [z + r, .32]], s * x, s * (x + .012), DARK));
 
@@ -96,8 +96,33 @@ function golf() {
   ];
 }
 
+// An old T-top: long and low with a fastback, no badge on it, and the two panels out of the roof, so that all that's left up there is the bar down the middle
+function coupe() {
+  return [
+    prism([[-2.42, .5], [-2.44, .9], [-2.2, .98], [.5, .94], [2, .74], [2.42, .6], [2.46, .44], [2.3, .32], [-2.28, .32]], -1.02, 1.02),
+    box(0, .03, 0, 1.8, .02, 4.4, DARK),
+    box(0, .95, -.7, 1.64, .02, 2.5, DARK),
+    // the glass: the windshield, the long back window and the side windows
+    prism([[.58, .94], [-.5, 1.48], [-.56, 1.45], [.46, .93]], -.84, .84, DARK),
+    prism([[-1.08, 1.48], [-2.18, .99], [-2.06, .98], [-1.04, 1.44]], -.8, .8, DARK),
+    ...both((s) => prism([[-2.02, .99], [-1.08, 1.44], [-.56, 1.44], [.44, .98]], s * .86, s * .84, DARK)),
+    // what's left of the roof: over the windshield, over the back window, and the bar between them
+    box(0, 1.48, -.52, 1.72, .05, .16), box(0, 1.48, -1.08, 1.66, .05, .16), box(0, 1.48, -.8, .22, .05, .56),
+    ...both((s) => bar([s * .88, .94, .58], [s * .84, 1.48, -.5], .07)), ...both((s) => bar([s * .86, .98, -.5], [s * .84, 1.48, -.56], .06)), ...both((s) => bar([s * .86, 1, -2.08], [s * .82, 1.48, -1.08], .12)),
+    // two seats you can see from above, and the wheel
+    ...both((s) => box(s * .42, 1.14, -.92, .56, .46, .12, SEAT)), ...both((s) => box(s * .42, .94, -.62, .56, .1, .56, SEAT)),
+    box(.42, 1.08, .02, .34, .34, .04, TRIM),
+    ...arches(1.45, .46, 1.02), ...arches(-1.4, .46, 1.02),
+    // a slot of a grille, low lamps in the nose, red all the way across the tail, and a lip of a spoiler
+    box(0, .48, 2.47, 1.3, .1, .04, DARK), ...both((s) => box(s * .66, .62, 2.41, .46, .09, .05, LIGHT)),
+    box(0, .78, -2.46, 1.84, .12, .04, TAIL), box(0, 1.04, -2.3, 1.86, .04, .26), ...both((s) => box(s * .78, 1, -2.3, .06, .08, .14)),
+    box(0, .42, 2.42, 2.04, .14, .12, TRIM), box(0, .42, -2.42, 2.04, .14, .12, TRIM),
+    ...both((s) => box(s * 1.022, .68, -.1, .01, .4, .04, DARK)), ...both((s) => box(s * 1.022, .68, -1.3, .01, .4, .04, DARK)),
+  ];
+}
+
 // The outline's hull has to meet at the corners, so its normals are shared wherever two faces touch
-function smoothed(geo) {
+export function smoothed(geo) {
   const p = geo.attributes.position, sum = new Map(), key = (i) => `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`, n = geo.attributes.normal;
   for (let i = 0; i < p.count; i++) { const k = key(i); let s = sum.get(k); if (!s) sum.set(k, s = new THREE.Vector3()); s.x += n.getX(i); s.y += n.getY(i); s.z += n.getZ(i); }
   const out = new Float32Array(p.count * 3);
@@ -108,7 +133,7 @@ function smoothed(geo) {
 
 export function vehicleGeometries() {
   const out = {};
-  for (const [kind, parts] of Object.entries({ car, pickup, quad, golf })) { const geo = mergeGeometries(parts()); out[kind] = { geo, line: smoothed(geo) }; }
+  for (const [kind, parts] of Object.entries({ car, pickup, quad, golf, coupe })) { const geo = mergeGeometries(parts()); out[kind] = { geo, line: smoothed(geo) }; }
   // one wheel, a unit across and a unit wide, turning about x
   const wheel = mergeGeometries([painted(new THREE.CylinderGeometry(1, 1, 1, 10).rotateZ(Math.PI / 2), TIRE), painted(new THREE.CylinderGeometry(.56, .56, 1.04, 6).rotateZ(Math.PI / 2), HUB)]);
   out.wheel = { geo: wheel, line: smoothed(wheel) };
@@ -121,6 +146,7 @@ export const LAMPS = {
   pickup: { head: [.78, .98, 2.9], tail: [1.17, 1.12, -2.96] },
   quad: { head: [.24, .82, 1.36], tail: [.22, .8, -1.34] },
   golf: { head: [.52, .66, 1.63], tail: [.5, .62, -1.58] },
+  coupe: { head: [.66, .62, 2.46], tail: [.7, .78, -2.5] },
 };
 
 // Each one's colour, faded the way paint goes, picked by how it's parked
@@ -129,4 +155,5 @@ export const PAINTS = {
   pickup: ['#7d3327', '#2f4a60', '#a8a18f', '#3e5238', '#6b675d', '#8f6a32', '#b5ad98', '#433f45'],
   quad: ['#7a2f24', '#3d5a38', '#a8622a', '#2f3a30'],
   golf: ['#d3cdbd', '#c2bfae', '#b9c4b5'],
+  coupe: ['#e6e1d2'],
 };

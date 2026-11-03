@@ -17,7 +17,7 @@ const snap = async (name) => { if (shots) { await mkdir(shots, { recursive: true
 
 await g(() => {
   const G = __game;
-  G.pause();
+  G.pause(); G.fillTown();
   // The way from one place to another on foot, over a half-metre grid, or null if there's no way. It only looks as far as it has to.
   const CELL = .5;
   // what stops him on foot in town: anything standing, and tree trunks
@@ -144,7 +144,7 @@ d = await talk('coop', 'Coop'); s = await st(); check('paid', s.flags.paid === t
 // the rest of the cans, in through the town hall's door
 const hall = await g(() => { const P = __game.places.hall; return [P.x, P.z]; });
 const at = ([x, z]) => [x + hall[0], z + hall[1]];
-for (const [name, x, z, reach] of [['along the strip', ...at([22.7, 18.1]), 1], ['up behind the block building', ...at([22.7, 3.1]), 1], ['round to the lot', ...at([50.7, 3.1]), 1], ['the town hall door', ...at([47.7, -12.87]), .6], ['inside', ...at([43.9, -12.87]), .5], ['the shelf can', ...at([42.05, -14]), .25]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
+for (const [name, x, z, reach] of [['along the strip', ...at([22.7, 18.1]), 1], ['up behind the block building', ...at([22.7, 6.1]), 1], ['round to the lot', ...at([50.7, 3.1]), 1], ['the town hall door', ...at([47.7, -12.87]), .6], ['inside', ...at([43.9, -12.87]), .5], ['the shelf can', ...at([42.05, -14]), .25]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
 await snap('06-hall');
 check('picked up the can on the near shelf', (await can(1)).got, await can(1));
 for (const [name, x, z, reach] of [['round to the gap', ...at([42.8, -11.62]), .4], ['past the counter', ...at([39.7, -11.62]), .4], ['the back shelf can', ...at([39.3, -9.2]), .3]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
@@ -162,7 +162,7 @@ d = await talk('odessa', 'Miss Odessa'); await snap('08-odessa');
 await choose(0); s = await choose(0); check('sweeping', s.mode === 'sweep', s.mode);
 await g(() => __game.key('e', true)); s = await g(() => __game.step(3.4)); await g(() => __game.key('e', false));
 check('swept for 3 beans, and twelve is plenty', s.flags.swept === true && s.beans >= 12, [s.flags.swept, s.beans]); await inShot('odessa', 'Miss Odessa'); await snap('09-swept');
-check('nobody else on the streets for the whole chapter', !(await g(() => __game.crowd())).out);
+check('the crowd stays away for the whole chapter', !(await g(() => __game.crowd())).out);
 s = await g(() => __game.step(2)); check('the chapter ends', s.mode === 'end', s.mode); await snap('10-end');
 check('and now they come out', (await g(() => __game.crowd())).all > 0);
 await page.click('#again'); s = await g(() => __game.step(.1)); check('the final objective', s.mode === 'town' && /Chunky is yours/.test(s.obj), [s.mode, s.obj]);

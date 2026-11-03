@@ -126,7 +126,9 @@ def build(raw, fetched, sha, roads, extras):
     bridge = next(c for c in roads["reference"]["crossings"] if c["road"] == roads["opening"]["road"] and c["with"] == "river")
     ponds, left = [], {"swamps": 0, "outOfReach": 0, "byTheBridge": 0}
     really_open = {e["id"] for e in extras["open"]}
-    missing = really_open - {f["properties"]["PERMANENT_IDENTIFIER"] for f in raw["features"]}
+    reached = {e["id"] for e in extras.get("reached", [])}
+    looks = {e["id"]: e["look"] for e in extras.get("reached", []) if "look" in e}
+    missing = (really_open | reached) - {f["properties"]["PERMANENT_IDENTIFIER"] for f in raw["features"]}
     if missing:
         raise SystemExit(f"tools/water_extras.json lists {sorted(missing)}, and NHD doesn't have them any more")
     for f in raw["features"]:
@@ -136,20 +138,24 @@ def build(raw, fetched, sha, roads, extras):
             continue
         rings = geometry["coordinates"] if geometry["type"] == "Polygon" else [r for poly in geometry["coordinates"] for r in poly]
         ring, lonlat = shore_of(rings[0])
-        if not any(near.within(x, z) for x, z in ring):
+        if props["PERMANENT_IDENTIFIER"] not in reached and not any(near.within(x, z) for x, z in ring):
             left["outOfReach"] += 1
             continue
         if any(math.hypot(x - bridge["x"], z - bridge["z"]) < BRIDGE_CLEAR for x, z in ring):
             left["byTheBridge"] += 1
             continue
-        if len(rings) > 1:
-            raise SystemExit(f"{props['PERMANENT_IDENTIFIER']} has an island, and nothing handles that yet")
         pond = {"id": props["PERMANENT_IDENTIFIER"], "source": "nhd", "area": round(area_of(ring)), "ring": ring, "lonlat": lonlat}
+        if len(rings) > 1:
+            pond["islands"] = [shore_of(r)[0] for r in rings[1:]]
+        if props["PERMANENT_IDENTIFIER"] in looks:
+            pond["look"] = looks[props["PERMANENT_IDENTIFIER"]]
         if props.get("GNIS_NAME"):
             pond["name"] = props["GNIS_NAME"]
         ponds.append(pond)
     for e in extras["ponds"]:
         ponds.append({"id": e["id"], "source": "naip", "area": round(area_of(e["ring"])), "ring": e["ring"], "lonlat": [[round(v, 6) for v in to_lonlat(x, z)] for x, z in e["ring"]]})
+    for e in extras.get("pools", []):
+        ponds.append({"id": e["id"], "source": "naip", "pool": e["pool"], "area": round(area_of(e["ring"])), "ring": e["ring"], "lonlat": [[round(v, 6) for v in to_lonlat(x, z)] for x, z in e["ring"]]})
     ponds.sort(key=lambda p: p["id"])
     return {
         "version": 1,

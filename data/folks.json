@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "families": ["Alexander", "Clark"],
+  "others": [
+    "Tate", "Rainey", "Dubose", "Lott", "Sims", "Todd", "Ware", "Yates", "Pace", "Graham", "Moore", "Walker", "Harris",
+    "Bounds", "Eaves", "Knight", "McElroy", "Hodges", "Pruitt", "Boyd", "Ferrell", "Gandy", "Sumrall", "Tullos", "Weems",
+    "Lofton", "Mabry", "Nix", "Odom", "Purvis"
+  ],
+  "dressed": { "church-dress": "women", "shirtless": "men" },
+  "women": [
+    "Wanda", "Loretta", "Nadine", "Earlene", "Faye", "Geraldine", "Hazel", "Imogene", "Jolene", "Lurleen", "Maxine", "Nell",
+    "Opal", "Pearl", "Ruby", "Tammy", "Velma", "Willa", "Bobbie", "Connie", "Dot", "Eula", "Flossie", "Gladys", "Hattie",
+    "Inez", "Jewel", "Lottie", "Mavis", "Norma", "Ola", "Patsy", "Reba", "Thelma", "Vonda", "Verna", "Alma", "Beulah",
+    "Cora", "Della", "Edna", "Fern", "Ginger", "Ida", "June", "Kay", "Lila", "Mae", "Nettie", "Oleta", "Paulette", "Rhonda",
+    "Sadie", "Trudy", "Una", "Vera", "Winnie", "Yvonne", "Zelda"
+  ],
+  "men": [
+    "Dale", "Wendell", "Lamar", "Hoyt", "Cecil", "Travis", "Darrell", "Vernon", "Otis", "Floyd", "Roy", "Buford", "Clyde",
+    "Harlan", "Lonnie", "Rusty", "Dwight", "Elbert", "Grady", "Hollis", "Ira", "Jimmy", "Kermit", "Leon", "Marvin", "Nolan",
+    "Orville", "Percy", "Ronnie", "Sonny", "Terrell", "Virgil", "Waylon", "Wade", "Alvin", "Bobby", "Curtis", "Donnie",
+    "Eugene", "Gene", "Homer", "Jerry", "Lester", "Mack", "Ned", "Odell", "Ricky", "Tommy", "Wesley", "Woodrow", "Amos",
+    "Burl", "Cloyce", "Doyle", "Ervin", "Foy", "Garland", "Horace", "Jesper"
+  ]
+}

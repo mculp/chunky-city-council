@@ -1,5 +1,5 @@
 // Goes and looks at what's come from the owner's lore, in docs/lore.md, with the game's own movement and real key presses and taps: every church's sign,
-// what it says today and tomorrow, and what happens when it's hit, then Charlie Flake's catfish, then Robby's lot and the flies. It can't say whether the jokes are any good.
+// what it says today and tomorrow, and what happens when it's hit, then Charlie Flake's catfish, then Robby's lot and the flies, then the light on Stuckey's Bridge. It can't say whether the jokes are any good.
 //
 //   npm i && npm run lore [-- --shots dir]
 import { mkdirSync } from 'node:fs';
@@ -217,8 +217,80 @@ check('after a reload it\'s remembered he\'s said it', kept.flag === true && kep
 await g(() => __game.step(.1)); await tap();
 check('and it\'s still only "..."', (await said())?.say === '...', await said());
 
+// ---- the light on Stuckey's Bridge. It comes when he goes back there, and nothing says what it is.
+const lamp = () => g(() => { const G = __game, L = G.lamp, P = G.player.pos; return { state: L.state, x: L.x, z: L.z, shown: L.shown, hush: L.hush, through: L.through, closest: L.closest, seen: G.lampGroup.visible, far: Math.hypot(L.x - P.x, L.z - P.z), hp: G.S.hp, mode: G.S.mode, words: document.body.innerText }; });
+await g(() => {
+  const G = __game; if (G.driving()) G.getOut(true); G.jump('town'); G.S.flags.town = true; G.step(.1);
+  window.fades = []; const fade = G.sound.fade; G.sound.fade = (bus, k) => { fades.push([bus, k]); return fade(bus, k); };
+  // on until the light's done what's asked, for as long as it takes someone to walk a bridge
+  window.lampUntil = (done) => { const L = G.lamp; let t = 0; while (t < 90 && !done(L)) { G.step(.1, 1 / 30); t += .1; } return t; };
+});
+let l = await lamp();
+check('the light isn\'t there from anywhere else', l.state === 'waiting' && !l.seen, l);
+await g(() => { const G = __game; G.place(-40, 0); G.look(-Math.PI / 2); G.step(1, 1 / 30); });
+const atFirst = await lamp();
+l = atFirst; check('it\'s out at the far end of the bridge when he comes back to it', l.state === 'out' && l.x === 24 && l.seen && l.shown > 0, l);
+check('and it isn\'t quiet yet', !l.hush && !(await g(() => fades.length)), l);
+await g(() => { __game.step(3, 1 / 30); }); await snap('light-far-end');
+await g(() => lampUntil((L) => L.state === 'coming')); l = await lamp();
+check('it starts coming after a while, without him doing anything', l.state === 'coming', l);
+await g(() => lampUntil((L) => L.hush)); l = await lamp();
+check('everything goes quiet while it\'s still on the bridge', l.hush && l.far < 31 && l.x > -20.6, l);
+check('the music, the effects and the night', JSON.stringify(await g(() => fades)) === JSON.stringify([['music', 0], ['effects', 0], ['ambience', 0]]), await g(() => fades));
+await g(() => lampUntil((L) => Math.hypot(L.x - __game.player.pos.x, L.z - __game.player.pos.z) < 4)); await snap('light-close');
+await g(() => lampUntil((L) => L.through)); l = await lamp();
+check('it goes through him', l.through && l.state === 'past' && l.closest < 1.4, l);
+check('and does nothing to him', l.hp === atFirst.hp && l.mode === 'town', [l.hp, atFirst.hp, l.mode]);
+const hurts = await g(() => { const G = __game; G.step(.5, 1 / 30); return G.blocked(G.lamp.x, G.lamp.z, 6.2); });
+check('there\'s nothing there to bump into', !hurts, hurts);
+await g(() => { const G = __game; G.look(Math.PI / 2); G.step(3, 1 / 30); }); await snap('light-going');
+await g(() => lampUntil((L) => !L.hush)); l = await lamp();
+check('it carries on out the other way, still there when it\'s quiet no more', l.state === 'past' && l.x < -40 - 25 && l.shown > 0, l);
+check('and the sound comes back', JSON.stringify((await g(() => fades)).slice(3)) === JSON.stringify([['music', 1], ['effects', 1], ['ambience', 1]]), await g(() => fades));
+await g(() => lampUntil((L) => L.state === 'gone')); l = await lamp();
+check('and then it\'s gone', l.state === 'gone' && !l.seen, l);
+await g(() => { __game.step(20, 1 / 30); }); l = await lamp();
+check('it doesn\'t come again while he\'s still here', l.state === 'gone' && !l.seen, l);
+check('no words anywhere say what it was', !/jason|jesse|maxwell|dana|ghost|stuckey'?s light/i.test(l.words), l.words);
+await g(() => { const G = __game; G.place(...G.map.fromTrue(0, 0)); G.step(.2, 1 / 30); G.place(-40, 0); G.step(.5, 1 / 30); }); l = await lamp();
+check('but it does when he\'s been away', l.state === 'out' && l.seen, l);
+
+// ---- and if he drives up, and carries on through it, that makes no difference
+const drove = await g(() => {
+  const G = __game, L = G.lamp, v = G.vehicles.find((o) => o.kind === 'pickup' && !o.wrecked && !o.drowned), a = v.yaw + Math.PI / 2, off = v.K.width / 2 + 1;
+  G.place(v.x + Math.sin(a) * off, v.z + Math.cos(a) * off); G.step(.6); G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); G.sim(1 / 30, 1 / 30);
+  const d = G.driving(); if (!d) return { boarded: false };
+  // come at it along the road and onto the bridge, flat out
+  d.x = -80; d.z = 0; d.y = G.floorAt(-80, 0); d.yaw = Math.PI / 2; d.f = 0; d.s = 0; d.steer = 0; d.grounded = true; G.look(d.yaw + Math.PI);
+  G.place(-80, 0); G.step(.1, 1 / 30); G.key('w', true);
+  const was = L.state; let t = 0, heard = false; for (; t < 30 && !L.through; t += 1 / 30) { G.step(1 / 30, 1 / 30); heard = heard || L.hush; } G.key('w', false);
+  const through = L.through, hp = d.hp; G.step(1, 1 / 30); const stillDriving = !!G.driving(), mode = G.S.mode; G.getOut(true); G.step(.2, 1 / 30);
+  return { boarded: true, was, through, heard, stillDriving, mode, seconds: t, on: G.S.mode };
+});
+check('driving, it comes the same, and he goes through it', drove.boarded && drove.through && drove.heard && drove.stillDriving, drove);
+
 check('and there are no console errors', errors.length === 0, errors);
 await close();
+
+// ---- it isn't anywhere in the opening, and with reduced motion it still swings, only less
+{
+  const swings = async (reducedMotion) => {
+    const p = await serveAndOpen({ touch: true, viewport: { width: 390, height: 844 }, reducedMotion });
+    const r = await p.page.evaluate(() => {
+      const G = __game; G.pause(); const opening = [];
+      for (const phase of ['hang', 'swim', 'land', 'bridge']) { G.jump(phase); G.step(.5, 1 / 30); opening.push(G.lamp.state === 'waiting' && !G.lampGroup.visible); }
+      G.jump('town'); G.S.flags.town = true; G.step(.1, 1 / 30); G.place(-40, 0); G.step(3, 1 / 30);
+      let lo = Infinity, hi = -Infinity; for (let t = 0; t < 2; t += 1 / 12) { G.step(1 / 12, 1 / 30); const z = G.lampGroup.position.z; lo = Math.min(lo, z); hi = Math.max(hi, z); }
+      return { opening, swing: hi - lo };
+    });
+    check(`it isn't there at any point of the opening${reducedMotion ? ', with reduced motion' : ''}`, r.opening.every(Boolean), r.opening);
+    check(`and in town it swings ${r.swing.toFixed(2)} m${reducedMotion ? ', with reduced motion' : ''}`, r.swing > (reducedMotion ? .3 : .9) && r.swing < (reducedMotion ? .6 : 1.2), r);
+    check('with no console errors', p.errors.length === 0, p.errors);
+    await p.close(); return r.swing;
+  };
+  const moving = await swings(undefined), still = await swings('reduce');
+  check('less with reduced motion', still < moving / 2, [still, moving]);
+}
 
 // ---- the old sheet hasn't got the flies' sound, and it doesn't say so
 {

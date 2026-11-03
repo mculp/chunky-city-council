@@ -252,7 +252,7 @@ await phone.page.evaluate(() => { __game.pause(); __game.step(.5); });
 const free = await phone.page.evaluate(() => ({ mode: __game.S.mode, gas: __game.S.gas, crowd: __game.crowd().out, free: !!__game.S.flags.ended, ruin: __game.floorAt(0, 0) < 0 }));
 check('and that drops him in town with some cans and the crowd out, and Stuckey\'s is down', free.mode === 'town' && free.gas === 3 && free.crowd && free.free && free.ruin, free);
 const a = await label('bA'), c = await label('bC');
-check('on a phone the big button swings and the other throws', a === 'SWING' && /^THROW/.test(c ?? ''), { a, c });
+check('on a phone the big button swings and the other throws', a === 'SWING' && /^GAS/.test(c ?? ''), { a, c });
 await phone.page.tap('#bC'); await phone.page.evaluate(() => __game.step(.1));
 const thrown = await phone.page.evaluate(() => __game.S.gas);
 check('tapping THROW throws one', thrown === 2, thrown);
