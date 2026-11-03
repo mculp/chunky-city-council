@@ -1,0 +1,26 @@
+// What every key and button does right now. Nothing here touches the page, so a test can read it.
+
+const ON_FOOT = new Set(['land', 'bridge', 'town']);
+
+// For the strip on a keyboard: what to press, and what it does. Moments with one thing to do have it in a prompt instead, and the strip stays out of the way.
+export function keysFor(mode, { act = null, map = false } = {}) {
+  const also = map ? [['M', 'Map']] : [], look = ['DRAG', 'Look'];
+  if (mode === 'swim') return [['WASD', 'Swim'], ['SPACE', 'Swim faster'], ...also, look];
+  if (ON_FOOT.has(mode)) return [['WASD', 'Move'], ['SHIFT', 'Run'], ['SPACE', 'Jump'], ...(act ? [['E', act]] : []), ...also, look];
+  return [];
+}
+
+// For a phone: what each button says. A button with nothing to do isn't there.
+export function buttonsFor(mode, { act = null } = {}) {
+  if (mode === 'hang') return { a: 'CUT', b: null, run: false };
+  if (mode === 'sweep') return { a: 'SWEEP', b: null, run: false };
+  if (mode === 'grabbed') return { a: 'FREE', b: null, run: false };
+  if (mode === 'swim') return { a: null, b: 'SWIM FAST', run: false };
+  if (ON_FOOT.has(mode)) return { a: act ? 'TALK' : null, b: 'JUMP', run: true };
+  return { a: null, b: null, run: false };
+}
+
+// The word a prompt uses for the act button: the key on a keyboard, what the button says on a phone
+export const actWord = (label, touch) => (touch ? label : 'E');
+// and for swimming faster
+export const fastWord = (touch) => (touch ? 'SWIM FAST' : 'SPACE');

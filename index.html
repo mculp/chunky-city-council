@@ -104,6 +104,12 @@ body.talking #mini,body.talking #miniName{visibility:hidden}
 #bB{width:64px;height:64px;font-size:19px;background:var(--cyan);color:var(--ink);margin-bottom:38px}
 #bR{position:absolute;right:9px;bottom:90px;width:60px;height:60px;font-size:13px;background:var(--cream);color:var(--ink)}
 #bR[hidden]{display:none}
+.btn{line-height:1}
+#keyStrip{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom, 0px) + 14px);z-index:4;pointer-events:none;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px 14px;width:max-content;max-width:calc(100vw - 32px);background:var(--panel);border:1px solid var(--line);padding:6px 12px;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+#keyStrip[hidden]{display:none}
+#keyStrip .ks{white-space:nowrap}
+#keyStrip .kc{display:inline-block;margin-right:6px;padding:1px 6px;border:1px solid var(--cream);border-bottom-width:3px;border-radius:3px;font-weight:600}
+body.talking #keyStrip{visibility:hidden}
 .btn.on{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
 @media (pointer:coarse){#stick{display:block}#btns{display:flex}}
 body.talking .ctl{visibility:hidden}
@@ -130,6 +136,7 @@ body.talking .ctl{visibility:hidden}
 <div id="toast"></div>
 <div id="flash"></div>
 <div class="card" id="card"><div><h2 id="cardH"></h2><p id="cardP"></p></div></div>
+<div id="keyStrip" hidden></div>
 <div id="stick" class="ctl" aria-hidden="true"><div id="knob"></div></div>
 <div id="btns" class="ctl"><button class="btn" id="bB" aria-label="Boost or jump">B</button><button class="btn" id="bA" aria-label="Act">A</button><button class="btn" id="bR" aria-label="Hold to run" hidden>RUN</button></div>
 <div id="map" hidden><canvas id="mapC" aria-label="Map of Chunky"></canvas>
@@ -143,7 +150,7 @@ body.talking .ctl{visibility:hidden}
     <p>Chapter 1 · Cut Down</p>
     <button class="big" id="start">Start</button>
     <button class="forget" id="forget" hidden>Forget everyone</button>
-    <p class="keys"><span class="k">WASD or arrows move · Shift runs · E acts · Space boosts and jumps · M is the map · drag to look</span><span class="t">Left thumb moves · hold RUN to run · A acts · B boosts and jumps · drag to look</span></p>
+    <p class="keys"><span class="k">WASD or arrows move · Shift runs · Space jumps · E uses · M is the map · drag to look</span><span class="t">Left thumb moves · the buttons say what they do · drag to look</span></p>
   </div>
 </div>
 <div class="panel" id="fail" hidden>
@@ -171,6 +178,7 @@ import { loadMap } from './src/map.js';
 import { createPeople } from './src/people.js';
 import { drawCloth, drawSkull } from './src/looks.js';
 import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
+import { keysFor, buttonsFor, actWord, fastWord } from './src/controls.js';
 import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRim, drawArrow, drawLabel, labelSpace, clampCam, zoomAbout, fitScale, COLORS as MAPC } from './src/mapview.js';
 import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, Sheet } from './src/structures.js';
 
@@ -2249,7 +2257,7 @@ for (const [id, k] of [['bA', 'a'], ['bB', 'b'], ['bR', 'r']]) {
   const el = $(id);
   el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); touchBtn[k] = true; el.classList.add('on'); if (k === 'a') input.aEdge = true; else if (k === 'b') input.bEdge = true; });
   const up = () => { touchBtn[k] = false; el.classList.remove('on'); if (k === 'r') touchBtn.rUntil = time + .2; };
-  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up);
 }
 let lookId = null, lookX = 0, lookY = 0, lastLook = -99;
 canvas.addEventListener('pointerdown', (e) => { if (lookId === null) { lookId = e.pointerId; lookX = e.clientX; lookY = e.clientY; canvas.setPointerCapture(e.pointerId); } });
@@ -2319,16 +2327,29 @@ function prompt(html, prog = null) {
   el.hidden = false; el.innerHTML = html + (prog !== null ? `<span class="bar"><i style="width:${Math.round(prog * 100)}%"></i></span>` : '');
 }
 const touchUI = matchMedia('(pointer:coarse)').matches;
-const KA = touchUI ? 'A' : 'E', KB = touchUI ? 'B' : 'SPACE';
+const press = (label) => actWord(label, touchUI);
 function setHTML(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; $(id).innerHTML = v; } }
 function setHidden(id, v) { if (hudCache['h' + id] !== v) { hudCache['h' + id] = v; $(id).hidden = v; } }
 const RUN = { speed: 8, tire: .05, rest: .125, recover: .3, ease: 7 };   // m/s, and how much breath a second: 20 s of running, 8 s to get it all back
+// What the keys and buttons say, which changes with what you're doing: a strip of keys on a keyboard, and words on a phone's buttons
+function setButton(id, label, sizes) {
+  const el = $(id); el.style.visibility = label ? '' : 'hidden'; if (!label) return;
+  el.innerHTML = label.replace(' ', '<br>'); el.style.fontSize = `${sizes[label.includes(' ') ? 2 : label.length < 4 ? 0 : label.length < 5 ? 1 : 2]}px`; el.setAttribute('aria-label', label);
+}
+function updateControls() {
+  const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, now = `${S.mode}|${act}|${map}`;
+  if (hudCache.controls === now) return; hudCache.controls = now;
+  if (touchUI) { const { a, b, run } = buttonsFor(S.mode, { act }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); return; }
+  const list = keysFor(S.mode, { act, map });
+  setHidden('keyStrip', !list.length); $('keyStrip').innerHTML = list.map(([key, what]) => `<span class="ks"><span class="kc">${key}</span>${what}</span>`).join('');
+}
 function hudVitals() {
+  updateControls();
   const talk = S.mode === 'dialog' || S.mode === 'end' || S.mode === 'fail' || S.mode === 'title';
   if (hudCache.talk !== talk) { hudCache.talk = talk; document.body.classList.toggle('talking', talk); }
   setHidden('hearts', !(S.mode === 'swim' || S.mode === 'bridge' || S.mode === 'land' || S.mode === 'grabbed' || (crowdOut && S.mode === 'town')));
   setHTML('hearts', '♥'.repeat(Math.max(0, S.hp)) + '♡'.repeat(Math.max(0, 3 - S.hp)));
-  setHidden('stam', S.mode !== 'swim' && !player.ran); setHidden('bR', !(S.mode === 'land' || S.mode === 'bridge' || S.mode === 'town')); $('stamFill').style.transform = `scaleX(${player.stamina.toFixed(2)})`;
+  setHidden('stam', S.mode !== 'swim' && !player.ran); $('stamFill').style.transform = `scaleX(${player.stamina.toFixed(2)})`;
   const town = S.mode === 'town' || S.mode === 'grabbed' || S.mode === 'dialog' || S.mode === 'sweep' || S.mode === 'end';
   setHidden('beans', !town); setHTML('beans', `Beans ${S.beans}/12`); setHidden('rep', !town);
   if (town) drawPeople();
@@ -2357,7 +2378,7 @@ function hurt(dir, kind) {
   S.hp -= 1; player.inv = 1.4; cam.shake = .5; flash(); glitch(.9, .35);
   const l = Math.hypot(dir.x, dir.y) || 1; player.kb.set(dir.x / l * 4, dir.y / l * 4);
   addRipple(player.pos.x, player.pos.z, .35, 1);
-  if (S.hp <= 0) fail(kind === 'deck' ? 'Cottonmouth on the boards.' : 'The cottonmouths got you.', kind === 'deck' ? 'Jump it next time.' : 'Keep moving. Use B to kick away.');
+  if (S.hp <= 0) fail(kind === 'deck' ? 'Cottonmouth on the boards.' : 'The cottonmouths got you.', kind === 'deck' ? 'Jump it next time.' : `Keep moving. Hold ${fastWord(touchUI)} to get away.`);
   else toast(kind === 'deck' ? 'Bit on the bridge' : 'Bit');
 }
 function fail(h, p) {
@@ -2478,7 +2499,7 @@ function startBridge() {
 function startTown() {
   S.mode = 'town'; S.collapse = 99; S.flags.town = true;
   card('Chunky, <span>Mississippi</span>', '2026', 3.4);
-  if (!touchUI) toast('Hold SHIFT to run');
+  if (touchUI) after(5, () => { if (S.mode === 'town') toast('Tap the map to open it'); });
   if (HORDE_EARLY) bringOutCrowd();
   townObjective(); hudVitals();
 }
@@ -2556,7 +2577,7 @@ const horde = createHorde({
   free() { S.mode = 'town'; HP.kind = 'run'; player.inv = 1.2; prompt(null); glitch(.4, .2); },
   overrun() {
     S.mode = 'town'; HP.kind = 'run'; player.inv = 1.4; prompt(null); S.hp -= 1; if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35);
-    if (S.hp <= 0) { fail('They dragged you off.', `Keep moving. Mash ${KA} to break free.`); return; }
+    if (S.hp <= 0) { fail('They dragged you off.', `Keep moving. Mash ${press('FREE')} to break free.`); return; }
     if (S.beans > 0) { S.beans -= 1; toast('-1 beans · they got a can'); } else toast('Keep moving');
   },
 });
@@ -2729,7 +2750,7 @@ function tick(dt, draw = true) {
     ropeTop.position.copy(ANCHOR).add(new THREE.Vector3(0, -1, 0).applyEuler(heroRoot.rotation)); ropeTop.quaternion.setFromEuler(heroRoot.rotation); ropeTop.scale.set(1, 2, 1);
     if (M === 'hang' && cardT <= 0) {
       if (input.a) { HP.cut = Math.min(1, HP.cut + dt / 2.4); if (bottle.parent === hero.body && HP.cut > 0) { dropProp(bottle, true); } }
-      prompt(`Hold ${KA} to cut the rope`, HP.cut);
+      prompt(`Hold ${press('CUT')} to cut the rope`, HP.cut);
       if (HP.cut >= 1) { prompt(null); cutDown(); }
     }
   }
@@ -2825,14 +2846,15 @@ function tick(dt, draw = true) {
       // talk
       let near = null, nd = 2.6;
       for (const [id, n] of Object.entries(NPCS)) { const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z); if (d < nd) { nd = d; near = id; } }
-      if (near) { prompt(`${KA} · Talk to ${NPCS[near].name}`); if (input.aEdge) openDialog(near); }
+      S.act = near ? `Talk to ${NPCS[near].name}` : null;
+      if (near) { prompt(touchUI ? S.act : `E · ${S.act}`); if (input.aEdge) openDialog(near); }
       else prompt(null);
     }
   }
   // ---------------- sweeping Odessa's steps
   if (M === 'sweep') {
     if (input.a) S.sweep = Math.min(1, S.sweep + dt / 3.2);
-    prompt(`Hold ${KA} to sweep`, S.sweep); HP.kind = 'sweep';
+    prompt(`Hold ${press('SWEEP')} to sweep`, S.sweep); HP.kind = 'sweep';
     if (S.sweep >= 1) { prompt(null); S.mode = 'town'; HP.kind = 'run'; people.apply(people.data.events.swept, played); openDialog('odessa'); }
   }
   // ---------------- held by the crowd: hauled along until he breaks free
@@ -2842,7 +2864,7 @@ function tick(dt, draw = true) {
     player.yaw += angDiff(player.yaw, g.at + Math.PI) * Math.min(1, dt * 8);
     HP.phase += dt * 14;
     if (input.aEdge) horde.mash();
-    if (horde.grab) prompt(`Mash ${KA} to break free`, g.progress);
+    if (horde.grab) prompt(`Mash ${press('FREE')} to break free`, g.progress);
   }
   if (crowdOut) updateCrowd(dt, M);
   // ---------------- hero placement

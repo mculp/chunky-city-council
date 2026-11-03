@@ -207,7 +207,7 @@ const phone = await serveAndOpen({ touch: true, query: '?test&horde' });
 await phone.page.evaluate(helpers);
 await phone.page.evaluate(() => { const G = __game; G.pause(); G.jump('town'); clearCrowd(); G.place(G.places.store.x + 40, 3); const one = G.horde.add(G.player.pos.x + .6, G.player.pos.z); one.state = 2; G.step(.2, 1 / 30); });
 let t = await phone.page.evaluate(() => __game.state());
-check('on a phone it says to mash A', t.mode === 'grabbed' && /^Mash A to break free/.test(t.prompt), t);
+check('on a phone it says to mash FREE', t.mode === 'grabbed' && /^Mash FREE to break free/.test(t.prompt), t);
 let taps = 0;
 while (taps < 40 && await phone.page.evaluate(() => __game.S.mode === 'grabbed')) { await phone.page.tap('#bA'); await phone.page.evaluate(() => __game.step(1 / 8, 1 / 30)); taps++; }
 t = await phone.page.evaluate(() => __game.state());
