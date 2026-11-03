@@ -28,6 +28,23 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .stam{width:118px;height:8px;border:2px solid var(--cream);background:rgba(0,0,0,.45)}
 .stam i{display:block;height:100%;width:100%;background:var(--cyan);transform-origin:left center}
 .beans{font-family:var(--f-display);font-size:18px;color:var(--rust);text-shadow:0 2px 0 var(--ink);white-space:nowrap}
+#mini{display:block;width:116px;height:116px;padding:0;border-radius:50%;border:2px solid var(--cream);background:#0d0812;box-shadow:0 2px 0 var(--ink),0 0 0 2px var(--ink);pointer-events:auto;overflow:hidden;touch-action:manipulation}
+#mini[hidden]{display:none}
+#mini canvas{display:block;width:100%;height:100%}
+#miniName{align-self:flex-start;max-width:116px;margin-top:-2px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);padding:2px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#miniName[hidden]{display:none}
+body.talking #mini,body.talking #miniName{visibility:hidden}
+#map{position:fixed;inset:0;z-index:9;background:#0d0812;touch-action:none}
+#map[hidden]{display:none}
+#map canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.map-head{position:absolute;left:0;right:0;top:0;pointer-events:none;padding:calc(env(safe-area-inset-top, 0px) + 12px) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.map-head h2{margin:0;font-family:var(--f-display);font-size:18px;font-weight:400;color:var(--cream);text-shadow:0 2px 0 var(--ink);line-height:1.1}
+.map-head h2 span{color:var(--rust)}
+.map-btns{position:absolute;right:max(16px, env(safe-area-inset-right, 0px));bottom:calc(env(safe-area-inset-bottom, 0px) + 22px);display:flex;flex-direction:column;align-items:center;gap:12px}
+.map-btns button{width:56px;height:56px;border-radius:50%;border:3px solid var(--ink);box-shadow:0 4px 0 var(--ink);background:var(--cream);color:var(--ink);font-family:var(--f-display);font-size:22px;padding:0;touch-action:manipulation}
+.map-btns button:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+.map-btns #mapMe{font-size:12px;background:var(--cyan)}
+.map-btns #mapX{width:72px;height:72px;font-size:13px;background:var(--rust)}
 .right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:0}
 .objpoint{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em;background:var(--panel);border:1px solid var(--line);padding:4px 10px}
 .objpoint[hidden]{display:none}
@@ -97,6 +114,8 @@ body.talking .ctl{visibility:hidden}
 <canvas id="c" aria-label="Game view"></canvas>
 <div class="hud">
   <div class="vitals">
+    <button id="mini" aria-label="Open the map" hidden><canvas id="miniC" width="232" height="232"></canvas></button>
+    <div id="miniName" hidden></div>
     <div class="hearts" id="hearts" hidden>♥♥♥</div>
     <div class="stam" id="stam" hidden><i id="stamFill"></i></div>
     <div class="beans" id="beans" hidden>Beans 0/12</div>
@@ -113,6 +132,10 @@ body.talking .ctl{visibility:hidden}
 <div class="card" id="card"><div><h2 id="cardH"></h2><p id="cardP"></p></div></div>
 <div id="stick" class="ctl" aria-hidden="true"><div id="knob"></div></div>
 <div id="btns" class="ctl"><button class="btn" id="bB" aria-label="Boost or jump">B</button><button class="btn" id="bA" aria-label="Act">A</button><button class="btn" id="bR" aria-label="Hold to run" hidden>RUN</button></div>
+<div id="map" hidden><canvas id="mapC" aria-label="Map of Chunky"></canvas>
+  <div class="map-head"><h2>Chunky,<br><span>Mississippi</span></h2><div class="obj" id="mapObj" hidden></div></div>
+  <div class="map-btns"><button id="mapIn" aria-label="Closer">+</button><button id="mapOut" aria-label="Further out">−</button><button id="mapMe" aria-label="Back to where you are">ME</button><button id="mapX" aria-label="Close the map">BACK</button></div>
+</div>
 <div id="dialog" hidden><div class="box"><div class="who" id="dWho"></div><div class="say" id="dSay"></div><div class="opts" id="dOpts"></div></div></div>
 <div class="panel" id="title">
   <div class="pbox">
@@ -120,7 +143,7 @@ body.talking .ctl{visibility:hidden}
     <p>Chapter 1 · Cut Down</p>
     <button class="big" id="start">Start</button>
     <button class="forget" id="forget" hidden>Forget everyone</button>
-    <p class="keys"><span class="k">WASD or arrows move · E acts · Space boosts and jumps · drag to look</span><span class="t">Left thumb moves · A acts · B boosts and jumps · drag to look</span></p>
+    <p class="keys"><span class="k">WASD or arrows move · Shift runs · E acts · Space boosts and jumps · M is the map · drag to look</span><span class="t">Left thumb moves · hold RUN to run · A acts · B boosts and jumps · drag to look</span></p>
   </div>
 </div>
 <div class="panel" id="fail" hidden>
@@ -148,6 +171,7 @@ import { loadMap } from './src/map.js';
 import { createPeople } from './src/people.js';
 import { drawCloth, drawSkull } from './src/looks.js';
 import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
+import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRim, drawArrow, drawLabel, labelSpace, clampCam, zoomAbout, fitScale, COLORS as MAPC } from './src/mapview.js';
 import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, Sheet } from './src/structures.js';
 
 const $ = (id) => document.getElementById(id);
@@ -2204,6 +2228,8 @@ addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase(); if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; }
   keys.add(k);
   if (S.mode === 'dialog' && /^[1-4]$/.test(k)) { const b = $('dOpts').children[+k - 1]; if (b) b.click(); }
+  if (k === 'm' && !e.repeat) { if (mapOpen) closeMap(); else if (canOpenMap()) openMap(); }
+  if (k === 'escape' && mapOpen) closeMap();
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 let stickId = null; const stick = $('stick'), knob = $('knob');
@@ -2263,10 +2289,15 @@ function objective(t, target = null) { const o = $('obj'); o.hidden = !t; o.text
 // "{street}" in an objective is filled in from the graph, so it always reads what the signs read
 function streetObjective(t, id) { objective(t.replace('{street}', MAP.roadById.get(id).name), { road: id }); }
 const pointer = { deg: 0, dist: 0, on: false };
+// Where the objective is on the ground right now: the nearest part of its street, if it's a street
+function objectivePoint() {
+  if (!objTarget) return null;
+  if (!objTarget.road) return { x: objTarget.x, z: objTarget.z, near: 3 };
+  const p = MAP.along(objTarget.road, MAP.sOn(objTarget.road, player.pos.x, player.pos.z));
+  return { x: p.x, z: p.z, near: MAP.roadById.get(objTarget.road).width / 2 + 1 };
+}
 function pointAtObjective() {
-  let x, z, near = 3;
-  if (objTarget && objTarget.road) { const road = MAP.roadById.get(objTarget.road), p = MAP.along(objTarget.road, MAP.sOn(objTarget.road, player.pos.x, player.pos.z)); x = p.x; z = p.z; near = road.width / 2 + 1; }
-  else if (objTarget) { x = objTarget.x; z = objTarget.z; }
+  const at = objectivePoint(), x = at?.x, z = at?.z, near = at?.near ?? 3;
   const onFoot = S.mode === 'town' || S.mode === 'swim';
   const dx = x - player.pos.x, dz = z - player.pos.z, dist = objTarget ? Math.hypot(dx, dz) : 0, on = !!objTarget && onFoot && dist > near;
   if (hudCache.point !== on) { hudCache.point = on; $('objPoint').hidden = !on; }
@@ -2557,6 +2588,118 @@ function updateCrowd(dt, M) {
   feel.canGrab = M === 'town' && player.inv <= 0;
   horde.update(dt, feel);
 }
+// ================================================================ the map
+const mapData = buildMapData({ roads: MAP.roads, rail: MAP.rail, river: MAP.river, structures: STRUCTURES });
+const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d') };
+const MAP_PLACES = [
+  ["Stuckey's Bridge", 0, 0, 3], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Grocery', ...atTrue(-64.5, -39.5), 2], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
+  ...STRUCTURES.filter((s) => s.use === 'church').map((s) => ['Church', s.wx, s.wz, 2]),
+].sort((a, b) => b[3] - a[3]);
+let mapOpen = false, mapDirty = false, mapCam = { x: 0, z: 0, scale: .4 };
+// Paper for the big map: scratches, in the game's own hatching, repeating too far apart to notice
+const mapPaper = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'); let x = 4242;
+  const r = () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; };
+  g.fillStyle = MAPC.ground; g.fillRect(0, 0, 256, 256); g.lineWidth = 1;
+  for (let i = 0; i < 180; i++) { const px = r() * 256, py = r() * 256, L = 6 + r() * 26, a = 2.2 + r() * .35; g.strokeStyle = `rgba(169,155,192,${(.03 + r() * .06).toFixed(3)})`; g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(a) * L, py + Math.sin(a) * L); g.stroke(); }
+  return c;
+})();
+const canOpenMap = () => S.flags.town && (S.mode === 'town' || S.mode === 'swim');
+// The small one, turning with the camera, at most at the game's own 12 frames a second
+function updateMini(step) {
+  const show = !!S.flags.town;
+  setHidden('mini', !show);
+  if (!show || step === MINI.step) { if (!show) setHidden('miniName', true); return; }
+  MINI.step = step;
+  const P = player.pos, g = MINI.ctx, n = MINI.size, dpr = g.canvas.width / n, v = makeView(P.x, P.z, MINI.scale, cam.yaw, n, n);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = MAPC.ground; g.fillRect(0, 0, g.canvas.width, g.canvas.height);
+  drawWorld(g, mapData, v, dpr, worldBox(v, n, n), { road: [3.4, 2.4] });
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const c = n / 2, at = objectivePoint();
+  // north, on the rim
+  const [nx, ny] = toScreen(v, P.x, P.z - 1000), N = toRim(c, c, nx, ny, c - 9);
+  drawLabel(g, 'N', N[0], N[1], '10px Bungee, Impact, sans-serif', MAPC.dusk);
+  if (at) {
+    const [ox, oy] = toScreen(v, at.x, at.z), [x, y, out] = toRim(c, c, ox, oy, c - 8);
+    if (out) drawArrow(g, x, y, x - c, y - c, 6, MAPC.hot);
+    else { g.beginPath(); g.arc(x, y, 4, 0, 7); g.fillStyle = MAPC.hot; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.stroke(); g.fill(); }
+  }
+  const [fx, fy] = toScreen(v, P.x + Math.sin(player.yaw), P.z + Math.cos(player.yaw));
+  drawArrow(g, c, c, fx - c, fy - c, 8);
+  // the street you're on
+  let name = '';
+  const off = MAP.roadGrid.nearest(P.x, P.z), by = MAP.roadGrid.seg?.owner;
+  if (by && off < by.width / 2 + 5) name = by.name;
+  setHidden('miniName', !name); setHTML('miniName', name);
+}
+// The whole thing, north up
+function drawFullMap() {
+  const c = $('mapC'), w = innerWidth, h = innerHeight, dpr = Math.min(devicePixelRatio, 2), g = c.getContext('2d');
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  mapCam = clampCam(mapCam, mapData.bounds, w, h);
+  const v = makeView(mapCam.x, mapCam.z, mapCam.scale, 0, w, h);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = g.createPattern(mapPaper, 'repeat'); g.fillRect(0, 0, c.width, c.height);
+  drawWorld(g, mapData, v, dpr, worldBox(v, w, h), { road: [4 + mapCam.scale * 3, 2.8 + mapCam.scale * 2], houses: mapCam.scale > .08, edges: mapCam.scale > .5 });
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const free = labelSpace(), on = (x, y) => x > -40 && x < w + 40 && y > -20 && y < h + 20;
+  const BIG = '13px Bungee, Impact, sans-serif', SMALL = '11px "IBM Plex Mono", ui-monospace, monospace';
+  // what's asked of you, then him, then who's where, then what's where, then the streets
+  const at = objectivePoint(), [hx, hy] = toScreen(v, player.pos.x, player.pos.z);
+  free(hx, hy, 28, 28);
+  if (at) {
+    const [x, y] = toScreen(v, at.x, at.z);
+    if (on(x, y)) { free(x, y, 20, 20); g.beginPath(); g.arc(x, y, 9, 0, 7); g.strokeStyle = MAPC.ink; g.lineWidth = 5; g.stroke(); g.strokeStyle = MAPC.hot; g.lineWidth = 3; g.stroke(); g.beginPath(); g.arc(x, y, 3, 0, 7); g.fillStyle = MAPC.hot; g.fill(); }
+  }
+  const known = new Set(people.known().map((p) => p.id));
+  for (const [id, n] of Object.entries(NPCS)) {
+    const [x, y] = toScreen(v, n.root.position.x, n.root.position.z); if (!on(x, y)) continue;
+    g.beginPath(); g.arc(x, y, 5, 0, 7); g.fillStyle = MAPC.cyan; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.stroke(); g.fill();
+    const name = known.has(id) ? n.name : '?', tw = name.length * 9 + 8;
+    if (free(x + 13 + tw / 2, y, tw, 16)) drawLabel(g, name, x + 13, y, BIG, MAPC.cyan, 0, 'left');
+  }
+  for (const [name, wx, wz, rank] of MAP_PLACES) {
+    if (mapCam.scale < [0, .3, .16, .03][rank]) continue;
+    const [x, y] = toScreen(v, wx, wz); if (!on(x, y)) continue;
+    const tw = name.length * 6.8 + 6;
+    if (!free(x, y + 17, tw, 14)) continue;
+    g.fillStyle = MAPC.rust; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.beginPath(); g.rect(x - 3, y - 3, 6, 6); g.stroke(); g.fill();
+    drawLabel(g, name, x, y + 17, SMALL, MAPC.cream);
+  }
+  for (const road of MAP.roads) for (const l of roadLabels(road, v, w, h)) { const tw = l.text.length * 10 + 6; if (free(l.x, l.y, Math.max(tw * Math.abs(Math.cos(l.angle)), 16), Math.max(tw * Math.abs(Math.sin(l.angle)), 16))) drawLabel(g, l.text, l.x, l.y, BIG, MAPC.cream, l.angle); }
+  drawArrow(g, hx, hy, Math.sin(player.yaw), Math.cos(player.yaw), 11);
+}
+function redrawMap() { if (mapOpen && !mapDirty) { mapDirty = true; requestAnimationFrame(() => { mapDirty = false; if (mapOpen) drawFullMap(); }); } }
+function openMap() {
+  mapOpen = true; $('map').hidden = false;
+  touchStick.set(0, 0); knob.style.transform = ''; stickId = null;
+  mapCam = { x: player.pos.x, z: player.pos.z, scale: Math.max(.34, fitScale(mapData.bounds, innerWidth, innerHeight)) };
+  const said = $('obj').textContent; $('mapObj').hidden = !said; $('mapObj').textContent = said;
+  drawFullMap();
+}
+function closeMap() { mapOpen = false; $('map').hidden = true; clock.getDelta(); }
+{
+  const c = $('mapC'), fingers = new Map();
+  let pinch = 0;
+  const middle = () => { const f = [...fingers.values()]; return [(f[0].x + f[1].x) / 2, (f[0].y + f[1].y) / 2, Math.hypot(f[0].x - f[1].x, f[0].y - f[1].y)]; };
+  c.addEventListener('pointerdown', (e) => { c.setPointerCapture(e.pointerId); fingers.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (fingers.size === 2) pinch = middle()[2]; });
+  c.addEventListener('pointermove', (e) => {
+    const f = fingers.get(e.pointerId); if (!f) return;
+    const dx = e.clientX - f.x, dy = e.clientY - f.y; f.x = e.clientX; f.y = e.clientY;
+    if (fingers.size === 1) mapCam = clampCam({ x: mapCam.x - dx / mapCam.scale, z: mapCam.z - dy / mapCam.scale, scale: mapCam.scale }, mapData.bounds, innerWidth, innerHeight);
+    else if (fingers.size === 2) { const [mx, my, d] = middle(); mapCam = clampCam({ x: mapCam.x - dx / 2 / mapCam.scale, z: mapCam.z - dy / 2 / mapCam.scale, scale: mapCam.scale }, mapData.bounds, innerWidth, innerHeight); if (pinch > 0) mapCam = zoomAbout(mapCam, mx, my, d / pinch, mapData.bounds, innerWidth, innerHeight); pinch = d; }
+    redrawMap();
+  });
+  const lift = (e) => { fingers.delete(e.pointerId); pinch = 0; };
+  c.addEventListener('pointerup', lift); c.addEventListener('pointercancel', lift);
+  c.addEventListener('wheel', (e) => { e.preventDefault(); mapCam = zoomAbout(mapCam, e.clientX, e.clientY, Math.exp(-e.deltaY * .0016), mapData.bounds, innerWidth, innerHeight); redrawMap(); }, { passive: false });
+  const zoomBy = (k) => { mapCam = zoomAbout(mapCam, innerWidth / 2, innerHeight / 2, k, mapData.bounds, innerWidth, innerHeight); redrawMap(); };
+  $('mapIn').addEventListener('click', () => zoomBy(1.6));
+  $('mapOut').addEventListener('click', () => zoomBy(1 / 1.6));
+  $('mapMe').addEventListener('click', () => { mapCam = { ...mapCam, x: player.pos.x, z: player.pos.z }; redrawMap(); });
+  $('mapX').addEventListener('click', closeMap);
+  $('mini').addEventListener('click', () => { if (canOpenMap()) openMap(); });
+  addEventListener('resize', redrawMap);
+}
 const camFwd = new THREE.Vector3(), camRight = new THREE.Vector3();
 function moveDir() {
   camFwd.set(-Math.sin(cam.yaw), 0, -Math.cos(cam.yaw)); camRight.set(Math.cos(cam.yaw), 0, -Math.sin(cam.yaw));
@@ -2771,6 +2914,7 @@ function tick(dt, draw = true) {
 
   sky.material.uniforms.uTime.value = time; waterMat.uniforms.uTime.value = time; swayU.uTime.value = time; gifMat.uniforms.uTime.value = time;
   if (!draw) return;   // a test walking the whole map only needs the physics
+  updateMini(step);
   sky.position.copy(camera.position);
   updateWorld();
   if (crowdOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
@@ -2793,7 +2937,7 @@ function updateWorld() {
   if (jumped || worldTick % 20 === 0) for (const d of DISTANT) d.obj.visible = Math.hypot(x - d.x, z - d.z) < d.r;
 }
 let paused = TEST;
-function loop() { if (paused) return; tick(Math.min(clock.getDelta(), .05)); requestAnimationFrame(loop); }
+function loop() { if (paused) return; if (!mapOpen) tick(Math.min(clock.getDelta(), .05)); requestAnimationFrame(loop); }
 $('start').addEventListener('click', () => { $('title').hidden = true; startHang(); });
 $('forget').hidden = !people.hasSave();
 $('forget').addEventListener('click', () => { people.forget(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
@@ -2843,6 +2987,7 @@ if (TEST) {
       return cv;
     },
     npcs: Object.fromEntries(Object.entries(NPCS).map(([k, n]) => [k, { x: n.root.position.x, z: n.root.position.z }])), pickups: PICKUPS,
+    openMap, closeMap, updateMini, mapState: () => ({ open: mapOpen, cam: mapCam, mini: !$('mini').hidden, name: $('miniName').hidden ? '' : $('miniName').textContent }), mapCamTo(c) { mapCam = { ...mapCam, ...c }; drawFullMap(); },
     pause() { paused = true; },
     resume() { if (paused) { paused = false; clock.getDelta(); requestAnimationFrame(loop); } },
     step(seconds = 1 / 60, dt = 1 / 60) { paused = true; for (let i = 0, n = Math.max(1, Math.round(seconds / dt)); i < n; i++) tick(dt); return this.state(); },
