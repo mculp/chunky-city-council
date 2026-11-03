@@ -67,6 +67,14 @@ describe('who they are', () => {
     for (const name of [...data.women, ...data.men, ...data.others]) assert.ok(!said(name), name);
   });
 
+  test('nobody\'s name sounds like one of the cast\'s, so whoever he hears about is the only one', () => {
+    const cast = JSON.parse(readFileSync(new URL('../data/cast.json', import.meta.url), 'utf8')).cast;
+    // Bobbie and Bobby: the same name said aloud, near enough, once the ending's let go and a doubled letter's said once
+    const sound = (n) => n.toLowerCase().replace(/(ie|ey|y|i|e)$/, '').replace(/(.)\1+/g, '$1');
+    const theirs = new Set(cast.flatMap((c) => c.name.split(' ').filter((w) => !/^(Miss|Mr|Mrs|Uncle|Aunt)$/.test(w)).map(sound)));
+    for (const name of [...data.women, ...data.men]) assert.ok(!theirs.has(sound(name)), `${name} sounds like one of the cast`);
+  });
+
   test('a name\'s only ever listed once', () => {
     for (const k of ['women', 'men', 'others']) assert.equal(new Set(data[k]).size, data[k].length, k);
     // the names take turns, seventeen at a time, so that has to reach all of them
