@@ -85,7 +85,13 @@ test('the file is small enough for a phone, and says where it came from', () => 
   assert.equal(hills.source.licence, 'Public domain');
   assert.equal(hills.units, 'metres');
   assert.equal(H.heights.length, hills.cols * hills.rows);
-  assert.ok(H.heights.every((h) => h >= 0), 'nothing is below the floodplain');
+  // nothing's below the floodplain but in a dip, where the land really is lower, and nothing's below a dip's floor. What's levelled in one, a pond
+  // or a building, takes some of the land around it down too.
+  H.heights.forEach((h, k) => {
+    if (h >= 0) return;
+    const x = H.x0 + (k % H.cols + .5) * H.dx, z = H.z0 + (Math.floor(k / H.cols) + .5) * H.dz;
+    assert.ok(hills.dips.some((d) => Math.hypot(x - d.x, z - d.z) < 2 * d.edge && h >= -d.depth), `${h} at ${x}, ${z}`);
+  });
 });
 
 test('the first scene is at the bottom of the hills, all the way across its square and past it', () => {
@@ -132,6 +138,19 @@ test('there are real hills on the roads that have them', () => {
   assert.ok(rise('stuckey_bridge_rd') > 40);
 });
 
+test('Chestnut St comes up off Griffis Fountain Rd from as low as the land really is there', () => {
+  const lines = (id) => roads.roads.find((r) => r.id === id).edges.map((e) => edges.get(e));
+  const at = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 1;
+  const foot = lines('chestnut_st').flatMap((p) => [p[0], p.at(-1)]).find((q) => lines('griffis_fountain_rd').some((p) => at(p[0], q) || at(p.at(-1), q)));
+  const up = lines('chestnut_st').map((p) => (at(p[0], foot) ? p : at(p.at(-1), foot) ? [...p].reverse() : null)).find(Boolean);
+  const hs = [...along(up, 5)].map(([x, z]) => H.at(x, z)), rise = Math.max(...hs) - hs[0];
+  let steepest = 0;
+  for (let i = 3; i < hs.length; i++) steepest = Math.max(steepest, (hs[i] - hs[i - 3]) / 15);
+  assert.ok(hs[0] < -1.8 && hs[0] > -2.4, `its foot's ${hs[0]}, where the survey has it 2.1 m under the floodplain`);
+  assert.ok(rise > 6.5, `it climbs ${rise} m of its real 7.9`);
+  assert.ok(steepest < .11, `at up to ${steepest}, where the survey's steepest 15 m is 10%`);
+});
+
 test('nearly every building stands on ground that has been levelled for it', () => {
   let steep = 0, leaning = 0;
   for (const b of [...structures.structures, ...structures.extras]) {
@@ -164,7 +183,7 @@ test('the skyline is the same land, further apart', () => {
   const { skyline: s } = H;
   assert.equal(s.heights.length, s.cols * s.rows);
   assert.equal(s.dx, hills.dx * hills.coarse.stride);
-  assert.ok(s.heights.every((h) => h >= 0 && Number.isFinite(h)));
+  assert.ok(s.heights.every((h) => h >= -Math.max(0, ...hills.dips.map((d) => d.depth)) && Number.isFinite(h)));
   // a long way from any road, where it's all there is, it's what the near land says within what a coarse grid can do
   const k = Math.floor(s.rows / 2) * s.cols + Math.floor(s.cols / 2);
   assert.ok(Math.abs(s.heights[k] - H.at(s.x0 + Math.floor(s.cols / 2) * s.dx, s.z0 + Math.floor(s.rows / 2) * s.dz)) < 15);

@@ -26,7 +26,7 @@ export function decodeHills({ data, cols, rows, quantum, coarse }) {
     for (let i = 0; i < cols; i++, k++) {
       const a = Math.floor(i / S), x = i % S, n = b * coarse.cols + a;
       const base = Math.floor((c[n] * (S - x) * (S - y) + c[n + 1] * x * (S - y) + c[n + coarse.cols] * (S - x) * y + c[n + coarse.cols + 1] * x * y + Math.floor(area / 2)) / area);
-      v[k] = Math.max(0, base + fine[k]) / quantum;
+      v[k] = (base + fine[k]) / quantum;
     }
   }
   return { heights: v, far: c };

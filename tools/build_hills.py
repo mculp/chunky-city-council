@@ -68,6 +68,12 @@ ROAD_GRADE = (90, 25, 90)    # the same for a highway
 ROAD_FINISH = (45, 10, 40)   # and again once the buildings are level, since they take some of the road with them
 STREET_GRADE = (15, 18, 60)  # and for any other paved road or lane, which only has a pixel's roughness taken out of it
 STREET_FINISH = (15, 8, 20)  # and again, back to the land as it was before anything was levelled, since a building's ground isn't the street's
+# Where the land really is lower than the floodplain and it's in plain sight, the floor comes down to meet it: as far as `depth` within `core`
+# metres of here, and back up by `edge`. A pond in it goes down with it, and its flat ground only reaches as far as `pond` says.
+DIPS = (
+    # the foot of Chestnut St, where it comes up off Griffis Fountain Rd and out of the river bottoms, with a pond beside it
+    {"at": (-282.0, 327.9), "core": 60, "edge": 105, "depth": 2.6, "pond": (22, 75)},
+)
 
 
 def sstep(a, b, x):
@@ -238,8 +244,23 @@ def level_grid(dem, levels):
 
 
 def soft(v):
-    """Nothing's below the floodplain, and the land comes up off it without a crease."""
+    """Nothing's below the floor, and the land comes up off it without a crease."""
     return 0.0 if v <= -SOFT else v if v >= SOFT else (v + SOFT) ** 2 / (4 * SOFT)
+
+
+def floor(x, z):
+    """How far below the floodplain the land can go here, which is nowhere but in a dip."""
+    f = 0.0
+    for dip in DIPS:
+        f = min(f, -dip["depth"] * (1 - sstep(dip["core"], dip["edge"], math.hypot(x - dip["at"][0], z - dip["at"][1]))))
+    return f
+
+
+def dip_of(pond):
+    """The dip a pond's in, if it's in one."""
+    xs, zs = [r[0] for r in pond["ring"]], [r[1] for r in pond["ring"]]
+    x, z = sum(xs) / len(xs), sum(zs) / len(zs)
+    return next((dip for dip in DIPS if math.hypot(x - dip["at"][0], z - dip["at"][1]) < dip["core"]), None)
 
 
 def grade(grid, H, lines, spec, land=None):
@@ -310,10 +331,12 @@ def inside(ring, x, z):
     return c
 
 
-def level_ponds(grid, H, ponds):
-    """A pond's water is flat, so the land's all one height around it, and comes back to its own height further off."""
+def level_ponds(grid, H, ponds, survey):
+    """A pond's water is flat, so the land's all one height around it, and comes back to its own height further off. One in a dip is down at
+    the foot of it, as low as the survey has the land there."""
     weight, target = [0.0] * len(H.v), [0.0] * len(H.v)
-    lo, hi = POND_CLEAR
+    dips = [dip_of(p) for p in ponds]
+    clears = [dip["pond"] if dip else POND_CLEAR for dip in dips]
     # what's near enough to run together has to be at one height, since a pixel can only be one
     group = list(range(len(ponds)))
 
@@ -326,16 +349,20 @@ def level_ponds(grid, H, ponds):
     boxes = [(min(r[0] for r in p["ring"]), max(r[0] for r in p["ring"]), min(r[1] for r in p["ring"]), max(r[1] for r in p["ring"])) for p in ponds]
     for a, A in enumerate(boxes):
         for b, B in enumerate(boxes[:a]):
-            if A[0] - lo * 2 < B[1] and B[0] - lo * 2 < A[1] and A[2] - lo * 2 < B[3] and B[2] - lo * 2 < A[3]:
-                if any(math.hypot(u[0] - v[0], u[1] - v[1]) < lo * 2 for u in ponds[a]["ring"] for v in ponds[b]["ring"]):
+            near = clears[a][0] + clears[b][0]
+            if A[0] - near < B[1] and B[0] - near < A[1] and A[2] - near < B[3] and B[2] - near < A[3]:
+                if any(math.hypot(u[0] - v[0], u[1] - v[1]) < near for u in ponds[a]["ring"] for v in ponds[b]["ring"]):
                     group[find(a)] = find(b)
-    samples = {}
+    samples, feet = {}, {}
     for n, p in enumerate(ponds):
         samples.setdefault(find(n), []).extend(H.at(x, z) for x, z in p["ring"])
+        if dips[n]:
+            feet[find(n)] = survey(*dips[n]["at"])
     for n, p in enumerate(ponds):
         ring = p["ring"]
         x0, x1, z0, z1 = boxes[n]
-        height = sum(samples[find(n)]) / len(samples[find(n)])
+        lo, hi = clears[n]
+        height = feet[find(n)] if find(n) in feet else sum(samples[find(n)]) / len(samples[find(n)])
         for j in range(max(0, int((z0 - hi - grid.z0) / grid.dz)), min(grid.rows, int((z1 + hi - grid.z0) / grid.dz) + 2)):
             z = grid.z(j)
             for i in range(max(0, int((x0 - hi - grid.x0) / grid.dx)), min(grid.cols, int((x1 + hi - grid.x0) / grid.dx) + 2)):
@@ -415,7 +442,7 @@ def encode(H, reach, exact):
     Water's got to be level, so what's around it is all kept, and to the step, however far it is from a road."""
     cols, rows = H.cols, H.rows
     ccols, crows = (cols - 1) // STRIDE + 2, (rows - 1) // STRIDE + 2
-    want = [max(0, round(h * QUANTUM)) for h in H.v]
+    want = [round(h * QUANTUM) for h in H.v]
     coarse = [0] * (ccols * crows)
     half = STRIDE // 2
     for b in range(crows):
@@ -471,12 +498,16 @@ def build(body, fetched, sha, roads, lanes, water, structures):
     bridge = next(c for c in roads["reference"]["crossings"] if c["road"] == roads["opening"]["road"] and c["with"] == "river")
 
     levels = level_grid(dem, river_levels(dem, river))
+
+    def survey(x, z):
+        return dem.at(x, z) - levels.at(x, z) - TOWN_Y
     H = dem.like([0.0] * len(dem.v))
     for j in range(dem.rows):
         z = dem.z(j)
         for i in range(dem.cols):
             k = j * dem.cols + i
-            H.v[k] = soft(dem.v[k] - levels.at(dem.x(i), z) - TOWN_Y)
+            f = floor(dem.x(i), z)
+            H.v[k] = f + soft(dem.v[k] - levels.at(dem.x(i), z) - TOWN_Y - f)
     natural = H.like(list(H.v))
     grade(dem, H, rail, RAIL_GRADE)
     land = H.like(list(H.v))
@@ -488,7 +519,7 @@ def build(body, fetched, sha, roads, lanes, water, structures):
         levelled = level_buildings(dem, H, buildings, road)
     grade(dem, H, highway, ROAD_FINISH)
     grade(dem, H, streets, STREET_FINISH, land)
-    ponds = level_ponds(dem, H, [p for p in water["ponds"] if not p.get("pool")])
+    ponds = level_ponds(dem, H, [p for p in water["ponds"] if not p.get("pool")], survey)
     level_buildings(dem, H, buildings, road, ponds)
     level_buildings(dem, H, [b for b in buildings if b[3] is not None], road)
     clear(dem, H, banks, (bridge["x"], bridge["z"]), road, levelled)
@@ -503,6 +534,7 @@ def build(body, fetched, sha, roads, lanes, water, structures):
         "axes": "+x east, +z south, in true metres from town center",
         "source": {"name": ATTRIBUTION, "service": SERVICE, "fetched": fetched, "sha256": sha, "licence": "Public domain"},
         "elevation": {"lowest": round(min(dem.v), 1), "highest": round(max(dem.v), 1), "highestOverFloodplain": round(high, 1)},
+        "dips": [{"x": d["at"][0], "z": d["at"][1], "core": d["core"], "edge": d["edge"], "depth": d["depth"]} for d in DIPS],
         "x0": round(H.x0, 3), "z0": round(H.z0, 3), "dx": round(H.dx, 4), "dz": round(H.dz, 4), "cols": H.cols, "rows": H.rows,
         "quantum": QUANTUM,
         "coarse": coarse,
