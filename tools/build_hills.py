@@ -61,10 +61,13 @@ BUILDING_LEAN = .03      # how much a building's left leaning, on a slope steepe
 BUILDING_LEAN_ROAD = .05  # and next to a paved road, which has a slope of its own to keep
 BUILDING_PAD = (45, 110)  # metres from a building: this level out to here, and the land's own from here
 BY_THE_POOL = 40         # metres from a swimming pool that a building's on the same level as it
-POND_CLEAR = (60, 150)   # the same for a pond: all at one height to here, so that its water's level
-RAIL_GRADE = (300, 30, 130)  # metres of track to average over either way, and how far either side it's cut and filled to that, to none
-ROAD_GRADE = (90, 25, 90)    # the same for a paved road
+POND_CLEAR = (45, 110)   # the same for a pond: all at one height to here, so that its water's level
+RAIL_GRADE = (300, 15, 60)   # metres of track to average over either way, and how far either side it's cut and filled to that, to none
+HIGHWAYS = ("us_80",)        # built to long, even grades. A street goes over a hill the way the land does.
+ROAD_GRADE = (90, 25, 90)    # the same for a highway
 ROAD_FINISH = (45, 10, 40)   # and again once the buildings are level, since they take some of the road with them
+STREET_GRADE = (15, 18, 60)  # and for any other paved road or lane, which only has a pixel's roughness taken out of it
+STREET_FINISH = (15, 8, 20)  # and again, back to the land as it was before anything was levelled, since a building's ground isn't the street's
 
 
 def sstep(a, b, x):
@@ -239,13 +242,14 @@ def soft(v):
     return 0.0 if v <= -SOFT else v if v >= SOFT else (v + SOFT) ** 2 / (4 * SOFT)
 
 
-def grade(grid, H, lines, spec):
-    """A road or the tracks don't follow every rise, so they run on an average of the land they cross, and the land's cut and filled to it."""
+def grade(grid, H, lines, spec, land=None):
+    """A road or the tracks don't follow every rise, so they run on an average of the land they cross, and the land's cut and filled to it.
+    That's the land as it is now, or as `land` has it."""
     reach, flat, out = spec
     seeds, heights = [], []
     for line in lines:
         samples = along(line, 15)
-        raw = [H.at(x, z) for x, z, _ in samples]
+        raw = [(land or H).at(x, z) for x, z, _ in samples]
         window = int(reach / 15)
         total = [0.0]
         for h in raw:
@@ -462,7 +466,8 @@ def build(body, fetched, sha, roads, lanes, water, structures):
     edges = {e["id"]: e["points"] for e in roads["edges"]}
     river = [l["points"] for l in roads["reference"]["river"]["lines"]]
     rail = [l["points"] for l in roads["reference"]["railroad"]["lines"]]
-    paved = [edges[e] for r in roads["roads"] if r["surface"] == "asphalt" for e in r["edges"]] + [l["points"] for l in lanes["lanes"] if l["surface"] == "asphalt"]
+    highway = [edges[e] for r in roads["roads"] if r["id"] in HIGHWAYS for e in r["edges"]]
+    streets = [edges[e] for r in roads["roads"] if r["surface"] == "asphalt" and r["id"] not in HIGHWAYS for e in r["edges"]] + [l["points"] for l in lanes["lanes"] if l["surface"] == "asphalt"]
     bridge = next(c for c in roads["reference"]["crossings"] if c["road"] == roads["opening"]["road"] and c["with"] == "river")
 
     levels = level_grid(dem, river_levels(dem, river))
@@ -474,13 +479,15 @@ def build(body, fetched, sha, roads, lanes, water, structures):
             H.v[k] = soft(dem.v[k] - levels.at(dem.x(i), z) - TOWN_Y)
     natural = H.like(list(H.v))
     grade(dem, H, rail, RAIL_GRADE)
-    road = grade(dem, H, paved, ROAD_GRADE)
+    land = H.like(list(H.v))
+    road = [min(a, b) for a, b in zip(grade(dem, H, highway, ROAD_GRADE), grade(dem, H, streets, STREET_GRADE))]
     banks = [(x, z) for line in river for x, z, _ in along(line, 15)]
     buildings = footprints(structures, water["ponds"])
     clear(dem, H, banks, (bridge["x"], bridge["z"]), road, level_buildings(dem, H.like(list(H.v)), buildings, road))
     for _ in range(3):
         levelled = level_buildings(dem, H, buildings, road)
-    grade(dem, H, paved, ROAD_FINISH)
+    grade(dem, H, highway, ROAD_FINISH)
+    grade(dem, H, streets, STREET_FINISH, land)
     ponds = level_ponds(dem, H, [p for p in water["ponds"] if not p.get("pool")])
     level_buildings(dem, H, buildings, road, ponds)
     level_buildings(dem, H, [b for b in buildings if b[3] is not None], road)
