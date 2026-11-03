@@ -72,7 +72,12 @@
     "jam.keys": { "gain": 0.8, "reach": 80, "spread": 0.02, "max": 2, "file": "audio/sfx/jam.keys.1.mp3" },
     "ball.bump": { "gain": 0.8, "reach": 40, "spread": 0.06, "max": 2, "file": ["audio/sfx/ball.bump.1.mp3", "audio/sfx/ball.bump.2.mp3"] },
     "ball.land": { "gain": 0.7, "reach": 40, "spread": 0.08, "max": 2, "file": "audio/sfx/ball.land.1.mp3" },
-    "tramp.spring": { "gain": 0.7, "reach": 40, "spread": 0.08, "max": 2, "file": "audio/sfx/tramp.spring.1.mp3" }
+    "tramp.spring": { "gain": 0.7, "reach": 40, "spread": 0.08, "max": 2, "file": "audio/sfx/tramp.spring.1.mp3" },
+    "crossing.bell": { "bus": "ambience", "gain": 0.32, "loop": true, "file": "audio/sfx/crossing.bell.1.mp3" },
+    "train.clatter": { "gain": 0.75, "loop": true, "file": "audio/sfx/train.clatter.1.mp3" },
+    "train.rumble": { "gain": 0.9, "loop": true, "file": "audio/sfx/train.rumble.1.mp3" },
+    "train.horn": { "gain": 0.8, "reach": 3200, "max": 1, "gap": 1, "file": "audio/sfx/train.horn.1.mp3", "stereo": true },
+    "train.blast": { "gain": 0.8, "reach": 700, "max": 1, "gap": 1, "file": "audio/sfx/train.blast.1.mp3" }
   },
   "music": {
     "title": { "bed": 0.55, "air": 0.5, "guitar": 0.6, "file": "audio/music/hang.1.mp3", "gain": 2.712 },

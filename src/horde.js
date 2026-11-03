@@ -34,6 +34,8 @@ export const TUNING = {
   wading: .55,                     // how much of that they keep in the water
   bite: [3, 7],                    // seconds in the water before the cottonmouths have them
   goesUnder: 1.2,                  // seconds to go down after that
+  thrownFalls: 15,                 // m/s², for anyone thrown
+  liesDead: 7,                     // seconds someone the train's killed lies there
   meet: 8,                         // metres. Closer than this counts as being around him.
   witness: 18,                     // metres. Further off than this, they didn't notice him hurt anyone.
   tell: 8,                         // metres. How close they've got to be to pass it on.
@@ -89,6 +91,35 @@ export function createHorde(world, tuning = {}, on = {}) {
     if (n && F && by !== 'fire') for (const o of active) if (o.who && !(o.flat > 0) && hypot(o.x - x, o.z - z) < T.witness) F.wasThere(o.who);
     return n;
   };
+  // Run down by something that isn't him, so nobody holds it against him, though they'll keep off the spot. at(x, z, y) says what's happened to anyone in its way:
+  // where they're knocked to, how they fly, how long they're down for, and whether they get up again. It says how many.
+  h.runOver = (at, by = 'train') => {
+    let n = 0;
+    for (const s of active) {
+      if (s.thrown || s.dead !== undefined || s.under !== undefined) continue;
+      const hit = at(s.x, s.z, s.y);
+      if (!hit) continue;
+      if (h.grab?.who.includes(s)) { h.grab.who.splice(h.grab.who.indexOf(s), 1); if (!h.grab.who.length) { h.grab = null; mercy = T.mercy; h.on.free?.(); } }
+      s.x = hit.x; s.z = hit.z; s.thrown = { vx: hit.vx, vz: hit.vz, vy: hit.vy, kills: hit.kills, spin: hit.spin ?? 0 }; s.tumble = 0;
+      s.state = STUNNED; s.timer = hit.seconds; s.alert = 1; s.moving = 0; s.flat = s.flatFor = hit.seconds + 1;
+      if (s.who) F.hurt(s.who, s.x, s.z, by);
+      h.on.thrown?.(s, hit);
+      n++;
+    }
+    return n;
+  };
+  function fly(s, dt) {
+    const f = s.thrown, nx = s.x + f.vx * dt, nz = s.z + f.vz * dt;
+    s.tumble += f.spin * dt;
+    if (!world.blocked(nx, nz, s.y)) { s.x = nx; s.z = nz; } else { f.vx *= -.2; f.vz *= -.2; }
+    f.vy -= T.thrownFalls * dt; s.y += f.vy * dt;
+    // into the water, and that's the last anyone sees of them
+    if (world.water(s.x, s.z) && s.y < (world.level?.(s.x, s.z) ?? -Infinity)) { s.thrown = null; s.tumble = 0; s.under = T.goesUnder; h.on.splash?.(s); return; }
+    const floor = world.floorAt(s.x, s.z);
+    if (s.y > floor) return;
+    s.y = floor; s.thrown = null; s.tumble = 0;
+    if (f.kills) { s.dead = T.liesDead; s.flat = 1; s.flatFor = 9; }
+  }
   h.calm = () => {
     if (h.grab) h.grab = null;
     for (const s of all) { s.state = SHAMBLE; s.alert = 0; s.timer = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; s.moving = 0; }
@@ -99,7 +130,7 @@ export function createHorde(world, tuning = {}, on = {}) {
   function nearestNoise(s) {
     let best = null, bd = Infinity;
     // the nearest, and a lure over anything that isn't one
-    for (const n of noises) { if (n.lure && s.who && F.wise(s.who, n.kind)) continue; const d = hypot(n.x - s.x, n.z - s.z), k = n.lure ? d - 1e4 : d; if (d < n.r && k < bd) { bd = k; best = n; } }
+    for (const n of noises) { if (n.lure && s.who && (F.wise(s.who, n.kind) || (n.kind === 'train' && s.who.calm))) continue; const d = hypot(n.x - s.x, n.z - s.z), k = n.lure ? d - 1e4 : d; if (d < n.r && k < bd) { bd = k; best = n; } }
     return best;
   }
   // Someone at home goes between the house, the door and the yard and stays a while, and if they're the kind, goes off down the road and comes back
@@ -267,6 +298,8 @@ export function createHorde(world, tuning = {}, on = {}) {
     for (const s of all) if (hypot(s.x - p.x, s.z - p.z) < T.active) active.push(s);
     for (const s of active) {
       if (s.under !== undefined) { s.under -= dt; s.y -= dt * 1.5; s.moving = 0; continue; }
+      if (s.thrown) { fly(s, dt); continue; }
+      if (s.dead !== undefined) { if ((s.dead -= dt) <= 0) { s.dead = undefined; s.under = T.goesUnder; } continue; }
       s.next -= dt;
       if (s.flat > 0) s.flat -= dt;
       if (s.next <= 0) { s.next += T.thinkEvery; think(s, p); }

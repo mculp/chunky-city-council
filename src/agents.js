@@ -132,8 +132,8 @@ export function createFolks(data, { store = null, looks = [] } = {}) {
     hurt(w, x, z, by) {
       note(w, () => {
         w.shun = [Math.round(x), Math.round(z)];
-        // nobody thinks of a fire as something he did to them
-        if (by === 'fire') return;
+        // nobody thinks of a fire or a train as something he did to them
+        if (by === 'fire' || by === 'train') return;
         w.hurt++; if (by === 'truck') w.truck++; w.when = clock;
       });
     },

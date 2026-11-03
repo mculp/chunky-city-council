@@ -337,3 +337,26 @@ describe('what it does in the crowd', () => {
     assert.ok(ms < 4, `${ms.toFixed(2)} ms a frame for 400 of them`);
   });
 });
+
+describe('the train', () => {
+  test('nobody holds it against him, though they keep off the spot', () => {
+    const F = folks(), w = someone(F, () => true), was = F.mood(w);
+    F.hurt(w, 10, 20, 'train');
+    assert.equal(w.hurt, 0); assert.equal(w.when, 0); assert.equal(F.mood(w), was); assert.deepEqual(w.shun, [10, 20]);
+    assert.ok(F.shuns(w, 11, 21));
+  });
+
+  test('its horn draws the crowd to a crossing, but not someone who\'s lived with it, and not forever', () => {
+    const F = folks(), h = createHorde(field(F));
+    const a = h.add(10, 0), b = h.add(-10, 0);
+    b.who.calm = true;
+    run(h, still, .3);
+    h.lure(30, 0, 95, 20, false, 'train');
+    const bWas = b.x;
+    run(h, still, 2.5);
+    assert.ok(a.x > 11, `one came, to ${a.x}`);
+    assert.ok(Math.abs(b.x - bWas) < 1.5, `the other's still where they were, ${b.x}`);
+    assert.ok(a.who.fooled.train >= 1, 'and it counts');
+    assert.ok(!b.who.fooled?.train, 'and nothing to the other');
+  });
+});

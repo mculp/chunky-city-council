@@ -78,7 +78,7 @@ Otherwise it's how bold they are: `nerve`, plus up to a fifth either way for `te
 And whatever their mood:
 
 - **Vehicles.** Anyone a vehicle's hit gets out of the way of one, even if they'd come at him on foot.
-- **Places.** They won't wander within 20 m of where they were last hurt. A fire counts for this and nothing else, because nobody thinks of a fire as something he did.
+- **Places.** They won't wander within 20 m of where they were last hurt. A fire or the train counts for this and nothing else, because nobody thinks of either as something he did.
 - **Lures.** A kind of lure stops working on someone after it's fooled them 2 to 5 times, the nosiest soonest. They stay on him, and a different kind still works.
 - **Family.** The ones who go along with others follow the nearest of their family within 20 m who'd sooner go their own way, which keeps anyone from going in a ring. That's why you see two or three walking together.
 - **Word.** Someone who was there or was hit tells anyone in their family who's within 8 m, for 90 seconds. It only goes one step.
@@ -109,6 +109,7 @@ They aren't driven by the physics. They follow the line of the road, on their ow
 - **What's in the road:** every fifth of a second they look along the line ahead for him, anyone else, and anything solid, far enough to stop comfortably.
 - **Going round:** 1.5 to 5 seconds after stopping, soonest for the worst tempers, they go round on the other side at walking pace if it's clear and nobody's coming, then get back over. If there's no way round after 9 seconds, they turn back.
 - **End of the road:** they turn back.
+- **A railroad crossing:** while one's shut for the train, they stop short of it and wait, without going round, and go on once it opens. Anyone already on it when it shuts carries on over. The kids on four-wheelers wait the same way at a lane's crossing. `data/railroad.md` has when a crossing shuts.
 
 Someone who's **after him** doesn't stop for him. Anyone hit on the road gets out of the way of a truck the same as on foot, which is `truck` in what they remember.
 
