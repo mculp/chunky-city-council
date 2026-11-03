@@ -142,6 +142,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { loadMap } from './src/map.js';
 import { createPeople } from './src/people.js';
+import { drawCloth, drawSkull } from './src/looks.js';
 import { createHorde, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED } from './src/horde.js';
 
 const $ = (id) => document.getElementById(id);
@@ -269,6 +270,7 @@ function makeHatch(seed, base, cols, n) {
   return toTex(cv);
 }
 const hatch = [1, 2, 3].map(k => makeHatch(k * 7919, '#08050a', ['#d81f4f', '#f2305f', '#7e1030'], 760));
+const tapeHatch = makeHatch(31337, '#2a1503', ['#ffb01a', '#ffd23c', '#e8541a'], 1250);
 const pantsHatch = [1, 2, 3].map(k => makeHatch(k * 104729, '#09070c', ['#3e2c60', '#523a78', '#22182f'], 420));
 const ropeTex = (() => {
   const cv = document.createElement('canvas'); cv.width = 64; cv.height = 256; const g = cv.getContext('2d');
@@ -402,15 +404,19 @@ const deckMat = triplanar(deckTex, .2, { roughness: .8 });
 const stoneMat = triplanar(stoneTex, .35, { roughness: .95 });
 const asphaltMat = triplanar(asphaltTex, .12, { roughness: 1 });
 const outlineMats = new Map();
-function outlineMat(color, px, chalk) {
-  const key = color + '|' + px + '|' + chalk;
+function outlineMat(color, px, chalk, { spikes = false, tinted = false } = {}) {
+  const key = [color, px, chalk, spikes, tinted].join('|');
   if (outlineMats.has(key)) return outlineMats.get(key);
   const uniforms = Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
     uColor: { value: new THREE.Color(color) }, uPx: { value: px }, uChalk: { value: chalk }, uStep: G.uStep, uRes: G.uRes, uPxScale: G.uPxScale, uMask: G.uMask
   });
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, fog: true, uniforms, userData: { outline: true },
+    defines: { ...(spikes && { SPIKES: 1 }), ...(tinted && { TINTED: 1 }) },
     vertexShader: `uniform float uPx, uStep, uChalk, uPxScale; uniform vec2 uRes;
+      #ifdef TINTED
+      varying vec3 vTint;
+      #endif
       #include <fog_pars_vertex>
       float hn(vec3 p){ return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453); }
       float vn(vec3 p){ vec3 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -426,16 +432,28 @@ function outlineMat(color, px, chalk) {
         vec4 clip=projectionMatrix*mvPosition;
         vec2 nc=(projectionMatrix*vec4(nv,0.)).xy; float l=length(nc); nc=l>1e-6?nc/l:vec2(0.);
         float boil=uChalk>0.?(.6+.8*vn(position*7.+vec3(uStep*1.37,uStep*2.11,uStep*.73))):1.;
+        #ifdef SPIKES
+          float h=hn(floor(position*26.)+.5); boil*=1.+pow(h,4.)*(6.+1.5*sin(uStep*2.+h*40.));
+        #endif
+        #ifdef TINTED
+          vTint=instanceColor; boil*=clamp(9./clip.w,.4,1.);   // a long way off the line thins, or it's all you'd see of them
+        #endif
         clip.xy+=nc*uPx*uPxScale*boil*2./uRes*clip.w;
         gl_Position=clip;
         #include <fog_vertex>
       }`,
     fragmentShader: `uniform vec3 uColor; uniform float uStep, uChalk, uPxScale, uMask;
+      #ifdef TINTED
+      varying vec3 vTint;
+      #endif
       #include <fog_pars_fragment>
       float h2(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
       void main(){
         if(uMask>.5){ gl_FragColor=vec4(1.); return; }
         vec3 c=uColor;
+        #ifdef TINTED
+          c*=vTint;
+        #endif
         if(uChalk>0.){ vec2 q=floor(gl_FragCoord.xy/(1.5*uPxScale))+uStep*13.; if(h2(q)<.15*uChalk) discard; c*=.8+.32*h2(q+7.); }
         gl_FragColor=vec4(c,1.);
         #include <fog_fragment>
@@ -443,8 +461,8 @@ function outlineMat(color, px, chalk) {
   });
   outlineMats.set(key, m); return m;
 }
-function outline(mesh, color = INK, px = 1.6, chalk = 0) {
-  const o = new THREE.Mesh(mesh.geometry, outlineMat(color, px, chalk));
+function outline(mesh, color = INK, px = 1.6, chalk = 0, style) {
+  const o = new THREE.Mesh(mesh.geometry, outlineMat(color, px, chalk, style));
   o.frustumCulled = mesh.frustumCulled; o.renderOrder = mesh.renderOrder; mesh.add(o); return mesh;
 }
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -1170,37 +1188,62 @@ const SIGNS = [];
 }
 
 // ================================================================ characters: the hooded build from the drawing
-const HOOD_RINGS = [
-  [-0.86, .27, .19, 0, 2.6], [-0.82, .30, .205, 0, 2.6], [-0.76, .315, .212, 0, 2.6], [-0.55, .325, .215, 0, 2.6],
-  [-0.30, .34, .218, 0, 2.6], [-0.12, .352, .215, -.005, 2.5], [-0.04, .345, .205, -.01, 2.3], [0.02, .31, .2, -.02, 2.1],
-  [0.07, .262, .212, -.035, 2], [0.11, .248, .226, -.04, 2], [0.18, .27, .258, -.03, 2], [0.28, .287, .283, -.02, 2],
-  [0.38, .282, .278, -.025, 2], [0.46, .243, .246, -.04, 2], [0.52, .172, .182, -.058, 2], [0.556, .082, .096, -.072, 2], [0.568, .012, .015, -.078, 2]
-];
 const cr = (p0, p1, p2, p3, t) => { const t2 = t * t, t3 = t2 * t; return .5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3); };
-function buildHoodie(pitch, yaw, roll, SUB = 4, M = 48) {
-  const C = HOOD_RINGS, rings = [];
+// The hero's own shape, measured off the coin: 0.39 m to the side of his hood, the opening nearly filling it, and the hood
+// sitting right down between shoulders half as wide again
+const HERO_SHAPE = {
+  pivot: [0, .2, -.03], bend: [.14, .3], openY: [.109, .8],
+  // half the width of the opening at a height: arched at the top, widest just below the middle, a V at the chin
+  open(y) { const v = y - .4; return y > .8 || y < .109 ? 0 : v > 0 ? .33 * Math.pow(1 - Math.pow(v / .4, 1.5), .8) : .33 * (1 - (v / .291) ** 2); },
+  rings: [
+    [-0.86, .35, .225, 0, 2.6], [-0.82, .39, .24, 0, 2.6], [-0.76, .42, .25, 0, 2.6], [-0.55, .45, .255, 0, 2.6],
+    [-0.30, .475, .26, 0, 2.6], [-0.16, .485, .265, -.005, 2.5], [-0.05, .48, .265, -.01, 2.3], [0.025, .45, .26, -.012, 2.2], [0.08, .41, .25, -.015, 2.1], [0.14, .36, .235, -.02, 2], [0.175, .315, .228, -.025, 2],
+    [0.21, .27, .232, -.03, 2],
+    [0.25, .32, .27, -.03, 2], [0.344, .385, .33, -.02, 2], [0.40, .39, .34, -.02, 2], [0.438, .389, .342, -.021, 2], [0.5675, .3767, .3418, -.026, 2], [0.705, .3377, .3166, -.044, 2],
+    [0.823, .2758, .2657, -.068, 2], [0.9136, .195, .1917, -.091, 2], [0.9621, .1205, .1198, -.106, 2], [0.9844, .0543, .0541, -.113, 2], [0.9897, .0136, .0136, -.115, 2], [0.99, .004, .004, -.115, 2]
+  ]
+};
+// Everyone else's shape, measured off the references: a tall hood half as wide again as the opening in it, and the opening a
+// rounded oblong, down to the top of the chest and well short of the hood's top. Cloth goes once round it and from hem to top.
+const TOWN_SCALE = .92, TOWN_HIPS = 1.43 * TOWN_SCALE;
+const TOWN_OPEN = { W: .21, mid: .471, up: .279, down: .341, power: 2.6 };
+const TOWN_SHAPE = {
+  pivot: [0, .2, -.03], bend: [.14, .3], fit: true, openY: [.13, .75],
+  open(y) { const O = TOWN_OPEN, t = Math.abs(y - O.mid) / (y > O.mid ? O.up : O.down); return t >= 1 ? 0 : O.W * Math.pow(1 - Math.pow(t, O.power), 1 / O.power); },
+  rings: [
+    [-0.86, .31, .2, 0, 2.6], [-0.82, .345, .215, 0, 2.6], [-0.76, .37, .225, 0, 2.6], [-0.55, .395, .23, 0, 2.6],
+    [-0.30, .42, .235, 0, 2.6], [-0.16, .43, .24, -.005, 2.5], [-0.05, .425, .24, -.01, 2.3], [0.025, .395, .235, -.012, 2.2], [0.08, .355, .228, -.015, 2.1], [0.125, .31, .216, -.02, 2], [0.155, .27, .21, -.025, 2],
+    [0.185, .245, .212, -.03, 2],
+    [0.225, .272, .24, -.03, 2], [0.31, .305, .272, -.025, 2], [0.40, .315, .28, -.022, 2], [0.46, .316, .281, -.022, 2], [0.579, .305, .2801, -.027, 2], [0.69, .2737, .2586, -.041, 2],
+    [0.785, .2234, .2162, -.0595, 2], [0.858, .158, .1557, -.078, 2], [0.8975, .0976, .0971, -.09, 2], [0.9155, .044, .0438, -.0955, 2], [0.9197, .011, .011, -.097, 2], [0.92, .004, .004, -.097, 2]
+  ]
+};
+function buildHoodie(pitch, yaw, roll, SUB, M, { rings: C, open, openY, pivot, bend, fit = false }) {
+  const rings = [];
   for (let i = 0; i < C.length - 1; i++) {
     const p0 = C[Math.max(i - 1, 0)], p1 = C[i], p2 = C[i + 1], p3 = C[Math.min(i + 2, C.length - 1)];
     for (let s = 0; s < SUB; s++) rings.push(p1.map((_, k) => cr(p0[k], p1[k], p2[k], p3[k], s / SUB)));
   }
   rings.push(C[C.length - 1].slice());
   const R = rings.length, pos = [], uv = [], surf = [], face = [];
-  const PV = new THREE.Vector3(0, .07, -.03), e = new THREE.Euler(), q = new THREE.Quaternion(), v = new THREE.Vector3();
+  const PV = new THREE.Vector3(...pivot), e = new THREE.Euler(), q = new THREE.Quaternion(), v = new THREE.Vector3();
   for (let r = 0; r < R; r++) {
     const [y, a, b, cz, n] = rings[r];
-    const w = sstep(.03, .2, y);
+    const w = sstep(bend[0], bend[1], y);
     e.set(pitch * w, yaw * w, roll * w, 'YXZ'); q.setFromEuler(e);
     for (let j = 0; j <= M; j++) {
       const th = j / M * Math.PI * 2, c = Math.cos(th), s = Math.sin(th);
       const x = a * Math.sign(c) * Math.pow(Math.abs(c), 2 / n), z = cz + b * Math.sign(s) * Math.pow(Math.abs(s), 2 / n);
       v.set(x, y, z).sub(PV).applyQuaternion(q).add(PV); pos.push(v.x, v.y, v.z);
-      uv.push(j / M * 3, y * 1.5);
+      if (fit) uv.push(j / M, (y - C[0][0]) / (C[C.length - 1][0] - C[0][0])); else uv.push(j / M * 3, y * 1.5);
       let tp = th - Math.PI / 2; if (tp > Math.PI) tp -= Math.PI * 2;
-      surf.push(tp, y); face.push(y > .05 ? tp / .82 : 9, y > .05 ? (y - .29) / .2 : 9);
+      surf.push(tp, y);
+      // a set opening goes by where a point is, seen from straight ahead, so that its outline and what's in it don't bend with the hood
+      face.push(s >= 0 ? x : Math.sign(c) * 9, s >= 0 ? y : 9);
     }
   }
   const bc = pos.length / 3; pos.push(0, rings[0][0] + .012, rings[0][3]); uv.push(0, 0); surf.push(0, -1); face.push(9, 9);
-  const idx = [], fidx = [], fe = (i) => face[i * 2] ** 2 + face[i * 2 + 1] ** 2;
+  const idx = [], fidx = [], fe = (i) => (Math.abs(face[i * 2]) < open(face[i * 2 + 1]) + .06 ? 0 : 9);
   for (let r = 0; r < R - 1; r++) for (let j = 0; j < M; j++) {
     const a = r * (M + 1) + j, b = (r + 1) * (M + 1) + j, c = a + 1, d = b + 1;
     idx.push(a, b, c, b, d, c); if (Math.min(fe(a), fe(b), fe(c), fe(d)) < 1.25) fidx.push(a, b, c, b, d, c);
@@ -1213,8 +1256,20 @@ function buildHoodie(pitch, yaw, roll, SUB = 4, M = 48) {
   const nr = geo.attributes.normal;
   for (let r = 0; r < R; r++) { const i0 = r * (M + 1), i1 = i0 + M; const nx = nr.getX(i0) + nr.getX(i1), ny = nr.getY(i0) + nr.getY(i1), nz = nr.getZ(i0) + nr.getZ(i1), l = Math.hypot(nx, ny, nz) || 1; nr.setXYZ(i0, nx / l, ny / l, nz / l); nr.setXYZ(i1, nx / l, ny / l, nz / l); }
   const faceGeo = new THREE.BufferGeometry(); for (const k of ['position', 'normal', 'aFace']) faceGeo.setAttribute(k, geo.attributes[k]); faceGeo.setIndex(fidx);
+  // the edge of the opening, for a rim to follow, and how far the hood's tilted
+  const rim = [];
+  for (let k = 0; k <= 64; k++) {
+    const side = k < 32 ? 1 : -1, t = k < 32 ? k / 32 : (64 - k) / 32, y = openY[0] + (openY[1] - openY[0]) * (1 - Math.cos(Math.PI * t)) / 2, x = side * open(y);
+    let i = 0; while (i < R - 2 && rings[i + 1][0] < y) i++;
+    const A = rings[i], B = rings[i + 1], f = clamp((y - A[0]) / (B[0] - A[0]), 0, 1), [, a, b, cz, n] = A.map((u, j) => u + (B[j] - u) * f), w = sstep(bend[0], bend[1], y);
+    e.set(pitch * w, yaw * w, roll * w, 'YXZ'); q.setFromEuler(e);
+    const c = Math.min(1, Math.pow(Math.abs(x) / a, n / 2)), z = cz + b * Math.pow(Math.sqrt(1 - c * c), 2 / n);
+    rim.push(new THREE.Vector3(x, y, z).sub(PV).applyQuaternion(q).add(PV));
+  }
+  e.set(pitch, yaw, roll, 'YXZ');
+  const tilt = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromEuler(e));
   const surfAt = (tp, y) => { let best = 0, bd = 1e9; for (let i = 0; i < surf.length / 2; i++) { const d = ((surf[i * 2] - tp) * .3) ** 2 + (surf[i * 2 + 1] - y) ** 2; if (d < bd) { bd = d; best = i; } } return { p: new THREE.Vector3().fromBufferAttribute(geo.attributes.position, best), n: new THREE.Vector3().fromBufferAttribute(nr, best) }; };
-  return { geo, faceGeo, surfAt };
+  return { geo, faceGeo, surfAt, rim, tilt };
 }
 function hoodMat(hatchTex, emiss) {
   const m = new THREE.MeshToonMaterial({ map: hatchTex, emissiveMap: hatchTex, emissive: 0xffffff, emissiveIntensity: emiss, gradientMap: toonGrad });
@@ -1234,45 +1289,125 @@ function hoodMat(hatchTex, emiss) {
   };
   return m;
 }
-// `hot` is for a crowd: instanced, each face going from ca to hot by its own aHot
-function faceMat(pat, ca, cb, hot) {
+// What's inside his hood: warning tape, flat and straight, set back in the dark behind the opening, with the coin's stripes:
+// light and dark about equal, 34 degrees off vertical and rising to the right, three wide bars and a sliver at each end. It's worked
+// out along the line of sight rather than painted on the hood, so it stays flat, and slides behind the rim as he turns.
+// The bars are scribbled in, like his hoodie, and the strokes rough up their edges.
+function tapeMat({ pivot }) {
   return new THREE.ShaderMaterial({
-    defines: hot ? { HOT: 1 } : {},
-    uniforms: { uStep: G.uStep, uBurst: G.uBurst, uPxScale: G.uPxScale, uA: { value: new THREE.Color(...ca) }, uB: { value: new THREE.Color(...cb) }, uHot: { value: new THREE.Color(...(hot || ca)) }, uPat: { value: pat } },
+    uniforms: { uStep: G.uStep, uBurst: G.uBurst, uPxScale: G.uPxScale, uTilt: { value: new THREE.Matrix3() }, uHatch: { value: tapeHatch } },
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-    vertexShader: `attribute vec2 aFace; varying vec2 vF;
-      #ifdef HOT
-      attribute float aHot; varying float vHot;
-      #endif
+    vertexShader: `attribute vec2 aFace; uniform mat3 uTilt; varying vec2 vF; varying vec3 vP, vC;
+      const vec3 PV=vec3(${pivot.map((v) => v.toFixed(3)).join(',')});
       void main(){ vF=aFace; vec3 p=position+normal*.0025;
-        #ifdef HOT
-        vHot=aHot; gl_Position=projectionMatrix*modelViewMatrix*instanceMatrix*vec4(p,1.);
-        #else
-        gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);
+        vP=transpose(uTilt)*(position-PV)+PV;
+        vC=transpose(uTilt)*((inverse(modelViewMatrix)*vec4(0.,0.,0.,1.)).xyz-PV)+PV;
+        gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.); }`,
+    fragmentShader: `uniform float uStep, uBurst, uPxScale; uniform sampler2D uHatch; varying vec2 vF; varying vec3 vP, vC;
+      float hh(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+      float vn(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); return mix(mix(hh(i),hh(i+vec2(1,0)),f.x),mix(hh(i+vec2(0,1)),hh(i+vec2(1,1)),f.x),f.y); }
+      float openAt(float y){ float v=y-.4; if(y>.8||y<.109) return 0.; return v>0.? .33*pow(1.-pow(v/.4,1.5),.8) : .33*(1.-(v*v)/(.291*.291)); }
+      void main(){
+        float d=openAt(vF.y)-abs(vF.x);
+        if(d<(vn(vF*30.+uStep*1.7)-.5)*.012) discard;
+        // where the line of sight lands on the tape, which hangs a little way back and leans with the hood
+        const vec3 N=vec3(0.,.2425,.9701), C=vec3(0.,.4,.2);
+        vec3 rd=normalize(vP-vC);
+        vec2 q=(vP+rd*dot(N,C-vP)/min(dot(N,rd),-.12)).xy;
+        q.x+=uBurst*(hh(vec2(floor(q.y*40.),uStep+3.))-.5)*.2;
+        float wob=(vn(q*60.+uStep*3.1)-.5)*.0035;
+        // the same strokes for the same size of hood as the hoodie's, redrawn on the step
+        vec3 ink=texture2D(uHatch,q*1.35+vec2(uStep*.37,uStep*.61)).rgb;
+        float s=abs(fract((q.x-(q.y-.438)*.68+.011+wob)/.171+.5)-.5);
+        float m=1.-smoothstep(.232,.25,s-(dot(ink,vec3(.45,.45,.1))-.3)*.06);
+        // past the tape's edge you're looking at the inside of the hood, and the rim shades what's near it
+        m*=1.-smoothstep(-.004,.012,abs(q.x)-openAt(q.y));
+        float chalk=.74+.34*hh(floor(gl_FragCoord.xy/(1.6*uPxScale))+uStep*7.);
+        gl_FragColor=vec4(mix(vec3(.004,.003,.006)+ink*.012,ink*1.3*chalk*mix(.55,1.,smoothstep(0.,.07,d)),m),1.); }`
+  });
+}
+// Everyone else's cloth: crayon rather than his scribble, with the paper's tooth in it, going dark into the outline. A crowd's
+// is all on one sheet with a row for each look, so that everyone in it is one draw call.
+function clothMat(tex, { rows = 0, glow = .42 } = {}) {
+  const m = new THREE.MeshToonMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: glow, gradientMap: toonGrad });
+  if (rows) m.defines.ROWS = rows.toFixed(1);
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uStep = G.uStep; sh.uniforms.uPxScale = G.uPxScale;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
+      uniform float uStep;
+      #ifdef ROWS
+      attribute float iLook;
+      #endif`).replace('#include <uv_vertex>', `#include <uv_vertex>
+      #ifdef ROWS
+      vMapUv.y=(clamp(vMapUv.y,.012,.988)+iLook)/ROWS;
+      #endif
+      vMapUv+=vec2(uStep*.0013,-uStep*.0004); vEmissiveMapUv=vMapUv;`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+      uniform float uStep, uPxScale;
+      float hhs(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        { float k=(.88+.2*hhs(floor(gl_FragCoord.xy/(1.5*uPxScale))+uStep*13.))*mix(.3,1.,smoothstep(.05,.6,abs(dot(normal,normalize(vViewPosition)))));
+          diffuseColor.rgb*=k; totalEmissiveRadiance*=k; }`)
+      // however near a fire they stand it's still that colour: only the lines get to bloom
+      .replace('#include <opaque_fragment>', `outgoingLight*=min(1.,.84/max(max(outgoingLight.r,max(outgoingLight.g,outgoingLight.b)),1e-4));
+        #include <opaque_fragment>`);
+  };
+  return m;
+}
+// The skull in someone's hood, flat on a plane set back behind the opening like his tape, and for the same reason. The edge of
+// the opening is drawn here too, in the colour of their outline and as wide on screen. A crowd's are all on one sheet, side by side.
+function skullMat(tex, { cells = 0, line = '#ffffff', glow = 1, px = 3.8 } = {}) {
+  const O = TOWN_OPEN, n = (v) => v.toFixed(3), [y0, y1] = TOWN_SHAPE.openY;
+  return new THREE.ShaderMaterial({
+    defines: cells ? { CELLS: cells.toFixed(1) } : {},
+    uniforms: { uStep: G.uStep, uBurst: G.uBurst, uPxScale: G.uPxScale, uTilt: { value: new THREE.Matrix3() }, uMap: { value: tex }, uLine: { value: new THREE.Color(line).multiplyScalar(glow) }, uPx: { value: px } },
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    vertexShader: `attribute vec2 aFace; uniform mat3 uTilt; varying vec2 vF; varying vec3 vP, vC;
+      #ifdef CELLS
+      attribute float iLook, aHot; attribute vec3 iLine; varying float vLook, vHot; varying vec3 vLine;
+      #endif
+      const vec3 PV=vec3(${TOWN_SHAPE.pivot.map(n).join(',')});
+      void main(){ vF=aFace; vec3 p=position+normal*.0025; mat4 mm=modelViewMatrix;
+        #ifdef CELLS
+        mm=modelViewMatrix*instanceMatrix; vLook=iLook; vHot=aHot; vLine=iLine;
         #endif
-      }`,
-    fragmentShader: `uniform float uStep, uBurst, uPxScale, uPat; uniform vec3 uA, uB, uHot; varying vec2 vF;
-      #ifdef HOT
-      varying float vHot;
+        vP=transpose(uTilt)*(position-PV)+PV;
+        vC=transpose(uTilt)*((inverse(mm)*vec4(0.,0.,0.,1.)).xyz-PV)+PV;
+        gl_Position=projectionMatrix*mm*vec4(p,1.); }`,
+    fragmentShader: `uniform float uStep, uBurst, uPxScale, uPx; uniform vec3 uLine; uniform sampler2D uMap; varying vec2 vF; varying vec3 vP, vC;
+      #ifdef CELLS
+      varying float vLook, vHot; varying vec3 vLine;
       #endif
       float hh(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
       float vn(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); return mix(mix(hh(i),hh(i+vec2(1,0)),f.x),mix(hh(i+vec2(0,1)),hh(i+vec2(1,1)),f.x),f.y); }
       void main(){
-        vec2 f=vF; float e=dot(f,f);
-        if(e>1.-vn(vec2(atan(f.y,f.x)*3.,uStep*1.7))*.08) discard;
-        f.x+=uBurst*(hh(vec2(floor(f.y*14.),uStep+3.))-.5)*.7;
-        float wob=(vn(f*9.+uStep*3.1)-.5)*.09, m;
-        if(uPat<.5){ float s=fract((f.x+f.y*.18)*3.25+.5+wob); m=smoothstep(.06,.1,s)*smoothstep(.56,.52,s); }
-        else if(uPat<1.5){ float s=fract(f.y*3.+abs(fract(f.x*3.)-.5)*1.2+wob); m=smoothstep(.1,.16,s)*smoothstep(.58,.52,s); }
-        else if(uPat<2.5){ vec2 g=fract(f*3.4+wob)-.5; m=1.-smoothstep(.2,.26,length(g)); }
-        else if(uPat<3.5){ float s=fract(f.y*3.6+wob); m=smoothstep(.08,.12,s)*smoothstep(.5,.46,s); }
-        else { float s=vn(f*5.+vec2(uStep*2.3,uStep*1.1)); m=smoothstep(.54,.64,s); }
-        float chalk=.72+.38*hh(floor(gl_FragCoord.xy/(1.6*uPxScale))+uStep*7.);
-        vec3 a=uA;
-        #ifdef HOT
-        a=mix(uA,uHot,vHot);
+        vec2 a=vec2(abs(vF.x)/${n(O.W)},abs(vF.y-${n(O.mid)})/(vF.y>${n(O.mid)}?${n(O.up)}:${n(O.down)}));
+        float e=pow(a.x,${n(O.power)})+pow(a.y,${n(O.power)})-1.+(vn(vF*26.+uStep*1.7)-.5)*.1;
+        // how many pixels past the edge this is, and how wide the line is, which has a limit, for someone a long way off
+        float past=e/max(length(vec2(dFdx(e),dFdy(e))),1e-5), wide=min(uPx*uPxScale,.03/max(length(vec2(dFdx(vF.y),dFdy(vF.y))),1e-5));
+        if(past>wide) discard;
+        // where the line of sight lands on the skull
+        const vec3 N=vec3(0.,.2,.98), C=vec3(0.,.44,.19);
+        vec3 rd=normalize(vP-vC);
+        vec2 q=(vP+rd*dot(N,C-vP)/min(dot(N,rd),-.12)).xy;
+        q.x+=uBurst*(hh(vec2(floor(q.y*40.),uStep+3.))-.5)*.2;
+        q+=(vec2(vn(q*40.+uStep*3.1),vn(q*40.+uStep*5.3+9.))-.5)*.007;
+        vec2 uv=vec2(q.x/${n(O.W)}*.5+.5,(q.y-${n(y0)})/${n(y1 - y0)});
+        vec3 col=vec3(.004,.003,.006), ln=uLine;
+        if(uv.x>0.&&uv.x<1.&&uv.y>0.&&uv.y<1.){
+          #ifdef CELLS
+          uv.x=(vLook+uv.x)/CELLS;
+          #endif
+          col=texture2D(uMap,uv).rgb;
+        }
+        float chalk=.74+.34*hh(floor(gl_FragCoord.xy/(1.6*uPxScale))+uStep*7.);
+        col*=chalk*mix(.5,1.,smoothstep(0.,14.*uPxScale,-past));
+        #ifdef CELLS
+        // once they've noticed something, it burns
+        ln=vLine; col=mix(col,vec3(1.8,.42,.1)*dot(col,vec3(.5)),vHot);
         #endif
-        gl_FragColor=vec4(mix(uB,a*chalk,m*(1.-smoothstep(.72,1.,e)*.85)),1.); }`
+        float ring=(1.-smoothstep(wide-1.,wide,abs(past)))*step(.15,hh(floor(gl_FragCoord.xy/(1.5*uPxScale))+uStep*13.));
+        gl_FragColor=vec4(mix(col,ln*chalk,ring),1.); }`
   });
 }
 class Sweep {
@@ -1317,45 +1452,52 @@ function orientGroup(g, axisY, awayZ) {
   const X = new THREE.Vector3().crossVectors(Y, Z); g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
 }
 // one rig used by the hero and the townsfolk
-function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, pitch = -.1 }) {
-  const body = new THREE.Group();
-  const hm = new THREE.Mesh(hood.geo, hoodM); outline(hm, ol, 4, 1); body.add(hm);
+function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, lineK = 1, lineStyle, rimmed = false, shoulder, out = 0, reach, thick = 1, legSize = 1, eyelets, chest, cord = 1, wave = 0, cordColor = null }) {
+  const body = new THREE.Group(), line = (m, px) => outline(m, ol, px * lineK, 1, lineStyle);
+  const hm = new THREE.Mesh(hood.geo, hoodM); line(hm, 4); body.add(hm);
   const fm = new THREE.Mesh(hood.faceGeo, faceM); fm.renderOrder = 2; body.add(fm);
   const mkArm = () => {
-    const sleeve = new Sweep(14, 12, sleeveM); outline(sleeve.mesh, ol, 3.4, 1); body.add(sleeve.mesh);
-    const cuff = new THREE.Mesh(cuffGeo, sleeveM); cuff.scale.set(.086, .07, .086); outline(cuff, ol, 2.8, 1); body.add(cuff);
-    const fist = new THREE.Group(); body.add(fist);
-    for (let i = 0; i < 4; i++) { const f = new THREE.Mesh(fingerGeo, handM); f.rotation.set(Math.PI / 2, 0, -Math.PI * .15); f.position.y = (i - 1.5) * .037; f.scale.setScalar(1 - Math.abs(i - 1.5) * .07); outline(f, ol, 2, 1); fist.add(f); }
-    const palm = new THREE.Mesh(sphGeo, handM); palm.scale.set(.066, .085, .052); palm.position.set(0, 0, -.06); outline(palm, ol, 2.4, 1); fist.add(palm);
+    const sleeve = new Sweep(14, 12, sleeveM); line(sleeve.mesh, 3.4); body.add(sleeve.mesh);
+    const cuff = new THREE.Mesh(cuffGeo, sleeveM); cuff.scale.set(.086 * thick, .07 * thick, .086 * thick); line(cuff, 2.8); body.add(cuff);
+    const fist = new THREE.Group(); fist.scale.setScalar(thick); body.add(fist);
+    for (let i = 0; i < 4; i++) { const f = new THREE.Mesh(fingerGeo, handM); f.rotation.set(Math.PI / 2, 0, -Math.PI * .15); f.position.y = (i - 1.5) * .037; f.scale.setScalar(1 - Math.abs(i - 1.5) * .07); line(f, 2); fist.add(f); }
+    const palm = new THREE.Mesh(sphGeo, handM); palm.scale.set(.066, .085, .052); palm.position.set(0, 0, -.06); line(palm, 2.4); fist.add(palm);
     return { sleeve, cuff, fist };
   };
   const arms = [mkArm(), mkArm()];
-  const legs = [0, 1].map(() => { const sw = new Sweep(10, 10, pantsM); outline(sw.mesh, ol, 2.4, 1); body.add(sw.mesh); return sw; });
+  const legs = [0, 1].map(() => { const sw = new Sweep(10, 10, pantsM); line(sw.mesh, 2.4); body.add(sw.mesh); return sw; });
   const shoeM = new THREE.MeshToonMaterial({ color: '#efe9de', gradientMap: toonGrad });
   const shoes = [0, 1].map(() => {
     const g = new THREE.Group(); body.add(g);
-    const up = new THREE.Mesh(new THREE.CapsuleGeometry(.068, .16, 4, 10), shoeM); up.rotation.x = Math.PI / 2; up.position.set(0, .01, .07); up.scale.set(1, 1, .82); outline(up, ol, 2.2, 1); g.add(up);
+    const up = new THREE.Mesh(new THREE.CapsuleGeometry(.068, .16, 4, 10), shoeM); up.rotation.x = Math.PI / 2; up.position.set(0, .01, .07); up.scale.set(1, 1, .82); line(up, 2.2); g.add(up);
     return g;
   });
-  // drawstrings: white-outlined black cords from white eyelets
-  const cords = [hood.surfAt(-.2, .03), hood.surfAt(.2, .03)].map(({ p, n }) => {
-    const eye = new THREE.Mesh(eyeGeo, whiteMat); eye.position.copy(p).addScaledVector(n, .003); eye.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n); body.add(eye);
-    const sw = new Sweep(8, 6, stringMat); outline(sw.mesh, CHALK_WHITE, 1.3, 1); body.add(sw.mesh);
-    const ag = new THREE.Mesh(agletGeo, whiteMat); body.add(ag);
+  // drawstrings: white-outlined black cords from white eyelets, or for everyone else, cords of their own colour from a ball of the same
+  const cordM = cordColor ? new THREE.MeshBasicMaterial({ color: cordColor }) : stringMat, cordLine = cordColor && new THREE.Color(cordColor).getHSL({}).l > .5 ? INK : CHALK_WHITE;
+  const cords = [hood.surfAt(-eyelets[0], eyelets[1]), hood.surfAt(eyelets[0], eyelets[1])].map(({ p, n }) => {
+    const eye = cordColor ? outline(new THREE.Mesh(sphGeo, cordM), cordLine, 1.3, 1) : new THREE.Mesh(eyeGeo, whiteMat); eye.scale.setScalar(cordColor ? .026 : thick); eye.position.copy(p).addScaledVector(n, .003); eye.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n); body.add(eye);
+    const sw = new Sweep(8, 6, cordM); outline(sw.mesh, cordLine, 1.3, 1); body.add(sw.mesh);
+    const ag = new THREE.Mesh(agletGeo, whiteMat); ag.visible = !cordColor; body.add(ag);
     return { p, n, sw, ag };
   });
   const rig = { body, arms, legs, shoes, hm, fm, hood };
-  rig.S = [new THREE.Vector3(-.3, -.07, 0), new THREE.Vector3(.3, -.07, 0)];
+  // a raised hem around the opening, so that what's in there reads as being inside
+  const rim = rimmed ? new Sweep(64, 6, sleeveM) : null;
+  if (rim) { line(rim.mesh, 2.2); body.add(rim.mesh); }
+  rig.setHood = (h) => { hm.geometry = hm.children[0].geometry = h.geo; fm.geometry = h.faceGeo; if (rim) rim.update(h.rim, .034); faceM.uniforms.uTilt.value.copy(h.tilt); };
+  rig.S = [new THREE.Vector3(-shoulder[0], shoulder[1], 0), new THREE.Vector3(shoulder[0], shoulder[1], 0)];
   rig.H = [new THREE.Vector3(-.12, -.7, 0), new THREE.Vector3(.12, -.7, 0)];
   // set an arm (0 left, 1 right) to reach a wrist target; grip axis for the fist
-  rig.arm = (i, wrist, hint, gripAxis) => {
-    const S = rig.S[i], E = new THREE.Vector3(); ik(S, wrist, .33, .31, hint, E);
+  // `out` moves every hand out with his shoulders, so a pose works whatever he's built like
+  rig.arm = (i, target, hint, gripAxis) => {
+    const wrist = out ? target.clone().setX(target.x + (i ? out : -out)) : target, pole = out ? hint.clone().setX(hint.x * .7) : hint;
+    const S = rig.S[i], E = new THREE.Vector3(); ik(S, wrist, reach[0], reach[1], pole, E);
     const fdir = wrist.clone().sub(E).normalize();
     const S0 = S.clone().add(new THREE.Vector3(i ? -.09 : .09, 0, 0));
     const pts = new THREE.CatmullRomCurve3([S0, S, E, wrist], false, 'centripetal').getSpacedPoints(14);
-    arms[i].sleeve.update(pts, pts.map((_, k) => .108 - .03 * k / 14 + .008 * Math.exp(-(((k / 14 - .55) / .12) ** 2))));
+    arms[i].sleeve.update(pts, pts.map((_, k) => thick * (.108 - .03 * k / 14 + .008 * Math.exp(-(((k / 14 - .55) / .12) ** 2)))));
     arms[i].cuff.position.copy(wrist).addScaledVector(fdir, .005); arms[i].cuff.quaternion.setFromUnitVectors(UP, fdir);
-    const grip = wrist.clone().addScaledVector(fdir, .08); arms[i].fist.position.copy(grip);
+    const grip = wrist.clone().addScaledVector(fdir, .08 * thick); arms[i].fist.position.copy(grip);
     orientGroup(arms[i].fist, gripAxis || new THREE.Vector3().crossVectors(fdir, UP).normalize(), fdir);
     return grip;
   };
@@ -1364,9 +1506,9 @@ function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, pitch = -.1 }
     for (const s of cords) {
       const sway = new THREE.Vector3(.02 * Math.sin(tq * 1.95 + s.p.x * 20), 0, lag * .15);
       const P0 = s.p.clone().addScaledVector(s.n, .006);
-      const P1 = P0.clone().addScaledVector(s.n, .02).add(new THREE.Vector3(0, -.04, 0));
-      const P2 = P0.clone().addScaledVector(s.n, .025).add(new THREE.Vector3(0, -.11, 0)).addScaledVector(sway, .5); P2.z = Math.max(P2.z, .232);
-      const P3 = P0.clone().addScaledVector(s.n, .022).add(new THREE.Vector3(0, -.19, 0)).add(sway); P3.z = Math.max(P3.z, .238);
+      const wv = wave * Math.sign(s.p.x), P1 = P0.clone().addScaledVector(s.n, .02).add(new THREE.Vector3(wv * .014, -.04 * cord, 0)); if (wave) P1.z = Math.max(P1.z, chest - .015);
+      const P2 = P0.clone().addScaledVector(s.n, .025).add(new THREE.Vector3(-wv * .018, -.11 * cord, 0)).addScaledVector(sway, .5); P2.z = Math.max(P2.z, chest);
+      const P3 = P0.clone().addScaledVector(s.n, .022).add(new THREE.Vector3(wv * .012, -.19 * cord, 0)).add(sway); P3.z = Math.max(P3.z, chest + .006);
       s.sw.update(new THREE.CatmullRomCurve3([P0, P1, P2, P3]).getSpacedPoints(8), .0075);
       s.ag.position.copy(P3).add(new THREE.Vector3(0, -.012, 0)); s.ag.quaternion.setFromUnitVectors(UP, P3.clone().sub(P2).normalize());
     }
@@ -1374,26 +1516,32 @@ function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, pitch = -.1 }
   rig.leg = (i, ankle, hint, toe = 0) => {
     const Hp = rig.H[i], K = new THREE.Vector3(); ik(Hp, ankle, .34, .34, hint, K);
     const pts = new THREE.CatmullRomCurve3([Hp.clone().add(new THREE.Vector3(0, .14, 0)), Hp, K, ankle], false, 'centripetal').getSpacedPoints(10);
-    legs[i].update(pts, pts.map((_, k) => .118 - .035 * k / 10));
+    legs[i].update(pts, pts.map((_, k) => legSize * (.118 - .035 * k / 10)));
     shoes[i].position.copy(ankle); shoes[i].rotation.set(toe, 0, 0);
   };
   return rig;
 }
 
 // ---------------- the hero
-const heroHood = buildHoodie(-.1, 0, 0);
-const heroFace = faceMat(0, [1.32, .78, .07], [.006, .004, .008]);
+const heroHood = buildHoodie(-.06, 0, 0, 4, 48, HERO_SHAPE);
+// hanging, his head lolls away from the rope
+const heroHoodHung = buildHoodie(-.06, 0, .38, 4, 48, HERO_SHAPE);
+// swimming, it's up out of the water, looking where he's going
+const heroHoodSwim = buildHoodie(-.8, 0, 0, 4, 48, HERO_SHAPE);
+const heroFace = tapeMat(HERO_SHAPE);
 const heroHoodM = hoodMat(hatch[0], .32), heroSleeveM = new THREE.MeshToonMaterial({ map: hatch[1], emissiveMap: hatch[1], emissive: 0xffffff, emissiveIntensity: .32, gradientMap: toonGrad });
 const heroPantsM = new THREE.MeshToonMaterial({ map: pantsHatch[0], emissiveMap: pantsHatch[0], emissive: 0xffffff, emissiveIntensity: .35, gradientMap: toonGrad });
 const darkHand = new THREE.MeshToonMaterial({ color: '#1c1015', gradientMap: toonGrad });
-const hero = makeRig({ hood: heroHood, hoodM: heroHoodM, sleeveM: heroSleeveM, pantsM: heroPantsM, handM: darkHand, faceM: heroFace, ol: ORANGE });
+const hero = makeRig({ hood: heroHood, hoodM: heroHoodM, sleeveM: heroSleeveM, pantsM: heroPantsM, handM: darkHand, faceM: heroFace, ol: ORANGE, rimmed: true, shoulder: [.44, -.08], out: .14, reach: [.3, .28], thick: 1.15, legSize: 1.2, eyelets: [.26, .147], chest: .285, cord: 1.5, wave: 1 });
+// a bit smaller all over, so that the hood's what's big and he doesn't tower over everyone
+const HERO_SCALE = .93, HERO_HIPS = 1.43 * HERO_SCALE; hero.body.scale.setScalar(HERO_SCALE); hero.setHood(heroHoodHung);
 const heroRoot = new THREE.Group(); scene.add(heroRoot); heroRoot.add(hero.body);
 const ropeMat = new THREE.MeshStandardMaterial({ map: ropeTex, roughness: .9 });
 // noose + rope + knot
-const nooseRing = new THREE.Mesh(new THREE.TorusGeometry(.27, .03, 8, 40), ropeMat); nooseRing.rotation.x = Math.PI / 2; nooseRing.position.set(0, .08, -.03); nooseRing.scale.set(1, .92, 1); hero.body.add(nooseRing);
-const KNOT = new THREE.Vector3(-.3, .1, -.06);
+const nooseRing = new THREE.Mesh(new THREE.TorusGeometry(.27, .03, 8, 40), ropeMat); nooseRing.rotation.x = Math.PI / 2; nooseRing.position.set(0, .2, -.03); nooseRing.scale.set(1, .92, 1); hero.body.add(nooseRing);
+const KNOT = new THREE.Vector3(.33, .2, -.06);
 const knot = new THREE.Mesh(sphGeo, ropeMat); knot.scale.set(.055, .075, .055); knot.position.copy(KNOT); hero.body.add(knot);
-const ANCHOR = new THREE.Vector3(0, DY - .34, ZS + .3);
+const ANCHOR = new THREE.Vector3(.607, DY - .34, ZS + .3);
 const ropeTop = new THREE.Mesh(new THREE.CylinderGeometry(.032, .032, 1, 8), ropeMat); outline(ropeTop, INK, 1.1); scene.add(ropeTop);
 const ropeTail = new THREE.Mesh(new THREE.CylinderGeometry(.03, .026, 1, 8), ropeMat); scene.add(ropeTail); ropeTail.visible = false; ropeTail.layers.enable(1);
 // props
@@ -1440,14 +1588,15 @@ heroRoot.traverse(o => { o.layers.enable(1); if (o.material && o.material.userDa
 const HP = { kind: 'hang', phase: 0, speed: 0, cut: 0, lag: 0, t: 0 };
 function poseHero(tq) {
   const k = HP.kind, ph = HP.phase, R = hero, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+  const head = k === 'hang' ? heroHoodHung : k === 'swim' ? heroHoodSwim : heroHood; if (R.hm.geometry !== head.geo) R.setHood(head);
   knife.visible = k === 'hang' && HP.cut > 0; broom.visible = k === 'sweep';
   if (bottle.parent === hero.body) bottle.visible = k === 'hang';
   if (k === 'hang') {
     const lag = HP.lag;
     if (HP.cut > 0) {
       const saw = Math.sin(tq * 22) * .05 * Math.min(1, HP.cut * 6);
-      const g = R.arm(1, V3(-.16 + saw, .62 + saw * .6, .08), V3(.7, .2, .3), V3(1, 0, .2));
-      knife.position.copy(g); knife.quaternion.setFromEuler(new THREE.Euler(0, 0, -1.1));
+      const g = R.arm(1, V3(.42 + saw, .3 + saw * .6, -.02), V3(.9, .1, .3), V3(1, 0, .2));
+      knife.position.copy(g); knife.quaternion.setFromEuler(new THREE.Euler(0, 0, 1.1));
     } else {
       const g = R.arm(1, V3(.36, -.24, .2), V3(.8, -.35, -.25), V3(0, 1, 0));
       if (bottle.parent === hero.body) { bottle.position.copy(g).add(V3(0, -.3, 0)); bottle.quaternion.identity(); }
@@ -1496,12 +1645,21 @@ function poseHero(tq) {
 }
 
 // ================================================================ townsfolk
-const npcHood = buildHoodie(.08, 0, 0);
-function makeNPC({ name, x, z, yaw, hatchCols, ol, pat, ca, cb, extra }) {
-  const ht = makeHatch(name.length * 7907, '#0a080c', hatchCols, 640);
-  const hm = hoodMat(ht, .3), sm = new THREE.MeshToonMaterial({ map: ht, emissiveMap: ht, emissive: 0xffffff, emissiveIntensity: .3, gradientMap: toonGrad });
-  const rig = makeRig({ hood: npcHood, hoodM: hm, sleeveM: sm, pantsM: heroPantsM, handM: darkHand, faceM: faceMat(pat, ca, cb), ol });
-  const root = new THREE.Group(); root.add(rig.body); rig.body.position.y = 1.43; root.position.set(x, Y0, z); root.rotation.y = yaw; scene.add(root);
+// What they wear is in data/looks.json. Nobody gets the hero's hoodie or his face: those are his alone.
+const LOOKS = await (await fetch('data/looks.json')).json();
+const SKULL_ASPECT = (TOWN_SHAPE.openY[1] - TOWN_SHAPE.openY[0]) / (TOWN_OPEN.W * 2), CLOTH_RANGE = { from: TOWN_SHAPE.rings[0][0], to: TOWN_SHAPE.rings[TOWN_SHAPE.rings.length - 1][0] };
+const canvasFor = (w, h, draw, repeat) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; draw(cv.getContext('2d')); return toTex(cv, repeat); };
+// a line only blooms if it's meant to
+const lineBright = (look) => (look.line.style === 'glow' ? 1.25 : .8), lineHex = (look) => '#' + new THREE.Color(look.line.color).multiplyScalar(lineBright(look)).getHexString();
+const townHood = buildHoodie(.08, 0, 0, 3, 32, TOWN_SHAPE);
+const townPantsM = new THREE.MeshToonMaterial({ color: '#2a2436', emissive: '#120e18', gradientMap: toonGrad });
+function makeNPC({ id, name, x, z, yaw, extra }) {
+  const look = LOOKS.cast[id];
+  const hm = clothMat(canvasFor(1024, 512, (g) => drawCloth(g, 0, 0, 1024, 512, look, CLOTH_RANGE), true)), sm = clothMat(canvasFor(256, 256, (g) => drawCloth(g, 0, 0, 256, 256, look, { ...CLOTH_RANGE, sleeve: true }), true));
+  const skull = canvasFor(512, Math.round(512 * SKULL_ASPECT), (g) => drawSkull(g, 0, 0, 512, Math.round(512 * SKULL_ASPECT), look), false);
+  const rig = makeRig({ hood: townHood, hoodM: hm, sleeveM: sm, pantsM: townPantsM, handM: darkHand, faceM: skullMat(skull, { line: look.line.color, glow: lineBright(look) }), ol: lineHex(look), lineK: 1.15, lineStyle: look.line.style === 'spikes' ? { spikes: true } : undefined, shoulder: [.39, -.07], out: .09, reach: [.31, .3], thick: 1.08, legSize: 1.12, eyelets: [.33, .1], chest: .25, cord: 1.25, cordColor: look.tassels.color });
+  rig.setHood(townHood);
+  const root = new THREE.Group(); root.add(rig.body); rig.body.scale.setScalar(TOWN_SCALE); rig.body.position.y = TOWN_HIPS; root.position.set(x, Y0, z); root.rotation.y = yaw; scene.add(root);
   const V3 = (a, b, c) => new THREE.Vector3(a, b, c);
   rig.arm(0, V3(-.36, -.58, .08), V3(-.7, -.35, -.25)); rig.arm(1, V3(.36, -.58, .08), V3(.7, -.35, -.25));
   rig.leg(0, V3(-.13, -1.36, 0), V3(-.1, -1, .8)); rig.leg(1, V3(.13, -1.36, 0), V3(.1, -1, .8)); rig.strings(0, 0);
@@ -1512,15 +1670,14 @@ function makeNPC({ name, x, z, yaw, hatchCols, ol, pat, ca, cb, extra }) {
 }
 const gold = new THREE.MeshStandardMaterial({ color: '#e8b54a', metalness: .9, roughness: .3, emissive: '#3a2a08' });
 const NPCS = {
-  coop: makeNPC({ name: 'Coop', x: 53 + PLACES.gas.x, z: 8.4 + PLACES.gas.z, yaw: Math.PI * .95, hatchCols: ['#5f7a3a', '#8aa14d', '#2c3a1c'], ol: '#e8b54a', pat: 3, ca: [.35, 1.6, .5], cb: [.01, .02, .01],
-    extra: (b) => { const ch = new THREE.Mesh(new THREE.TorusGeometry(.2, .018, 6, 24), gold); ch.rotation.x = Math.PI / 2 - .5; ch.position.set(0, -.05, .12); b.add(ch);
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(.24, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshToonMaterial({ color: '#1b2a4a', gradientMap: toonGrad })); cap.position.set(0, .48, -.03); b.add(outline(cap, INK, 1.5));
-      const brim = new THREE.Mesh(new THREE.BoxGeometry(.3, .02, .2), cap.material); brim.position.set(0, .5, .26); b.add(outline(brim, INK, 1.2)); } }),
-  tre: makeNPC({ name: 'Tre', x: BOX.x + 3.3, z: BOX.z - 3, yaw: Math.PI * .9, hatchCols: ['#8a7a40', '#5a4a24', '#c9b66a'], ol: '#6fd6c8', pat: 1, ca: [.2, 1.5, 1.4], cb: [.01, .015, .02],
-    extra: (b) => { const sh = new THREE.Mesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#050407', metalness: .8, roughness: .2 })); sh.scale.set(.34, .07, .05); sh.position.set(0, .34, .28); b.add(outline(sh, INK, 1)); } }),
-  odessa: makeNPC({ name: 'Miss Odessa', x: 68.5 + PLACES.church.x, z: -5.8 + PLACES.church.z, yaw: 0, hatchCols: ['#8a3a8a', '#c25ac2', '#4a1e4a'], ol: '#f1e6cf', pat: 2, ca: [1.6, .9, 1.4], cb: [.02, .01, .02],
-    extra: (b) => { const hat = new THREE.Mesh(new THREE.CylinderGeometry(.45, .45, .04, 24), new THREE.MeshToonMaterial({ color: '#f1e6cf', gradientMap: toonGrad })); hat.position.set(0, .55, -.02); b.add(outline(hat, INK, 1.3));
-      const crown = new THREE.Mesh(new THREE.CylinderGeometry(.2, .24, .18, 18), hat.material); crown.position.set(0, .64, -.03); b.add(outline(crown, INK, 1.2)); } })
+  coop: makeNPC({ id: 'coop', name: 'Coop', x: 53 + PLACES.gas.x, z: 8.4 + PLACES.gas.z, yaw: Math.PI * .95,
+    extra: (b) => { const ch = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([[-.235, .15, .17], [-.17, .01, .245], [-.08, -.12, .262], [0, -.165, .268], [.08, -.12, .262], [.17, .01, .245], [.235, .15, .17]].map((p) => new THREE.Vector3(...p))), 24, .017, 6), gold); b.add(ch);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(.285, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshToonMaterial({ color: '#1b2a4a', emissive: '#0a1020', gradientMap: toonGrad })); cap.scale.y = .86; cap.position.set(0, .68, -.045); b.add(outline(cap, INK, 1.5));
+      const brim = new THREE.Mesh(new THREE.BoxGeometry(.36, .022, .22), cap.material); brim.position.set(0, .695, .29); b.add(outline(brim, INK, 1.2)); } }),
+  tre: makeNPC({ id: 'tre', name: 'Tre', x: BOX.x + 3.3, z: BOX.z - 3, yaw: Math.PI * .9 }),
+  odessa: makeNPC({ id: 'odessa', name: 'Miss Odessa', x: 68.5 + PLACES.church.x, z: -5.8 + PLACES.church.z, yaw: 0,
+    extra: (b) => { const hat = new THREE.Mesh(new THREE.CylinderGeometry(.47, .47, .04, 24), new THREE.MeshToonMaterial({ color: '#b8ad96', gradientMap: toonGrad })); hat.position.set(0, .8, -.06); b.add(outline(hat, INK, 1.3));
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(.2, .24, .18, 18), hat.material); crown.position.set(0, .89, -.07); b.add(outline(crown, INK, 1.2)); } })
 };
 for (const n of Object.values(NPCS)) solid(n.root.position.x - .4, n.root.position.x + .4, n.root.position.z - .4, n.root.position.z + .4, Y0 + 2);
 
@@ -1541,47 +1698,53 @@ const PICKUPS = [
 // ================================================================ the crowd's bodies
 // One body drawn many times: a hood, a face and four limbs, each a single mesh whoever's in it, so forty-eight of them
 // cost seven draw calls where one townsperson costs forty. Their limbs don't bend, which is most of what those forty pay for.
-// The look stands in until the owner says what they are.
-const CROWD_SHOWN = 48, CROWD_SEE = 110;
+// What they're wearing is on one sheet, with a row for each look, and they read their own off it.
+const CROWD_SHOWN = 48, CROWD_SEE = 110, CROWD_LOOKS = LOOKS.crowd, CROWD_LINE = CROWD_LOOKS.map((l) => new THREE.Color(l.line.color).multiplyScalar(lineBright(l)).toArray());
 const crowdGroup = new THREE.Group(); crowdGroup.visible = false; scene.add(crowdGroup);
-const crowdHatch = [1, 2, 3].map((k) => makeHatch(k * 15485, '#0a080c', ['#6f6878', '#938c9c', '#3d3844'], 420));
-const crowdCloth = () => new THREE.MeshToonMaterial({ map: crowdHatch[0], emissiveMap: crowdHatch[0], emissive: 0xffffff, emissiveIntensity: .26, gradientMap: toonGrad });
-const crowdHoodM = crowdCloth(), crowdSleeveM = crowdCloth(), crowdBody = buildHoodie(.3, 0, 0, 1, 16);
+const crowdCloth = canvasFor(512, 256 * CROWD_LOOKS.length, (g) => CROWD_LOOKS.forEach((look, i) => drawCloth(g, 0, (CROWD_LOOKS.length - 1 - i) * 256, 512, 256, look, { ...CLOTH_RANGE, painted: true })), true);
+crowdCloth.wrapT = THREE.ClampToEdgeWrapping;
+const crowdSkull = canvasFor(256 * CROWD_LOOKS.length, Math.round(256 * SKULL_ASPECT), (g) => CROWD_LOOKS.forEach((look, i) => drawSkull(g, i * 256, 0, 256, Math.round(256 * SKULL_ASPECT), look)), false);
+const crowdClothM = clothMat(crowdCloth, { rows: CROWD_LOOKS.length }), crowdBody = buildHoodie(.3, 0, 0, 1, 16, TOWN_SHAPE);
 function crowdMesh(geo, mat, n, share) {
   const m = new THREE.InstancedMesh(geo, mat, n); m.frustumCulled = false; m.count = 0;
   if (share) m.instanceMatrix = share.instanceMatrix; else m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   crowdGroup.add(m); return m;
 }
-const crowdLines = (m, px) => crowdMesh(m.geometry, outlineMat('#a99bc0', px, 1), m.instanceMatrix.count, m);
+const crowdLines = (m, px, tint) => { const o = crowdMesh(m.geometry, outlineMat('#ffffff', px, 1, { tinted: true }), m.instanceMatrix.count, m); o.instanceColor = tint; return o; };
+const crowdAttr = (n, size = 1) => new THREE.InstancedBufferAttribute(new Float32Array(n * size), size).setUsage(THREE.DynamicDrawUsage);
 // a limb hangs down from its pivot, with a hand or a foot on the end
 const crowdLimb = (len, top, end, tip) => mergeGeometries([new THREE.CylinderGeometry(top, end, len, 6, 2, true).translate(0, -len / 2, 0), tip.translate(0, -len, 0)]);
-const crowdArmGeo = crowdLimb(.66, .1, .075, new THREE.SphereGeometry(.078, 6, 4).scale(.9, 1.15, .8).translate(0, -.05, 0));
+const crowdArmGeo = crowdLimb(.66, .11, .08, new THREE.SphereGeometry(.082, 6, 4).scale(.9, 1.15, .8).translate(0, -.05, 0));
+// sleeves take their cloth from his back, where nothing's painted on, and a hand takes its black from his hem
+{ const uv = crowdArmGeo.attributes.uv, sleeve = new THREE.CylinderGeometry(.11, .08, .66, 6, 2, true).attributes.position.count; for (let i = 0; i < uv.count; i++) { if (i < sleeve) uv.setXY(i, .55 + uv.getX(i) * .3, .08 + uv.getY(i) * .4); else uv.setXY(i, .5, .014); } }
 const crowdLegGeo = crowdLimb(.66, .115, .08, new THREE.SphereGeometry(.088, 6, 4).scale(.85, .6, 1.6).translate(0, -.02, .07));
-const crowdHoods = crowdMesh(crowdBody.geo, crowdHoodM, CROWD_SHOWN);
-crowdHoods.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CROWD_SHOWN * 3).fill(1), 3).setUsage(THREE.DynamicDrawUsage);
-crowdBody.faceGeo.setAttribute('aHot', new THREE.InstancedBufferAttribute(new Float32Array(CROWD_SHOWN), 1).setUsage(THREE.DynamicDrawUsage));
-const crowdFaces = crowdMesh(crowdBody.faceGeo, faceMat(4, [.46, .42, .55], [.012, .01, .016], [1.7, .5, .14]), CROWD_SHOWN, crowdHoods); crowdFaces.renderOrder = 2;
-const crowdArms = crowdMesh(crowdArmGeo, crowdSleeveM, CROWD_SHOWN * 2), crowdLegs = crowdMesh(crowdLegGeo, heroPantsM, CROWD_SHOWN * 2);
-const crowdParts = [crowdHoods, crowdFaces, crowdLines(crowdHoods, 3), crowdArms, crowdLines(crowdArms, 2.2), crowdLegs, crowdLines(crowdLegs, 2)];
+const crowdLook = crowdAttr(CROWD_SHOWN), crowdLimbLook = crowdAttr(CROWD_SHOWN * 2), crowdLine = crowdAttr(CROWD_SHOWN, 3), crowdLimbLine = crowdAttr(CROWD_SHOWN * 2, 3), crowdHot = crowdAttr(CROWD_SHOWN);
+crowdBody.geo.setAttribute('iLook', crowdLook); crowdArmGeo.setAttribute('iLook', crowdLimbLook);
+crowdBody.faceGeo.setAttribute('iLook', crowdLook); crowdBody.faceGeo.setAttribute('iLine', crowdLine); crowdBody.faceGeo.setAttribute('aHot', crowdHot);
+const crowdSkullM = skullMat(crowdSkull, { cells: CROWD_LOOKS.length }); crowdSkullM.uniforms.uTilt.value.copy(crowdBody.tilt);
+const crowdHoods = crowdMesh(crowdBody.geo, crowdClothM, CROWD_SHOWN);
+const crowdFaces = crowdMesh(crowdBody.faceGeo, crowdSkullM, CROWD_SHOWN, crowdHoods); crowdFaces.renderOrder = 2;
+const crowdArms = crowdMesh(crowdArmGeo, crowdClothM, CROWD_SHOWN * 2), crowdLegs = crowdMesh(crowdLegGeo, townPantsM, CROWD_SHOWN * 2);
+const crowdParts = [crowdHoods, crowdFaces, crowdLines(crowdHoods, 3.4, crowdLine), crowdArms, crowdLines(crowdArms, 2.6, crowdLimbLine), crowdLegs, crowdLines(crowdLegs, 2.2, crowdLimbLine)];
 const _cb = new THREE.Matrix4(), _cu = new THREE.Matrix4(), _cl = new THREE.Matrix4(), _cm = new THREE.Matrix4(), _cp = new THREE.Vector3(), _cq = new THREE.Quaternion(), _cs = new THREE.Vector3(), _ce = new THREE.Euler();
 const GAIT = [3.6, 4.6, 9, 11, 16, 0];   // how quickly their limbs go, by state
 const crowdShown = [];
 let crowdPicked = -1, crowdDrawn = -1;
 // Redrawn on the 12 fps step like everyone else, and they move on it too, which is also why it's cheap
 function drawCrowd(step) {
-  const k = step % 3; crowdHoodM.map = crowdHoodM.emissiveMap = crowdHatch[k]; crowdSleeveM.map = crowdSleeveM.emissiveMap = crowdHatch[(k + 1) % 3];
   // who's drawn, nearest first, four times a second
   if (Math.floor(step / 3) !== crowdPicked) {
     crowdPicked = Math.floor(step / 3); crowdShown.length = 0;
     for (const s of horde.active) { s.seen = Math.hypot(s.x - camera.position.x, s.z - camera.position.z); if (s.seen < CROWD_SEE) crowdShown.push(s); }
     crowdShown.sort((a, b) => a.seen - b.seen); if (crowdShown.length > CROWD_SHOWN) crowdShown.length = CROWD_SHOWN;
   }
-  const hoods = crowdHoods.instanceMatrix.array, arms = crowdArms.instanceMatrix.array, legs = crowdLegs.instanceMatrix.array, heat = crowdBody.faceGeo.attributes.aHot.array, tint = crowdHoods.instanceColor.array;
+  const hoods = crowdHoods.instanceMatrix.array, arms = crowdArms.instanceMatrix.array, legs = crowdLegs.instanceMatrix.array;
   crowdShown.forEach((s, i) => {
     const st = s.state, after = st === HUNTING || st === SWARM || st === GRABBING, still = !s.moving && st !== GRABBING;
     s.gait += GAIT[st] / 12 * (still ? .2 : 1);
     const p = s.gait, stride = still ? 0 : after ? .62 : .36;
-    _cb.compose(_cp.set(s.x, s.y + 1.43 * s.size + Math.abs(Math.sin(p)) * .03, s.z), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(s.size));
+    const look = s.look % CROWD_LOOKS.length, size = s.size * TOWN_SCALE;
+    _cb.compose(_cp.set(s.x, s.y + 1.43 * size + Math.abs(Math.sin(p)) * .03, s.z), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(size));
     // the top half leans from the hips, so the feet stay on the ground
     _cl.makeRotationFromEuler(_ce.set(st === STUNNED ? -.25 : after ? .34 : .14, 0, st === STUNNED ? Math.sin(step * .9) * .12 : Math.sin(p) * (after ? .05 : .1)));
     const e = _cl.elements; _cl.setPosition(.7 * e[4], -.7 + .7 * e[5], .7 * e[6]);
@@ -1589,16 +1752,17 @@ function drawCrowd(step) {
     for (let a = 0; a < 2; a++) {
       const side = a ? 1 : -1, swing = Math.sin(p + (a ? Math.PI : 0));
       const reach = after ? -1.3 + Math.sin(p * 1.3 + a * 2) * .16 : st === CURIOUS ? -.4 - a * .25 : st === STUNNED ? .15 : swing * .18;
-      _cl.makeRotationFromEuler(_ce.set(reach, 0, side * (after ? .05 : .13))).setPosition(side * .3, -.07, 0);
+      _cl.makeRotationFromEuler(_ce.set(reach, 0, side * (after ? .05 : .13))).setPosition(side * .39, -.07, 0);
       _cm.multiplyMatrices(_cu, _cl).toArray(arms, (i * 2 + a) * 16);
       _cl.makeRotationFromEuler(_ce.set(-swing * stride * (a === s.limp ? .55 : 1), 0, side * .03)).setPosition(side * .13, -.7, 0);
       _cm.multiplyMatrices(_cb, _cl).toArray(legs, (i * 2 + a) * 16);
     }
-    heat[i] = after ? 1 : st === CURIOUS ? .42 : st === STUNNED ? .2 : 0;
-    const c = CROWD_TINTS[s.look % CROWD_TINTS.length]; tint[i * 3] = c[0]; tint[i * 3 + 1] = c[1]; tint[i * 3 + 2] = c[2];
+    crowdHot.array[i] = after ? 1 : st === CURIOUS ? .42 : st === STUNNED ? .2 : 0;
+    crowdLook.array[i] = look; crowdLine.array.set(CROWD_LINE[look], i * 3);
+    for (let a = 0; a < 2; a++) { crowdLimbLook.array[i * 2 + a] = look; crowdLimbLine.array.set(CROWD_LINE[look], (i * 2 + a) * 3); }
   });
   for (const m of crowdParts) m.count = crowdShown.length * (m.instanceMatrix.count / CROWD_SHOWN);
-  crowdHoods.instanceMatrix.needsUpdate = crowdArms.instanceMatrix.needsUpdate = crowdLegs.instanceMatrix.needsUpdate = crowdHoods.instanceColor.needsUpdate = crowdBody.faceGeo.attributes.aHot.needsUpdate = true;
+  crowdHoods.instanceMatrix.needsUpdate = crowdArms.instanceMatrix.needsUpdate = crowdLegs.instanceMatrix.needsUpdate = crowdLook.needsUpdate = crowdLimbLook.needsUpdate = crowdLine.needsUpdate = crowdLimbLine.needsUpdate = crowdHot.needsUpdate = true;
 }
 
 // ================================================================ water moccasins
@@ -1884,7 +2048,9 @@ Object.assign(S.flags, people.flags());
 // what dialogue reads and changes
 const played = { flags: S.flags, items: S.items, get beans() { return S.beans; }, addBeans };
 const player = { pos: new THREE.Vector3(), vy: 0, yaw: Math.PI, grounded: true, inv: 0, stamina: 1, boostT: 0, kb: new THREE.Vector2(), fallV: new THREE.Vector3(), lastSafe: new THREE.Vector3() };
-const cam = { yaw: -.6, pitch: .28, shake: 0, snap: false };
+const cam = { yaw: -.6, pitch: .28, shake: 0, snap: false, talk: 0 };
+// over his shoulder when he's talking: how far back, how far out, how high, how high it looks, and how far along towards them
+const TALK = { back: 3, out: 1.7, up: 2.45, look: 1.5, along: .27 }, _talk = new THREE.Vector3();
 let toastT = 0, cardT = 0;
 // game-clock timers, so story beats wait for the game when the tab sleeps or a test holds the clock
 const timers = [];
@@ -1982,6 +2148,7 @@ $('retry').addEventListener('click', () => {
 const ACTIONS = { sweep: () => startSweep() };
 function openDialog(id) {
   const node = people.line(id, played); people.meet(node.whoId); people.apply(node.do, played);
+  if (S.mode !== 'dialog') faceWhoever(NPCS[node.whoId]);
   S.mode = 'dialog'; HP.speed = 0; $('dialog').hidden = false; prompt(null);
   $('dWho').textContent = node.who; $('dSay').textContent = node.say;
   const box = $('dOpts'); box.innerHTML = '';
@@ -1995,6 +2162,15 @@ function openDialog(id) {
   });
   hudVitals();
   setTimeout(() => { const f = box.querySelector('button'); if (f && !touchUI) f.focus(); }, 30);
+}
+// He turns to them, and the camera goes over whichever shoulder has room. With his back to a wall, it goes over theirs and looks at him.
+function faceWhoever(n) {
+  S.talkTo = n; if (!n) return;
+  const P = player.pos, N = n.root.position, L = Math.hypot(N.x - P.x, N.z - P.z) || 1, ux = (N.x - P.x) / L, uz = (N.z - P.z) / L;
+  cam.yaw = Math.atan2(-ux, -uz);
+  const clear = (from, dir, side, k) => { for (let t = .3; t <= 1; t += .1) if (blocked(from.x + t * k * (-dir * ux * TALK.back - dir * uz * side * TALK.out), from.z + t * k * (-dir * uz * TALK.back + dir * ux * side * TALK.out), P.y + 1)) return false; return true; };
+  S.talk = { side: 1, k: .45, dir: 1 };
+  for (const k of [1, .8, .62, .45]) for (const [from, dir] of [[P, 1], [N, -1]]) for (const side of [1, -1]) if (clear(from, dir, side, k)) { S.talk = { side, k, dir }; return; }
 }
 function closeDialog() { $('dialog').hidden = true; if (S.mode === 'dialog') S.mode = 'town'; townObjective(); }
 const street = (id) => MAP.roadById.get(id).name;
@@ -2042,7 +2218,7 @@ function cutDown() {
   const wp = new THREE.Vector3(), wq = new THREE.Quaternion(); hero.body.getWorldPosition(wp); hero.body.getWorldQuaternion(wq);
   heroRoot.position.copy(wp); heroRoot.quaternion.copy(wq); hero.body.position.set(0, 0, 0); hero.body.quaternion.identity();
   player.fallV.set(0, 0, .5); player.yaw = new THREE.Euler().setFromQuaternion(wq, 'YXZ').y;
-  ropeTail.visible = true; hero.body.add(ropeTail); ropeTail.position.copy(KNOT).add(new THREE.Vector3(0, .26, 0)); ropeTail.scale.set(1, .5, 1); ropeTail.quaternion.identity();
+  ropeTail.visible = true; hero.body.add(ropeTail); ropeTail.position.copy(KNOT).add(new THREE.Vector3(.18, .17, 0)); ropeTail.scale.set(1, .5, 1); ropeTail.rotation.set(0, 0, -.7);
   dropProp(lantern, true);
   addRipple(heroRoot.position.x, heroRoot.position.z, .2, 1);
 }
@@ -2133,7 +2309,6 @@ const horde = createHorde({
 });
 // where they start: along the streets of town, thickest on US 80
 const CROWD_STREETS = [['us_80', [120, 0], [900, 18], 56], ['church_st', [206, -397], [634, -181], 20], ['adams_st', [632, -5], [630, -320], 20]];
-const CROWD_TINTS = [[1, 1, 1], [1.2, .95, .82], [.85, 1.08, .88], [.9, .9, 1.25], [1.15, 1.08, .9]];
 let crowdOut = false;
 function bringOutCrowd() {
   if (crowdOut) return; crowdOut = true; crowdGroup.visible = true; S.hp = 3;
@@ -2185,7 +2360,7 @@ function tick(dt, draw = true) {
     const swing = Math.cos(time * 2.4) * .1;
     heroRoot.position.copy(ANCHOR); heroRoot.rotation.set(swing, 0, .04 * Math.sin(time * 2.1));
     HP.lag = -swing;
-    const kn = KNOT.clone(); hero.body.position.set(-kn.x, -2 - kn.y, -kn.z);
+    const kn = KNOT.clone().multiplyScalar(HERO_SCALE); hero.body.position.set(-kn.x, -2.1, -kn.z);
     ropeTop.position.copy(ANCHOR).add(new THREE.Vector3(0, -1, 0).applyEuler(heroRoot.rotation)); ropeTop.quaternion.setFromEuler(heroRoot.rotation); ropeTop.scale.set(1, 2, 1);
     if (M === 'hang' && cardT <= 0) {
       if (input.a) { HP.cut = Math.min(1, HP.cut + dt / 2.4); if (bottle.parent === hero.body && HP.cut > 0) { dropProp(bottle, true); } }
@@ -2305,7 +2480,7 @@ function tick(dt, draw = true) {
   if (M === 'swim' || M === 'land' || M === 'bridge' || M === 'town' || M === 'grabbed' || M === 'sweep' || M === 'dialog' || M === 'end' || (M === 'fail' && !S.flags.bridgeStarted)) {
     heroRoot.position.copy(player.pos); heroRoot.rotation.set(0, player.yaw, 0);
     if (HP.kind === 'swim') { hero.body.position.set(0, .2, 0); hero.body.rotation.set(.95, 0, Math.sin(HP.phase) * .08); }
-    else { const bob = Math.abs(Math.sin(HP.phase)) * .05 * Math.min(1, HP.speed / 4); hero.body.position.set(0, 1.43 + bob, 0); hero.body.rotation.set(HP.kind === 'struggle' ? .32 : .1 * Math.min(1, HP.speed / 4), 0, 0); }
+    else { const bob = Math.abs(Math.sin(HP.phase)) * .05 * Math.min(1, HP.speed / 4); hero.body.position.set(0, HERO_HIPS + bob, 0); hero.body.rotation.set(HP.kind === 'struggle' ? .32 : .1 * Math.min(1, HP.speed / 4), 0, 0); }
   }
   hero.body.visible = !(player.inv > 0 && Math.floor(time * 16) % 2 === 0 && player.inv < 1.3);
   // dropped props: lantern and bottle fall, float, sink glowing
@@ -2315,10 +2490,10 @@ function tick(dt, draw = true) {
   }
   // townsfolk idle and turn toward you when you're close
   for (const n of Object.values(NPCS)) {
-    n.ph += dt; n.rig.body.position.y = 1.43 + Math.sin(n.ph * 1.6) * .012;
+    n.ph += dt; n.rig.body.position.y = TOWN_HIPS + Math.sin(n.ph * 1.6) * .012;
     const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z);
     const want = d < 7 && (M === 'town' || M === 'dialog') ? Math.atan2(player.pos.x - n.root.position.x, player.pos.z - n.root.position.z) : n.yaw;
-    n.root.rotation.y += angDiff(n.root.rotation.y, want) * Math.min(1, dt * 3); n.tag.visible = d < 14 && M !== 'title';
+    n.root.rotation.y += angDiff(n.root.rotation.y, want) * Math.min(1, dt * 3); n.tag.visible = d < 14 && M !== 'title' && M !== 'dialog';
     // their limbs never frustum-cull, so someone across town costs forty draw calls for a few pixels in the fog
     n.root.visible = Math.hypot(n.root.position.x - camera.position.x, n.root.position.z - camera.position.z) < 95;
   }
@@ -2335,11 +2510,20 @@ function tick(dt, draw = true) {
     const tgt = heroRoot.position.clone().add(new THREE.Vector3(0, swim ? .55 : 1.55, 0));
     const moving = Math.hypot(input.x, input.y) > .1;
     if (moving && time - lastLook > 1.2 && M !== 'fall') cam.yaw += angDiff(cam.yaw, player.yaw + Math.PI) * Math.min(1, dt * 1.6);
-    const dist = swim ? 4.6 : M === 'dialog' ? 3.4 : 5.4;
+    const dist = swim ? 4.6 : 5.4;
     // looking down on him when he's held, or whoever's holding him is all you'd see
     const pitch = M === 'grabbed' ? Math.max(cam.pitch, .9) : cam.pitch;
     V.set(Math.sin(cam.yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(cam.yaw) * Math.cos(pitch)).multiplyScalar(dist).add(tgt);
     if (V.y < .35) V.y = .35;
+    // talking: over his shoulder, looking between them, or a hood that size is all you'd see of whoever it is
+    cam.talk = clamp(cam.talk + (M === 'dialog' && S.talkTo ? dt : -dt) * 2.5, 0, 1);
+    if (cam.talk > 0 && S.talkTo) {
+      const H = heroRoot.position, N = S.talkTo.root.position, L = Math.hypot(N.x - H.x, N.z - H.z) || 1, { side, k, dir } = S.talk, A = dir > 0 ? H : N, ux = (N.x - H.x) / L * dir, uz = (N.z - H.z) / L * dir;
+      if (M === 'dialog') player.yaw += angDiff(player.yaw, Math.atan2(ux * dir, uz * dir)) * Math.min(1, dt * 7);
+      const w = sstep(0, 1, cam.talk);
+      V.lerp(_talk.set(A.x + k * (-ux * TALK.back - uz * side * TALK.out), H.y + TALK.up, A.z + k * (-uz * TALK.back + ux * side * TALK.out)), w);
+      tgt.lerp(_talk.set(A.x + ux * L * TALK.along, H.y + TALK.look, A.z + uz * L * TALK.along), w);
+    }
     if (cam.snap) { camera.position.copy(V); cam.snap = false; } else camera.position.lerp(V, 1 - Math.exp(-dt * (M === 'fall' ? 3 : 7)));
     if (cam.shake > 0) { cam.shake -= dt; camera.position.x += (Math.random() - .5) * cam.shake * .3; camera.position.y += (Math.random() - .5) * cam.shake * .3; }
     camera.lookAt(tgt); if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }

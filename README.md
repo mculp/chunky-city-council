@@ -17,6 +17,7 @@ Then open http://localhost:8000. It needs a network connection for three.js and 
 
 - `index.html`: the game
 - `src/map.js`: the road graph as the game walks on it
+- `src/looks.js`: draws what everyone but the hero wears, from `data/looks.json`
 - `reference/stuckeys-bridge.html`: the scene the game grew out of
 - `docs/art-direction.md`: how it should look
 - `data/roads.json`: the road graph of real Chunky, MS, generated from Census TIGER/Line data

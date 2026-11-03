@@ -2,7 +2,7 @@
 
 `data/cast.json` holds everyone you can talk to: how they feel about you, what ties them together, and what they say. `src/people.js` runs it. `npm test` checks the file, and fails on anything that would only go wrong in play, like an option that goes nowhere or a conversation that can run out of answers.
 
-To add someone: give them a `cast` entry, a dialogue node with the same id, and a rig in `NPCS` in `index.html`.
+To add someone: give them a `cast` entry, a dialogue node with the same id, a look in `data/looks.json`, and a rig in `NPCS` in `index.html`.
 
 Who these people are, and what they say, is the owner's. The words here came from the prototype unchanged, except Coop's directions to the tracks, which the new map made wrong. The meter changes that weren't in the prototype, and the ties, are starting values to tune.
 

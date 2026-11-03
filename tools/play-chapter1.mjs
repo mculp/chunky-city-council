@@ -54,9 +54,15 @@ const talk = async (id, who) => {
   const r = await walkTo(n.x, n.z, 2); blockedCheck(`walk up to ${who}`, r);
   const s = await g(() => __game.state()); check(`${who} offers to talk`, s.prompt.includes(who), s.prompt);
   const d = await g(() => press()); check(`${who} talks`, d.dialog?.who === who, d.dialog);
+  await inShot(id, who);
   return d;
 };
 const choose = (i = 0) => g((i) => __game.choose(i), i);
+// that the camera's settled somewhere you can see who he's talking to, and isn't in a wall
+const inShot = async (id, who) => {
+  const v = await g((id) => { const G = __game, n = G.npcs[id], c = G.camera, P = G.player.pos; G.step(.7); c.updateMatrixWorld(); const at = new c.position.constructor(n.x, P.y + 1.8, n.z).project(c); return { x: at.x, y: at.y, inWall: G.blocked(c.position.x, c.position.z, P.y + 1) }; }, id);
+  check(`${who}'s face is in shot`, Math.abs(v.x) < 1 && Math.abs(v.y) < 1 && !v.inWall, v);
+};
 
 // nothing's left where the prototype had it
 const PROTOTYPE = { coop: [53, 8.4], tre: [84, 12.2], odessa: [68.5, -5.8] }, PROTOTYPE_CANS = [[38.2, -12.7], [43, -9.7], [76.6, 20.6], [100, -14], [85.9, 14]];
@@ -112,7 +118,7 @@ r = await g(() => followArrow()); blockedCheck('follow the arrow to Church St', 
 d = await talk('odessa', 'Miss Odessa'); await snap('08-odessa');
 await choose(0); s = await choose(0); check('sweeping', s.mode === 'sweep', s.mode);
 await g(() => __game.key('e', true)); s = await g(() => __game.step(3.4)); await g(() => __game.key('e', false));
-check('swept for 3 beans, and twelve is plenty', s.flags.swept === true && s.beans >= 12, [s.flags.swept, s.beans]); await snap('09-swept');
+check('swept for 3 beans, and twelve is plenty', s.flags.swept === true && s.beans >= 12, [s.flags.swept, s.beans]); await inShot('odessa', 'Miss Odessa'); await snap('09-swept');
 check('nobody else on the streets for the whole chapter', !(await g(() => __game.crowd())).out);
 s = await g(() => __game.step(2)); check('the chapter ends', s.mode === 'end', s.mode); await snap('10-end');
 check('and now they come out', (await g(() => __game.crowd())).all > 0);
