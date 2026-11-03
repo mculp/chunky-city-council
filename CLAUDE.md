@@ -34,7 +34,8 @@ Read `docs/art-direction.md` before changing anything visible. `reference/stucke
 
 - 1 unit = 1 m. +X is east, +Y is up and -Z is north.
 - Map data has its origin at town center, 32.32583, -88.92806, and uses a local equirectangular projection with R = 6,371,000 m: `x = R * dLon * cos(lat0)`, `z = -R * dLat`, in radians.
-- Chapter 1's scene isn't on the map yet: its origin is the bridge and its town is a placeholder. East and west already agree (the west bank is at -X, the church at +X), but its tracks run north-south where the real railroad runs east-west.
+- The game's world has its origin at Stuckey's Bridge, which is US 80's first river crossing, so the opening scene never moves. West of the edge of town it also lays US 80 straight along z 0. `src/map.js` converts everything, and `data/roads.md` has the formulas. Place new things with `atTrue(x, z)`, in true metres from town center, so they follow the map if its compression changes.
+- Keep the opening as it is. The first scene's terrain, trees and random sequence are deliberately untouched inside its square, which is why `firstSceneH` exists and why new code doesn't call `rnd()`. Use `hash()` for anything new that needs to be random and repeatable.
 
 ## Running it
 
@@ -50,4 +51,6 @@ Then open http://localhost:8000.
 
 `npm run smoke` plays Chapter 1 in real Chrome and fails on a wrong beat or a console error. It needs `npm i` first and takes `--shots dir` for screenshots and `--touch` for a phone viewport.
 
-`index.html?test` adds `window.__game`, which is what the smoke test drives. `pause()` and `step(seconds)` hold and advance the clock, `jump(phase)` starts a phase, `place(x, z)` moves the player, `key(k, down)` and `stick(x, y)` give input, `state()` reads the game, and Math.random is seeded. A background tab runs at about 1 fps, so test with the clock held or in a real window.
+`npm run walk` walks all four roads end to end, both ways, with the game's own movement code.
+
+`index.html?test` adds `window.__game`, which is what the smoke test drives. The clock starts held. `step(seconds)` advances it and `sim(seconds)` does the same without drawing, `jump(phase)` starts a phase, `place(x, z)` moves the player, `key(k, down)` and `stick(x, y)` give input, `state()` reads the game, and Math.random is seeded. A background tab runs at about 1 fps, so test with the clock held or in a real window.

@@ -57,7 +57,7 @@ Night in an abandoned Mississippi town.
 - **The river:** it takes glowing rings where things hit it. Cottonmouths open white mouths before striking.
 - **The lantern:** the one from the local legend, a guide light with nobody holding it that leads him across the river.
 
-The town in `index.html` is a placeholder. The brief is a "perfectly 3d modeled city": the real layout and landmarks of Chunky on real street geometry, rendered in this hand-drawn style. Accuracy applies to where things are and what they are. It doesn't mean photorealism.
+The brief is a "perfectly 3d modeled city": the real layout and landmarks of Chunky on real street geometry, rendered in this hand-drawn style. Accuracy applies to where things are and what they are. It doesn't mean photorealism. The roads, the railroad and the river come from the road graph. The buildings are still the prototype's, placed along those roads, until their own tickets rebuild them.
 
 ## What only the reference has
 

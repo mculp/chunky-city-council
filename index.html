@@ -128,13 +128,16 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { loadMap } from './src/map.js';
 
 const $ = (id) => document.getElementById(id);
 await Promise.race([document.fonts.load('40px Bungee').catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ?test adds window.__game (see the bottom of this file) and seeds Math.random, so a run can be repeated
 const TEST = new URLSearchParams(location.search).has('test');
-if (TEST) { let s = 20261031; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; }
+// three.js draws on Math.random for every object's id, so it's seeded again before the particles, or adding a mesh would move them
+const seedRandom = () => { if (TEST) { let s = 20261031; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; } };
+seedRandom();
 const G = { uStep: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uBurst: { value: 0 }, uPxScale: { value: 1 }, uMask: { value: 0 } };
 const INK = '#120b14', ORANGE = '#ff7a2c', CHALK_WHITE = '#f6f2ea';
 const UP = new THREE.Vector3(0, 1, 0), XA = new THREE.Vector3(1, 0, 0);
@@ -435,8 +438,9 @@ const toonGrad = (() => { const d = new Uint8Array([70, 150, 255]); const t = ne
 
 // collect static boxes per material, then merge them into one mesh each (fewer draw calls on phones)
 const buckets = new Map();
+let OX = 0, OZ = 0;   // what a landmark's own coordinates are relative to
 function addBox(mat, cx, cy, cz, sx, sy, sz, ink = 1.5, rot = null) {
-  const m = new THREE.Matrix4().compose(new THREE.Vector3(cx, cy, cz), rot || new THREE.Quaternion(), new THREE.Vector3(sx, sy, sz));
+  const m = new THREE.Matrix4().compose(new THREE.Vector3(cx + OX, cy, cz + OZ), rot || new THREE.Quaternion(), new THREE.Vector3(sx, sy, sz));
   const k = mat.uuid + '|' + ink;
   if (!buckets.has(k)) buckets.set(k, { mat, ink, geos: [] });
   buckets.get(k).geos.push(boxGeo.clone().applyMatrix4(m));
@@ -446,37 +450,147 @@ function addBeam(a, b, w, h, mat = steelMat, ink = 1.6) {
   const q = new THREE.Quaternion().setFromUnitVectors(XA, d.clone().normalize());
   addBox(mat, (A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2, L, h, w, ink, q);
 }
-function flushBuckets() {
+// merges what's been added since the last flush into a group that's only drawn when the camera is near it
+const DISTANT = [];
+function flushBuckets(range = 300) {
+  const group = new THREE.Group(), box = new THREE.Box3(); scene.add(group);
   for (const { mat, ink, geos } of buckets.values()) {
     const g = mergeGeometries(geos); const m = new THREE.Mesh(g, mat);
-    if (ink) outline(m, INK, ink); scene.add(m);
+    if (ink) outline(m, INK, ink); group.add(m);
+    g.computeBoundingBox(); box.union(g.boundingBox);
   }
   buckets.clear();
+  const c = box.getCenter(new THREE.Vector3()), r = Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2;
+  DISTANT.push({ obj: group, x: c.x, z: c.z, r: r + range });
 }
 
 // ================================================================ world: terrain shape
 const DY = 6.0, TY = 11.6, ZS = 2.8, XE = 20, XP = 15, DECK_TOP = 6.36, ROAD_TOP = 6.2, TOWN_Y = 6.15;
-function groundH(x, z) {
-  const mz = 3.5 * Math.sin(z * .035);
-  const d = Math.abs(x - mz);
+// The opening scene's river. The map's river bends over to it near the bridge.
+const channel = (z) => 3.5 * Math.sin(z * .035);
+const MAP = await loadMap('data/roads.json', { riverAtBridge: channel });
+// where things stand, in true metres from town center, so that they move with the map if its bands change
+const atTrue = (x, z) => MAP.fromTrue(x, z);
+// The ground the first scene was drawn on, kept as it was because the trees are chosen by it.
+function firstSceneH(x, z) {
+  const d = Math.abs(x - channel(z));
   let h = -3 + 9.1 * sstep(12, 24, d);
   h += (fbm((x + 300) * .03, (z + 300) * .03, 61, 1e6, 4) - .5) * 4 * sstep(18, 34, d);
   const town = sstep(23, 30, x) * (1 - sstep(42, 56, Math.abs(z)));
   return h + (TOWN_Y - h) * town;
 }
-{
-  const g = new THREE.PlaneGeometry(300, 300, 180, 180); g.rotateX(-Math.PI / 2); g.translate(30, 0, 0);
-  const p = g.attributes.position, col = [];
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), z = p.getZ(i), h = groundH(x, z); p.setY(i, h);
-    const n = fbm((x + 500) * .12, (z + 500) * .12, 8, 1e6, 3);
-    let c = h < .6 ? lerp3(hex('#1c1420'), hex('#2a1e22'), n) : lerp3(hex('#24302b'), hex('#3a2a30'), n);
-    if (h > .6 && n > .62) c = lerp3(c, hex('#8a3a1e'), .7);
-    if (x > 26) c = lerp3(c, hex('#2c2a24'), .5);
-    col.push(Math.pow(c[0] / 255, 2.2), Math.pow(c[1] / 255, 2.2), Math.pow(c[2] / 255, 2.2));
+function riverDist(x, z) {
+  const az = Math.abs(z);
+  if (az >= 160 || Math.abs(x) > 150) return MAP.riverGrid.nearest(x, z);
+  const near = Math.abs(x - channel(z));
+  if (az <= 100) return near;
+  return near + (Math.min(MAP.riverGrid.nearest(x, z), 60) - near) * sstep(100, 160, az);
+}
+// flat ground for a building, with a margin that blends into the land around it
+const PADS = [];
+function pad(x0, x1, z0, z1, m = 8) { PADS.push({ x0: x0 + OX, x1: x1 + OX, z0: z0 + OZ, z1: z1 + OZ, m }); }
+function padWeight(x, z) {
+  let w = 0;
+  for (const p of PADS) {
+    if (x < p.x0 - p.m || x > p.x1 + p.m || z < p.z0 - p.m || z > p.z1 + p.m) continue;
+    w = Math.max(w, 1 - sstep(0, p.m, Math.hypot(Math.max(p.x0 - x, 0, x - p.x1), Math.max(p.z0 - z, 0, z - p.z1))));
   }
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.computeVertexNormals();
-  scene.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true })));
+  return w;
+}
+// US 80 narrows to the bridge's width as it comes up to it, and the bridge's own deck takes over at the abutment
+const ROAD_GAP = 20.4;
+function roadHalf(road, x, z) {
+  const half = road.width / 2, ax = Math.abs(x);
+  return road.id === 'us_80' && ax < 60 && Math.abs(z) < 8 ? 2.8 + (half - 2.8) * sstep(30, 60, ax) : half;
+}
+function groundH(x, z) {
+  const d = riverDist(x, z);
+  let h = -3 + 9.1 * sstep(12, 24, d);
+  if (d > 18) h += (fbm((x + 300) * .03, (z + 300) * .03, 61, 1e6, 4) - .5) * 4 * sstep(18, 34, d);
+  const clearing = sstep(23, 30, x) * (1 - sstep(42, 56, Math.abs(z))) * (1 - sstep(125, 180, x));
+  if (clearing > 0) h += (TOWN_Y - h) * clearing;
+  // it levels out under a road or the tracks, except where they're on a bridge over the river
+  const banks = sstep(14, 26, d);
+  if (banks > 0) {
+    const rd = MAP.roadGrid.nearest(x, z);
+    if (rd < 32) {
+      // tight around the bridge, so the first scene's trees stay on the ground they were drawn on
+      const ax = Math.abs(x), half = roadHalf(MAP.roadGrid.seg.owner, x, z), guard = Math.abs(z) < 30 ? sstep(24, 34, ax) : 1;
+      h += (TOWN_Y - h) * (1 - sstep(half + .5, half + 3 + 11 * sstep(125, 170, ax), rd)) * banks * guard;
+    }
+    const td = MAP.railGrid.nearest(x, z);
+    if (td < 24) h += (TOWN_Y - h) * (1 - sstep(3.5, 16, td)) * banks;
+  }
+  const pw = padWeight(x, z);
+  return pw > 0 ? h + (TOWN_Y - h) * pw : h;
+}
+// The ground is built in chunks around the camera, on the same grid the first scene was drawn on.
+const CH_Q = 36, CH_STEP = 300 / 180, CH_SIZE = CH_Q * CH_STEP, CH_R = matchMedia('(pointer:coarse)').matches ? 210 : 250;
+const chunkIndex = (() => {
+  const idx = new Uint16Array(CH_Q * CH_Q * 6), n = CH_Q + 1; let k = 0;
+  for (let j = 0; j < CH_Q; j++) for (let i = 0; i < CH_Q; i++) {
+    const a = i + n * j, b = i + n * (j + 1), c = i + 1 + n * (j + 1), d = i + 1 + n * j;
+    idx[k++] = a; idx[k++] = b; idx[k++] = d; idx[k++] = b; idx[k++] = c; idx[k++] = d;
+  }
+  return new THREE.BufferAttribute(idx, 1);
+})();
+const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
+const chunks = new Map(), chunkPool = [];
+const DUST = hex('#2c2a24');
+function groundColor(x, z, h, col, i) {
+  const n = fbm((x + 500) * .12, (z + 500) * .12, 8, 1e6, 3);
+  let c = h < .6 ? lerp3(hex('#1c1420'), hex('#2a1e22'), n) : lerp3(hex('#24302b'), hex('#3a2a30'), n);
+  if (h > .6 && n > .62) c = lerp3(c, hex('#8a3a1e'), .7);
+  // packed dirt around the bridge's east end, under buildings, along the shoulders and the track bed
+  let dust = x > 26 ? .5 * (1 - sstep(180, 240, x)) : 0;
+  if (Math.abs(x) > 60 && MAP.roadGrid.nearest(x, z) < MAP.roadGrid.reach) dust = Math.max(dust, .7 * sstep(60, 125, Math.abs(x)) * (1 - sstep(MAP.roadGrid.seg.owner.width / 2, MAP.roadGrid.seg.owner.width / 2 + 5, MAP.roadGrid.d)));
+  if (MAP.railGrid.nearest(x, z) < 8) dust = Math.max(dust, .8 * (1 - sstep(2, 7, MAP.railGrid.d)));
+  dust = Math.max(dust, .5 * padWeight(x, z));
+  if (dust > 0) c = lerp3(c, DUST, dust);
+  col[i] = Math.pow(c[0] / 255, 2.2); col[i + 1] = Math.pow(c[1] / 255, 2.2); col[i + 2] = Math.pow(c[2] / 255, 2.2);
+}
+function buildChunk(ci, cj) {
+  const n = CH_Q + 1;
+  let mesh = chunkPool.pop();
+  if (!mesh) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * n * 3), 3));
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * n * 3), 3));
+    g.setIndex(chunkIndex);
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1);
+    mesh = new THREE.Mesh(g, groundMat); scene.add(mesh);
+  }
+  const P = mesh.geometry.attributes.position, C = mesh.geometry.attributes.color;
+  const x0 = -120 + ci * CH_SIZE, z0 = -150 + cj * CH_SIZE;
+  let lo = Infinity, hi = -Infinity;
+  for (let j = 0, v = 0; j < n; j++) for (let i = 0; i < n; i++, v++) {
+    const x = x0 + i * CH_STEP, z = z0 + j * CH_STEP, h = groundH(x, z);
+    P.array[v * 3] = x; P.array[v * 3 + 1] = h; P.array[v * 3 + 2] = z;
+    groundColor(x, z, h, C.array, v * 3);
+    if (h < lo) lo = h; if (h > hi) hi = h;
+  }
+  P.needsUpdate = C.needsUpdate = true;
+  const s = mesh.geometry.boundingSphere; s.center.set(x0 + CH_SIZE / 2, (lo + hi) / 2, z0 + CH_SIZE / 2); s.radius = Math.hypot(CH_SIZE * .7072, (hi - lo) / 2 + 1);
+  mesh.visible = true; mesh.ci = ci; mesh.cj = cj;
+  return mesh;
+}
+// budget is how many chunks may be built now. Building one costs a few milliseconds, so play spreads them out.
+// Infinity is for when the camera has jumped: everything in reach of the fog at once, and the rest as usual.
+function updateGround(x, z, budget = 1) {
+  const r = Math.ceil(CH_R / CH_SIZE) + 1, ci0 = Math.floor((x + 120) / CH_SIZE), cj0 = Math.floor((z + 150) / CH_SIZE);
+  for (const [k, m] of chunks) {
+    const cx = -120 + (m.ci + .5) * CH_SIZE, cz = -150 + (m.cj + .5) * CH_SIZE;
+    if (Math.hypot(cx - x, cz - z) > CH_R + CH_SIZE * 2) { m.visible = false; chunkPool.push(m); chunks.delete(k); }
+  }
+  let want = null;
+  for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) {
+    const ci = ci0 + i, cj = cj0 + j, k = (ci + 4096) * 8192 + cj + 4096;
+    const d = Math.hypot(-120 + (ci + .5) * CH_SIZE - x, -150 + (cj + .5) * CH_SIZE - z);
+    if (d > CH_R + CH_SIZE * .72 || chunks.has(k)) continue;
+    if (budget === Infinity && d < 150) { chunks.set(k, buildChunk(ci, cj)); continue; }
+    if (!want || d < want.d) want = { d, ci, cj, k };
+  }
+  if (want && budget > 0) chunks.set(want.k, buildChunk(want.ci, want.cj));
 }
 
 // ================================================================ the bridge (merged), with a plank deck that can fall apart
@@ -503,7 +617,6 @@ for (const s of [-1, 1]) {
 for (let x = -XE; x <= XE; x += 5) addBeam([x, DY - .35, -ZS], [x, DY - .35, ZS], .3, .5);
 for (const s of [-1, 1]) {
   addBox(stoneMat, s * (XE + 2), DY - 4.55, 0, 4.5, 9, 8.5, 1.6);
-  addBox(asphaltMat, s > 0 ? 80 : -50, DY + .05, 0, s > 0 ? 119 : 60, .3, 5.6, 0);
 }
 // lamps at both ends of the bridge
 for (const s of [-1, 1]) {
@@ -543,6 +656,7 @@ const wrapRope = new THREE.Mesh(new THREE.TorusGeometry(.36, .045, 8, 24), new T
 wrapRope.rotation.y = Math.PI / 2; wrapRope.position.set(0, DY, ZS); scene.add(wrapRope);
 
 // ================================================================ trees (autumn hardwoods + loblolly pines), kept off the roads and the town
+let fillTrees = null;
 const swayU = { uTime: { value: 0 } };
 function swayMat(params) {
   const m = new THREE.MeshStandardMaterial(params);
@@ -557,7 +671,7 @@ function swayMat(params) {
 {
   const hard = [], pines = [];
   for (let i = 0; i < 7000 && (hard.length < 300 || pines.length < 150); i++) {
-    const x = (rnd() - .5) * 240 + 20, z = (rnd() - .5) * 240, h = groundH(x, z);
+    const x = (rnd() - .5) * 240 + 20, z = (rnd() - .5) * 240, h = firstSceneH(x, z);
     if (h < 2.2 || (Math.abs(z) < 6 && Math.abs(x) < 140)) continue;
     if (x > 24 && x < 125 && Math.abs(z) < 34) continue;
     if (x < -14 && x > -30 && z > 3 && z < 12) continue;
@@ -571,23 +685,79 @@ function swayMat(params) {
   const pal = ['#c9551f', '#e0862e', '#a8381f', '#b8481c', '#4f9f98', '#2a6f70', '#7a3050', '#d89a3a', '#356f6c'].map(c => new THREE.Color(c));
   const ppal = ['#1f4a48', '#24504c', '#173a3a', '#2c5a50'].map(c => new THREE.Color(c));
   let ti = 0, bi = 0, ci = 0;
-  for (const [x, h, z, k] of hard) {
-    const th = 3.2 * k; M.compose(P.set(x, h + th / 2, z), Q.identity(), S.set(k, th, k)); trunks.setMatrixAt(ti++, M);
+  // A tree the map's river or roads took keeps its place in the random sequence and draws at no size, so the rest stay put.
+  const seat = (x, z) => { const g = groundH(x, z); return g < 2.2 ? null : g; };
+  for (const [x, , z, k] of hard) {
+    const h = seat(x, z), gone = h === null, th = 3.2 * k; M.compose(P.set(x, h + th / 2, z), Q.identity(), gone ? S.setScalar(0) : S.set(k, th, k)); trunks.setMatrixAt(ti++, M);
     const base = pal[Math.floor(rnd() * pal.length)];
     for (let j = 0; j < 5; j++) {
       const r = (.9 + rnd() * .9) * k;
       M.compose(P.set(x + (rnd() - .5) * 2.6 * k, h + th + (rnd() - .25) * 2.2 * k, z + (rnd() - .5) * 2.6 * k), Q.setFromEuler(E.set(rnd() * 3, rnd() * 3, rnd() * 3)), S.set(r, r * (.8 + rnd() * .4), r));
+      if (gone) M.makeScale(0, 0, 0);
       blobs.setMatrixAt(bi, M); blobs.setColorAt(bi, base.clone().offsetHSL((rnd() - .5) * .04, 0, (rnd() - .5) * .12)); bi++;
     }
   }
-  for (const [x, h, z, k] of pines) {
-    const th = 6.5 * k; M.compose(P.set(x, h + th / 2, z), Q.identity(), S.set(k * .8, th, k * .8)); trunks.setMatrixAt(ti++, M);
+  for (const [x, , z, k] of pines) {
+    const h = seat(x, z), gone = h === null, th = 6.5 * k; M.compose(P.set(x, h + th / 2, z), Q.identity(), gone ? S.setScalar(0) : S.set(k * .8, th, k * .8)); trunks.setMatrixAt(ti++, M);
     const c = ppal[Math.floor(rnd() * ppal.length)];
-    for (let j = 0; j < 3; j++) { const r = (1.7 - j * .45) * k; M.compose(P.set(x, h + th - .6 * k + j * 1.25 * k, z), Q.identity(), S.set(r, 2.4 * k, r)); cones.setMatrixAt(ci, M); cones.setColorAt(ci, c); ci++; }
+    for (let j = 0; j < 3; j++) { const r = (1.7 - j * .45) * k; M.compose(P.set(x, h + th - .6 * k + j * 1.25 * k, z), Q.identity(), gone ? S.setScalar(0) : S.set(r, 2.4 * k, r)); cones.setMatrixAt(ci, M); cones.setColorAt(ci, c); ci++; }
   }
-  scene.add(trunks, blobs, cones);
-  const o1 = new THREE.InstancedMesh(blobGeo, outlineMat(INK, 1.3, 0), blobs.count); o1.instanceMatrix = blobs.instanceMatrix; scene.add(o1);
-  const o2 = new THREE.InstancedMesh(coneGeo, outlineMat(INK, 1.3, 0), cones.count); o2.instanceMatrix = cones.instanceMatrix; scene.add(o2);
+  const forest = new THREE.Group(); forest.add(trunks, blobs, cones); scene.add(forest);
+  const o1 = new THREE.InstancedMesh(blobGeo, outlineMat(INK, 1.3, 0), blobs.count); o1.instanceMatrix = blobs.instanceMatrix; forest.add(o1);
+  const o2 = new THREE.InstancedMesh(coneGeo, outlineMat(INK, 1.3, 0), cones.count); o2.instanceMatrix = cones.instanceMatrix; forest.add(o2);
+  DISTANT.push({ obj: forest, x: 20, z: 0, r: 330 });
+
+  // The rest of the map's woods come from a hash of where they stand, so walking back finds the same trees.
+  // One small pool of instances moves with the camera, the same budget as the first scene's forest.
+  const pt = new THREE.InstancedMesh(trunks.geometry, trunks.material, hard.length + pines.length);
+  const pb = new THREE.InstancedMesh(blobGeo, blobs.material, hard.length * 5), pc = new THREE.InstancedMesh(coneGeo, cones.material, pines.length * 3);
+  const po1 = new THREE.InstancedMesh(blobGeo, o1.material, pb.count), po2 = new THREE.InstancedMesh(coneGeo, o2.material, pc.count);
+  po1.instanceMatrix = pb.instanceMatrix; po2.instanceMatrix = pc.instanceMatrix;
+  pb.setColorAt(0, pal[0]); pc.setColorAt(0, ppal[0]);
+  for (const m of [pt, pb, pc, po1, po2]) { m.frustumCulled = false; m.count = 0; scene.add(m); }
+  const CELL = 11, RANGE = 135, cache = new Map();
+  const treeAt = (cx, cz) => {
+    const k = (cx + 32768) * 65536 + cz + 32768;
+    let t = cache.get(k);
+    if (t !== undefined) return t;
+    t = null;
+    const r = (i) => hash(cx, cz, 900 + i), x = (cx + r(1)) * CELL, z = (cz + r(2)) * CELL;
+    // the first scene's forest has its own square, apart from where its town stood
+    const first = x > -100 && x < 140 && z > -120 && z < 120 && !(x > 64 && x < 125 && Math.abs(z) < 34);
+    if (r(0) < .62 && !first && fbm(x * .012 + 40, z * .012 + 40, 77, 1e6, 2) > .36) {
+      const h = groundH(x, z), rd = MAP.roadGrid.nearest(x, z), half = rd < 32 ? MAP.roadGrid.seg.owner.width / 2 : 0;
+      if (h >= 2.2 && rd > half + 4 && MAP.railGrid.nearest(x, z) > 6 && padWeight(x, z) === 0) t = { x, z, h, r, pine: r(3) < .33, k: r(4) };
+    }
+    cache.set(k, t); return t;
+  };
+  let lastX = 1e9, lastZ = 1e9;
+  fillTrees = (cam_x, cam_z) => {
+    if (Math.hypot(cam_x - lastX, cam_z - lastZ) < 14) return;
+    lastX = cam_x; lastZ = cam_z;
+    let ti = 0, bi = 0, ci = 0; const cr = Math.ceil(RANGE / CELL), c0x = Math.floor(cam_x / CELL), c0z = Math.floor(cam_z / CELL);
+    for (let i = -cr; i <= cr; i++) for (let j = -cr; j <= cr; j++) {
+      if (i * i + j * j > cr * cr || ti >= pt.instanceMatrix.count) continue;
+      const t = treeAt(c0x + i, c0z + j); if (!t) continue;
+      const { x, z, h, r } = t;
+      if (t.pine) {
+        if (ci + 3 > pc.instanceMatrix.count) continue;
+        const k = .8 + t.k * .7, th = 6.5 * k; M.compose(P.set(x, h + th / 2, z), Q.identity(), S.set(k * .8, th, k * .8)); pt.setMatrixAt(ti++, M);
+        const c = ppal[Math.floor(r(5) * ppal.length)];
+        for (let n = 0; n < 3; n++) { const w = (1.7 - n * .45) * k; M.compose(P.set(x, h + th - .6 * k + n * 1.25 * k, z), Q.identity(), S.set(w, 2.4 * k, w)); pc.setMatrixAt(ci, M); pc.setColorAt(ci, c); ci++; }
+      } else {
+        if (bi + 5 > pb.instanceMatrix.count) continue;
+        const k = .7 + t.k * .9, th = 3.2 * k; M.compose(P.set(x, h + th / 2, z), Q.identity(), S.set(k, th, k)); pt.setMatrixAt(ti++, M);
+        const base = pal[Math.floor(r(5) * pal.length)];
+        for (let n = 0; n < 5; n++) {
+          const q = (u) => r(10 + n * 8 + u), w = (.9 + q(0) * .9) * k;
+          M.compose(P.set(x + (q(1) - .5) * 2.6 * k, h + th + (q(2) - .25) * 2.2 * k, z + (q(3) - .5) * 2.6 * k), Q.setFromEuler(E.set(q(4) * 3, q(5) * 3, q(6) * 3)), S.set(w, w * (.8 + q(7) * .4), w));
+          pb.setMatrixAt(bi, M); pb.setColorAt(bi, base.clone().offsetHSL((q(1) - .5) * .04, 0, (q(2) - .5) * .12)); bi++;
+        }
+      }
+    }
+    pt.count = ti; pb.count = po1.count = bi; pc.count = po2.count = ci;
+    for (const m of [pt, pb, pc]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+  };
 }
 
 // ================================================================ water (no reflection pass, so it stays light on phones)
@@ -622,18 +792,36 @@ const waterMat = new THREE.ShaderMaterial({
 });
 const water = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), waterMat); water.rotation.x = -Math.PI / 2; scene.add(water);
 
+flushBuckets();   // the bridge
+
 // ================================================================ the town: post-apocalyptic Chunky, Mississippi
 const SOLIDS = [];   // [x0,x1,z0,z1,top] blocks the player
-function solid(x0, x1, z0, z1, top) { SOLIDS.push([x0, x1, z0, z1, top]); }
+function solid(x0, x1, z0, z1, top) { SOLIDS.push([x0 + OX, x1 + OX, z0 + OZ, z1 + OZ, top]); }
 const kudzuSpots = [];
-function kudzuOn(x0, x1, y, z0, z1, n) { for (let i = 0; i < n; i++) kudzuSpots.push([x0 + rnd() * (x1 - x0), y, z0 + rnd() * (z1 - z0)]); }
+function kudzuOn(x0, x1, y, z0, z1, n) { for (let i = 0; i < n; i++) kudzuSpots.push([x0 + OX + rnd() * (x1 - x0), y, z0 + OZ + rnd() * (z1 - z0)]); }
 const lit = (c, i = 1) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(i) });
 const Y0 = TOWN_Y;
+// Each landmark is built in its own coordinates, around an origin on the map. PLACES is that origin.
+const worldX = (trueX) => atTrue(trueX, 0)[0];
+const onRoadAt = (id, x) => ({ x, z: MAP.zAt(id, x) });
+const PLACES = {
+  // old x 55, on the frontage, the first thing you reach coming in from the bridge
+  gas: (() => { const p = onRoadAt('us_80', 270); return { x: p.x - 55, z: p.z }; })(),
+  store: (() => { const p = onRoadAt('us_80', worldX(-450)); return { x: p.x - 40, z: p.z }; })(),
+  church: (() => { const p = onRoadAt('church_st', worldX(-520)); return { x: p.x - 68.5, z: p.z }; })(),
+  // a siding on the town side of the main line
+  boxcar: (() => { const x = worldX(-500); return { x, z: atTrue(-500, 149.7)[1] - 10 }; })(),
+  trailers: { x: worldX(-540) - 68, z: atTrue(-540, 45)[1] - 23.5 },
+  tower: { x: worldX(-330) - 100, z: atTrue(-330, 15)[1] + 14 },
+};
+function around(place, fn) { OX = place.x; OZ = place.z; fn(); OX = OZ = 0; }
+const STORE = {};
 // Chunky Mercantile: walk-in general store
 const storeMat = triplanar(woodRed, .5, { roughness: .95 });
 const roofMat = new THREE.MeshStandardMaterial({ color: '#2b2630', roughness: .9 });
-{
+around(PLACES.store, () => {
   const x0 = 34, x1 = 46, z0 = -16, z1 = -6, H = 4.6, t = .3;
+  pad(x0 - 1, x1 + 1, z0 - 1, z1 + 1);
   addBox(storeMat, (x0 + 39) / 2, Y0 + H / 2, z1 - t / 2, 39 - x0, H, t); solid(x0, 39, z1 - t, z1, Y0 + H);
   addBox(storeMat, (41 + x1) / 2, Y0 + H / 2, z1 - t / 2, x1 - 41, H, t); solid(41, x1, z1 - t, z1, Y0 + H);
   addBox(storeMat, 40, Y0 + H - .6, z1 - t / 2, 2, 1.2, t);
@@ -644,85 +832,153 @@ const roofMat = new THREE.MeshStandardMaterial({ color: '#2b2630', roughness: .9
   addBox(roofMat, 40, Y0 + .8, -12.7, 9, 1.6, .7); solid(35.5, 44.5, -13.05, -12.35, Y0 + 1.6);  // shelves
   addBox(roofMat, 43, Y0 + .8, -9.7, 4, 1.6, .7); solid(41, 45, -10.05, -9.35, Y0 + 1.6);
   kudzuOn(x0, x1, Y0 + H + .4, z0, z1, 18); kudzuOn(x0, x0 + .6, Y0 + 1.5, z0, z1, 6);
-}
-const storeRoof = new THREE.Mesh(boxGeo, roofMat); storeRoof.scale.set(12.6, .3, 10.6); storeRoof.position.set(40, Y0 + 4.75, -11); outline(storeRoof, INK, 1.5); scene.add(storeRoof);
+  Object.assign(STORE, { x0: x0 + OX, x1: x1 + OX, z0: z0 + OZ, z1: z1 + OZ });
+  addBox(storeMat, 40, Y0 + 5.7, -6.05, 10.4, 2.2, .2, 1.2);
+  flushBuckets();
+});
+const storeRoof = new THREE.Mesh(boxGeo, roofMat); storeRoof.scale.set(12.6, .3, 10.6); storeRoof.position.set(40 + PLACES.store.x, Y0 + 4.75, -11 + PLACES.store.z); outline(storeRoof, INK, 1.5); scene.add(storeRoof);
 const storeSign = new THREE.Mesh(new THREE.PlaneGeometry(10, 1.8), new THREE.MeshStandardMaterial({ map: textTex(['CHUNKY MERCANTILE'], 1024, 184, '#e4d6b8', '#7a2318', '76px Bungee, Impact, sans-serif', { grime: true }), roughness: .9 }));
-storeSign.position.set(40, Y0 + 5.7, -5.92); scene.add(storeSign);
-addBox(storeMat, 40, Y0 + 5.7, -6.05, 10.4, 2.2, .2, 1.2);
+storeSign.position.set(40 + PLACES.store.x, Y0 + 5.7, -5.92 + PLACES.store.z); scene.add(storeSign);
 // gas station with canopy
-{
+around(PLACES.gas, () => {
+  pad(46, 67, 3, 17);
   addBox(roofMat, 53, Y0 + 4.6, 10, 10, .35, 8, 1.5);
   for (const [x, z] of [[48.6, 6.6], [57.4, 6.6], [48.6, 13.4], [57.4, 13.4]]) { addBox(railMat, x, Y0 + 2.3, z, .3, 4.6, .3, 1.2); solid(x - .25, x + .25, z - .25, z + .25, Y0 + 4.6); }
   for (const x of [51, 55]) { addBox(railMat, x, Y0 + .8, 10, .7, 1.6, 1, 1.2); solid(x - .45, x + .45, 9.4, 10.6, Y0 + 1.6); }
   addBox(storeMat, 61.5, Y0 + 1.7, 11, 5, 3.4, 6, 1.5); solid(59, 64, 8, 14, Y0 + 3.4);
   kudzuOn(59, 64, Y0 + 3.7, 8, 14, 10); kudzuOn(48, 58, Y0 + 4.9, 6, 14, 8);
-}
-const gasLight = new THREE.PointLight('#9fe3ff', 9, 12, 1.6); gasLight.position.set(53, Y0 + 4.1, 10); scene.add(gasLight);
-const gasStrip = new THREE.Mesh(boxGeo, lit('#bfefff', 2.2)); gasStrip.scale.set(8, .05, .2); gasStrip.position.set(53, Y0 + 4.4, 10); scene.add(gasStrip);
+  addBox(railMat, 47, Y0 + 3, 4.1, .2, 6, .2, 1);
+  flushBuckets();
+});
+const gasAt = (x, z) => [x + PLACES.gas.x, z + PLACES.gas.z];
+const gasLight = new THREE.PointLight('#9fe3ff', 9, 12, 1.6); gasLight.position.set(gasAt(53, 0)[0], Y0 + 4.1, gasAt(0, 10)[1]); scene.add(gasLight);
+const gasStrip = new THREE.Mesh(boxGeo, lit('#bfefff', 2.2)); gasStrip.scale.set(8, .05, .2); gasStrip.position.set(gasAt(53, 0)[0], Y0 + 4.4, gasAt(0, 10)[1]); scene.add(gasStrip);
 const gasSign = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.4), new THREE.MeshBasicMaterial({ map: textTex(['GAS'], 256, 150, '#1b1420', '#ff4a6a', '96px Bungee, Impact, sans-serif'), color: new THREE.Color(1.4, 1.4, 1.4) }));
-gasSign.position.set(47, Y0 + 6.2, 4.0); gasSign.rotation.y = Math.PI; scene.add(gasSign);
-addBox(railMat, 47, Y0 + 3, 4.1, .2, 6, .2, 1);
+gasSign.position.set(gasAt(47, 0)[0], Y0 + 6.2, gasAt(0, 4)[1]); gasSign.rotation.y = Math.PI; scene.add(gasSign);
 // church
 const churchMat = triplanar(woodWhite, .5, { roughness: .9 });
-{
+around(PLACES.church, () => {
+  pad(62, 75, -24, -5);
   addBox(churchMat, 68.5, Y0 + 3, -15, 9, 6, 14, 1.6); solid(64, 73, -22, -8, Y0 + 6);
   const r1 = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, .62)), r2 = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -.62));
   addBox(roofMat, 66.2, Y0 + 7.4, -15, 5.6, .3, 14.6, 1.4, r1); addBox(roofMat, 70.8, Y0 + 7.4, -15, 5.6, .3, 14.6, 1.4, r2);
   addBox(churchMat, 68.5, Y0 + 6.5, -8.6, 2.2, 13, 2.2, 1.4); solid(67.4, 69.6, -9.7, -7.5, Y0 + 13);
   for (let i = 0; i < 3; i++) addBox(stoneMat, 68.5, Y0 + .15 + i * .3, -6.9 + i * .45, 4, .3, 1.4 - i * .45, 1);
-}
-const steepleTop = new THREE.Mesh(new THREE.ConeGeometry(1.4, 4, 4), churchMat); steepleTop.position.set(68.5, Y0 + 15, -8.6); steepleTop.rotation.y = Math.PI / 4; outline(steepleTop, INK, 1.4); scene.add(steepleTop);
-for (const z of [-11, -15, -19]) for (const x of [63.9, 73.1]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.2), lit('#ffb347', 1.6)); w.position.set(x, Y0 + 3.2, z); w.rotation.y = x < 68 ? -Math.PI / 2 : Math.PI / 2; scene.add(w); }
-const churchLight = new THREE.PointLight('#ffb347', 10, 13, 1.7); churchLight.position.set(68.5, Y0 + 2.6, -5); scene.add(churchLight);
-// railroad + rusted boxcar + Tre's spot
+  flushBuckets();
+});
+const churchAt = (x, z) => [x + PLACES.church.x, z + PLACES.church.z];
+const steepleTop = new THREE.Mesh(new THREE.ConeGeometry(1.4, 4, 4), churchMat); steepleTop.position.set(churchAt(68.5, 0)[0], Y0 + 15, churchAt(0, -8.6)[1]); steepleTop.rotation.y = Math.PI / 4; outline(steepleTop, INK, 1.4); scene.add(steepleTop);
+for (const z of [-11, -15, -19]) for (const x of [63.9, 73.1]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.2), lit('#ffb347', 1.6)); w.position.set(churchAt(x, 0)[0], Y0 + 3.2, churchAt(0, z)[1]); w.rotation.y = x < 68 ? -Math.PI / 2 : Math.PI / 2; scene.add(w); }
+const churchLight = new THREE.PointLight('#ffb347', 10, 13, 1.7); churchLight.position.set(churchAt(68.5, 0)[0], Y0 + 2.6, churchAt(0, -5)[1]); scene.add(churchLight);
+// the railroad, on the graph's lines. One tie pool moves with the camera.
 {
-  for (const x of [86.2, 87.8]) addBox(railMat, x, Y0 + .18, 0, .12, .14, 140, 0);
-  const ties = new THREE.InstancedMesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#2a1d18', roughness: 1 }), 233);
-  for (let i = 0; i < 233; i++) { _m.compose(_v.set(87, Y0 + .06, -70 + i * .6), _q.identity(), _s.set(2.6, .12, .3)); ties.setMatrixAt(i, _m); }
-  scene.add(ties);
-  addBox(steelMat, 87, Y0 + 2.4, 15.5, 3.4, 3.6, 13, 1.6); solid(85.3, 88.7, 9, 22, Y0 + 4.2);
-  addBox(roofMat, 85.25, Y0 + 2.2, 14.5, .1, 2.6, 3, 0);
-  for (const z of [10.5, 20.5]) for (const x of [86.2, 87.8]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(.45, .45, .2, 14), roofMat); w.rotation.z = Math.PI / 2; w.position.set(x, Y0 + .5, z); scene.add(w); }
-  addBox(roofMat, 83, Y0 + .4, 14.5, 1.4, .8, .9, 1.2); solid(82.3, 83.7, 14.05, 14.95, Y0 + 1.5);
+  const up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3(), mid = new THREE.Vector3(), rq = new THREE.Quaternion();
+  for (const line of MAP.rail) for (let i = 1; i < line.length; i++) {
+    const [ax, az] = line[i - 1], [bx, bz] = line[i], l = Math.hypot(bx - ax, bz - az); if (l < .01) continue;
+    dir.set((bx - ax) / l, 0, (bz - az) / l); rq.setFromUnitVectors(XA, dir);
+    const nx = -dir.z * .8, nz = dir.x * .8;
+    for (const s of [-1, 1]) { mid.set((ax + bx) / 2 + nx * s, Y0 + .18, (az + bz) / 2 + nz * s); addBox(railMat, mid.x, mid.y, mid.z, l + .02, .14, .12, 0, rq); }
+  }
+  flushBuckets(1e6);
 }
-const tank = new THREE.Mesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#cfefff', transparent: true, opacity: .18, roughness: .1, depthWrite: false })); tank.scale.set(1.2, .7, .8); tank.position.set(83, Y0 + 1.15, 14.5); outline(tank, INK, 1.2); scene.add(tank);
+const TIES = new THREE.InstancedMesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#2a1d18', roughness: 1 }), 620);
+TIES.frustumCulled = false; TIES.count = 0; scene.add(TIES);
+let tieX = 1e9, tieZ = 1e9;
+function fillTies(x, z) {
+  if (Math.hypot(x - tieX, z - tieZ) < 12) return;
+  tieX = x; tieZ = z;
+  let n = 0; const RANGE = 160;
+  for (const line of MAP.rail) {
+    let run = 0;
+    for (let i = 1; i < line.length; i++) {
+      const [ax, az] = line[i - 1], [bx, bz] = line[i], l = Math.hypot(bx - ax, bz - az);
+      // the nearest point of this stretch to the camera, to skip it whole when it's out of range
+      const t = l ? clamp(((x - ax) * (bx - ax) + (z - az) * (bz - az)) / (l * l), 0, 1) : 0;
+      if (Math.hypot(x - ax - (bx - ax) * t, z - az - (bz - az) * t) < RANGE) {
+        const yaw = -Math.atan2(bz - az, bx - ax);
+        for (let d = (.6 - run % .6) % .6; d < l && n < TIES.instanceMatrix.count; d += .6) {
+          const px = ax + (bx - ax) * d / l, pz = az + (bz - az) * d / l;
+          if (Math.hypot(px - x, pz - z) > RANGE) continue;
+          _m.compose(_v.set(px, Y0 + .06, pz), _q.setFromAxisAngle(UP, yaw), _s.set(.3, .12, 2.6)); TIES.setMatrixAt(n++, _m);
+        }
+      }
+      run += l;
+    }
+  }
+  TIES.count = n; TIES.instanceMatrix.needsUpdate = true;
+}
+// rusted boxcar + Tre's spot, on a siding with the tracks behind it
+const BOX = PLACES.boxcar;
+around(BOX, () => {
+  pad(-9, 9, -9, 3);
+  addBox(steelMat, 0, Y0 + 2.4, 0, 13, 3.6, 3.4, 1.6); solid(-6.5, 6.5, -1.7, 1.7, Y0 + 4.2);
+  addBox(roofMat, 1, Y0 + 2.2, -1.75, 3, 2.6, .1, 0);
+  addBox(roofMat, 1, Y0 + .4, -4, .9, .8, 1.4, 1.2); solid(.55, 1.45, -4.7, -3.3, Y0 + 1.5);
+  flushBuckets();
+});
+for (const x of [-5, 5]) for (const z of [-.8, .8]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(.45, .45, .2, 14), roofMat); w.rotation.x = Math.PI / 2; w.position.set(BOX.x + x, Y0 + .5, BOX.z + z); scene.add(w); }
+const tank = new THREE.Mesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#cfefff', transparent: true, opacity: .18, roughness: .1, depthWrite: false })); tank.scale.set(.8, .7, 1.2); tank.position.set(BOX.x + 1, Y0 + 1.15, BOX.z - 4); outline(tank, INK, 1.2); scene.add(tank);
 {
-  const pts = []; for (let i = 0; i <= 40; i++) { const a = i / 40 * Math.PI * 4.5, r = .32 - i * .006; pts.push(new THREE.Vector3(83 + Math.cos(a) * r, Y0 + .88 + i * .004, 14.5 + Math.sin(a) * r * .55)); }
+  const pts = []; for (let i = 0; i <= 40; i++) { const a = i / 40 * Math.PI * 4.5, r = .32 - i * .006; pts.push(new THREE.Vector3(BOX.x + 1 + Math.sin(a) * r * .55, Y0 + .88 + i * .004, BOX.z - 4 + Math.cos(a) * r)); }
   const coil = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, .035, 6), new THREE.MeshStandardMaterial({ map: snakeTex, roughness: .7 })); outline(coil, INK, 1); scene.add(coil);
 }
 // water tower with the town's name
-{
+around(PLACES.tower, () => {
+  pad(95, 105, -19, -9);
   for (const [x, z] of [[-2.2, -2.2], [2.2, -2.2], [-2.2, 2.2], [2.2, 2.2]]) addBeam([100 + x * 1.4, Y0, -14 + z * 1.4], [100 + x, Y0 + 13, -14 + z], .25, .25, steelMat, 1.2);
   addBeam([97.2, Y0 + 6, -16.8], [102.8, Y0 + 6, -11.2], .1, .1, steelMat, 0); addBeam([102.8, Y0 + 6, -16.8], [97.2, Y0 + 6, -11.2], .1, .1, steelMat, 0);
   solid(96, 104, -18, -10, Y0 + .2);
-}
+  flushBuckets();
+});
+const towerX = 100 + PLACES.tower.x, towerZ = -14 + PLACES.tower.z;
 const towerTank = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 4.6, 32, 1), new THREE.MeshStandardMaterial({ map: textTex(['CHUNKY'], 1024, 256, '#9fb3b8', '#2a1c26', '150px Bungee, Impact, sans-serif', { grime: true }), roughness: .8, metalness: .2 }));
-towerTank.position.set(100, Y0 + 15.3, -14); towerTank.rotation.y = -Math.PI / 2 - .5; outline(towerTank, INK, 1.6); scene.add(towerTank);
-const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(3.8, 2, 32), roofMat); towerRoof.position.set(100, Y0 + 18.6, -14); outline(towerRoof, INK, 1.4); scene.add(towerRoof);
-const beacon = new THREE.Mesh(new THREE.SphereGeometry(.18, 10, 8), lit('#ff2a2a', 4)); beacon.position.set(100, Y0 + 19.7, -14); scene.add(beacon);
+towerTank.position.set(towerX, Y0 + 15.3, towerZ); towerTank.rotation.y = -Math.PI / 2 - .5; outline(towerTank, INK, 1.6); scene.add(towerTank);
+const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(3.8, 2, 32), roofMat); towerRoof.position.set(towerX, Y0 + 18.6, towerZ); outline(towerRoof, INK, 1.4); scene.add(towerRoof);
+const beacon = new THREE.Mesh(new THREE.SphereGeometry(.18, 10, 8), lit('#ff2a2a', 4)); beacon.position.set(towerX, Y0 + 19.7, towerZ); scene.add(beacon);
 // trailers, burnt cars, power poles, fire barrels, the town sign
 const trailerMat = triplanar(woodGrey, .5, { roughness: .9 });
-for (const [x, z] of [[60, 24], [76, 23]]) {
-  addBox(trailerMat, x, Y0 + 1.7, z, 10, 2.8, 3.2, 1.5); solid(x - 5, x + 5, z - 1.6, z + 1.6, Y0 + 3.1);
-  addBox(roofMat, x, Y0 + .25, z - 2.3, 3, .5, 1.4, 1); kudzuOn(x - 5, x + 5, Y0 + 3.3, z - 1.6, z + 1.6, 9);
-  for (const dx of [-3, 0, 3]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(1.1, .7), lit(dx === 0 && x === 76 ? '#ffcf7a' : '#1a1522', dx === 0 && x === 76 ? 1.4 : 1)); w.position.set(x + dx, Y0 + 2.1, z - 1.62); w.rotation.y = Math.PI; scene.add(w); }
-}
+around(PLACES.trailers, () => {
+  pad(53, 83, 19, 29);
+  for (const [x, z] of [[60, 24], [76, 23]]) {
+    addBox(trailerMat, x, Y0 + 1.7, z, 10, 2.8, 3.2, 1.5); solid(x - 5, x + 5, z - 1.6, z + 1.6, Y0 + 3.1);
+    addBox(roofMat, x, Y0 + .25, z - 2.3, 3, .5, 1.4, 1); kudzuOn(x - 5, x + 5, Y0 + 3.3, z - 1.6, z + 1.6, 9);
+    for (const dx of [-3, 0, 3]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(1.1, .7), lit(dx === 0 && x === 76 ? '#ffcf7a' : '#1a1522', dx === 0 && x === 76 ? 1.4 : 1)); w.position.set(x + dx + OX, Y0 + 2.1, z - 1.62 + OZ); w.rotation.y = Math.PI; scene.add(w); }
+  }
+  flushBuckets();
+});
 const burnt = new THREE.MeshStandardMaterial({ color: '#2a2024', roughness: 1, metalness: .3 });
-for (const [x, z, r] of [[30, 4.6, .2], [64, -4.4, -.15], [95, 4.4, .4]]) {
-  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, r, 0));
-  addBox(burnt, x, Y0 + .6, z, 4.2, .9, 1.9, 1.4, q); addBox(burnt, x - .2, Y0 + 1.3, z, 2.2, .7, 1.7, 1.2, q);
-  solid(x - 2.2, x + 2.2, z - 1.1, z + 1.1, Y0 + 1.6); kudzuOn(x - 1.5, x + 1.5, Y0 + 1.7, z - .7, z + .7, 3);
+{
+  const roadside = (x, side) => { const p = onRoadAt('us_80', x); return [p.x, p.z + side * 5.4]; };
+  for (const [[x, z], r] of [[roadside(62, 1), .2], [roadside(worldX(-590), -1), -.15], [roadside(worldX(-395), 1), .4]]) {
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, r, 0));
+    addBox(burnt, x, Y0 + .6, z, 4.2, .9, 1.9, 1.4, q); addBox(burnt, x - .2, Y0 + 1.3, z, 2.2, .7, 1.7, 1.2, q);
+    solid(x - 2.2, x + 2.2, z - 1.1, z + 1.1, Y0 + 1.6); kudzuOn(x - 1.5, x + 1.5, Y0 + 1.7, z - .7, z + .7, 3);
+  }
 }
+// power poles along the north side of US 80: every 12 m out of the bridge, wider once in town
 const poleMat = new THREE.MeshStandardMaterial({ color: '#2d2026', roughness: 1 });
-const wirePts = [];
-for (let x = 26; x <= 122; x += 12) { addBox(poleMat, x, Y0 + 4, -4.3, .25, 8, .25, 1.1); addBox(poleMat, x, Y0 + 7.6, -4.3, .12, .12, 2.2, 1); solid(x - .2, x + .2, -4.5, -4.1, Y0 + 8); wirePts.push(x); }
 const wireMat = new THREE.MeshBasicMaterial({ color: '#0c080e' });
-for (let i = 0; i < wirePts.length - 1; i++) for (const dz of [-.9, .9]) {
-  const a = new THREE.Vector3(wirePts[i], Y0 + 7.65, -4.3 + dz), b = new THREE.Vector3(wirePts[i + 1], Y0 + 7.65, -4.3 + dz), m = a.clone().lerp(b, .5); m.y -= .9;
-  scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(a, m, b), 12, .02, 4), wireMat));
+{
+  const adamsX = MAP.nodes.find((n) => n.id === 'n2').x, doorX = 40 + PLACES.store.x;
+  const poles = [];
+  for (let x = 26, end = adamsX + 60; x <= end; x += x < 300 ? 12 : 24) {
+    if (Math.abs(x - adamsX) < 8 || Math.abs(x - doorX) < 2.5) continue;
+    const z = MAP.zAt('us_80', x) - 4.3;
+    addBox(poleMat, x, Y0 + 4, z, .25, 8, .25, 1.1); addBox(poleMat, x, Y0 + 7.6, z, .12, .12, 2.2, 1); solid(x - .2, x + .2, z - .2, z + .2, Y0 + 8);
+    poles.push([x, z]);
+  }
+  // one merged mesh for every eight spans, so wires out of view cost nothing
+  for (let i = 0; i < poles.length - 1; i += 8) {
+    const geos = [];
+    for (let j = i; j < Math.min(i + 8, poles.length - 1); j++) for (const dz of [-.9, .9]) {
+      const a = new THREE.Vector3(poles[j][0], Y0 + 7.65, poles[j][1] + dz), b = new THREE.Vector3(poles[j + 1][0], Y0 + 7.65, poles[j + 1][1] + dz), m = a.clone().lerp(b, .5); m.y -= .9;
+      geos.push(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(a, m, b), 12, .02, 4));
+    }
+    scene.add(new THREE.Mesh(mergeGeometries(geos), wireMat));
+  }
 }
 const fires = [];
-for (const [x, z] of [[50, 7.4], [80, -4.6], [91.5, 8.5]]) {
+for (const [x, z] of [[...gasAt(50, 7.4)], [96, -5.5], [BOX.x - 3, BOX.z - 6]]) {
   addBox(railMat, x, Y0 + .5, z, .7, 1, .7, 1.2); solid(x - .4, x + .4, z - .4, z + .4, Y0 + 1);
   const fl = new THREE.Mesh(new THREE.ConeGeometry(.3, .9, 8), lit('#ffb040', 3)); fl.position.set(x, Y0 + 1.35, z); scene.add(fl);
   const pl = new THREE.PointLight('#ff8a30', 12, 11, 1.7); pl.position.set(x, Y0 + 1.8, z); scene.add(pl);
@@ -734,6 +990,82 @@ for (const [x, z] of [[50, 7.4], [80, -4.6], [91.5, 8.5]]) {
   sign.position.set(25.2, Y0 + 2.1, 4.66); sign.rotation.y = Math.PI; scene.add(sign);
 }
 flushBuckets();
+// ================================================================ the roads, from the graph: each one's width and surface
+const SURFACES = { asphalt: asphaltMat, gravel: triplanar(stoneTex, .2, { roughness: 1 }), dirt: triplanar(stoneTex, .1, { roughness: 1, color: '#6a4a34' }) };
+{
+  const y = ROAD_TOP;
+  // A strip for one stretch of road. Corners are mitred, and the width comes from roadHalf, so it narrows into the bridge.
+  const strip = (road, pts) => {
+    const n = pts.length, pos = new Float32Array(n * 6), nor = new Float32Array(n * 6), idx = [];
+    for (let i = 0; i < n; i++) {
+      const [x, z] = pts[i], a = pts[Math.max(i - 1, 0)], b = pts[Math.min(i + 1, n - 1)];
+      let tx = b[0] - a[0], tz = b[1] - a[1]; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+      // the mitre: a corner has to stretch across the segments on either side of it
+      let miter = 1;
+      if (i > 0 && i < n - 1) {
+        const ax = x - a[0], az = z - a[1], bx = b[0] - x, bz = b[1] - z, al = Math.hypot(ax, az) || 1, bl = Math.hypot(bx, bz) || 1;
+        miter = 1 / Math.max(.5, (tx * ax + tz * az) / al * ((tx * bx + tz * bz) / bl > 0 ? 1 : 1));
+      }
+      const half = roadHalf(road, x, z) * miter;
+      pos.set([x + tz * half, y, z - tx * half, x - tz * half, y, z + tx * half], i * 6);
+      nor.set([0, 1, 0, 0, 1, 0], i * 6);
+      if (i < n - 1) { const v = i * 2; idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setIndex(idx);
+    const m = new THREE.Mesh(g, SURFACES[road.surface] || asphaltMat); scene.add(m);
+    return m;
+  };
+  for (const road of MAP.roads) {
+    // Stuckey's Bridge has its own deck, and the road comes up to it in short steps so the narrowing is smooth
+    let pieces = [road.pts];
+    if (road.id === 'us_80') {
+      const west = road.pts.filter(([x]) => x < -60), east = road.pts.filter(([x]) => x > 60);
+      const steps = (a, b) => { const out = []; for (let x = a; x <= b + .001; x += 3) out.push([x, MAP.zAt('us_80', x)]); return out; };
+      pieces = [[...west, ...steps(-60, -20)], [...steps(20.5, 60), ...east]];
+    }
+    // split into stretches of about 150 m, so that a stretch out of view isn't drawn
+    for (const pts of pieces) {
+      let start = 0, run = 0;
+      for (let i = 1; i < pts.length; i++) {
+        run += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+        if (run > 150 || i === pts.length - 1) { strip(road, pts.slice(start, i + 1)); start = i; run = 0; }
+      }
+    }
+  }
+  // junctions round off where two strips meet
+  for (const n of MAP.nodes) if (n.kind === 'junction') {
+    const w = Math.max(...n.roads.map((id) => MAP.roadById.get(id).width));
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(w / 2 + 2, 24), asphaltMat); disc.rotation.x = -Math.PI / 2; disc.position.set(n.x, y, n.z); scene.add(disc);
+  }
+}
+// bridges carrying the roads over the river where they cross it, apart from Stuckey's
+const SPANS = [];
+{
+  const conc = stoneMat;
+  for (const c of MAP.crossings) if (c.with === 'river' && Math.abs(c.x) > 30) {
+    const road = MAP.roadById.get(c.road), s0 = MAP.sOn(c.road, c.x, c.z), half = road.width / 2, L = 26;
+    SPANS.push({ x: c.x, z: c.z, r: L + 2, road });
+    let prev = null;
+    for (let s = s0 - L; s <= s0 + L + .01; s += 4) {
+      const p = MAP.along(c.road, s), l = [p.x + p.nx * (half + .15), p.z + p.nz * (half + .15)], r = [p.x - p.nx * (half + .15), p.z - p.nz * (half + .15)];
+      addBeam([l[0], ROAD_TOP - .45, l[1]], [r[0], ROAD_TOP - .45, r[1]], .3, .4, conc, 1.2);
+      if (prev) for (const [a, b] of [[prev.l, l], [prev.r, r]]) {
+        addBeam([a[0], ROAD_TOP - .25, a[1]], [b[0], ROAD_TOP - .25, b[1]], .3, .55, conc, 1.4);
+        addBeam([a[0], ROAD_TOP + .95, a[1]], [b[0], ROAD_TOP + .95, b[1]], .09, .09, railMat, 1.1);
+      }
+      for (const a of [l, r]) addBeam([a[0], ROAD_TOP - .1, a[1]], [a[0], ROAD_TOP + .95, a[1]], .07, .07, railMat, .8);
+      prev = { l, r };
+    }
+    // piers either side of the water
+    for (const d of [-13, 13]) {
+      const p = MAP.along(c.road, s0 + d);
+      addBeam([p.x, -3, p.z], [p.x, ROAD_TOP - .4, p.z], 1.1, 1.1, conc, 1.4);
+    }
+    flushBuckets();
+  }
+}
+const spanAt = (x, z) => { for (const s of SPANS) if (Math.hypot(x - s.x, z - s.z) < s.r) return s; return null; };
 // kudzu: Mississippi's green blanket over everything left standing
 {
   const kz = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: '#3f7a35', roughness: .9, flatShading: true }), kudzuSpots.length);
@@ -1061,13 +1393,13 @@ function makeNPC({ name, x, z, yaw, hatchCols, ol, pat, ca, cb, extra }) {
 }
 const gold = new THREE.MeshStandardMaterial({ color: '#e8b54a', metalness: .9, roughness: .3, emissive: '#3a2a08' });
 const NPCS = {
-  coop: makeNPC({ name: 'Coop', x: 53, z: 8.4, yaw: Math.PI * .95, hatchCols: ['#5f7a3a', '#8aa14d', '#2c3a1c'], ol: '#e8b54a', pat: 3, ca: [.35, 1.6, .5], cb: [.01, .02, .01],
+  coop: makeNPC({ name: 'Coop', x: 53 + PLACES.gas.x, z: 8.4 + PLACES.gas.z, yaw: Math.PI * .95, hatchCols: ['#5f7a3a', '#8aa14d', '#2c3a1c'], ol: '#e8b54a', pat: 3, ca: [.35, 1.6, .5], cb: [.01, .02, .01],
     extra: (b) => { const ch = new THREE.Mesh(new THREE.TorusGeometry(.2, .018, 6, 24), gold); ch.rotation.x = Math.PI / 2 - .5; ch.position.set(0, -.05, .12); b.add(ch);
       const cap = new THREE.Mesh(new THREE.SphereGeometry(.24, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshToonMaterial({ color: '#1b2a4a', gradientMap: toonGrad })); cap.position.set(0, .48, -.03); b.add(outline(cap, INK, 1.5));
       const brim = new THREE.Mesh(new THREE.BoxGeometry(.3, .02, .2), cap.material); brim.position.set(0, .5, .26); b.add(outline(brim, INK, 1.2)); } }),
-  tre: makeNPC({ name: 'Tre', x: 84, z: 12.2, yaw: -Math.PI * .55, hatchCols: ['#8a7a40', '#5a4a24', '#c9b66a'], ol: '#6fd6c8', pat: 1, ca: [.2, 1.5, 1.4], cb: [.01, .015, .02],
+  tre: makeNPC({ name: 'Tre', x: BOX.x + 3.3, z: BOX.z - 3, yaw: Math.PI * .9, hatchCols: ['#8a7a40', '#5a4a24', '#c9b66a'], ol: '#6fd6c8', pat: 1, ca: [.2, 1.5, 1.4], cb: [.01, .015, .02],
     extra: (b) => { const sh = new THREE.Mesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#050407', metalness: .8, roughness: .2 })); sh.scale.set(.34, .07, .05); sh.position.set(0, .34, .28); b.add(outline(sh, INK, 1)); } }),
-  odessa: makeNPC({ name: 'Miss Odessa', x: 68.5, z: -5.8, yaw: 0, hatchCols: ['#8a3a8a', '#c25ac2', '#4a1e4a'], ol: '#f1e6cf', pat: 2, ca: [1.6, .9, 1.4], cb: [.02, .01, .02],
+  odessa: makeNPC({ name: 'Miss Odessa', x: 68.5 + PLACES.church.x, z: -5.8 + PLACES.church.z, yaw: 0, hatchCols: ['#8a3a8a', '#c25ac2', '#4a1e4a'], ol: '#f1e6cf', pat: 2, ca: [1.6, .9, 1.4], cb: [.02, .01, .02],
     extra: (b) => { const hat = new THREE.Mesh(new THREE.CylinderGeometry(.45, .45, .04, 24), new THREE.MeshToonMaterial({ color: '#f1e6cf', gradientMap: toonGrad })); hat.position.set(0, .55, -.02); b.add(outline(hat, INK, 1.3));
       const crown = new THREE.Mesh(new THREE.CylinderGeometry(.2, .24, .18, 18), hat.material); crown.position.set(0, .64, -.03); b.add(outline(crown, INK, 1.2)); } })
 };
@@ -1076,7 +1408,10 @@ for (const n of Object.values(NPCS)) solid(n.root.position.x - .4, n.root.positi
 // ================================================================ bean cans
 const canLabel = textTex(['BEANS'], 256, 128, '#c8452a', '#f6e8c8', '52px Bungee, Impact, sans-serif');
 const canMat = [new THREE.MeshStandardMaterial({ map: canLabel, roughness: .6, metalness: .2, emissive: '#3a1006' }), new THREE.MeshStandardMaterial({ color: '#c9ccd2', metalness: .9, roughness: .3 })];
-const PICKUPS = [[38.2, Y0 + 1.75, -12.7], [43, Y0 + 1.75, -9.7], [76.6, Y0 + .3, 20.6], [100, Y0 + .3, -14], [85.9, Y0 + .9, 14]].map(([x, y, z]) => {
+const PICKUPS = [
+  [38.2 + PLACES.store.x, Y0 + 1.75, -12.7 + PLACES.store.z], [43 + PLACES.store.x, Y0 + 1.75, -9.7 + PLACES.store.z],
+  [76.6 + PLACES.trailers.x, Y0 + .3, 20.6 + PLACES.trailers.z], [towerX, Y0 + .3, towerZ], [BOX.x + 1.5, Y0 + .9, BOX.z - 2]
+].map(([x, y, z]) => {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(.11, .11, .26, 18), [canMat[0], canMat[1], canMat[1]]);
   m.position.set(x, y + .2, z); outline(m, INK, 1.5); scene.add(m);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color: new THREE.Color(1, .55, .2), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: .7 }));
@@ -1170,6 +1505,7 @@ const gHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color:
 const gLight = new THREE.PointLight('#ff9a46', 14, 12, 1.8); ghost.add(gLight);
 
 // ================================================================ particles: leaves, fireflies, cyan drips, mist. They wrap around the camera, and phones get fewer.
+seedRandom();
 const LOW = matchMedia('(pointer:coarse)').matches;
 const LEAVES = LOW ? 140 : 380, FF = LOW ? 70 : 180, MISTS = LOW ? 5 : 10, WRAP_X = 68, WRAP_Z = 40;
 const wrapTo = (v, c, span) => c + ((((v - c + span / 2) % span) + span) % span) - span / 2;
@@ -1412,7 +1748,8 @@ function fail(h, p) {
 }
 $('retry').addEventListener('click', () => {
   $('fail').hidden = true; S.hp = 3; player.inv = 1;
-  if (S.flags.bridgeStarted) startBridge(); else startSwim(true);
+  if (S.flags.town) { S.mode = 'town'; HP.kind = 'run'; player.pos.set(24.5, ROAD_TOP, 0); player.grounded = true; cam.snap = true; townObjective(); }
+  else if (S.flags.bridgeStarted) startBridge(); else startSwim(true);
 });
 
 // ---------------- dialogue
@@ -1476,7 +1813,7 @@ function townObjective() {
   else if (S.flags.delivered && !S.flags.paid) t += ' · Go get paid by Coop';
   objective(t);
 }
-function startSweep() { S.mode = 'sweep'; S.sweep = 0; HP.kind = 'sweep'; player.pos.set(68.5, Y0 + .3, -6.9); player.yaw = 0; }
+function startSweep() { S.mode = 'sweep'; S.sweep = 0; HP.kind = 'sweep'; player.pos.set(68.5 + PLACES.church.x, Y0 + .3, -6.9 + PLACES.church.z); player.yaw = 0; }
 function endChapter() {
   S.mode = 'end'; prompt(null); $('dialog').hidden = true;
   const r = S.rep, best = Object.entries(r).sort((a, b) => b[1] - a[1])[0];
@@ -1529,21 +1866,38 @@ function startBridge() {
   deckSnake.reset();
 }
 function startTown() {
-  S.mode = 'town'; S.collapse = 99;
+  S.mode = 'town'; S.collapse = 99; S.flags.town = true;
   card('Chunky, <span>Mississippi</span>', '2026', 3.4);
   townObjective(); hudVitals();
 }
 
 // ---------------- movement helpers
+function onRoad(x, z) {
+  const rd = MAP.roadGrid.nearest(x, z);
+  if (rd > 6) return false;
+  const road = MAP.roadGrid.seg.owner;
+  return rd < roadHalf(road, x, z) && !(road.id === 'us_80' && Math.abs(x) < ROAD_GAP && Math.abs(z) < 8);
+}
 function floorAt(x, z) {
   let f = groundH(x, z);
-  if (Math.abs(z) < 2.8 && Math.abs(x) > 20.4) f = Math.max(f, ROAD_TOP);
+  if (onRoad(x, z)) f = Math.max(f, ROAD_TOP);
   if (Math.abs(z) < 4.25 && Math.abs(Math.abs(x) - 22) < 2.25) f = Math.max(f, DY - .05);
   const p = plankUnder(x, z); if (p && !p.hole && p.fall === 0) f = Math.max(f, DECK_TOP);
   return f;
 }
+// solids by cell, so a check only looks at what's around it
+const solidCells = new Map();
+for (const b of SOLIDS) {
+  for (let cx = Math.floor((b[0] - .3) / 16); cx <= Math.floor((b[1] + .3) / 16); cx++) for (let cz = Math.floor((b[2] - .3) / 16); cz <= Math.floor((b[3] + .3) / 16); cz++) {
+    const k = (cx + 32768) * 65536 + cz + 32768; if (!solidCells.has(k)) solidCells.set(k, []); solidCells.get(k).push(b);
+  }
+}
 function blocked(x, z, y) {
-  for (const [x0, x1, z0, z1, top] of SOLIDS) if (x > x0 - .3 && x < x1 + .3 && z > z0 - .3 && z < z1 + .3 && y < top - .25) return true;
+  if (!MAP.inBounds(x, z)) return true;
+  const list = solidCells.get((Math.floor(x / 16) + 32768) * 65536 + Math.floor(z / 16) + 32768);
+  if (list) for (const [x0, x1, z0, z1, top] of list) if (x > x0 - .3 && x < x1 + .3 && z > z0 - .3 && z < z1 + .3 && y < top - .25) return true;
+  // the rails on a road bridge
+  if (SPANS.length && y > ROAD_TOP - 1) { const s = spanAt(x, z); if (s && MAP.roadGrid.nearest(x, z) > s.road.width / 2 && MAP.roadGrid.d < s.road.width / 2 + 1) return true; }
   return false;
 }
 const camFwd = new THREE.Vector3(), camRight = new THREE.Vector3();
@@ -1556,7 +1910,7 @@ let stepT = 0, lastStepIdx = -1;
 // ================================================================ main loop
 const clock = new THREE.Clock();
 const V = new THREE.Vector3();
-function tick(dt) {
+function tick(dt, draw = true) {
   time += dt;
   for (let i = timers.length - 1; i >= 0; i--) if (time >= timers[i].at) timers.splice(i, 1)[0].fn();
   readInput();
@@ -1598,15 +1952,18 @@ function tick(dt) {
     if (want > .1) player.yaw += angDiff(player.yaw, Math.atan2(dir.x, dir.z)) * Math.min(1, dt * 6);
     player.pos.x += (Math.sin(player.yaw) * sp + player.kb.x) * dt; player.pos.z += (Math.cos(player.yaw) * sp + player.kb.y) * dt;
     player.kb.multiplyScalar(Math.exp(-dt * 4));
-    if (player.pos.x > 12.5) { player.pos.x = 12.5; if (!S.flags.toldSteep) { S.flags.toldSteep = true; toast('Too steep. West bank.'); } }
-    player.pos.z = clamp(player.pos.z, -40, 40);
+    if (!S.flags.town) {
+      if (player.pos.x > 12.5) { player.pos.x = 12.5; if (!S.flags.toldSteep) { S.flags.toldSteep = true; toast('Too steep. West bank.'); } }
+      player.pos.z = clamp(player.pos.z, -40, 40);
+    }
     HP.speed = sp; HP.phase += dt * (sp * 3 + 2);
     player.pos.y = Math.sin(time * 2.2) * .04;
     if (want > .1 && Math.random() < dt * 3) addRipple(player.pos.x, player.pos.z, .08, 0);
     for (const s of SNAKES) s.update(dt);
     // reached the shallows on the west side: climb out
     if (groundH(player.pos.x, player.pos.z) > -.35) {
-      if (player.pos.x < -8) { S.mode = 'land'; HP.kind = 'run'; player.grounded = true; player.pos.y = floorAt(player.pos.x, player.pos.z);
+      if (S.flags.town) { S.mode = 'town'; HP.kind = 'run'; player.grounded = true; player.pos.y = floorAt(player.pos.x, player.pos.z); townObjective(); }
+      else if (player.pos.x < -8) { S.mode = 'land'; HP.kind = 'run'; player.grounded = true; player.pos.y = floorAt(player.pos.x, player.pos.z);
         objective('Get up to the road.'); if (!S.removedNoose) { S.removedNoose = true; nooseRing.visible = knot.visible = false; ropeTail.visible = false; toast('He takes off the noose.'); } }
       else { player.pos.x -= Math.sin(player.yaw) * sp * dt; player.pos.z -= Math.cos(player.yaw) * sp * dt; }
     }
@@ -1636,11 +1993,11 @@ function tick(dt) {
     // into the water from the bank or bridge
     if (player.pos.y < .05 && f2 < -.3) {
       if (M === 'bridge') fail('The Chunky takes you back.', 'Jump the gaps. Don\'t stop running.');
-      else { S.mode = 'swim'; HP.kind = 'swim'; objective('Swim to the west bank. Follow the lantern.'); }
+      else { S.mode = 'swim'; HP.kind = 'swim'; objective(S.flags.town ? 'Swim to the bank.' : 'Swim to the west bank. Follow the lantern.'); }
     }
     if (M === 'land') {
       ghost.position.lerp(new THREE.Vector3(-23, ROAD_TOP + 1.6, 1.5), Math.min(1, dt * 1.2));
-      if (player.pos.x < -20.6 && Math.abs(player.pos.z) < 2.7 && player.pos.y > ROAD_TOP - .3) startBridge();
+      if (player.pos.x < -20.6 && player.pos.x > -60 && Math.abs(player.pos.z) < 2.7 && player.pos.y > ROAD_TOP - .3) startBridge();
     }
     if (M === 'bridge') {
       S.collapse += 3.5 * dt;
@@ -1663,7 +2020,7 @@ function tick(dt) {
       for (const [id, n] of Object.entries(NPCS)) { const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z); if (d < nd) { nd = d; near = id; } }
       if (near) { prompt(`${KA} · Talk to ${NPCS[near].name}`); if (input.aEdge) openDialog(near); }
       else prompt(null);
-      storeRoof.visible = !(player.pos.x > 34 && player.pos.x < 46 && player.pos.z > -16 && player.pos.z < -6);
+      storeRoof.visible = !(player.pos.x > STORE.x0 && player.pos.x < STORE.x1 && player.pos.z > STORE.z0 && player.pos.z < STORE.z1);
     }
   }
   // ---------------- sweeping Odessa's steps
@@ -1720,12 +2077,28 @@ function tick(dt) {
   input.aEdge = false; input.bEdge = false;
 
   sky.material.uniforms.uTime.value = time; waterMat.uniforms.uTime.value = time; swayU.uTime.value = time; gifMat.uniforms.uTime.value = time;
+  if (!draw) return;   // a test walking the whole map only needs the physics
   sky.position.copy(camera.position);
+  updateWorld();
   updateParticles(dt, M);
   if (bottle.visible) levelLiquid();
   renderFrame(dt);
 }
-let paused = false;
+// a test run starts with the clock held, so nothing has ticked before its first step
+// The ground, woods and water around the camera. The moon only moves once the camera has left the bridge,
+// so that it hangs in the same place through the opening.
+let worldX0 = 1e9, worldZ0 = 1e9, worldTick = 0;
+function updateWorld() {
+  const x = camera.position.x, z = camera.position.z, jumped = Math.hypot(x - worldX0, z - worldZ0) > 40;
+  worldX0 = x; worldZ0 = z; worldTick++;
+  updateGround(x, z, jumped ? Infinity : worldTick % 3 === 0 ? 1 : 0);
+  fillTrees(x, z); fillTies(x, z);
+  const away = Math.hypot(x, z), k = away > 60 ? 1 - 60 / away : 0;
+  if (k) water.position.set(x, 0, z); else water.position.set(0, 0, 0);
+  moon.position.copy(MOON_DIR).multiplyScalar(440); moon.position.x += x * k; moon.position.z += z * k; moon.position.y += camera.position.y * k;
+  if (jumped || worldTick % 20 === 0) for (const d of DISTANT) d.obj.visible = Math.hypot(x - d.x, z - d.z) < d.r;
+}
+let paused = TEST;
 function loop() { if (paused) return; tick(Math.min(clock.getDelta(), .05)); requestAnimationFrame(loop); }
 $('start').addEventListener('click', () => { $('title').hidden = true; startHang(); });
 // first frame: him hanging behind the title
@@ -1738,11 +2111,13 @@ requestAnimationFrame(loop);
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, floorAt, groundH, onRoad, blocked, places: PLACES, chunks: () => chunks.size,
     npcs: Object.fromEntries(Object.entries(NPCS).map(([k, n]) => [k, { x: n.root.position.x, z: n.root.position.z }])), pickups: PICKUPS,
     pause() { paused = true; },
     resume() { if (paused) { paused = false; clock.getDelta(); requestAnimationFrame(loop); } },
     step(seconds = 1 / 60, dt = 1 / 60) { paused = true; for (let i = 0, n = Math.max(1, Math.round(seconds / dt)); i < n; i++) tick(dt); return this.state(); },
+    // the same as step without drawing, for walking long distances
+    sim(seconds = 1 / 60, dt = 1 / 60) { paused = true; for (let i = 0, n = Math.max(1, Math.round(seconds / dt)); i < n; i++) tick(dt, false); return this.state(); },
     state() {
       return { mode: S.mode, time, hp: S.hp, beans: S.beans, rep: { ...S.rep }, flags: { ...S.flags }, kind: HP.kind, cut: HP.cut, pos: player.pos.toArray(), yaw: player.yaw, stamina: player.stamina, grounded: player.grounded, hero: heroRoot.position.toArray(), cam: camera.position.toArray(), burst: burstOn, uBurst: G.uBurst.value, obj: $('obj').textContent, toast: $('toast').classList.contains('show') ? $('toast').textContent : '', card: $('card').classList.contains('show') ? $('cardH').textContent : '', prompt: $('prompt').hidden ? '' : $('prompt').textContent, dialog: $('dialog').hidden ? null : { who: $('dWho').textContent, say: $('dSay').textContent, opts: [...$('dOpts').children].map(b => b.textContent) } };
     },
