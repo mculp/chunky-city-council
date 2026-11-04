@@ -81,7 +81,7 @@ check('it is gravel from end to end', drive.off === 0, drive.off);
 await g(() => __game.step(.1));
 await snap('yard');
 
-// ---------------- the taxidermy sign at the road by the drive, facing the road. What's carved on it is only checked for what it isn't: there's a name, the word, and no number.
+// ---------------- the taxidermy sign across the road from the drive, facing it. What's carved on it is only checked for what it isn't: there's a name, the word, and no number.
 // Then he walks into it and it stops him, and a truck driven into it from the road knocks it down.
 const sign = await g(() => {
   const G = __game, S = G.compound.sign, P = G.player.pos, T = 1 / 30, mouth = G.map.lanes.filter((l) => measured.includes(l.id)).sort((a, b) => b.length - a.length)[0].pts[0];
@@ -92,7 +92,7 @@ const sign = await g(() => {
   return out;
 });
 await snap('sign');
-check(`the taxidermy sign stands by the road ${sign.mouth} m from the mouth of the drive, off the road and the drive, facing the road, and lit a little`, sign.mouth < 12 && sign.off && sign.faces && sign.lit, sign);
+check(`the taxidermy sign stands across the road from the drive, ${sign.mouth} m from its mouth, off the road, facing it, and lit a little`, sign.mouth < 12 && sign.off && sign.faces && sign.lit, sign);
 check('  carved with a name and TAXIDERMY, and no number', sign.named && sign.word && !sign.number, { named: sign.named, word: sign.word, number: sign.number });
 check(`  walking into it stops him ${sign.stopped} m short of it`, sign.stopped > .1 && sign.stopped < 1, sign.stopped);
 const knocked = await g(() => {

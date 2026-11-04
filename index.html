@@ -3270,6 +3270,8 @@ const rails = (F, a, b, high, mat) => {
 };
 const clearing = (x0, z0, x1, z1, m, lawn) => { const [ax, az] = atTrue(x0, z0), [bx, bz] = atTrue(x1, z1); pad(ax, bx, az, bz, m, lawn); };
 clearing(1038, 584, 1066, 612, 4); clearing(1002, 614, 1066, 655, 5); clearing(994, 640, 1014, 662, 4); clearing(1006, 655, 1040, 706, 5); clearing(956, 652, 984, 692, 5); clearing(975, 668, 998, 694, 3); clearing(893, 699, 930, 733, 5);
+// and the cleared lot across Pine Forest Rd from the drive, bare red dirt. It's off the aerial, measured from the road's own edge, since TIGER has the road 5 m east of where it is there.
+clearing(805, 696, 845, 768, 3); clearing(783, 712, 805, 772, 4); clearing(795, 768, 830, 786, 4);
 // ---- the deck, with the pool in it. The water's in data/water.json.
 const DECK = tilted(1035.6, 644.6, -30.5), [POOL_U0, POOL_U1, POOL_V0, POOL_V1] = [2.72, 12.72, 4.04, 8.44];
 const patioMat = new THREE.MeshStandardMaterial({ color: '#a6a091', roughness: 1 }), copingMat = new THREE.MeshStandardMaterial({ color: '#d9d4c4', roughness: .95 });
@@ -3470,10 +3472,12 @@ const GROUNDS = (() => { const [x0, z0] = atTrue(855.5, 572), [x1, z1] = atTrue(
 // ---- the taxidermy sign at the road. The owner asked for it by name, so it's the one thing here that says whose it is, as it's carved on the listing's photo from
 // February 2018: two tall timber posts and a crossbar, a plain oval plaque hanging from the bar, and under that a board of weathered grey-green planks in a timber frame,
 // with the family's name in an arc over a buck and a doe and TAXIDERMY on a ribbon. The real one has the phone number on its last plank, and here that plank's bare. It's
-// 1.4 times life, as the other signs are, so it reads from the road, and it stands back off Pine Forest Rd south of the drive, facing the road.
+// 1.4 times life, as the other signs are, so it reads from the road. It stands across Pine Forest Rd from the drive, at the front of the cleared lot there, facing the mouth of
+// the drive, as it does on Street View from October 2024.
 const TAXIDERMY_SIGN = (() => {
-  const words = ['MURPHEY', 'TAXIDERMY'], [x, z] = atTrue(860.4, 741.6), nx = -.962, nz = .273, ex = nz, ez = -nx, yaw = Math.atan2(nx, nz), q = new THREE.Quaternion().setFromAxisAngle(UP, yaw);
-  const at = (u, w) => [x + ex * u + nx * w, z + ez * u + nz * w], foot = Math.min(groundH(x, z), Y0), here = nearHere(860, 742, 160);
+  const words = ['MURPHEY', 'TAXIDERMY'], [x, z] = atTrue(844.6, 736.2), [mx, mz] = atTrue(851.6, 736.3), nx = (mx - x) / Math.hypot(mx - x, mz - z), nz = (mz - z) / Math.hypot(mx - x, mz - z);
+  const ex = nz, ez = -nx, yaw = Math.atan2(nx, nz), q = new THREE.Quaternion().setFromAxisAngle(UP, yaw);
+  const at = (u, w) => [x + ex * u + nx * w, z + ez * u + nz * w], foot = Math.min(groundH(x, z), Y0), here = nearHere(845, 736, 160);
   const wood = '#a8743f', cut = '#33251a', serif = 'Georgia, "Times New Roman", serif';
   const face = textTex([], 1024, 800, '#76836f', wood, `700 104px ${serif}`, { after: (g) => {
     // seven planks, each its own grey-green, weathered along the grain, with dark gaps between them
