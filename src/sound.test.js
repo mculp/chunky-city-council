@@ -384,6 +384,43 @@ test('a clip wanted while it\'s on its way plays once it comes, and only once', 
   assert.equal(w.made.sources.length, made + 1);
 });
 
+test('a clip from nowhere is as loud wherever he is, and in the middle', async () => {
+  const w = fakeWorld({ respond: (f) => (f === 'stone.mp3' ? tone({ seconds: 3, amp: .3 }) : null) }), s = createSound(data(), { win: w.win }); w.touch(); await w.settle();
+  s.update(0, 0, 0); assert.ok(s.clip('stone.mp3')); await w.settle();
+  const c = () => s.state().clips['stone.mp3'], here = c().gain;
+  for (const [x, z, yaw] of [[30, 0, 0], [0, -500, 1.2], [-80, 60, 3]]) { s.update(x, z, yaw); assert.equal(c().gain, here, `as loud at ${x}, ${z}`); assert.equal(w.made.lastPanner.pan.target, 0, 'and in the middle'); }
+});
+
+test('a clip fades away by as much of it as it\'s asked for, everything else comes back up as it does, and none of it stops it', async () => {
+  const w = fakeWorld({ respond: (f) => (f === 'stone.mp3' ? tone({ seconds: 3, amp: .3 }) : null) }), buses = withBuses(w), s = createSound(data(), { win: w.win }); w.touch(); await w.settle();
+  // the night noise where the sheet has it, with nothing dipping it
+  s.setLevel('ambience', 1);
+  const B = buses(), level = (b) => B[b].gain.target, before = level('ambience');
+  s.update(0, 0, 0); s.clip('stone.mp3'); await w.settle();
+  const src = w.made.sources.at(-1), c = () => s.state().clips['stone.mp3'], all = c().gain, under = level('ambience');
+  assert.ok(under < before * .6, 'the night noise dips under all of it');
+  s.fadeClip('stone.mp3', .5); s.update(0, 0, 0);
+  assert.ok(Math.abs(c().gain - all / 2) < .002, `half of it is half as loud: ${all} to ${c().gain}`);
+  assert.ok(Math.abs(level('ambience') - (before + under) / 2) < 1e-9, 'and the night noise is half way back up');
+  assert.equal(s.state().aim.ambience, +level('ambience').toFixed(3), 'and it says that\'s where the night noise is headed');
+  s.fadeClip('stone.mp3', 1); s.update(0, 0, 0);
+  assert.ok(c().gain === all && level('ambience') === under, 'and all of it again is as it was');
+  s.fadeClip('stone.mp3', 0);
+  assert.ok('stopped' in src, 'none of it stops it');
+  src.onended();
+  assert.ok(!c().playing && s.state().clipping === 0 && level('ambience') === before);
+  assert.ok(s.clip('stone.mp3'), 'and asked for again, it starts again'); assert.notEqual(w.made.sources.at(-1), src);
+  assert.equal(c().much, 1, 'all of it');
+});
+
+test('a clip faded to nothing before it comes in doesn\'t start when it does', async () => {
+  const w = fakeWorld({ respond: (f) => (f === 'stone.mp3' ? tone({ seconds: 2 }) : null) }), s = createSound(data(), { win: w.win }); w.touch(); await w.settle();
+  const made = w.made.sources.length;
+  s.clip('stone.mp3'); s.fadeClip('stone.mp3', 0); await w.settle();
+  assert.equal(w.made.sources.length, made);
+  assert.ok(s.clip('stone.mp3'), 'and asked for after, it starts'); assert.equal(w.made.sources.length, made + 1);
+});
+
 test('nothing that goes wrong in here can reach the game', () => {
   const w = fakeWorld(), errors = []; w.win.console.error = (m) => errors.push(m);
   const s = createSound(data(), { win: w.win }); w.touch();

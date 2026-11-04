@@ -34,6 +34,9 @@ const edgeDistance = (x, z, poly) => {
   return best;
 };
 
+// How far x, z is from the cemetery: 0 inside it, and otherwise from the nearest of its edges, which have the fence along the loop and the gate on them. In whatever metres the outline's in.
+export const fromCemetery = (x, z, outline = CEMETERY.outline) => (inside(x, z, outline) ? 0 : edgeDistance(x, z, outline));
+
 // How much room each kind takes: how far out it stops him, and how high. A slab can be walked on: only the stone at its head stops him.
 const SIZE = { low: [.5, .6], double: [.75, .75], upright: [.35, .85], old: [.28, .9], cross: [.3, 1], obelisk: [.6, 3], slab: [.85, .8] };
 

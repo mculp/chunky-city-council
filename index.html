@@ -266,7 +266,8 @@ import { vehicleGeometries, doorGeometries, smoothed, PAINTS, LAMPS } from './sr
 import { makeLine, createTrains } from './src/trains.js';
 import { trainGeometries, TRAIN_LAMPS, gateArm } from './src/trainmodels.js';
 import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, feedBin, stockTank, frog, frogThroat, frogLids } from './src/things.js';
-import { CEMETERY, layGraves, graveSolid, onSlab, slabHead } from './src/graves.js';
+import { CEMETERY, layGraves, graveSolid, onSlab, slabHead, fromCemetery } from './src/graves.js';
+import { createSong } from './src/song.js';
 import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/volley.js';
 import { FROGS, BEST, TONI, createToni, frogLine, askLine, forgetToni } from './src/toni.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
@@ -3837,9 +3838,11 @@ clearing(-590, -7362, -535, -7318, 8);
 const GRAVES = layGraves(hash), GRAVE_TURN = Math.atan2(CEMETERY.back[0], CEMETERY.back[1]);
 const STONE_WORDS = await (await fetch('data/stone.json')).json();
 // The words are on the slab the owner picked, cut in the stone at its head (CHUNKY-167), and can be read standing on it or beside it anywhere along it.
-// STONE is that stone, where the owner's clip plays from, which is theirs to add at STONE_CLIP and isn't on any sheet. Until they do, nothing plays.
+// STONE is that stone. STONE_CLIP is their song, the owner's own, which isn't on any sheet. It plays as music and not from the stone, when he pulls up and when the
+// stone's read (CHUNKY-175), and without the file nothing plays. CEMETERY_EDGE is the cemetery's edge in world metres, for how far off he is, and `song` is its comings and goings.
 const WORDS_SLAB = (() => { const g = GRAVES.find((o) => o.words), [x, z] = atTrue(g.x, g.z); return { ...g, x, z }; })();
 const STONE = (([x, z]) => ({ x, z }))(slabHead(WORDS_SLAB, GRAVE_TURN)), STONE_CLIP = 'audio/music/stone.mp3';
+const CEMETERY_EDGE = CEMETERY.outline.map(([x, z]) => atTrue(x, z)), song = createSong();
 const stoneInReach = () => onSlab(WORDS_SLAB, player.pos.x, player.pos.z, GRAVE_TURN, .9);
 let stoneRead = false;
 const stoneWords = () => `<span class="words">${(STONE_WORDS.words || 'Words from a song, imprinted on the stone.').replace(/</g, '&lt;')}</span>`;
@@ -8406,6 +8409,10 @@ function soundTick(dt, M) {
   const P = player.pos;
   SFX.update(P.x, P.z, cam.yaw);
   if (!SFX.unlocked || boardOpen) return;
+  // their song at the cemetery: pulling up starts it, on foot or in whatever he's stopped, once a visit, and it fades away once he's well off
+  const tune = song.update(fromCemetery(P.x, P.z, CEMETERY_EDGE), M === 'town' ? null : M === 'drive' && driving ? Math.hypot(driving.f, driving.s) : Infinity, dt);
+  if (tune.start) SFX.clip(STONE_CLIP);
+  SFX.fadeClip(STONE_CLIP, tune.much);
   // and once more after the last of what was going without him has stopped, which leaves its engine off
   if ((townFull && folkOut) || coasting.length || coastHeard) { goingBy(P); coastHeard = coasting.length > 0; }
   // when a try ends it's the fever's music, out of tune, and coming to it's the bridge's
@@ -8637,7 +8644,7 @@ function tick(dt, draw = true) {
       if (!stone) stoneRead = false;
       if (!plate) railMarkerRead = false;
       if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (railMarkerRead && S.act === 'Read the marker') prompt(`<span class="words">${RAIL_MARKER.words}</span>`); else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH && !S.items.gerald) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
-      if (input.aEdge) { if (near === 'toni') toniSpoke(toni.talk(player.pos)); else if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) { stoneRead = true; SFX.clip(STONE_CLIP, STONE); } else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else if (ditch) letGeraldGo(); else swing(); }
+      if (input.aEdge) { if (near === 'toni') toniSpoke(toni.talk(player.pos)); else if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) { stoneRead = true; SFX.clip(STONE_CLIP); } else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else if (ditch) letGeraldGo(); else swing(); }
       if (input.sEdge) swing();
       if (input.hEdge) toggleShamble();
       if (input.cEdge) throwOne();
@@ -8951,7 +8958,7 @@ if (TEST) {
     fling: { shoes: () => shoeList.map((o) => ({ x: o.x, y: o.y, z: o.z, down: o.down, roll: o.roll })), drawnShoes: () => shoes.count, streak: (s) => { const i = crowdShown.indexOf(s), a = crowdAura.instanceMatrix.array; return i < 0 ? null : [a[i * 16 + 8], a[i * 16 + 9], a[i * 16 + 10]]; },
       cast: () => Object.entries(NPCS).filter(([, n]) => n.box).map(([id, n]) => ({ id, x: n.root.position.x, y: n.root.position.y, z: n.root.position.z, spot: [n.spot.x, n.spot.z], jumping: !!n.jump, solid: n.box[4] > -Infinity })), JUMP, loose },
     THREE, hills: { at: HILLS.at, slope: HILLS.slope, follow: HILLS.follow, terraces: HILLS.terraces, tracks: HILLS.tracks, here: () => HILL.uHillHere.value, uniforms: HILL, flat: hillsFlat, skyline },
-    stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, STONE_CLIP, WORDS_SLAB, GRAVE_TURN, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead },
+    stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, STONE_CLIP, WORDS_SLAB, GRAVE_TURN, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead, song, fromCemetery: (x, z) => fromCemetery(x, z, CEMETERY_EDGE) },
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },
     compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, screen: () => screenMesh, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach, sign: TAXIDERMY_SIGN },
     lures: { LYING, lyingNear, flying, popping, ALARMS, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },

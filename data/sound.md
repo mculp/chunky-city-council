@@ -85,13 +85,16 @@ The music and everything else dip under it, the words come up, and it plays once
 
 ## Somebody's own clip
 
-A recording that's somebody's own is on no sheet and in no manifest. It's played by its file with `clip(file, { x, z, reach })`, the way the stone in the cemetery plays the owner's clip from `audio/music/stone.mp3` when it's read (`data/stone.md`). The file can be anything Chrome plays.
+A recording that's somebody's own is on no sheet and in no manifest. It's played by its file with `clip(file, { x, z, reach })`, the way the cemetery plays the owner's song from `audio/music/stone.mp3` when he pulls up and when the stone's read (`data/stone.md`). The file can be anything Chrome plays.
 
 - It's asked for the first time it's wanted, and only then. If it isn't there, nothing plays and nothing's said, then or after. The browser notes the one request that wasn't found, the way it does for any file, and the checks don't count that as an error.
-- It plays once, from x and z, as loud as a voice line and turned down with the effects, and quieter as he walks off, out to `reach`, 30 m unless it's asked otherwise.
-- The music, the night noise and the effects, which have the crowd in them, dip under it the way they do under a voice line, and come back up after.
+- It plays once, as loud as a voice line and turned down with the effects. From x and z, it's quieter as he walks off, out to `reach`, 30 m unless it's asked otherwise, and to one side. Without them it's from nowhere: as loud wherever he is, in the middle, which is how the owner's song plays.
+- `fadeClip(file, much)` says how much of it's to be heard, from 1 for all of it down to 0, which stops it, or stops it starting if it hasn't come in yet. The page fades the song away by it.
+- The music, the night noise and the effects, which have the crowd in them, dip under it the way they do under a voice line, by as much of it as there is, so they come back up as it fades and after it's done.
 - It goes straight to the master, so the mute has it and nothing it dips does.
-- Wanted again while it's going, it carries on, and it's never started over or twice. Once it's done, it plays again the next time it's wanted.
+- Wanted again while it's going, it carries on, and it's never started over or twice. Once it's done, it plays again the next time it's wanted, all of it.
+
+`state()` has each bus as it is, `levels`, and where it's headed, `aim`. Chrome only works out a bus while something's playing through it, so one with nothing on it keeps the last it had, and the checks look at `aim` for what's dipped.
 
 ## Making them with ElevenLabs on fal
 

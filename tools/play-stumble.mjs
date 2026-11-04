@@ -1,7 +1,8 @@
 // Goes and finds what's only there for anyone who stumbles on it, on a phone-sized page, with the game's own movement and real taps. In from School St to the second trailer from the left, down its length to the computer in the back,
 // up to the screen and away again. Across the green pool. Then in a pickup up the road past where the map used to stop, on foot up the gravel loop and through the gate, between the stones to the
-// slab with words on it, the northernmost, which the owner picked, and READ all along it. Nothing's marked. Last, the owner's clip, played from a stand-in for it, so a check never plays theirs:
-// once from the stone when it's read, with the night noise and the crowd dipped under it, quieter walking off, with the sound button and the effects slider, and nothing at all without it.
+// slab with words on it, the northernmost, which the owner picked, and READ all along it. Nothing's marked. Last, their song, played from a stand-in for it so a check never plays theirs: a pickup
+// driving past the cemetery and then pulling up by it, as loud anywhere round it with the night noise and the crowd dipped under it, once a visit, reading the stone while it plays and once it's
+// done, fading away up the road, walking back in, with the sound button and the effects slider, and nothing at all without it.
 //
 //   npm i && npm run stumble [-- --shots dir]
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -172,9 +173,9 @@ await tap(); await g(() => __game.sim(.1, 1 / 30));
 // the owner's words exactly, once they've put them in data/stone.json, and that there are words from a song on it until then
 const read = await g(() => { const says = promptSays(), words = __game.stumble.sheet.words; return { read: __game.stumble.stoneRead(), theirs: !!words, right: words ? says === words : /imprinted on the stone/.test(says) }; });
 check(read.theirs ? 'it says the owner\'s words, exactly' : 'it says there are words from a song on it, which are the owner\'s to fill in', read.read && read.right, read);
-// with no clip of the owner's there, which is how it is until they add one, it's asked for once and nothing plays
-const silent = await g(async () => { await new Promise((r) => setTimeout(r, 500)); const G = __game, s = G.sound.state(); return { unlocked: s.unlocked, clip: s.clips[G.stumble.STONE_CLIP] ?? null, clipping: s.clipping }; });
-check('with no clip of the owner\'s there, reading it plays nothing', silent.unlocked && silent.clip?.there === false && !silent.clip.playing && silent.clipping === 0, silent);
+// with no clip of the owner's there, it's asked for once, and nothing plays and nothing's said, pulling up or reading
+const silent = await g(async () => { await new Promise((r) => setTimeout(r, 500)); const G = __game, s = G.sound.state(); return { unlocked: s.unlocked, clip: s.clips[G.stumble.STONE_CLIP] ?? null, clipping: s.clipping, said: !document.getElementById('sub').hidden }; });
+check('with no clip of the owner\'s there, pulling up and reading it play nothing and say nothing', silent.unlocked && silent.clip?.there === false && !silent.clip.playing && silent.clipping === 0 && !silent.said, silent);
 await snap('the-stone');
 const typed = await g(() => { const G = __game, S = G.stumble; S.sheet.words = 'A LINE FROM THE SHEET'; G.sim(.1, 1 / 30); const says = promptSays(); S.sheet.words = ''; return says; });
 check('and whatever goes on the sheet is what it says', typed === 'A LINE FROM THE SHEET', typed);
@@ -226,48 +227,109 @@ await snap('the-stone-and-every-button');
 check('no console errors', errors.length === 0, errors);
 await close();
 
-// ---------------- the owner's clip, from a stand-in for it, in Chrome with nothing to play it out of, on the levels the game sets and what comes out of it
+// ---------------- their song, from a stand-in for it so a check never plays theirs, in Chrome with nothing to play it out of, on the levels the game sets and what comes out of it.
+// A pickup up Chunky Duffee Rd past the cemetery without stopping, and then pulling up by it. It's music, as loud anywhere round the cemetery, with the night noise and the crowd dipped
+// under it, and once a visit. Reading the stone carries it on, and starts it once it's done. It fades away up the road, and walking back in after being well off starts it again.
 {
-  const { page, errors, close } = await serveAndOpen({ touch: true, viewport: { width: 390, height: 844 }, overrides: { '/audio/music/stone.mp3': standIn(4) } });
+  const { page, errors, close } = await serveAndOpen({ touch: true, viewport: { width: 390, height: 844 }, overrides: { '/audio/music/stone.mp3': standIn(5) } });
   const g = (fn, arg) => page.evaluate(fn, arg), wait = (s) => page.waitForTimeout(s * 1000);
   const read = async () => { await page.tap('#bA'); await page.waitForTimeout(20); await g(() => __game.sim(1 / 30, 1 / 30)); };
-  const now = () => g(() => { const G = __game, s = G.sound.state(); return { c: s.clips[G.stumble.STONE_CLIP] ?? null, clipping: s.clipping, levels: s.levels, db: G.sound.meter(), muted: G.sound.muted }; });
-  await g(() => {
-    const G = __game, S = G.stumble, W = S.WORDS_SLAB, a = S.GRAVE_TURN + W.turn; G.pause(); G.jump('town'); G.S.flags.town = true; G.step(.1); document.getElementById('card').style.display = 'none';
+  const now = () => g(() => { const G = __game, S = G.stumble, s = G.sound.state(); return { c: s.clips[S.STONE_CLIP] ?? null, clipping: s.clipping, aim: s.aim, db: G.sound.meter(), muted: G.sound.muted, visit: S.song.visit, read: S.stoneRead(), d: +S.fromCemetery(G.player.pos.x, G.player.pos.z).toFixed(1) }; });
+  // on foot to a place, in true metres, and a moment there
+  const at = (x, z) => g(([x, z]) => { const G = __game; G.place(...G.map.fromTrue(x, z)); G.sim(.3, 1 / 30); }, [x, z]);
+  await g(async () => {
+    const G = __game, S = G.stumble, W = S.WORDS_SLAB, a = S.GRAVE_TURN + W.turn, T = 1 / 30; G.pause(); G.jump('town'); G.S.flags.town = true; G.step(.1); document.getElementById('card').style.display = 'none';
     window.slab = (u, v) => [W.x + u * Math.cos(a) + v * Math.sin(a), W.z - u * Math.sin(a) + v * Math.cos(a)];
-    G.place(...slab(0, W.d / 2 - .3)); G.sim(.3, 1 / 30);
+    // Chunky Duffee Rd from more than 100 m short of the cemetery to more than 100 m past it, which goes by it 9 m off
+    const lanes = (await (await fetch('data/lanes.json')).json()).lanes.filter((l) => l.name === 'Chunky Duffee Rd').map((l) => l.points.map((p) => G.map.fromTrue(...p)));
+    const lane = lanes.find((l) => l.some(([x, z]) => S.fromCemetery(x, z) < 15)), first = lane.findIndex(([x, z], i) => S.fromCemetery(x, z) < 105 && i > 0) - 1;
+    window.road = lane.slice(first, lane.findIndex(([x, z], i) => i > first + 2 && S.fromCemetery(x, z) > 110 && z < lane[first][1]) + 1);
+    const v = G.vehicles.find((o) => o.kind === 'pickup' && !o.wrecked), side = v.yaw + Math.PI / 2;
+    G.place(v.x + Math.sin(side) * (v.K.width / 2 + 1), v.z + Math.cos(side) * (v.K.width / 2 + 1)); G.step(.6);
+    G.key('e', true); G.sim(T, T); G.key('e', false); G.sim(T, T);
+    window.truck = v;
+    // the pickup to the start of the road, stopped and facing up it
+    window.toStart = () => { const [sx, sz] = road[0], yaw = Math.atan2(road[2][0] - sx, road[2][1] - sz); Object.assign(v, { x: sx, z: sz, y: G.floorAt(sx, sz), yaw, f: 0, s: 0, steer: 0, grounded: true }); G.look(yaw + Math.PI); G.sim(.5, T); };
+    // up the road with the stick, steering for a point ahead on it, at `top` m/s at most, slower in a bend, and if `stopBy` is given, braking once he's that near the cemetery.
+    // Says how near it went, how slow it was going while it was within 25 m, how fast it was going when their song was asked for, and how near.
+    window.drive = (top, stopBy = null) => {
+      let i = 0, t = 0, closest = Infinity, slowest = Infinity, asked = null;
+      const note = () => { const d = S.fromCemetery(v.x, v.z), sp = Math.hypot(v.f, v.s); closest = Math.min(closest, d); if (d < 25) slowest = Math.min(slowest, sp); if (!asked && G.sound.state().clips[S.STONE_CLIP]) asked = { d: +d.toFixed(1), speed: +sp.toFixed(2) }; return d; };
+      while (t < 90) {
+        while (i < road.length - 1 && Math.hypot(road[i][0] - v.x, road[i][1] - v.z) < 8 + Math.abs(v.f) * .9) i++;
+        const [tx, tz] = road[i]; let d = Math.atan2(tx - v.x, tz - v.z) - v.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+        if ((i === road.length - 1 && Math.hypot(tx - v.x, tz - v.z) < 10) || (stopBy !== null && note() < stopBy)) break;
+        G.stick(Math.max(-1, Math.min(1, -d * 2.4)), Math.abs(v.f) > (Math.abs(d) > .35 ? Math.min(9, top) : top) ? -1 : 1); G.sim(T, T); t += T; note();
+      }
+      G.stick(0, 0);
+      if (stopBy !== null) { G.key('s', true); for (let k = 0; k < 240 && Math.abs(v.f) > .3; k++) { G.sim(T, T); note(); } G.key('s', false); for (let k = 0; k < 15; k++) { G.sim(T, T); note(); } }
+      return { closest: +closest.toFixed(1), slowest: +slowest.toFixed(1), asked, t: +t.toFixed(1), stopped: +Math.hypot(v.f, v.s).toFixed(2) };
+    };
   });
   await page.keyboard.press('Shift'); await wait(.4);
   const before = await now();
-  await read(); await wait(.6);
+  const past = await g(() => { toStart(); return drive(14); });
+  await wait(.6);
+  const after = await now();
+  check(`driving past at speed doesn't start it: by it ${past.closest} m off, and never under ${past.slowest} m/s within 25 m`, past.closest < 12 && past.slowest > 4 && !past.asked && !after.c && !after.visit && after.d > 100, { past, after });
+  const up = await g(() => { toStart(); return drive(14, 26); });
+  await wait(.8);
   const first = await now();
-  check('reading it plays the owner\'s clip once, from the stone', first.c?.there === true && first.c.playing && first.clipping === 1 && first.c.gain > 0, first);
-  check(`with the night noise down to ${Math.round(first.levels.ambience / before.levels.ambience * 100)}% under it and the crowd to ${Math.round(first.levels.effects / before.levels.effects * 100)}%`,
-    first.levels.ambience < before.levels.ambience * .6 && first.levels.effects < before.levels.effects * .8 && first.levels.voice === before.levels.voice, { before: before.levels, during: first.levels });
+  check(`pulling up in a pickup starts it: asked for at ${up.asked?.speed} m/s, ${up.asked?.d} m off, once it's stopped`, up.asked && up.asked.speed < 2 && up.asked.d < 25 && first.c?.there === true && first.c.playing && first.clipping === 1 && first.c.gain > 0 && first.c.much === 1, { up, c: first.c });
+  check(`with the night noise down to ${Math.round(first.aim.ambience / before.aim.ambience * 100)}% under it and the crowd to ${Math.round(first.aim.effects / before.aim.effects * 100)}%`,
+    first.aim.ambience < before.aim.ambience * .6 && first.aim.effects < before.aim.effects * .8 && first.aim.voice === before.aim.voice, { before: before.aim, during: first.aim });
+  // out of the pickup, and about the cemetery on foot: at the stone, in through the gate, on the road by it, across the road at the church, and 50 m up the road
+  await g(() => { const G = __game; G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); G.sim(.5, 1 / 30); });
+  const round = [];
+  for (const [x, z] of [[-391.5, -7425.5], [-415.5, -7428.5], [-485, -7353], [-497, -7392], [-425.2, -7489.4]]) { await at(x, z); await wait(.3); const n = await now(); round.push({ d: n.d, gain: n.c.gain, playing: n.c.playing, at: n.c.at }); }
+  check(`it's as loud anywhere round the cemetery, from in it to ${Math.max(...round.map((r) => r.d))} m off: ${[...new Set(round.map((r) => r.gain))].join(', ')}`, round.every((r) => r.playing && r.at === first.c.at && Math.abs(r.gain - first.c.gain) < .002) && Math.max(...round.map((r) => r.d)) > 45, round);
+  await g(() => { __game.place(...slab(0, __game.stumble.WORDS_SLAB.d / 2 - .3)); __game.sim(.3, 1 / 30); });
   await read(); await wait(.2);
   const again = await now();
-  check('reading it again while it\'s playing doesn\'t start it over or start another', again.c.playing && again.c.at === first.c.at && again.clipping === 1, { first: first.c, again: again.c });
-  await g(() => { __game.place(...slab(0, __game.stumble.WORDS_SLAB.d / 2 + 13)); __game.sim(.3, 1 / 30); }); await wait(.3);
-  const off = await now();
-  check(`walking off it gets quieter: ${first.c.gain} to ${off.c.gain} of it, 13 m further off`, off.c.playing && off.c.gain < first.c.gain * .5, { near: first.c.gain, far: off.c.gain });
-  await g(() => { __game.place(...slab(0, __game.stumble.WORDS_SLAB.d / 2 - .3)); __game.sim(.3, 1 / 30); }); await wait(.3);
+  check('reading the stone while it\'s playing carries it on, and doesn\'t start it over or start another', again.read && again.c.playing && again.c.at === first.c.at && again.clipping === 1, { first: first.c, again: again.c });
   const loud = await now();
   await page.locator('#mute').tap(); await wait(.3);
   const hushed = await now();
   await page.locator('#mute').tap(); await wait(.2);
   check(`the sound button has it: ${loud.db.toFixed(0)} dB coming out, then ${hushed.db.toFixed(0)}`, hushed.muted && hushed.c.playing && loud.db > -50 && hushed.db < loud.db - 40, { loud: loud.db, hushed: hushed.db });
-  await page.waitForFunction(() => !__game.sound.state().clips[__game.stumble.STONE_CLIP].playing, null, { timeout: 6000 }).catch(() => {}); await wait(.8);
-  const after = await now();
-  check('once it\'s done, the night noise and the crowd come back up', !after.c.playing && after.clipping === 0 && ['music', 'ambience', 'effects', 'voice'].every((b) => Math.abs(after.levels[b] - before.levels[b]) < .01), { before: before.levels, after: after.levels });
+  await page.waitForFunction(() => !__game.sound.state().clips[__game.stumble.STONE_CLIP].playing, null, { timeout: 8000 }).catch(() => {}); await wait(.8);
+  const done = await now();
+  check('once it\'s done, the night noise and the crowd come back up', !done.c.playing && done.clipping === 0 && ['music', 'ambience', 'effects', 'voice'].every((b) => Math.abs(done.aim[b] - before.aim[b]) < .01), { before: before.aim, after: done.aim });
   await read(); await wait(.4);
   const next = await now();
-  check('and read again after, it plays again', next.c.playing && next.c.at > first.c.at, next.c);
+  check('and reading the stone once it\'s done starts it again', next.read && next.c.playing && next.c.at > first.c.at, next.c);
   // the effects slider, with a real drag, under the button beside the mute
   await page.locator('#levels').tap(); await wait(.2);
   const lane = await page.locator('#lvEffects').boundingBox(), mid = lane.y + lane.height / 2;
   await page.mouse.move(lane.x + lane.width - 6, mid); await page.mouse.down(); await page.mouse.move(lane.x + lane.width * .25, mid, { steps: 8 }); await page.mouse.up(); await wait(.5);
   const slid = await now(), effects = await g(() => __game.sound.levelOf('effects'));
   check(`the effects slider turns it down with the rest of the effects, to ${Math.round(effects * 100)}%`, effects < .5 && slid.c.playing && Math.abs(slid.c.out / next.c.out - effects) < .05, { effects, was: next.c.out, now: slid.c.out });
+  await page.locator('#levels').tap(); await wait(.1);
+  // up the road, past 60 m, it fades away over a few seconds, and everything else comes back up as it does
+  const full = (await now()).c.gain;
+  await g(() => { const G = __game; G.place(...G.map.fromTrue(-505.1, -7296.6)); G.sim(2, 1 / 30); }); await wait(.4);
+  const fading = await now();
+  await g(() => __game.sim(2.5, 1 / 30)); await wait(.4);
+  const gone = await now();
+  check(`${fading.d} m off it fades away: ${Math.round(fading.c.much * 100)}% of it 2 s on, and none of it 2.5 s after that`, fading.c.playing && Math.abs(fading.c.much - .5) < .05 && Math.abs(fading.c.gain - full * fading.c.much) < .01 && !gone.c.playing && gone.clipping === 0, { fading: fading.c, gone: gone.c, full });
+  check('and the night noise comes back up with it', fading.aim.ambience > slid.aim.ambience && Math.abs(gone.aim.ambience - before.aim.ambience) < .01, { during: slid.aim.ambience, fading: fading.aim.ambience, gone: gone.aim.ambience, before: before.aim.ambience });
+  // back without having been 100 m off: it's the same visit
+  await at(-485, -7353); await g(() => __game.sim(1, 1 / 30)); await wait(.4);
+  const back = await now();
+  check(`back ${back.d} m off without having been 100 m away, it doesn't start again by itself`, back.visit && !back.c.playing, back);
+  // well off, and in again on foot
+  await at(-511.8, -7246.7);
+  const off = await now();
+  const walk = await g(() => {
+    const G = __game, S = G.stumble, P = G.player.pos, T = 1 / 30, [ex, ez] = G.map.fromTrue(-484.9, -7353.3); let t = 0, started = null;
+    G.key('w', true);
+    while (t < 60 && Math.hypot(P.x - ex, P.z - ez) > .8) { G.look(Math.atan2(P.x - ex, P.z - ez)); G.sim(T, T); t += T; if (!started && S.song.visit) started = +S.fromCemetery(P.x, P.z).toFixed(1); }
+    G.key('w', false); G.sim(T, T);
+    return { started, t: +t.toFixed(1) };
+  });
+  await wait(.6);
+  const walked = await now();
+  check(`after ${off.d} m off, walking back in starts it again, ${walk.started} m from it`, !off.visit && walk.started !== null && walk.started <= 25 && walk.started > 23 && walked.c.playing && walked.c.at > next.c.at && walked.c.much === 1, { off: off.d, walk, c: walked.c });
   check('with no console errors', errors.length === 0, errors);
   await close();
 }
