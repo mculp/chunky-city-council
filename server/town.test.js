@@ -95,6 +95,14 @@ test('someone who has gone quiet is on the list to be dropped, counting from whe
   now = 10002; t.move(a, new Uint8Array(3)); assert.deepEqual(t.silent(now, 5000), [a]);
 });
 
+test('someone who\'s only saying what they carry isn\'t quiet, which is how a newcomer stays in town through the opening before they\'re anywhere', () => {
+  let now = 0; const t = createTown({ clock: () => now }), a = inTown(t);
+  now = 4000; t.keep(a, { beans: 1 });
+  now = 8000; assert.deepEqual(t.silent(now, 5000), []);
+  assert.equal(decodeMessage(t.snapshot()).players.length, 0);
+  now = 9001; assert.deepEqual(t.silent(now, 5000), [a]);
+});
+
 // ---------------- coming back
 test('someone coming back is welcomed with where they were and what they had', () => {
   let now = 0; const t = createTown({ clock: () => now }), me = hello({ name: 'Tre' });

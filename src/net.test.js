@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { encodePose, decodePose, encodeSnapshot, decodeMessage, say, rollLook, createWalkers, connectNet, POSE_BYTES, NET_RATE, HOW } from './net.js';
+import { encodePose, decodePose, encodeSnapshot, decodeMessage, say, rollLook, createWalkers, connectNet, makeKey, worldOf, POSE_BYTES, NET_RATE, HOW, PHONE_KEY } from './net.js';
 
 const near = (a, b, within, what) => assert.ok(Math.abs(a - b) <= within, `${what ?? 'value'}: ${a} is not within ${within} of ${b}`);
 
@@ -62,6 +62,24 @@ test('twenty-five names spread over all seven looks', () => {
   assert.equal(used.size, 7);
 });
 
+test('a phone\'s key is one the town takes, and nobody else\'s', () => {
+  const keys = new Set(Array.from({ length: 200 }, () => makeKey()));
+  assert.equal(keys.size, 200);
+  for (const k of keys) assert.match(k, PHONE_KEY);
+});
+
+test('the vehicles, as a word: the same for the same vehicles parked in the same places, and different if any of them is different', () => {
+  const parked = [{ kind: 'pickup', x: 10.004, z: -3, yaw: 1 }, { kind: 'car', x: 200, z: 7.5, yaw: 0 }];
+  const w = worldOf(parked);
+  assert.match(w, /^[0-9a-f]{8,64}$/);
+  assert.equal(worldOf(parked.map((v) => ({ ...v }))), w);
+  assert.equal(worldOf([{ ...parked[0], x: 10.0041 }, parked[1]]), w, 'a hair either way, as two phones\' sums can differ, is the same place');
+  assert.notEqual(worldOf([{ ...parked[0], kind: 'van' }, parked[1]]), w);
+  assert.notEqual(worldOf([{ ...parked[0], x: 12 }, parked[1]]), w);
+  assert.notEqual(worldOf([...parked].reverse()), w, 'a vehicle is known by its place in the list');
+  assert.notEqual(worldOf(parked.slice(0, 1)), w);
+});
+
 // ---------------- someone else's steps
 // Someone walks in a straight line along x. They send from a 60 fps page at 20 Hz, a server holds the latest and passes it on at
 // its own 20 Hz, out of step with them, and it reaches us a variable time later. We draw at 60 fps.
@@ -111,12 +129,43 @@ test('someone whose name hasn\'t come yet is drawn nameless, and takes it when i
   assert.equal(w.at(1010)[0].name, 'Tre'); assert.equal(w.at(1010)[0].look, 2);
 });
 
-test('what they are in, how they are and their swings and waves are as of the newest pose, not smoothed', () => {
+test('their swings and waves are as of the newest pose, not smoothed, so none goes missing between two', () => {
   const w = createWalkers();
   w.take([{ id: 4, stamp: 0, x: 0, y: 0, z: 0, yaw: 0, ride: 0, swings: 0, waves: 0, how: HOW.foot }], 0);
   w.take([{ id: 4, stamp: 50, x: 1, y: 0, z: 0, yaw: 0, ride: 9, swings: 2, waves: 1, how: HOW.swim }], 50);
   const [a] = w.at(60);
-  assert.equal(a.ride, 9); assert.equal(a.swings, 2); assert.equal(a.waves, 1); assert.equal(a.how, HOW.swim);
+  assert.equal(a.swings, 2); assert.equal(a.waves, 1);
+});
+
+// Poses every 50 ms on both clocks, from `poses` of [x, what else], drawn at 60 fps
+function play(poses, until = 1000 + poses.length * 50 + 300) {
+  const w = createWalkers({ delay: 100 }), frames = [];
+  let i = 0;
+  for (let t = 1000; t < until; t += 1000 / 60) {
+    for (; i < poses.length && 1000 + i * 50 <= t; i++) w.take([{ id: 4, stamp: i * 50, x: poses[i][0], y: 0, z: 0, yaw: 0, ...poses[i][1] }], 1000 + i * 50);
+    const [a] = w.at(t); frames.push({ t, x: a.x, ride: a.ride, how: a.how, when: a.when });
+  }
+  return frames;
+}
+
+test('what they\'re in goes with where they\'re shown: nobody\'s in a vehicle where they stood beside it, or stood up where it is', () => {
+  // standing beside a pickup whose middle is at 1.8, then in it and away
+  const frames = play([...Array(6)].map(() => [0, { ride: 0 }]).concat([...Array(8)].map((_, i) => [1.8 + i * .3, { ride: 9 }])));
+  assert.ok(frames.some((f) => f.ride === 9), 'they never got in');
+  for (const f of frames) {
+    if (f.ride === 9) assert.ok(f.x >= 1.8 - 1e-9, `in it at ${f.x.toFixed(2)}, where they stood, at ${f.t.toFixed(0)} ms`);
+    else assert.ok(f.x <= 1e-9, `on foot at ${f.x.toFixed(2)}, inside it, at ${f.t.toFixed(0)} ms`);
+  }
+  // and when the pose they're shown in was sent, on their clock, which a vehicle that's been left about goes by
+  for (let i = 1; i < frames.length; i++) assert.ok(frames[i].when >= frames[i - 1].when, `back from ${frames[i - 1].when} to ${frames[i].when}`);
+  for (const f of frames) assert.ok(f.ride === 9 ? f.when >= 300 : f.when <= 250, `${f.ride ? 'in it' : 'on foot'} with a pose from ${f.when} ms`);
+});
+
+test('and how they are goes with where they\'re shown, so nobody swims on the bank', () => {
+  // walking into a pond whose edge is between 0.6 and 0.8
+  const frames = play([0, .2, .4, .6].map((x) => [x, { how: HOW.foot }]).concat([.8, 1, 1.2, 1.4, 1.6].map((x) => [x, { how: HOW.swim }])));
+  assert.ok(frames.some((f) => f.how === HOW.swim), 'they never swam');
+  for (const f of frames) if (f.how === HOW.swim) assert.ok(f.x > .6, `swimming at ${f.x.toFixed(2)}, on the bank, at ${f.t.toFixed(0)} ms`);
 });
 
 test('at 60 fps a walk out of step with the server moves as evenly as the walk itself', () => {
@@ -239,6 +288,8 @@ class FakeSocket {
   opened() { this.readyState = 1; this.onopen?.(); }
   hear(b) { this.onmessage?.({ data: typeof b === 'string' ? b : b.buffer.slice(b.byteOffset, b.byteOffset + b.length) }); }
   shut(code = 1006) { this.readyState = 3; this.onclose?.({ code }); }
+  // as the game lets go of it; a real socket says it's closed a moment later, which the tests do by hand
+  close() { this.readyState = 3; }
   get poses() { return this.sent.filter((s) => typeof s !== 'string'); }
   get words() { return this.sent.filter((s) => typeof s === 'string').map((s) => JSON.parse(s)); }
 }
@@ -269,6 +320,30 @@ for (const fps of [30, 60, 120]) test(`at ${fps} fps it still sends twenty poses
   for (t.now = 0; t.now < 10000; t.now += 1000 / fps) net.update(t.now, 0, 0, 0);
   const rate = socket().poses.length / 10;
   assert.ok(Math.abs(rate - NET_RATE) < .6, `${rate} a second`);
+});
+
+test('a phone that isn\'t anywhere yet, watching the opening, keeps its connection and is let in without saying where it is', () => {
+  const said = []; const { net, t, socket } = link({ status: (s) => said.push(s), retry: 2000 });
+  net.tend();
+  socket().opened(); socket().hear(say({ t: 'welcome', id: 4 }));
+  for (t.now = 0; t.now < 3000; t.now += 16) net.tend();
+  assert.equal(socket().poses.length, 0);
+  assert.deepEqual(said, ['joined']);
+  const first = socket(); t.now = 3000; first.shut(); t.now = 5001; net.tend();
+  assert.notEqual(socket(), first, 'and it tries again if it\'s lost');
+});
+
+test('a pose that can\'t wait its turn goes at once, and the next one waits for it', () => {
+  const { net, t, socket } = joined(link());
+  for (t.now = 0; t.now < 1000; t.now += 1000 / 60) net.update(0, 0, 0, 0, { ride: 3 });
+  const before = socket().poses.length;
+  net.now(5, 0, 0, 0, { ride: 3 });
+  assert.equal(socket().poses.length, before + 1);
+  assert.deepEqual((({ x, ride }) => ({ x, ride }))(decodePose(socket().poses.at(-1))), { x: 5, ride: 3 });
+  net.update(6, 0, 0, 0);
+  assert.equal(socket().poses.length, before + 1);
+  t.now += 51; net.update(6, 0, 0, 0);
+  assert.equal(socket().poses.length, before + 2);
 });
 
 test('a stamp is the sender\'s own clock, so that smoothing doesn\'t care when the server passed it on', () => {
@@ -352,6 +427,24 @@ for (const why of ['name', 'reload', 'hero']) test(`turned away for "${why}", it
   assert.deepEqual(said, [[why, 'because']]);
   t.now = 60000; net.update(0, 0, 0, 0); assert.equal(socket(), first);
   net.again(); net.update(0, 0, 0, 0); assert.notEqual(socket(), first);
+});
+
+test('letting go of the town closes it, says nothing, and doesn\'t try again until asked', () => {
+  const said = []; const { net, t, socket } = joined(link({ status: (s) => said.push(s), retry: 10 }));
+  const first = socket(); net.close();
+  assert.equal(first.readyState, 3); first.onclose?.({ code: 1000 });
+  assert.equal(net.id, 0); assert.deepEqual(said, ['joined']);
+  t.now = 60000; net.update(0, 0, 0, 0); net.tend(); assert.equal(socket(), first);
+  net.again(); net.tend(); assert.notEqual(socket(), first);
+});
+
+test('a socket that closes after another has opened changes nothing', () => {
+  const said = []; const { net, t, socket } = joined(link({ status: (s) => said.push(s), retry: 10 }));
+  const first = socket(); net.close(); net.again(); net.tend();
+  const second = socket(); second.opened(); second.hear(say({ t: 'welcome', id: 6 }));
+  first.onclose?.({ code: 1000 }); first.onmessage?.({ data: say({ t: 'welcome', id: 9 }) });
+  assert.equal(net.id, 6); assert.deepEqual(said, ['joined', 'joined']);
+  t.now = 100; net.update(0, 0, 0, 0); assert.equal(second.poses.length, 1);
 });
 
 test('joining again after being lost says so', () => {

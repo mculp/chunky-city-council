@@ -51,15 +51,21 @@ Then open http://localhost:8000.
 
 `npm run net:server` runs the town everyone shares on this machine, at ws://localhost:8787, and keeps it in `data/raw/town.json`. What goes over the wire is in `src/net.js`, and the town itself is `server/town.js`.
 
+`index.html?net` puts Play with others under Start, for that town, and `?net=ws://…` for one somewhere else. Without it there's no button and nothing of playing together is loaded, and `npm run frames` checks that the opening's the same to the byte. The phone's side of it is `src/together.js`, and `docs/multiplayer.md` says how it fits together. The owner is the hero on a link of their own: the address with `#hero=` and a secret, for a town started with `CHUNKY_HERO` set to that secret's sha256 in hex. Their phone keeps it, and it comes off the address as soon as it's read.
+
 `npm run deploy` puts main up at https://chunky.ms, the game's own files and nothing else: `index.html`, `src/`, `data/` and `audio/`, without tests, Markdown or `data/raw/`. It takes `--ref` for another commit and `--dry` to list the files.
 
 ## Tests
 
 `npm test` runs `node --test` for data and logic. Name test files `*.test.js`.
 
-`npm run talk:host` plays the server for the characters' own words in Cloudflare's runtime on this machine, against a stand-in for OpenRouter so nothing's spent: a line and what it cost, a page on another site turned away, the month's cap, a phone asking too fast, and the month still spent after a restart. What it does is `server/talk.js`, and `server/worker.js` puts it on Cloudflare with the owner's key, which only the owner puts in.
+`npm run frames` plays the opening as it is and as it is on `origin/main`, or the commit it's given, and fails unless every frame is the same to the byte. It's for a change that isn't meant to touch the opening, and it's run by hand.
 
 `npm run check` runs everything below and `npm test` too, three at a time and longest first, and runs anything that fails again on its own. `-- --changed` runs only what the uncommitted changes, or the last commit, could break, `-- --dry` says what it would run, and `-- --at <commit>` checks a commit from a copy so the worktree can change meanwhile.
+
+`npm run talk:host` plays the server for the characters' own words in Cloudflare's runtime on this machine, against a stand-in for OpenRouter so nothing's spent: a line and what it cost, a page on another site turned away, the month's cap, a phone asking too fast, and the month still spent after a restart. What it does is `server/talk.js`, and `server/worker.js` puts it on Cloudflare with the owner's key, which only the owner puts in.
+
+`npm run net` plays together against a town on this machine, in two Chrome pages with real key presses, clicks and taps, one on a keyboard and one a phone: Play with others, a name and a look each, the opening watched with the rope cut for them and coming to on the riverbank, then each seeing the other by name and look walking, running, on the stick and driving, the vehicle left where it was left, a truck nudging someone aside and a swing going through them with nobody hurt, WAVE and V, a dot on the map, coming back to where they left with what they had and without the opening, and the hero's link: everyone sees the hero, and a second phone takes him over. It takes `--shots dir`.
 
 `npm run smoke` plays Chapter 1 in real Chrome and fails on a wrong beat or a console error. It needs `npm i` first and takes `--shots dir` for screenshots and `--touch` for a phone viewport.
 

@@ -53,6 +53,21 @@ export function decodeMessage(data) {
   return { players };
 }
 
+// What a phone calls itself, made the first time it's needed and kept. The town only ever sees its hash.
+export function makeKey() {
+  const b = crypto.getRandomValues(new Uint8Array(24));
+  return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+// The game's vehicles as a word, for the town to tell two games apart. A vehicle's known by its place in the list, so everyone in
+// town has to have the same list, parked in the same places. They're placed to the decimetre, since two phones' sums can differ in
+// the last digit.
+export function worldOf(vehicles) {
+  const text = vehicles.map((v) => `${v.kind}:${Math.round(v.x * 10)}:${Math.round(v.z * 10)}:${Math.round(v.yaw * 100)}`).join('|');
+  let a = 0x811c9dc5, b = 0x9747b28c;
+  for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); a = Math.imul(a ^ c, 0x01000193); b = Math.imul(b ^ c, 0x5bd1e995); b ^= b >>> 15; }
+  return (a >>> 0).toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0');
+}
+
 // The look that comes with a name, for someone who'd rather not pick: the same one for that name every time, whatever the capitals
 export function rollLook(name, looks) {
   let h = 0x811c9dc5;
@@ -69,8 +84,9 @@ const strideRate = (v) => Math.min(v, 4.4) * 2.4 + Math.max(0, v - 4.4) * 1.3;
 // Everyone else, as they should look right now. Each person's poses are placed on the clock they were sent by, not when they got
 // here or when the server passed them on, and shown `delay` ms behind the newest, so there's nearly always one either side to go between.
 // Going by the sender's clock is the point: the server's ticks are out of step with everyone's frames, and if it were its clock they
-// were placed on, a walk would come out as a stutter. What they're in, how they are and their swings and waves aren't smoothed: they
-// take the newest pose's.
+// were placed on, a walk would come out as a stutter. What they're in and how they are go with where they're shown, from the same pose,
+// and getting into something or out of it isn't gone between by degrees: they're just there, as they are after a jump. Their swings
+// and waves aren't smoothed: they take the newest pose's, so none goes missing between two.
 export function createWalkers({ delay = 100, ahead = 150, jump = 10 } = {}) {
   const all = new Map(), list = [], names = new Map();
   const named = (w) => { const n = names.get(w.id); w.name = n?.name ?? ''; w.look = n?.look ?? 0; w.hero = !!n?.hero; };
@@ -85,18 +101,19 @@ export function createWalkers({ delay = 100, ahead = 150, jump = 10 } = {}) {
       for (const p of players) {
         let w = all.get(p.id);
         if (!w) {
-          w = { id: p.id, x: p.x, y: p.y, z: p.z, yaw: p.yaw, speed: 0, phase: 0, s: [{ t: 0, x: p.x, y: p.y, z: p.z, yaw: p.yaw }], stamp: p.stamp, t: 0, off: now, drawn: now, here: true };
-          w.ride = p.ride ?? 0; w.swings = p.swings ?? 0; w.waves = p.waves ?? 0; w.how = p.how ?? HOW.foot;
+          const at = { t: 0, x: p.x, y: p.y, z: p.z, yaw: p.yaw, ride: p.ride ?? 0, how: p.how ?? HOW.foot };
+          w = { id: p.id, x: p.x, y: p.y, z: p.z, yaw: p.yaw, ride: at.ride, how: at.how, when: 0, speed: 0, phase: 0, s: [at], stamp: p.stamp, t: 0, off: now, drawn: now, here: true };
+          w.swings = p.swings ?? 0; w.waves = p.waves ?? 0;
           named(w); all.set(p.id, w); list.push(w); continue;
         }
         w.here = true;
         const d = (p.stamp - w.stamp) & 0xffff;
         if (!d) continue;   // the same pose again: they've not said anything since the server's last tick
         w.stamp = p.stamp; w.t += d;
-        w.ride = p.ride ?? 0; w.swings = p.swings ?? 0; w.waves = p.waves ?? 0; w.how = p.how ?? HOW.foot;
+        w.swings = p.swings ?? 0; w.waves = p.waves ?? 0;
         const off = now - w.t;
         w.off = Math.abs(off - w.off) > 1000 ? off : w.off + (off - w.off) * .05;
-        w.s.push({ t: w.t, x: p.x, y: p.y, z: p.z, yaw: p.yaw }); if (w.s.length > KEEP) w.s.shift();
+        w.s.push({ t: w.t, x: p.x, y: p.y, z: p.z, yaw: p.yaw, ride: p.ride ?? 0, how: p.how ?? HOW.foot }); if (w.s.length > KEEP) w.s.shift();
       }
       for (let i = list.length - 1; i >= 0; i--) if (!list[i].here) { all.delete(list[i].id); list.splice(i, 1); }
     },
@@ -114,8 +131,11 @@ export function createWalkers({ delay = 100, ahead = 150, jump = 10 } = {}) {
           if (shown - a.t >= ahead) v = -1;
         }
         const dist = Math.hypot(to.x - from.x, to.z - from.z);
-        if (dist > jump) { k = 1; v = -1; }   // they didn't walk that: they're just there
+        if (dist > jump || to.ride !== from.ride) { k = 1; v = -1; }   // they didn't walk that: they're just there
         w.x = from.x + (to.x - from.x) * k; w.y = from.y + (to.y - from.y) * k; w.z = from.z + (to.z - from.z) * k; w.yaw = faceBetween(from.yaw, to.yaw, Math.min(1, k));
+        // as of the pose they're shown at, or the one they're shown just past, and when that was sent, on their clock
+        const as = k >= 1 ? to : from;
+        w.ride = as.ride; w.how = as.how; w.when = as.t;
         v = v < 0 || to === from ? 0 : dist / (to.t - from.t) * 1000;
         w.speed += (v - w.speed) * Math.min(1, dt * 10);
         w.phase += strideRate(w.speed) * dt;
@@ -139,7 +159,9 @@ export function connectNet({ url, WS = globalThis.WebSocket, clock = () => perfo
   function open() {
     const me = sock = new WS(url); me.binaryType = 'arraybuffer';
     me.onopen = () => { if (sock === me) send(say({ t: 'hello', ...hello() })); };
+    // one that's been let go of says nothing more
     me.onmessage = (e) => {
+      if (sock !== me) return;
       count.framesIn++; count.bytesIn += typeof e.data === 'string' ? e.data.length : e.data.byteLength;
       const m = decodeMessage(e.data);
       if (!m) return;
@@ -151,6 +173,7 @@ export function connectNet({ url, WS = globalThis.WebSocket, clock = () => perfo
       else if (m.t === 'no') refused = m;
     };
     me.onclose = () => {
+      if (sock !== me) return;
       sock = null; id = 0; walkers.clear(); sendAt = 0;
       if (refused?.why === 'full') { openAt = clock() + full; tell('full', refused); }
       else if (refused) { stopped = true; tell(refused.why, refused); }
@@ -158,19 +181,32 @@ export function connectNet({ url, WS = globalThis.WebSocket, clock = () => perfo
       refused = null;
     };
   }
+  // open, or opened again, and whether it's let in
+  const tend = (now) => { if (!sock && !stopped && now >= openAt) open(); return sock?.readyState === 1 && !!id; };
   return {
     get id() { return id; },
     count,
     update(x, y, z, yaw, extra) {
       const now = clock();
-      if (!sock && !stopped && now >= openAt) open();
-      if (sock?.readyState !== 1 || !id || now < sendAt) return;
+      if (!tend(now) || now < sendAt) return;
       sendAt = Math.max(sendAt + every, now - every);
       send(encodePose(Math.round(now), x, y, z, yaw, extra));
     },
+    // A pose that can't wait its turn: the last from something he's just got out of, so that the town leaves it exactly where he
+    // did and not where it was a moment before. The next waits its turn after it.
+    now(x, y, z, yaw, extra) {
+      const now = clock();
+      if (!tend(now)) return;
+      sendAt = Math.max(sendAt, now + every);
+      send(encodePose(Math.round(now), x, y, z, yaw, extra));
+    },
+    // the connection kept without saying where he is, for a phone that isn't anywhere yet, which keep() says it's still there for
+    tend() { tend(clock()); },
     // what he's carrying, for the town to keep
     keep(state) { if (sock?.readyState === 1 && id) send(say({ t: 'keep', ...state })); },
     again() { stopped = false; openAt = 0; said = null; },
+    // let go of the town, without a word, until again()
+    close() { const was = sock; stopped = true; sock = null; id = 0; refused = null; walkers.clear(); sendAt = 0; was?.close(); },
     others() { return walkers.at(clock()); },
   };
 }

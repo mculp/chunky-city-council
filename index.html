@@ -5719,11 +5719,13 @@ const horde = createHorde({
 });
 // where they start: along the streets of town, thickest on US 80
 const CROWD_STREETS = [['us_80', atTrue(-615, -18), atTrue(185, 0), 56], ['church_st', atTrue(-1098, -379), atTrue(-281, -199), 20], ['adams_st', atTrue(-283, -23), atTrue(-285, -338), 20]];
-let crowdOut = false, folkOut = false;
+// `net` is playing together, from src/together.js, and null in a game on its own
+let crowdOut = false, folkOut = false, net = null;
 // Everyone's drawn and thinks the same way. Whether or not the crowd's out, the people who live here are about as soon as he's in town.
 function bringOutFolk() { folkOut = true; crowdGroup.visible = true; }
+// and there's no crowd in the street when there are others in town, until there's one crowd that everyone in town shares
 function bringOutCrowd() {
-  if (crowdOut) return; crowdOut = true; bringOutFolk(); S.hp = 3; SFX.say('crowd');
+  if (crowdOut || net) return; crowdOut = true; bringOutFolk(); S.hp = 3; SFX.say('crowd');
   const [cx, cz] = atTrue(-309, -228);
   if (!S.flags.churchDown) { churchZone = { x: cx, z: cz, r: 28 }; horde.zones.push(churchZone); }
   for (const f of fires) if (!f.out) horde.lights.push(f.spot);
@@ -7036,6 +7038,7 @@ function updateMini(step) {
     else { g.beginPath(); g.arc(x, y, 4, 0, 7); g.fillStyle = MAPC.hot; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.stroke(); g.fill(); }
   }
   const [fx, fy] = toScreen(v, P.x + Math.sin(player.yaw), P.z + Math.cos(player.yaw));
+  net?.onMap(g, v, dpr);
   drawArrow(g, c, c, fx - c, fy - c, 8);
   // the street you're on
   let name = '';
@@ -7079,6 +7082,7 @@ function drawFullMap() {
     drawLabel(g, name, x, ly, SMALL, MAPC.cream);
   }
   for (const road of [...MAP.roads, ...NAMED_LANES]) for (const l of roadLabels(road, v, w, h)) { const tw = l.text.length * 10 + 6; if (free(l.x, l.y, Math.max(tw * Math.abs(Math.cos(l.angle)), 16), Math.max(tw * Math.abs(Math.sin(l.angle)), 16))) drawLabel(g, l.text, l.x, l.y, BIG, MAPC.cream, l.angle); }
+  net?.onMap(g, v, dpr, true);
   drawArrow(g, hx, hy, Math.sin(player.yaw), Math.cos(player.yaw), 11);
 }
 function redrawMap() { if (mapOpen && !mapDirty) { mapDirty = true; requestAnimationFrame(() => { mapDirty = false; if (mapOpen) drawFullMap(); }); } }
@@ -7416,7 +7420,8 @@ function tick(dt, draw = true) {
   if (townFull && S.flags.town && !folkOut) bringOutFolk();
   if (folkOut) {
     updateCrowd(dt, S.mode);
-    if (townFull) { const P = player.pos; traffic.update(dt, { x: driving ? driving.x : P.x, z: driving ? driving.z : P.z, y: P.y, driving: !!driving }); }
+    // nor anyone driving about, for the same reason
+    if (townFull && !net) { const P = player.pos; traffic.update(dt, { x: driving ? driving.x : P.x, z: driving ? driving.z : P.z, y: P.y, driving: !!driving }); }
   }
   if (S.flags.town) updateWreck(dt, step);
   if (trainsOn && S.flags.town) updateTrains(dt);
@@ -7528,6 +7533,7 @@ function tick(dt, draw = true) {
   updateMini(step);
   sky.position.copy(camera.position);
   updateWorld();
+  if (net) net.frame(dt, step);
   updateChurchSigns(step);
   updateFlies(dt, step);
   if (folkOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
@@ -7571,6 +7577,50 @@ $('forget').addEventListener('click', () => { people.forget(); folks.forget(); p
 heroRoot.position.copy(ANCHOR); poseHero(0); drawPlanks();
 for (const s of SNAKES) s.update(.016); deckSnake.update(.016);
 ghost.position.set(-17.5, 1.3, 7.5);
+
+// ================================================================ playing together (CHUNKY-151)
+// Play with others goes under Start when there's a town to play in: ?net for one on this machine (npm run net:server), or ?net=ws://…
+// for one somewhere else. Nothing of it is loaded until it's pressed, and src/together.js is all of it. `net` stays null in a game on
+// its own, which is what the few lines that mention it go by. The owner's link, #hero=…, is kept on their phone the first time it's
+// opened (as chunky.net.hero, like the rest of what src/together.js keeps), and it comes off the address so it isn't passed on.
+{
+  const town = new URLSearchParams(location.search);
+  if (location.hash.startsWith('#hero=')) { try { localStorage.setItem('chunky.net.hero', decodeURIComponent(location.hash.slice(6))); } catch { /* not kept */ } history.replaceState(null, '', location.pathname + location.search); }
+  // what's parked where before anything moves, which everyone in town has to agree on
+  const parked = VEHICLES.map(({ kind, x, z, yaw }) => ({ kind, x, z, yaw }));
+  // out of the opening, with nothing of his left on them
+  const tidyOpening = () => { nooseRing.visible = knot.visible = false; S.removedNoose = true; ropeTop.visible = false; ropeTail.visible = false; lantern.visible = false; bottle.visible = false; };
+  const game = {
+    url: town.get('net'), store: saveStore, parked, TEST, reduceMotion,
+    S, HP, player, cam, camera, scene, heroRoot, vehicles: VEHICLES, map: MAP, water: WATER, wakeRoad: WAKE_ROAD, wakeBridge: WAKE_BRIDGE,
+    looks: CROWD_LOOKS, crowdParts, zombieLine, TOWN_SCALE, ZOMBIE_HIP, HEAD, SEATED, HERO_SCALE, HERO_HIPS, SWING_POSES, SWING_T, hoods: { stand: heroHood, swim: heroHoodSwim },
+    hillUp, floorAt, onRoad, blocked: blockedInTown, markVehicle, toast, prompt, getOut,
+    get time() { return time; }, get driving() { return driving; }, get swingT() { return swingT; }, get cardT() { return cardT; },
+    vehMoved() { vehDirty = true; },
+    trainsOff() { trainsOn = false; },
+    leave() { net = null; },
+    opening() { $('title').hidden = true; startHang(); },
+    dropBottle() { if (bottle.parent === hero.body) dropProp(bottle, true); },
+    // what the opening has waiting to be said, since swimming for the bank isn't theirs to do
+    letGo() { timers.length = 0; objective(null); },
+    fade(k) { gifMat.uniforms.uFade.value = k; },
+    // coming to where they're put, without his fever
+    comeTo(x, z, yaw) { tidyOpening(); startWake(); feverLeft = 0; feverTo(0); player.pos.set(x, floorAt(x, z), z); player.yaw = yaw; cam.yaw = yaw + Math.PI; cam.snap = true; },
+    // straight into town, where he wakes or where they were
+    toTown(at) {
+      $('title').hidden = true; tidyOpening(); HP.kind = 'run'; onWakeBridge(); feverLeft = 0; feverTo(0); gifMat.uniforms.uFade.value = 1; startTown();
+      if (at) { player.pos.set(at.x, at.y, at.z); player.yaw = at.yaw; player.grounded = true; cam.yaw = at.yaw + Math.PI; cam.snap = true; }
+    },
+    // the hero, as everyone else sees the owner: built as he is under "the hero", with a face of its own for its hood to turn
+    heroTwin() { const r = makeRig({ hood: heroHood, hoodM: heroHoodM, sleeveM: heroSleeveM, pantsM: heroPantsM, handM: darkHand, faceM: tapeMat(HERO_SHAPE), ol: ORANGE, rimmed: true, shoulder: [.44, -.08], out: .14, reach: [.3, .28], thick: 1.15, legSize: 1.2, eyelets: [.26, .147], chest: .285, cord: 1.5, wave: 1 }); r.setHood(heroHood); return r; },
+  };
+  if (town.has('net')) {
+    const play = document.createElement('button'); play.className = 'forget'; play.id = 'together'; play.textContent = 'Play with others';
+    $('start').after(play);
+    let made = null;
+    play.addEventListener('click', async () => { made ??= (await import('./src/together.js')).together(game); net = made; net.open(); });
+  }
+}
 requestAnimationFrame(loop);
 if (location.hash === '#free') startFree();
 if (location.hash === '#sounds' || location.hash === '#sounds-new') openBoard();

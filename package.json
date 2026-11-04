@@ -8,6 +8,8 @@
     "deploy": "node tools/deploy.mjs",
     "net:server": "node server/index.js",
     "talk:host": "node tools/talk-host.mjs",
+    "net": "node tools/play-net.mjs",
+    "frames": "node tools/opening-frames.mjs",
     "smoke": "node tools/smoke.mjs",
     "walk": "node tools/walk-roads.mjs",
     "play": "node tools/play-chapter1.mjs",

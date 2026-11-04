@@ -10,6 +10,7 @@
 //   (horde and map are in nearly every tool, so they'd pick everything)
 // - the sound checks, for anything under audio/ or with sound in its name
 // - talk:host, for the talk server's own files in server/
+// - net, for the town's own files in server/ and the name check in src/names.js
 // - for index.html, the checks named in its changed lines, but for names it uses everywhere, and the sound checks,
 //   which are the slowest and come from sound files instead
 // - everything, for a new dependency or a change to tools/browser.mjs
@@ -92,6 +93,7 @@ if (args.includes('--changed')) {
       if (toolOf(c) === f) add(c, f);
       if ((f.startsWith('audio/') || /sound/.test(f)) && c.name.startsWith('sound')) add(c, f);
       if (/^server\/(talk|worker|wrangler)\b/.test(f) && c.name === 'talk:host') add(c, f);
+      if ((/^server\/(town|index)\b/.test(f) || f === 'src/names.js') && c.name === 'net') add(c, f);
     }
   }
   const stems = new Set(files.filter((f) => /^(src|data)\//.test(f)).map((f) => f.split('/').pop().replace(/(\.test)?\.[^.]+$/, '')));

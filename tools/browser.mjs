@@ -31,7 +31,8 @@ async function fromCache(route) {
 }
 
 // `overrides` serves its contents at those paths in place of what's in the repo, or as well as it. Null means there's nothing there.
-export async function serveAndOpen({ touch = false, viewport, query = '?test', reducedMotion, overrides = {} } = {}) {
+// `args` go to Chrome as well as the GPU's.
+export async function serveAndOpen({ touch = false, viewport, query = '?test', reducedMotion, overrides = {}, args = [] } = {}) {
   const server = createServer(async (req, res) => {
     const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
     try {
@@ -41,7 +42,7 @@ export async function serveAndOpen({ touch = false, viewport, query = '?test', r
     } catch { res.writeHead(404); res.end(); }
   });
   await new Promise((r) => server.listen(0, r));
-  const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader'] });
+  const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', ...args] });
   const size = viewport || (touch ? { width: 390, height: 844 } : { width: 513, height: 696 });
   const context = await browser.newContext({ viewport: size, deviceScaleFactor: 2, hasTouch: touch, isMobile: touch, reducedMotion });
   await context.route(CDN, fromCache);

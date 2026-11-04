@@ -106,9 +106,10 @@ export function createTown({ max = NET_MAX, clock = () => performance.now() } = 
       const s = saved.get(p.keyHash); s.x = q.x; s.y = q.y; s.z = q.z; s.yaw = q.yaw; dirty = true;
       return out;
     },
+    // what they carry, which is also how a phone that's nowhere yet, watching the opening, says it's still there
     keep(id, state) {
       const p = here.get(id);
-      if (p) { Object.assign(saved.get(p.keyHash), carried(state)); dirty = true; }
+      if (p) { p.heard = clock(); Object.assign(saved.get(p.keyHash), carried(state)); dirty = true; }
       return [];
     },
     leave(id) { return here.has(id) ? drop(id) : []; },
