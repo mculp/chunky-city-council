@@ -139,6 +139,7 @@ Night in an abandoned Mississippi town.
 - **The ponds:** the same water as the river, with the sky and the moon in it, each at its own height just under its lowest bank. Dark mud at the edge, and the far bank and its trees black against the sky.
 - **The lantern:** the one from the local legend, a guide light with nobody holding it that leads him across the river.
 - **The light on Stuckey's Bridge:** a cold, pale point with a soft blue halo and no lamp around it, which only comes after the first chapter. It steps on the twelves like everything else, and it borrows the lantern's light, because one more in the scene would cost every material on a phone. `docs/lore.md` has what it's from.
+- **The mushroom rings:** ten rings of pale mushrooms about 3 m across, in the grass beside a road, mostly at a junction. They're cream caps on short stems, each a little different, with an ink line and a faint cool glow of their own. A thin ring of the same light lies on the grass under them, and a few spores drift up off them on the twelves and hold still with reduced motion, so that one can be found at night. None of it's a light. On the map each is a circle of pale dots with no name. `data/rings.md` has the rest.
 
 The brief is a "perfectly 3d modeled city": the real layout and landmarks of Chunky on real street geometry, rendered in this hand-drawn style. Accuracy applies to where things are and what they are. It doesn't mean photorealism. The roads, the railroad and the river come from the road graph, and the buildings from `data/structures.json`.
 
@@ -151,6 +152,7 @@ Between the end of the bridge run and the edge of town there isn't a word, and n
 - **The fever.** Hot pink and cyan take over the palette, the picture warps in rows and smears through the last frame, and the camera rises off him and out along the road towards a horizon that won't hold still. It fades to black.
 - **He comes to.** Face down on the planks of the Chunky River Bridge, with the fever still in the sky. It takes a few seconds more to leave him.
 - **Reduced motion.** The same scene with a still camera: the tint and the fade, no warping, no shake and no glitch, in under half the time.
+- **A trip from a mushroom ring.** He sits down in the ring with his knees up and his hands on them as the fever's pink and cyan come up and bend the picture in rows. At the height of it he's in the other ring, sitting, and he gets up as it goes, facing the road, three and a half seconds in all. The camera stays behind him and comes down with him as he sits. With reduced motion it's a fade to dark and back instead, with nothing bent, in 1.3 seconds.
 
 ### When a try ends
 

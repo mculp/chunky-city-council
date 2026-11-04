@@ -268,6 +268,7 @@ import { trainGeometries, TRAIN_LAMPS, gateArm } from './src/trainmodels.js';
 import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, feedBin, stockTank, frog, frogThroat, frogLids } from './src/things.js';
 import { CEMETERY, layGraves, graveSolid, onSlab, slabHead, fromCemetery } from './src/graves.js';
 import { createSong } from './src/song.js';
+import { RING as SHROOMS, tripAt, settle as settleRing, ringAt, pickRing } from './src/rings.js';
 import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/volley.js';
 import { FROGS, BEST, TONI, createToni, frogLine, askLine, forgetToni } from './src/toni.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
@@ -4402,6 +4403,8 @@ const HERO_BUILD = { hood: heroHood, hoodM: heroHoodM, sleeveM: heroSleeveM, pan
 const hero = makeRig({ ...HERO_BUILD, faceM: heroFace });
 // a bit smaller all over, so that the hood's what's big and he doesn't tower over everyone
 const HERO_SCALE = .93, HERO_HIPS = 1.43 * HERO_SCALE; hero.body.scale.setScalar(HERO_SCALE); hero.setHood(heroHoodHung);
+// and how high the middle of him is sat on the ground in a mushroom ring (CHUNKY-176)
+const SIT_HIPS = .63;
 const heroRoot = new THREE.Group(); scene.add(heroRoot); heroRoot.add(hero.body);
 const ropeMat = new THREE.MeshStandardMaterial({ map: ropeTex, roughness: .9 });
 // noose + rope + knot
@@ -4539,6 +4542,14 @@ function poseHero(tq) {
       const s = i ? 1 : -1;
       R.arm(i, V3(s * (.36 + d * .14), -.6 + d * .78 + s * f, .08 + d * .5), V3(s * .7, -.35, -.25));
       R.leg(i, V3(s * .14, -1.36 + knees * .34, -knees * .62 * (i ? 1 : .8) + (1 - d) * (i ? -.1 : .06)), V3(s * .1, -1, .8), knees * .3);
+    }
+  } else if (k === 'sit') {
+    // HP.sit is 0 on his feet and 1 sat on the ground in a ring, with his knees up and his hands on them (CHUNKY-176)
+    const s = HP.sit;
+    for (let i = 0; i < 2; i++) {
+      const side = i ? 1 : -1;
+      R.arm(i, V3(side * (.36 - .14 * s), -.6 + .3 * s, .05 + .4 * s), V3(side * .7, -.35, -.25));
+      R.leg(i, V3(side * (.13 + .06 * s), -1.36 + .76 * s, .72 * s), V3(side * (.1 + .08 * s), -1 + 1.6 * s, .8), .3 * s);
     }
   } else if (k === 'roll') {
     // out of the door with his hands out past his head, then over and over with them in to his chest and his legs everywhere
@@ -5417,7 +5428,7 @@ let partY = 0, lastDrip = 0;
 function updateParticles(dt, M) {
   const cx = camera.position.x, cz = camera.position.z;
   // on foot they drift around him; at the river they hang over the water
-  partY += ((M === 'land' || M === 'bridge' || M === 'bitten' || M === 'dream' || M === 'wake' || M === 'town' || M === 'drive' || M === 'sweep' || M === 'dialog' ? player.pos.y : M === 'swim' ? swimY : 0) - partY) * Math.min(1, dt * .8);
+  partY += ((M === 'land' || M === 'bridge' || M === 'bitten' || M === 'dream' || M === 'wake' || M === 'town' || M === 'drive' || M === 'sweep' || M === 'dialog' || M === 'trip' ? player.pos.y : M === 'swim' ? swimY : 0) - partY) * Math.min(1, dt * .8);
   // cyan: a stray drop from the bottle while he still has it, and a ring where it lands
   if (bottle.parent === hero.body && bottle.visible && time - lastDrip > 3.1) {
     const d = drips.find(x => !x.on);
@@ -6792,9 +6803,10 @@ function updateCrowd(dt, M) {
   if (shambling && horde.lights.some((l) => Math.hypot(l.x - P.x, l.z - P.z) < l.r * SHAMBLE_LIT)) giveAway();
   feel.acting = shambling;
   feel.noise = M === 'town' ? HP.speed / 4.4 * 14 : M === 'drive' && !driving.wrecked && !driving.drowned ? driving.K.noise * (.5 + .5 * Math.abs(driving.f) / driving.K.top) : 0;
-  feel.hidden = (M !== 'town' && M !== 'grabbed' && M !== 'drive') || horde.inSanctuary(P.x, P.z) || barredIn(P);
+  // nor for a few seconds after he's come to in a ring
+  feel.hidden = (M !== 'town' && M !== 'grabbed' && M !== 'drive') || horde.inSanctuary(P.x, P.z) || barredIn(P) || time < ringGraceUntil;
   // and nobody can get hold of him while he's rolling out of a truck and getting up
-  feel.canGrab = M === 'town' && player.inv <= 0 && !roll; feel.driving = M === 'drive';
+  feel.canGrab = M === 'town' && player.inv <= 0 && !roll && time >= ringGraceUntil; feel.driving = M === 'drive';
   horde.update(dt, feel);
 }
 // ================================================================ vehicles
@@ -8207,6 +8219,111 @@ function startFree() {
 layOutGas();
 // the barrels burn the way everything else does, except that they don't set light to anything
 for (const f of fires) f.burner = burnAt(f.home.x, Y0 + .95, f.home.z, .58, Infinity, { barrel: true });
+// ================================================================ the mushroom rings
+// Fast travel, part 1 (CHUNKY-176): rings of pale mushrooms at ten public places, all on the map from the start. Standing in one on foot, he eats one, taps another on
+// the map, and comes to sitting up in it. About where they are is data/rings.json, where each settles and when each part of the trip happens is src/rings.js, and
+// data/rings.md has the rest. There isn't a word in any of it.
+const RING_SHEET = await (await fetch('data/rings.json')).json();
+// Nobody's yard is somewhere for one: each is at least this far from any house, mobile home or cabin. A church, a shop or the gas station isn't anybody's yard.
+const RING_YARD = 30, YARD_USES = new Set(['house', 'mobile', 'cabin']);
+// how far x, z is outside the outline pts, and 0 in it
+function offOutline(x, z, pts) {
+  if (insideRing(x, z, pts)) return 0;
+  let d = Infinity;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [ax, az] = pts[j], [bx, bz] = pts[i], dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1e-9)));
+    d = Math.min(d, Math.hypot(x - ax - dx * t, z - az - dz * t));
+  }
+  return d;
+}
+// The nearest spot to `about` where the whole ring's on dry grass in the open: a step clear of every road and lane, and clear of the railroad, the river, the ponds,
+// anything built and its ground, fences and anybody's yard, with no tree in it or over it. It goes on out past 40 m if it has to, across the road if need be.
+function ringSpot(about) {
+  const yards = STRUCTURES.filter((s) => YARD_USES.has(s.use) && Math.hypot(s.wx - about[0], s.wz - about[1]) < 400), open = SHROOMS.r + 3.5;
+  return settleRing(about, (cx, cz) => {
+    if (!MAP.inBounds(cx, cz) || yards.some((s) => offOutline(cx, cz, s.pts) < RING_YARD)) return false;
+    if (MAP.roadGrid.within(cx, cz, (o, x, z) => roadHalf(o, x, z) + SHROOMS.r + 1.2) || MAP.railGrid.nearest(cx, cz) < SHROOMS.r + 6 || riverDist(cx, cz) < SHROOMS.r + 12) return false;
+    let tree = false; treesNear(cx, cz, open, (t) => { tree ||= Math.hypot(t.x - cx, t.z - cz) < open; }); if (tree) return false;
+    for (let i = 0; i <= 8; i++) {
+      const a = i * Math.PI / 4, r = i < 8 ? SHROOMS.r + .4 : 0, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r, y = floorAt(x, z);
+      if (houseAt(x, z) || padWeight(x, z) > 0 || y < WATER.level(x, z) + .2 || blockedInTown(x, z, y)) return false;
+    }
+    return true;
+  }, { far: 300 });
+}
+// each where it settled, facing the nearest road, which is the way he faces coming to in it
+const RINGS = RING_SHEET.rings.map((r) => {
+  const about = atTrue(...r.about), [x, z] = ringSpot(about) ?? about;
+  MAP.roadGrid.nearest(x, z); const g = MAP.roadGrid.seg, t = MAP.roadGrid.t;
+  return { x, z, y: floorAt(x, z), yaw: g ? Math.atan2(g.ax + g.dx * t - x, g.az + g.dz * t - z) : 0, at: r.at };
+});
+// A ring is pale caps on short stems round a circle 3 m across, no two the same, with an ink line and a faint light of their own. A little of the light lies on the
+// grass under them, and spores drift up off them on the twelves and hold still with reduced motion, so that one can be found at night. None of it's a light, and
+// only a ring within 220 m is drawn.
+const SHROOM_GEO = (() => {
+  const paint = (g, hex) => { const c = new THREE.Color(hex), a = new Float32Array(g.attributes.position.count * 3); for (let i = 0; i < a.length; i += 3) c.toArray(a, i); g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
+  return mergeGeometries([paint(new THREE.SphereGeometry(1, 7, 3, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, .6, 1).translate(0, 1.25, 0), '#efe4cc'), paint(new THREE.CylinderGeometry(.26, .34, 1.3, 5).translate(0, .65, 0), '#d6cdb9')]);
+})();
+const SHROOM_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85, flatShading: true, emissive: '#a8e0d6', emissiveIntensity: .42 }), SHROOM_INK = outlineMat(INK, 1.1, 0);
+const RING_GLOW = new THREE.MeshBasicMaterial({ map: (() => { const { cv } = pixelTex(64, (u, v) => { const d = Math.hypot(u - .5, v - .5) * 2, a = Math.exp(-(((d - .65) / .1) ** 2)); return [255, 255, 255, 255 * a]; }); return new THREE.CanvasTexture(cv); })(), color: '#24423e', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+const SPORE_MAT = new THREE.PointsMaterial({ map: radialTex, color: '#d8f3ec', size: .14, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), SPORES = 10, SPORE_LIFE = 40;
+{
+  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler(), P = new THREE.Vector3(), K = new THREE.Vector3();
+  RINGS.forEach((R, i) => {
+    const n = 15 + Math.floor(hash(i, 1, 176) * 6), caps = new THREE.InstancedMesh(SHROOM_GEO, SHROOM_MAT, n), ink = new THREE.InstancedMesh(SHROOM_GEO, SHROOM_INK, n);
+    R.tops = [];
+    for (let j = 0; j < n; j++) {
+      const a = (j + hash(i, j, 1761) * .6) / n * Math.PI * 2, r = SHROOMS.r + (hash(i, j, 1762) - .5) * .3, s = .045 + hash(i, j, 1763) * .07, x = R.x + Math.cos(a) * r, z = R.z + Math.sin(a) * r, y = floorAt(x, z);
+      caps.setMatrixAt(j, M.compose(P.set(x, y, z), Q.setFromEuler(E.set((hash(i, j, 1764) - .5) * .3, a, (hash(i, j, 1765) - .5) * .3)), K.set(s, s * (.8 + hash(i, j, 1766) * .5), s)));
+      R.tops.push([x, y + s * 1.7, z]);
+    }
+    ink.instanceMatrix = caps.instanceMatrix;
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.6).rotateX(-Math.PI / 2), RING_GLOW); glow.position.set(R.x, R.y + .04, R.z);
+    R.spores = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(SPORES * 3), 3)), SPORE_MAT); R.spores.frustumCulled = false;
+    R.group = new THREE.Group(); R.group.add(caps, ink, glow, R.spores); scene.add(R.group); DISTANT.push({ obj: R.group, x: R.x, z: R.z, r: 220 });
+  });
+}
+// the spores off whichever rings are drawn, rising off a cap and drifting, then gone and off another
+let sporeStep = -1;
+function stepSpores(step) {
+  if (step === sporeStep) return; sporeStep = step;
+  const at = reduceMotion ? 0 : step;
+  RINGS.forEach((R, i) => {
+    if (!R.group.visible) return;
+    const p = R.spores.geometry.attributes.position;
+    for (let k = 0; k < SPORES; k++) {
+      const go = at + Math.floor(hash(i, k, 1767) * SPORE_LIFE), t = go % SPORE_LIFE / SPORE_LIFE, from = R.tops[Math.floor(hash(i, k * 64 + Math.floor(go / SPORE_LIFE), 1768) * R.tops.length)];
+      p.setXYZ(k, from[0] + Math.sin(go * .3 + k) * .1 * t, from[1] + t * 1.5, from[2] + Math.cos(go * .27 + k) * .1 * t);
+    }
+    p.needsUpdate = true;
+  });
+}
+// The trip: which ring he's going to, how far in he is, whether he's there yet, and whether it's the fade for reduced motion. Coming to, nobody goes for him till
+// ringGraceUntil.
+let trip = null, ringGraceUntil = -Infinity;
+function startTrip(to) {
+  trip = { t: 0, to, still: reduceMotion, swapped: false };
+  S.mode = 'trip'; S.act = null; prompt(null); HP.kind = 'sit'; HP.sit = 0; HP.speed = 0; player.running = false; player.kb.set(0, 0); feverLeft = 0;
+  hudVitals();
+}
+function stepTrip(dt) {
+  trip.t += dt;
+  const f = tripAt(trip.t, trip.still);
+  HP.sit = f.down; feverTo(f.heat); gifMat.uniforms.uFade.value = f.fade;
+  if (f.part !== 'going' && !trip.swapped) {
+    const R = RINGS[trip.to]; trip.swapped = true;
+    player.pos.set(R.x, floorAt(R.x, R.z), R.z); player.vy = 0; player.grounded = true; player.yaw = R.yaw; cam.yaw = R.yaw + Math.PI; cam.snap = true;
+    // nothing follows him through, and everyone else playing sees him go there in one step
+    horde.calm(); net?.jumped();
+  }
+  if (f.part === 'up') { trip = null; S.mode = 'town'; HP.kind = 'run'; HP.sit = 0; ringGraceUntil = time + SHROOMS.grace; hudVitals(); }
+}
+// a ring on the map: a circle of pale dots, which nothing else on it is
+function drawRingMark(g, x, y, r, dim = false) {
+  g.beginPath(); g.arc(x, y, r, 0, 7); g.strokeStyle = MAPC.ink; g.lineWidth = r * .9; g.stroke();
+  g.fillStyle = dim ? MAPC.dusk : MAPC.cream;
+  for (let k = 0; k < 8; k++) { g.beginPath(); g.arc(x + Math.cos(k * Math.PI / 4) * r, y + Math.sin(k * Math.PI / 4) * r, Math.max(1.2, r * .26), 0, 7); g.fill(); }
+}
 // ================================================================ the map
 const mapData = buildMapData({ roads: MAP.roads, lanes: MAP.lanes, rail: MAP.rail, river: MAP.river, ponds: WATER.ponds.map((p) => p.ring), structures: STRUCTURES, fields: FIELDS });
 const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d') };
@@ -8240,6 +8357,7 @@ function updateMini(step) {
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const c = n / 2, at = objectivePoint();
   for (const o of vehShown) if (o !== driving && !o.wrecked && !o.drowned) drawVehicleMark(g, v, o, 3);
+  for (const R of RINGS) { const [x, y] = toScreen(v, R.x, R.z); if (Math.hypot(x - c, y - c) < c - 6) drawRingMark(g, x, y, 3.5); }
   // north, on the rim
   const [nx, ny] = toScreen(v, P.x, P.z - 1000), N = toRim(c, c, nx, ny, c - 9);
   drawLabel(g, 'N', N[0], N[1], '10px Bungee, Impact, sans-serif', MAPC.dusk);
@@ -8277,6 +8395,12 @@ function drawFullMap() {
     const [x, y] = toScreen(v, at.x, at.z);
     if (on(x, y)) { free(x, y, 20, 20); g.beginPath(); g.arc(x, y, 9, 0, 7); g.strokeStyle = MAPC.ink; g.lineWidth = 5; g.stroke(); g.strokeStyle = MAPC.hot; g.lineWidth = 3; g.stroke(); g.beginPath(); g.arc(x, y, 3, 0, 7); g.fillStyle = MAPC.hot; g.fill(); }
   }
+  // the mushroom rings, bigger while he's picking one to go to, and the one he's in dim
+  ringsMarked = 0;
+  RINGS.forEach((R, i) => {
+    const [x, y] = toScreen(v, R.x, R.z), r = mapPick === null ? 5 : 9; if (!on(x, y)) return;
+    free(x, y, r * 2 + 6, r * 2 + 6); drawRingMark(g, x, y, r, i === mapPick); ringsMarked++;
+  });
   net?.roomOnMap(v, free, w, h);
   if (mapCam.scale > .2) for (const o of VEHICLES) if (o !== driving && !o.wrecked && !o.drowned) drawVehicleMark(g, v, o, 2 + mapCam.scale * 1.6);
   const known = new Set(people.known().map((p) => p.id));
@@ -8300,28 +8424,46 @@ function drawFullMap() {
   drawArrow(g, hx, hy, Math.sin(player.yaw), Math.cos(player.yaw), 11);
 }
 function redrawMap() { if (mapOpen && !mapDirty) { mapDirty = true; requestAnimationFrame(() => { mapDirty = false; if (mapOpen) drawFullMap(); }); } }
-function openMap() {
+// Open with the ring he's eating from, it's to pick where to go: all of them are in view, and a tap on another is where. Backing out does nothing.
+// ringsMarked is how many it drew last time, for the tests.
+let mapPick = null, ringsMarked = 0;
+function openMap(pick = null) {
   SFX.play('ui.paper');
-  mapOpen = true; $('map').hidden = false;
+  mapOpen = true; mapPick = pick; $('map').hidden = false;
   touchStick.set(0, 0); knob.style.transform = ''; stickId = null;
-  mapCam = { x: player.pos.x, z: player.pos.z, scale: Math.max(.34, fitScale(mapData.bounds, innerWidth, innerHeight)) };
-  const said = $('obj').textContent; $('mapObj').hidden = !said; $('mapObj').textContent = said;
+  mapCam = pick === null ? { x: player.pos.x, z: player.pos.z, scale: Math.max(.34, fitScale(mapData.bounds, innerWidth, innerHeight)) } : allRings();
+  const said = pick === null ? $('obj').textContent : ''; $('mapObj').hidden = !said; $('mapObj').textContent = said;
   drawFullMap();
 }
-function closeMap() { SFX.play('ui.paper'); mapOpen = false; $('map').hidden = true; clock.getDelta(); }
+function closeMap() { SFX.play('ui.paper'); mapOpen = false; mapPick = null; $('map').hidden = true; clock.getDelta(); }
+// the map round all the rings, clear of its buttons
+function allRings() {
+  const xs = RINGS.map((R) => R.x), zs = RINGS.map((R) => R.z), x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
+  return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, scale: Math.min((innerWidth - 80) / (x1 - x0), (innerHeight - 200) / (z1 - z0)) };
+}
+// where each ring is on the map as it's drawn, in the page's pixels
+function ringSpots() { const v = makeView(mapCam.x, mapCam.z, mapCam.scale, 0, innerWidth, innerHeight); return RINGS.map((R) => toScreen(v, R.x, R.z)); }
+// a tap on the map while he's picking: the ring nearest it, if one's near enough and it isn't the one he's in
+function tappedMap(x, y) {
+  if (mapPick === null) return;
+  const i = pickRing(ringSpots(), x, y);
+  if (i < 0 || i === mapPick) return;
+  closeMap(); startTrip(i);
+}
 {
   const c = $('mapC'), fingers = new Map();
-  let pinch = 0;
+  // one finger down and up again without going anywhere is a tap
+  let pinch = 0, tap = null;
   const middle = () => { const f = [...fingers.values()]; return [(f[0].x + f[1].x) / 2, (f[0].y + f[1].y) / 2, Math.hypot(f[0].x - f[1].x, f[0].y - f[1].y)]; };
-  c.addEventListener('pointerdown', (e) => { c.setPointerCapture(e.pointerId); fingers.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (fingers.size === 2) pinch = middle()[2]; });
+  c.addEventListener('pointerdown', (e) => { c.setPointerCapture(e.pointerId); fingers.set(e.pointerId, { x: e.clientX, y: e.clientY }); tap = fingers.size === 1 ? { moved: 0 } : null; if (fingers.size === 2) pinch = middle()[2]; });
   c.addEventListener('pointermove', (e) => {
     const f = fingers.get(e.pointerId); if (!f) return;
-    const dx = e.clientX - f.x, dy = e.clientY - f.y; f.x = e.clientX; f.y = e.clientY;
+    const dx = e.clientX - f.x, dy = e.clientY - f.y; f.x = e.clientX; f.y = e.clientY; if (tap) tap.moved += Math.hypot(dx, dy);
     if (fingers.size === 1) mapCam = clampCam({ x: mapCam.x - dx / mapCam.scale, z: mapCam.z - dy / mapCam.scale, scale: mapCam.scale }, mapData.bounds, innerWidth, innerHeight);
     else if (fingers.size === 2) { const [mx, my, d] = middle(); mapCam = clampCam({ x: mapCam.x - dx / 2 / mapCam.scale, z: mapCam.z - dy / 2 / mapCam.scale, scale: mapCam.scale }, mapData.bounds, innerWidth, innerHeight); if (pinch > 0) mapCam = zoomAbout(mapCam, mx, my, d / pinch, mapData.bounds, innerWidth, innerHeight); pinch = d; }
     redrawMap();
   });
-  const lift = (e) => { fingers.delete(e.pointerId); pinch = 0; };
+  const lift = (e) => { const was = e.type === 'pointerup' && fingers.size === 1 && tap && tap.moved < 12; fingers.delete(e.pointerId); pinch = 0; tap = null; if (was) tappedMap(e.clientX, e.clientY); };
   c.addEventListener('pointerup', lift); c.addEventListener('pointercancel', lift);
   c.addEventListener('wheel', (e) => { e.preventDefault(); mapCam = zoomAbout(mapCam, e.clientX, e.clientY, Math.exp(-e.deltaY * .0016), mapData.bounds, innerWidth, innerHeight); redrawMap(); }, { passive: false });
   const zoomBy = (k) => { mapCam = zoomAbout(mapCam, innerWidth / 2, innerHeight / 2, k, mapData.bounds, innerWidth, innerHeight); redrawMap(); };
@@ -8514,7 +8656,7 @@ function tick(dt, draw = true) {
   readInput();
   updateMouse(dt);
   const step = Math.floor(time * 12);
-  if (step !== lastStepIdx) { lastStepIdx = step; G.uStep.value = ASTRAL.uStep.value = step % 4; gifMat.uniforms.uFrame.value = step % 997; const k = step % 3; heroHoodM.map = heroHoodM.emissiveMap = hatch[k]; heroSleeveM.map = heroSleeveM.emissiveMap = hatch[(k + 1) % 3]; heroPantsM.map = heroPantsM.emissiveMap = pantsHatch[k]; poseHero(step / 12); stepBurst(); pointAtObjective(); }
+  if (step !== lastStepIdx) { lastStepIdx = step; G.uStep.value = ASTRAL.uStep.value = step % 4; gifMat.uniforms.uFrame.value = step % 997; const k = step % 3; heroHoodM.map = heroHoodM.emissiveMap = hatch[k]; heroSleeveM.map = heroSleeveM.emissiveMap = hatch[(k + 1) % 3]; heroPantsM.map = heroPantsM.emissiveMap = pantsHatch[k]; poseHero(step / 12); stepBurst(); pointAtObjective(); stepSpores(step); }
   if (player.inv > 0) player.inv -= dt;
   gifMat.uniforms.uHurt.value = Math.max(0, player.inv - .9) * .8;
 
@@ -8644,11 +8786,13 @@ function tick(dt, draw = true) {
       const bell = !near && !ride && !meat && !door && !jam && !ball && !crt && bellInReach();
       // with Gerald in his hand, the cast are who to show him to, and any ditch is where to let him go
       const showTo = near && S.items.gerald && GERALD_SEEN[near] && !S.flags[GERALD_SEEN[near]], ditch = !!S.items.gerald && inDitch(player.pos.x, player.pos.z);
-      S.act = near ? `${showTo ? 'Show Gerald to' : 'Talk to'} ${near === 'toni' ? 'Toni' : NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : bell ? 'Ring the bell' : gear && S.flags.sixInARow ? 'Take the bat' : ditch ? 'Let Gerald go' : null;
+      // and in a ring of mushrooms, one to eat (CHUNKY-176)
+      const ring = ringAt(RINGS, player.pos.x, player.pos.z);
+      S.act = near ? `${showTo ? 'Show Gerald to' : 'Talk to'} ${near === 'toni' ? 'Toni' : NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : bell ? 'Ring the bell' : gear && S.flags.sixInARow ? 'Take the bat' : ditch ? 'Let Gerald go' : ring >= 0 ? 'Eat a mushroom' : null;
       if (!stone) stoneRead = false;
       if (!plate) railMarkerRead = false;
       if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (railMarkerRead && S.act === 'Read the marker') prompt(`<span class="words">${RAIL_MARKER.words}</span>`); else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH && !S.items.gerald) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
-      if (input.aEdge) { if (near === 'toni') toniSpoke(toni.talk(player.pos)); else if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) { stoneRead = true; SFX.clip(STONE_CLIP); } else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else if (ditch) letGeraldGo(); else swing(); }
+      if (input.aEdge) { if (near === 'toni') toniSpoke(toni.talk(player.pos)); else if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) { stoneRead = true; SFX.clip(STONE_CLIP); } else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else if (ditch) letGeraldGo(); else if (ring >= 0) openMap(ring); else swing(); }
       if (input.sEdge) swing();
       if (input.hEdge) toggleShamble();
       if (input.cEdge) throwOne();
@@ -8690,6 +8834,7 @@ function tick(dt, draw = true) {
     HP.down = 1 - sstep(2.1, WAKE_UP, Math.floor(wakeT * 12) / 12);
     if (wakeT >= WAKE_UP) { HP.kind = 'run'; startTown(); }
   }
+  if (M === 'trip') stepTrip(dt);
   if (M === 'fail' && died) stepDeath(dt);
   // it takes a while to leave him
   if (feverLeft > 0) { feverLeft = Math.max(0, feverLeft - dt * FEVER_FADES); feverTo(feverLeft * feverLeft * .8); }
@@ -8707,9 +8852,10 @@ function tick(dt, draw = true) {
   if (S.mode === 'drive') {
     _v.set(driving.K.seat[0], driving.K.seat[1], driving.K.seat[2]).applyMatrix4(toBody(driving)); heroRoot.position.copy(_v);
     heroRoot.rotation.set(driving.pitch, driving.yaw, driving.roll); hero.body.position.set(0, 0, 0); hero.body.rotation.set(0, 0, 0);
-  } else if (M === 'drive' || M === 'swim' || M === 'land' || M === 'bridge' || M === 'bitten' || M === 'dream' || M === 'wake' || M === 'town' || M === 'grabbed' || M === 'sweep' || M === 'dialog' || M === 'end' || M === 'fail') {
+  } else if (M === 'drive' || M === 'swim' || M === 'land' || M === 'bridge' || M === 'bitten' || M === 'dream' || M === 'wake' || M === 'town' || M === 'grabbed' || M === 'sweep' || M === 'dialog' || M === 'end' || M === 'fail' || M === 'trip') {
     heroRoot.position.copy(player.pos); heroRoot.rotation.set(0, player.yaw, 0);
     if (HP.kind === 'swim') { hero.body.position.set(0, .2, 0); hero.body.rotation.set(.95, 0, Math.sin(HP.phase) * .08); }
+    else if (HP.kind === 'sit') { const s = HP.sit; hero.body.position.set(0, HERO_HIPS + (SIT_HIPS - HERO_HIPS) * s, 0); hero.body.rotation.set(.18 * s, 0, 0); }
     else if (HP.kind === 'down') { const d = HP.down, e = d * d; hero.body.position.set(0, HERO_HIPS + (.3 - HERO_HIPS) * Math.min(1, d * 1.08), 0); hero.body.rotation.set(.3 * (1 - d) + 1.46 * e, 0, Math.sin(Math.floor(time * 12) * .9) * .05 * (1 - d) + .16 * e); }
     // Rolling, he's lying the way he lies face down, turned over about the line down the middle of him, which is a little off the ground,
     // and a whole number of turns of it leaves him just as he lies to get up
@@ -8766,7 +8912,7 @@ function tick(dt, draw = true) {
     if (camera.up.y !== 1) camera.up.set(0, 1, 0);
     const swim = M === 'swim' || (M === 'fail' && !S.flags.bridgeStarted) || M === 'fall';
     const car = S.mode === 'drive' ? driving : null, carSpeed = car ? speedOf(car) : 0;
-    const lying = roll ? (HP.kind === 'down' ? HP.down : 1) : M === 'bitten' || M === 'wake' || M === 'fail' ? HP.kind === 'down' ? HP.down : 0 : 0;
+    const lying = roll ? (HP.kind === 'down' ? HP.down : 1) : M === 'bitten' || M === 'wake' || M === 'fail' ? HP.kind === 'down' ? HP.down : 0 : M === 'trip' ? HP.sit * .55 : 0;
     const tgt = car ? new THREE.Vector3(car.x, car.y + car.K.camLook, car.z) : heroRoot.position.clone().add(new THREE.Vector3(0, swim ? .55 : 1.55 - lying * 1.15, 0));
     const moving = Math.hypot(input.x, input.y) > .1;
     // In something with an engine it swings round behind it by itself, once it's moving
@@ -9043,6 +9189,7 @@ if (TEST) {
       }
       for (const d of DISTANT) d.obj.visible = true;
       for (const g of LANE_MESHES) g.visible = false;
+      for (const R of RINGS) R.group.visible = false;
       // the ground's leaf litter would hide the roads, so it's dimmed and they're drawn flat
       const flat = new THREE.MeshBasicMaterial({ color: '#77778a' }); groundMat.color.setScalar(.45);
       scene.traverse((o) => { if ((o.isInstancedMesh && o !== plankMesh) || o.isPoints || o.isSprite) o.visible = false; if (Object.values(SURFACES).includes(o.material)) o.material = flat; });
@@ -9070,6 +9217,13 @@ if (TEST) {
     bail: { BAIL, roll: () => roll && { ...roll }, coasting: () => coasting.map((c) => c.v), doors: () => Object.fromEntries(Object.entries(vehDoors).map(([k, m]) => [k, m.visible ? m.count : 0])), hood: () => [heroHood, heroHoodHung, heroHoodFlop, heroHoodSwim].findIndex((h) => h.geo === hero.hm.geometry) },
     wreck: { strike, blast, blastCan, thud, toss, damage, breakProp, props: PROPS, falling, swing, burnAt, burners, catchTree, treesNear, treeBlocks, fellTree, gasCans: GAS_CANS, wreckVehicle, explodeVehicle, startFree, housesNear, trees: (x, z, r) => { const out = []; treesNear(x, z, r, (t) => out.push(t)); return out; } },
     openMap, closeMap, updateMini, mapState: () => ({ open: mapOpen, cam: mapCam, mini: !$('mini').hidden, name: $('miniName').hidden ? '' : $('miniName').textContent }), mapCamTo(c) { mapCam = { ...mapCam, ...c }; drawFullMap(); },
+    // the mushroom rings (CHUNKY-176): where each settled, which he's standing in, how far into a trip he is, which ring the map's open to pick from and where
+    // each is on it, how long nobody's to go for him, and how far he's sat down
+    rings: {
+      list: () => RINGS.map(({ x, z, y, yaw, at }) => ({ x, z, y, yaw, at })), here: () => ringAt(RINGS, player.pos.x, player.pos.z), picking: () => mapPick, spots: ringSpots, marked: () => ringsMarked,
+      trip: () => trip && { ...tripAt(trip.t, trip.still), t: trip.t, to: trip.to, swapped: trip.swapped, still: trip.still }, grace: () => Math.max(0, ringGraceUntil - time), sit: () => HP.sit ?? 0,
+      drawn: () => RINGS.map((R) => R.group.visible), look: () => ({ dream: gifMat.uniforms.uDream.value, tint: gifMat.uniforms.uTint.value, fade: gifMat.uniforms.uFade.value }),
+    },
     // where the title card's camera is in a town that's shared, which can be moved
     title: () => titleAt,
     pause() { paused = true; },

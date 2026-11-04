@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "rings": [
+    { "at": "the gas station, in the grass at the side of its lot", "about": [-88, -31] },
+    { "at": "where True Light Rd meets US 80", "about": [-3682, 23] },
+    { "at": "where Coffee Cup Rd leaves Chunky Duffee Rd", "about": [-527, -5613] },
+    { "at": "where Point Wanita Lake Rd leaves Pine Forest Rd", "about": [2851, 2788] },
+    { "at": "the crossroads, where Meehan-Savoy Rd meets US 80", "about": [5808, -216] },
+    { "at": "where Goodwater Rd meets Meehan-Savoy Rd", "about": [6372, 3229] },
+    { "at": "the turn-off to Stuckey Bridge Rd", "about": [7416, 6233] },
+    { "at": "where Pauldin Rd meets Meehan-Savoy Rd", "about": [10738, 6368] },
+    { "at": "where Old Hwy 80 W ends, by the prison", "about": [11833, -1748] },
+    { "at": "by the farthest church's sign on US 11", "about": [14810, 6724] }
+  ]
+}

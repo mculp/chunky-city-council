@@ -26,8 +26,9 @@ export function hereUrl(town) {
 }
 // who a phone is: a key it makes the first time it's needed and keeps, for the town and for the characters' words
 export const PHONE_KEY = /^[\w-]{16,128}$/;
-// how someone is, besides where: on their feet (walking, running, standing), swimming, or knocked down
-export const HOW = { foot: 0, swim: 1, down: 2 };
+// how someone is, besides where: on their feet (walking, running, standing), swimming, knocked down, or on a trip from a mushroom
+// ring to another (CHUNKY-176), from sitting down to getting up at the other end
+export const HOW = { foot: 0, swim: 1, down: 2, trip: 3 };
 const SNAPSHOT = 2, HEAD = 2, ENTRY = POSE_BYTES + 2, TAU = Math.PI * 2;
 const viewOf = (b) => new DataView(b.buffer, b.byteOffset, b.byteLength);
 

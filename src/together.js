@@ -267,6 +267,7 @@ export function together(G) {
 
   // ---------------- the wire
   let riding = null;
+  const howNow = () => (S.mode === 'trip' ? HOW.trip : HP.kind === 'swim' ? HOW.swim : HP.kind === 'roll' || (HP.kind === 'down' && HP.down > .5) ? HOW.down : HOW.foot);
   function pump() {
     if (!link) return;
     requestAnimationFrame(pump);
@@ -278,8 +279,8 @@ export function together(G) {
     if (!started) link.tend();
     else if (d) link.update(d.x, d.y, d.z, d.yaw, { ride: G.vehicles.indexOf(d) + 1, swings, waves, how: HOW.foot });
     // down until they're halfway up, coming to, and down rolling out of something going too: a pose has no room for which way over
-    // they are, so it's lying along the ground
-    else link.update(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: HP.kind === 'swim' ? HOW.swim : HP.kind === 'roll' || (HP.kind === 'down' && HP.down > .5) ? HOW.down : HOW.foot });
+    // they are, so it's lying along the ground. On a trip from a ring it's that, from sitting down to getting up at the other end.
+    else link.update(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: howNow() });
     // what they carry goes whenever it changes
     const had = JSON.stringify({ beans: S.beans, items: S.items, gas: S.gas });
     if (link.id && had !== keptWas) { keptWas = had; link.keep({ beans: S.beans, items: { ...S.items }, gas: S.gas }); }
@@ -509,6 +510,8 @@ export function together(G) {
     get name() { return you.name; },
     // where they come to when a try ends, which is by the pumps where they start
     spot: () => startSpot(),
+    // where he's come to at the other ring, at once, the way where a vehicle was left goes first, so that the jump arrives as one step
+    jumped() { if (!link || alone || !started) return; const P = G.player.pos; link.now(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: howNow() }); },
     // after the world's placed, each frame that's drawn
     frame(dt, step) {
       if (!started) return;

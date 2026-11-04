@@ -48,6 +48,7 @@
     "sound:level": "node tools/level-sound.mjs",
     "wreck": "node tools/play-wreck.mjs",
     "afternoon": "node tools/play-afternoon.mjs",
+    "rings": "node tools/play-rings.mjs",
     "overlay:structures": "node tools/structure-overlay.mjs",
     "overlay": "node tools/map-overlay.mjs"
   },
