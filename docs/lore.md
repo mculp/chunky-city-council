@@ -145,7 +145,7 @@ The community pool's there too, directly west of the park, as green as it is fro
 
 - There's nothing written on any of the stones, because they're somebody's. Where any of them stand, beyond the big slabs, is made up.
 - One's darker than the rest, off toward the back, and that's the one. Nothing points to it and it isn't on the map. Where the real one stands isn't known, and this isn't meant to be it.
-- The line of the song isn't in the game or anywhere else here. Up close it says "Words from a song, imprinted on the stone." `data/stone.json` is the place for the words themselves, if the owner wants to type them in. Nobody else does. Whether they can go in the game is the same question as music.
+- The line of the song isn't in the game or anywhere else here. Up close it says "Words from a song, imprinted on the stone." `data/stone.json` is the place for the words themselves, if the owner wants to type them in. Nobody else does.
 - Nothing there breaks but the fence.
 
 ## The gas station
