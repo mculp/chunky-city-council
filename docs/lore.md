@@ -246,6 +246,10 @@ Shown a picture from above of the big building behind a fuel canopy on US 80, ab
 
 > Holy shit the map is this big? That's a gigantic gas station with a [sandwich shop], [doughnut shop], full 24 hour restaurant (truck stop), canopy over gas pumps for cars. The blue building is just the truck fuel canopy
 
+And later, as the Creative Director passed it on:
+
+> The truckstop is called Spaceway
+
 ## Toni
 
 Typed into the Creative Director session on 2026-11-03:
@@ -257,3 +261,27 @@ Asked what Toni looks like, her hair and what she wears:
 > Brown hair, a big green military jacket or trench coat, boots and SHE HOLDS THE FROGS IN HER HAND
 
 **In the game:** she's at the burned house on the south side of Gallatin St, straight across from Clay St, ten years old and see-through, in rows like a picture on an old television, with long brown hair, a big green coat and boots, and a frog in her hand. There's no jar. She catches them all night in the ditch along Gallatin and the tall grass round the house, and goes up to whoever comes by and shows them one. She has twelve, with names, and shows him one he hasn't seen every time he comes by, and remembers which. When he's seen them all she gives him Gerald, and he can't swing till he lets Gerald go in a ditch. Nothing can hurt her, nobody lives in the house and nothing's parked at it. What she says and the cast say about Gerald is the Creative Director's, in `data/toni.json` and `data/cast.json`, and `data/toni.md` has the rest.
+
+## The fish camp
+
+On 2026-11-03, as it's quoted at the top of CHUNKY-149:
+
+> Theres a fish camp on highway 80 (this should be built, it's a core memory for anyone from chunky).
+
+## Crawfish
+
+On 2026-11-03, as it's quoted at the top of CHUNKY-150:
+
+> Theres a crawfish place across from the Methodist church and another crawfish/seafood place about 5 miles north of the interstate on chunky-duffee rd (dunno if it's on the map)
+
+## Floating the river
+
+On 2026-11-03, as it's quoted at the top of CHUNKY-161, sent with pictures of a float in 1995 and of the two places that rent the boats:
+
+> Floating the river on inflatable inner tubes is another past time
+
+## The prison
+
+On 2026-11-03, as it's quoted at the top of CHUNKY-156:
+
+> The prison, you can make stuff up there. I don't care about that.
