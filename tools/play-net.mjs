@@ -363,6 +363,22 @@ try {
     await a.page.keyboard.press('e'); await until(async () => !(await state(a)).drive);
     await until(async () => (await state(a)).kind === 'run', 6000);
   }
+  // ---------------- out of it going 27 mph, A dives out and rolls (CHUNKY-168), and is lying down all the while on both phones, not
+  // stood up sliding along the road
+  {
+    await on(a, (i) => { const G = __game, v = G.vehicles[i], side = v.K.width / 2 + .6; G.place(v.x - Math.cos(v.yaw) * side, v.z + Math.sin(v.yaw) * side); }, truck.i);
+    await sleep(300);
+    await a.page.keyboard.press('e'); await until(async () => (await state(a)).drive);
+    await on(a, () => { __game.driving().f = 12; });
+    await a.page.keyboard.press('e');
+    const lying = await until(async () => {
+      if ((await state(a)).kind !== 'roll') return null;
+      const own = await bodyOf(a, A.id), seen = await bodyOf(b, A.id);
+      return own?.up > 60 && seen?.up > 60 ? { own: own.up, seen: seen.up } : null;
+    }, 3000);
+    check(`A dives out of it going 27 mph and rolls, lying down while A does: ${lying ? `${lying.own.toFixed(0)}° over on A's phone and ${lying.seen.toFixed(0)}° on B's` : 'stood up'}`, !!lying, lying ?? { own: await bodyOf(a, A.id), seen: await bodyOf(b, A.id), kind: (await state(a)).kind });
+    await until(async () => (await state(a)).kind === 'run', 8000);
+  }
   {
     const Bnow = await me(b);
     await on(a, ([x, z]) => { const G = __game; G.place(x - 1.2, z); G.player.yaw = Math.PI / 2; }, [Bnow.x, Bnow.z]);

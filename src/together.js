@@ -187,7 +187,8 @@ export function together(G) {
     if (!started) link.tend();
     else if (d) link.update(d.x, d.y, d.z, d.yaw, { ride: G.vehicles.indexOf(d) + 1, swings, waves, how: HOW.foot });
     // down until they're halfway up, coming to
-    else link.update(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: HP.kind === 'swim' ? HOW.swim : HP.kind === 'down' && HP.down > .5 ? HOW.down : HOW.foot });
+    // rolling, out of something going, is down too: a pose has no room for which way over they are, so it's lying along the ground
+    else link.update(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: HP.kind === 'swim' ? HOW.swim : HP.kind === 'roll' || (HP.kind === 'down' && HP.down > .5) ? HOW.down : HOW.foot });
     // what they carry goes whenever it changes
     const had = JSON.stringify({ beans: S.beans, items: S.items, gas: S.gas });
     if (link.id && had !== keptWas) { keptWas = had; link.keep({ beans: S.beans, items: { ...S.items }, gas: S.gas }); }
@@ -429,7 +430,7 @@ export function together(G) {
       let n = 0, hero = null;
       if (!you.hero) {
         const d = G.driving, P = G.player.pos;
-        pose(n++, { id: 0, x: P.x, y: P.y, z: P.z, yaw: G.player.yaw, speed: HP.speed, phase: HP.phase, look: you.look, seat: d, how: HP.kind === 'swim' ? HOW.swim : HOW.foot, down: HP.kind === 'down' ? HP.down : 0, air: HP.kind === 'air', swingAge: G.time - swungAt, waveAge: G.time - wavedAt }, step);
+        pose(n++, { id: 0, x: P.x, y: P.y, z: P.z, yaw: G.player.yaw, speed: HP.speed, phase: HP.phase, look: you.look, seat: d, how: HP.kind === 'swim' ? HOW.swim : HOW.foot, down: HP.kind === 'down' ? HP.down : HP.kind === 'roll' ? 1 : 0, air: HP.kind === 'air', swingAge: G.time - swungAt, waveAge: G.time - wavedAt }, step);
         slots[0].id = you.id;
       }
       for (const w of list) {
