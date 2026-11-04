@@ -292,9 +292,10 @@ export function discRack(colors = ['#a33a3a', '#e8a93a', '#2f6f8f', '#d8d2bd', '
   return [box(0, .68, -.06, .42, 1.36, .03, '#3a2c22'), ...both((s) => box(s * .2, .68, 0, .02, 1.36, .16, '#3a2c22')), ...[0, 1, 2, 3, 4, 5].map((y) => box(0, .02 + y * .25, 0, .4, .02, .16, '#3a2c22')), ...spines];
 }
 
-// ---- what stands in a cemetery, from what can be seen from the road. Nothing's written on any of it.
+// ---- what stands in a cemetery, from what can be seen from the road. Nothing's written on any of it but the one slab with `words`, whose lines are cut in the
+// face of the stone at its head, toward the slab, where it's read from, and can only be made out from right up close.
 const GRAVE_GREYS = ['#8d8c88', '#77767a', '#a3a196', '#5e5d62', '#b4b1a4'], BLOOMS = ['#d94a6a', '#f1e6cf', '#e8a93a', '#b03ac0', '#d9402a'];
-export function graveMarker({ kind, tone = 0, flowers = 0, w = 3, d = 3.4 }) {
+export function graveMarker({ kind, tone = 0, flowers = 0, w = 3, d = 3.4, words = false }) {
   const G = GRAVE_GREYS[Math.floor(tone * GRAVE_GREYS.length) % GRAVE_GREYS.length], BASE = '#83827a', parts = [];
   const base = (bw, bd = .34, bh = .14, color = BASE) => box(0, bh / 2, 0, bw, bh, bd, color);
   if (kind === 'low') parts.push(base(.84), box(0, .36, 0, .68, .46, .17, G));
@@ -304,16 +305,12 @@ export function graveMarker({ kind, tone = 0, flowers = 0, w = 3, d = 3.4 }) {
   if (kind === 'cross') parts.push(base(.5, .3, .2), box(0, .62, 0, .11, .85, .1, G), box(0, .78, 0, .46, .1, .1, G));
   if (kind === 'slab') parts.push(
     box(0, .05, 0, w, .1, d, '#a9a79c'), box(0, .09, .1, w - .34, .06, d - .54, '#8b8a80'),
-    ...moved([base(1.6, .4), box(0, .42, 0, 1.3, .56, .22, G), box(0, .72, 0, 1.06, .05, .17, G)], { z: -d / 2 + .2 }),
+    ...moved([base(1.6, .4), box(0, .42, 0, 1.3, .56, .22, G), box(0, .72, 0, 1.06, .05, .17, G),
+      ...(words ? [.6, .53, .46, .39, .32].map((y, i) => box(0, y, .112, [.82, .94, .72, .88, .56][i], .012, .004, '#4c4b52')) : [])], { z: -d / 2 + .2 }),
   );
   if (kind === 'obelisk') parts.push(
     box(0, .14, 0, 1.1, .28, 1.1, BASE), box(0, .42, 0, .8, .3, .8, G),
     ...moved([cyl(0, 1.5, 0, .22, 1.9, G, 4, .32), cyl(0, 2.6, 0, 0, .3, G, 4, .22)], { ry: Math.PI / 4 }),
-  );
-  // Dark and polished, and whatever's cut in it can only be read from right up close
-  if (kind === 'stone') parts.push(
-    base(1, .42, .16, '#3a383e'), box(0, .6, 0, .8, .88, .16, '#26242a'),
-    ...[.86, .78, .7, .62, .54].map((y, i) => box(0, y, .083, [.5, .56, .44, .54, .34][i], .012, .004, '#9a98a0')),
   );
   for (let i = 0; i < flowers; i++) {
     const x = (i - (flowers - 1) / 2) * .22, z = kind === 'slab' ? -d / 2 + .56 : .26;

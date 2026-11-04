@@ -1,9 +1,20 @@
 // Goes and finds what's only there for anyone who stumbles on it, on a phone-sized page, with the game's own movement and real taps. In from School St to the second trailer from the left, down its length to the computer in the back,
-// up to the screen and away again. Across the green pool. Then in a pickup up the road past where the map used to stop, on foot up the gravel loop and through the gate, between the stones to the one with words on it. Nothing's marked.
+// up to the screen and away again. Across the green pool. Then in a pickup up the road past where the map used to stop, on foot up the gravel loop and through the gate, between the stones to the
+// slab with words on it, the northernmost, which the owner picked, and READ all along it. Nothing's marked. Last, the owner's clip, which is theirs to add, played from a stand-in for it: once
+// from the stone when it's read, with the night noise and the crowd dipped under it, quieter walking off, with the sound button and the effects slider, and nothing at all without it.
 //
 //   npm i && npm run stumble [-- --shots dir]
 import { mkdirSync, readFileSync } from 'node:fs';
 import { serveAndOpen } from './browser.mjs';
+
+// A stand-in for the owner's clip, since it's theirs to add: a soft tone, as a WAV, which Chrome plays whatever it's called
+function standIn(seconds, rate = 22050) {
+  const n = Math.floor(seconds * rate), b = Buffer.alloc(44 + n * 2);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / rate * 2 * Math.PI * 330) * .3 * Math.min(1, i / 400, (n - i) / 400) * 32767), 44 + i * 2);
+  return b;
+}
 
 const at = process.argv.indexOf('--shots'), shots = at > 0 ? process.argv[at + 1] : null;
 if (shots) mkdirSync(shots, { recursive: true });
@@ -135,7 +146,8 @@ const found = await g(() => {
   G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); G.sim(.3, 1 / 30);
   G.place(...true2(-472, -7392)); G.sim(.2, .1);
   const up = walkTo([true2(-447, -7409.4), true2(-428, -7431), true2(-415.5, -7428.5), true2(-410, -7420)], .8, 60);
-  // the way through from the gate, in half metres, round whatever's in the way
+  // the way through from the gate, in half metres, round whatever's in the way, to the nearest of the slab or right beside it
+  const W = S.WORDS_SLAB, turn = S.GRAVE_TURN + W.turn, bySlab = (x, z) => { const dx = x - W.x, dz = z - W.z; return Math.abs(dx * Math.cos(turn) - dz * Math.sin(turn)) <= W.w / 2 + .3 && Math.abs(dx * Math.sin(turn) + dz * Math.cos(turn)) <= W.d / 2 + .3; };
   const Y = G.floorAt(P.x, P.z), key = (i, j) => i * 100000 + j, cell = .6, [gx, gz] = [Math.round(P.x / cell), Math.round(P.z / cell)];
   const seen = new Map([[key(gx, gz), null]]), q = [[gx, gz]]; let done = null;
   for (let h = 0; h < q.length && !done && h < 30000; h++) {
@@ -144,7 +156,7 @@ const found = await g(() => {
       const n = key(i + a, j + b), x = (i + a) * cell, z = (j + b) * cell;
       if (seen.has(n) || G.blocked(x, z, Y) || G.blocked(x + .15, z, Y) || G.blocked(x - .15, z, Y) || G.blocked(x, z + .15, Y) || G.blocked(x, z - .15, Y)) continue;
       seen.set(n, [i, j]); q.push([i + a, j + b]);
-      if (Math.hypot(x - S.STONE.x, z - S.STONE.z) < 1.5) { done = [i + a, j + b]; break; }
+      if (bySlab(x, z)) { done = [i + a, j + b]; break; }
     }
   }
   const path = []; if (done) for (let c = done; c; c = seen.get(key(c[0], c[1]))) path.unshift([c[0] * cell, c[1] * cell]);
@@ -159,11 +171,26 @@ await tap(); await g(() => __game.sim(.1, 1 / 30));
 // the owner's words exactly, once they've put them in data/stone.json, and that there are words from a song on it until then
 const read = await g(() => { const says = promptSays(), words = __game.stumble.sheet.words; return { read: __game.stumble.stoneRead(), theirs: !!words, right: words ? says === words : /imprinted on the stone/.test(says) }; });
 check(read.theirs ? 'it says the owner\'s words, exactly' : 'it says there are words from a song on it, which are the owner\'s to fill in', read.read && read.right, read);
+// with no clip of the owner's there, which is how it is until they add one, it's asked for once and nothing plays
+const silent = await g(async () => { await new Promise((r) => setTimeout(r, 500)); const G = __game, s = G.sound.state(); return { unlocked: s.unlocked, clip: s.clips[G.stumble.STONE_CLIP] ?? null, clipping: s.clipping }; });
+check('with no clip of the owner\'s there yet, reading it plays nothing', silent.unlocked && silent.clip?.there === false && !silent.clip.playing && silent.clipping === 0, silent);
 await snap('the-stone');
 const typed = await g(() => { const G = __game, S = G.stumble; S.sheet.words = 'A LINE FROM THE SHEET'; G.sim(.1, 1 / 30); const says = promptSays(); S.sheet.words = ''; return says; });
 check('and whatever goes on the sheet is what it says', typed === 'A LINE FROM THE SHEET', typed);
-const leave = await g(() => { const G = __game, S = G.stumble, P = G.player.pos; G.place(P.x + 4, P.z); G.sim(.2, 1 / 30); const away = S.stoneRead(); G.place(S.STONE.x, S.STONE.z + 1); G.sim(.2, 1 / 30); return { away, act: G.S.act, says: promptSays() }; });
+// clear of the slab, which can be read from anywhere along it
+const leave = await g(() => { const G = __game, S = G.stumble, P = G.player.pos; G.place(P.x + 8, P.z); G.sim(.2, 1 / 30); const away = S.stoneRead(); G.place(S.STONE.x, S.STONE.z + 1); G.sim(.2, 1 / 30); return { away, act: G.S.act, says: promptSays() }; });
 check('walk off and come back and it has to be read again', !leave.away && leave.act === 'Read the stone' && /Read the stone/.test(leave.says), leave);
+// all along the slab, on it or beside it, and not from further off, and the upright in the middle that had the words before is an ordinary stone
+const along = await g(() => {
+  const G = __game, S = G.stumble, W = S.WORDS_SLAB, a = S.GRAVE_TURN + W.turn, at = (u, v) => [W.x + u * Math.cos(a) + v * Math.sin(a), W.z - u * Math.sin(a) + v * Math.cos(a)];
+  const reads = ([x, z]) => { G.place(x, z); G.sim(.1, 1 / 30); return G.S.act === 'Read the stone' && buttonSays() === 'READ'; };
+  const on = [[0, W.d / 2 - .3], [0, 0], [.6, -W.d / 2 + .7], [-W.w / 2 - .6, 0], [W.w / 2 + .6, -W.d / 4], [0, W.d / 2 + .6]].map((p) => reads(at(...p)));
+  const off = [[-W.w / 2 - 1.6, 0], [W.w / 2 + 1.6, 0], [0, W.d / 2 + 1.6]].map((p) => reads(at(...p)));
+  const [ux, uz] = true2(...S.CEMETERY.upright), upright = [[0, 1], [1, 0], [0, -1], [-1, 0]].map(([dx, dz]) => { G.place(ux + dx, uz + dz); G.sim(.1, 1 / 30); return G.S.act; });
+  return { on, off, upright, slab: [+W.w.toFixed(2), +W.d.toFixed(2)] };
+});
+check(`READ comes up anywhere along the slab, on it or beside it, and not from further off`, along.on.every(Boolean) && !along.off.some(Boolean), along);
+check('and the upright in the middle that had the words is an ordinary stone again', along.upright.every((a) => a !== 'Read the stone'), along.upright);
 
 // ---------------- it's somebody's
 const graves = await g(() => {
@@ -197,6 +224,52 @@ await snap('the-stone-and-every-button');
 
 check('no console errors', errors.length === 0, errors);
 await close();
+
+// ---------------- the owner's clip, from a stand-in for it, in Chrome with nothing to play it out of, on the levels the game sets and what comes out of it
+{
+  const { page, errors, close } = await serveAndOpen({ touch: true, viewport: { width: 390, height: 844 }, overrides: { '/audio/music/stone.mp3': standIn(4) } });
+  const g = (fn, arg) => page.evaluate(fn, arg), wait = (s) => page.waitForTimeout(s * 1000);
+  const read = async () => { await page.tap('#bA'); await page.waitForTimeout(20); await g(() => __game.sim(1 / 30, 1 / 30)); };
+  const now = () => g(() => { const G = __game, s = G.sound.state(); return { c: s.clips[G.stumble.STONE_CLIP] ?? null, clipping: s.clipping, levels: s.levels, db: G.sound.meter(), muted: G.sound.muted }; });
+  await g(() => {
+    const G = __game, S = G.stumble, W = S.WORDS_SLAB, a = S.GRAVE_TURN + W.turn; G.pause(); G.jump('town'); G.S.flags.town = true; G.step(.1); document.getElementById('card').style.display = 'none';
+    window.slab = (u, v) => [W.x + u * Math.cos(a) + v * Math.sin(a), W.z - u * Math.sin(a) + v * Math.cos(a)];
+    G.place(...slab(0, W.d / 2 - .3)); G.sim(.3, 1 / 30);
+  });
+  await page.keyboard.press('Shift'); await wait(.4);
+  const before = await now();
+  await read(); await wait(.6);
+  const first = await now();
+  check('reading it plays the owner\'s clip once, from the stone', first.c?.there === true && first.c.playing && first.clipping === 1 && first.c.gain > 0, first);
+  check(`with the night noise down to ${Math.round(first.levels.ambience / before.levels.ambience * 100)}% under it and the crowd to ${Math.round(first.levels.effects / before.levels.effects * 100)}%`,
+    first.levels.ambience < before.levels.ambience * .6 && first.levels.effects < before.levels.effects * .8 && first.levels.voice === before.levels.voice, { before: before.levels, during: first.levels });
+  await read(); await wait(.2);
+  const again = await now();
+  check('reading it again while it\'s playing doesn\'t start it over or start another', again.c.playing && again.c.at === first.c.at && again.clipping === 1, { first: first.c, again: again.c });
+  await g(() => { __game.place(...slab(0, __game.stumble.WORDS_SLAB.d / 2 + 13)); __game.sim(.3, 1 / 30); }); await wait(.3);
+  const off = await now();
+  check(`walking off it gets quieter: ${first.c.gain} to ${off.c.gain} of it, 13 m further off`, off.c.playing && off.c.gain < first.c.gain * .5, { near: first.c.gain, far: off.c.gain });
+  await g(() => { __game.place(...slab(0, __game.stumble.WORDS_SLAB.d / 2 - .3)); __game.sim(.3, 1 / 30); }); await wait(.3);
+  const loud = await now();
+  await page.locator('#mute').tap(); await wait(.3);
+  const hushed = await now();
+  await page.locator('#mute').tap(); await wait(.2);
+  check(`the sound button has it: ${loud.db.toFixed(0)} dB coming out, then ${hushed.db.toFixed(0)}`, hushed.muted && hushed.c.playing && loud.db > -50 && hushed.db < loud.db - 40, { loud: loud.db, hushed: hushed.db });
+  await page.waitForFunction(() => !__game.sound.state().clips[__game.stumble.STONE_CLIP].playing, null, { timeout: 6000 }).catch(() => {}); await wait(.8);
+  const after = await now();
+  check('once it\'s done, the night noise and the crowd come back up', !after.c.playing && after.clipping === 0 && ['music', 'ambience', 'effects', 'voice'].every((b) => Math.abs(after.levels[b] - before.levels[b]) < .01), { before: before.levels, after: after.levels });
+  await read(); await wait(.4);
+  const next = await now();
+  check('and read again after, it plays again', next.c.playing && next.c.at > first.c.at, next.c);
+  // the effects slider, with a real drag, under the button beside the mute
+  await page.locator('#levels').tap(); await wait(.2);
+  const lane = await page.locator('#lvEffects').boundingBox(), mid = lane.y + lane.height / 2;
+  await page.mouse.move(lane.x + lane.width - 6, mid); await page.mouse.down(); await page.mouse.move(lane.x + lane.width * .25, mid, { steps: 8 }); await page.mouse.up(); await wait(.5);
+  const slid = await now(), effects = await g(() => __game.sound.levelOf('effects'));
+  check(`the effects slider turns it down with the rest of the effects, to ${Math.round(effects * 100)}%`, effects < .5 && slid.c.playing && Math.abs(slid.c.out / next.c.out - effects) < .05, { effects, was: next.c.out, now: slid.c.out });
+  check('with no console errors', errors.length === 0, errors);
+  await close();
+}
 
 // ---------------- less motion
 {

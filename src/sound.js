@@ -35,6 +35,9 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
   let deck = null, loading = 0, startedAt = -Infinity;
   const levels = { ...data.levels }, L = { x: 0, z: 0, yaw: 0 };
   const fades = {};
+  // Somebody's own recordings, by file, which might not be there: whether each one came, how loud it is, and where it's playing from while it is (clip)
+  const clips = new Map();
+  let clipping = 0;
   // how far up the player has a bus, from 0 to 1 of what the sheet says, kept for next time like the mute
   let mine = {};
   let ctx = null, master = null, buses = {}, voices = 0, muted = false, wanted = 'title', score = null, keepAlive = null, hidden = !!win.document?.hidden, speaking = null, nextLine = null, meterNode = null;
@@ -46,7 +49,7 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
   const guarded = (f, otherwise = false) => (...args) => { try { return f(...args); } catch (e) { complain('error', e.message); return otherwise; } };
   const cueOf = (name) => { const c = data.cues[name]; return c ? { ...defaults, ...c } : null; };
   const smooth = (param, value, seconds) => { const now = ctx.currentTime; param.cancelScheduledValues(now); param.setTargetAtTime(value, now, seconds); };
-  const busGain = (b) => (levels[b] ?? 1) * (mine[b] ?? 1) * (fades[b] ?? 1) * (speaking && b !== 'voice' ? data.duck?.[b] ?? 1 : 1);
+  const busGain = (b) => (levels[b] ?? 1) * (mine[b] ?? 1) * (fades[b] ?? 1) * ((speaking || clipping) && b !== 'voice' ? data.duck?.[b] ?? 1 : 1);
 
   function toBuffer(samples) { const b = ctx.createBuffer(1, samples.length, RATE); b.getChannelData(0).set(samples); return b; }
   // A sound's takes: its file's if that's come in, or the bank's, worked out now if it hasn't been already
@@ -269,7 +272,25 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
     });
   }
 
-  const applyLevels = () => { if (!ctx) return; for (const b of BUSES) smooth(buses[b].gain, busGain(b), .12); };
+  const applyLevels = () => { if (!ctx) return; for (const b of BUSES) smooth(buses[b].gain, busGain(b), .12); for (const c of clips.values()) if (c.out) smooth(c.out.gain, clipOut(), .12); };
+  // A recording of somebody's own goes straight to the master, so the mute has it and nothing it dips does: as loud as a voice line, turned down with the
+  // effects, and fading with distance from where it's playing, and to one side, the way any sound from somewhere does
+  const clipOut = () => (levels.effects ?? 1) * (mine.effects ?? 1);
+  const clipGain = (c) => c.level * Math.max(0, 1 - Math.hypot(c.x - L.x, c.z - L.z) / c.reach) ** 2;
+  const clipPan = (c) => { const dx = c.x - L.x, dz = c.z - L.z, d = Math.hypot(dx, dz); return d > .5 ? Math.max(-.85, Math.min(.85, (dx * Math.cos(L.yaw) - dz * Math.sin(L.yaw)) / d * Math.min(1, d / 6))) : 0; };
+  function startClip(c) {
+    c.wanted = false;
+    const src = ctx.createBufferSource(), amp = ctx.createGain(), out = ctx.createGain(), pan = ctx.createStereoPanner?.() ?? null;
+    src.buffer = c.buffer; amp.gain.value = clipGain(c); out.gain.value = clipOut();
+    src.connect(amp);
+    if (pan) { pan.pan.value = clipPan(c); amp.connect(pan); pan.connect(out); } else amp.connect(out);
+    out.connect(master);
+    Object.assign(c, { src, amp, out, pan, at: ctx.currentTime });
+    clipping++; applyLevels();
+    src.onended = () => { for (const n of [src, amp, pan, out]) n?.disconnect(); Object.assign(c, { src: null, amp: null, out: null, pan: null }); clipping--; applyLevels(); };
+    src.start();
+    heard.push({ name: `clip:${c.file}`, g: amp.gain.value, pan: pan?.pan.value ?? 0, at: ctx.currentTime, notes: 0 }); if (heard.length > 200) heard.shift();
+  }
   const pause = () => { hidden = true; if (ctx) ctx.suspend?.(); keepAlive?.pause(); };
   const carryOn = () => { hidden = false; if (ctx) ctx.resume?.(); keepAlive?.play()?.catch?.(() => {}); };
 
@@ -320,6 +341,7 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
       if (!live()) return;
       workOnQueue(); runScore();
       for (const [name, l] of loops) if (l.level <= 0 && ctx.currentTime - l.since > 2) { l.src.stop(); l.src.disconnect(); l.gain.disconnect(); loops.delete(name); }
+      for (const c of clips.values()) if (c.src) { smooth(c.amp.gain, clipGain(c), .08); if (c.pan) smooth(c.pan.pan, clipPan(c), .08); }
     },
     // One sound, right now. With x and z it fades with distance and sits to one side. A `rate` on its line plays it higher and shorter than its file is, or lower and longer, which is how two sounds can share takes. It says whether it played.
     play(name, { x, z, gain = 1, rate = 1 } = {}) {
@@ -394,8 +416,33 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
       src.start();
       return true;
     },
+    // Somebody's own recording, from a file that might not be there yet. It's asked for the first time it's wanted, and if nothing's there, nothing plays and
+    // nothing's said, then or after. It plays once from x, z, and everything else dips under it while it does. Wanted again while it's going, it carries on:
+    // it's never started over, or twice. It says whether it's playing or about to.
+    clip(file, { x = L.x, z = L.z, reach = 30 } = {}) {
+      if (!live()) return false;
+      let c = clips.get(file);
+      if (!c) {
+        clips.set(file, c = { file, buffer: undefined, level: 1, x, z, reach, wanted: true, src: null });
+        win.fetch(file).then((res) => (res.ok ? res.arrayBuffer() : null), () => null)
+          .then((bytes) => bytes && decode(bytes).catch((e) => { complain('warn', `${file} isn't something it can play: ${e?.message ?? e}`); return null; }))
+          .then((b) => {
+            c.buffer = b || null;
+            if (!b) return;
+            const m = measure(b); c.level = Math.min(VOICE_RMS / m.rms, .95 / m.peak);
+            if (c.wanted && live()) startClip(c);
+          })
+          .catch((e) => { c.buffer ??= null; complain('warn', e.message); });
+        return true;
+      }
+      if (c.src || c.buffer === null) return false;
+      Object.assign(c, { x, z, reach });
+      if (c.buffer === undefined) { c.wanted = true; return true; }
+      startClip(c);
+      return true;
+    },
     // For tools/play-sound.mjs: what's going on, and how loud it is coming out, in dB
-    state() { return { unlocked: !!ctx, ctx: ctx?.state ?? null, muted, voices, loops: [...loops.keys()], loopLevels: Object.fromEntries([...loops].map(([k, l]) => [k, +l.level.toFixed(3)])), loopRates: Object.fromEntries([...loops].map(([k, l]) => [k, +l.rate.toFixed(3)])), maxVoices: MAX_VOICES, maxTracks: MAX_TRACKS, waiting: waitingFor.size, tracks: [...tracks.keys()], track: deck?.now?.t.file ?? null, rounds: deck?.rounds ?? 0, layered: !!score?.layered, plugged: !!score?.plugged, music: score?.state ?? wanted, queued: queue.length, heard: heard.map((h) => h.name), speaking, keepAlive: !!keepAlive, files: [...files.keys()], levels: ctx ? Object.fromEntries(BUSES.map((b) => [b, +buses[b].gain.value.toFixed(3)])) : null, nodes: voices + loops.size }; },
+    state() { return { unlocked: !!ctx, ctx: ctx?.state ?? null, muted, voices, loops: [...loops.keys()], loopLevels: Object.fromEntries([...loops].map(([k, l]) => [k, +l.level.toFixed(3)])), loopRates: Object.fromEntries([...loops].map(([k, l]) => [k, +l.rate.toFixed(3)])), maxVoices: MAX_VOICES, maxTracks: MAX_TRACKS, waiting: waitingFor.size, tracks: [...tracks.keys()], track: deck?.now?.t.file ?? null, rounds: deck?.rounds ?? 0, layered: !!score?.layered, plugged: !!score?.plugged, music: score?.state ?? wanted, queued: queue.length, heard: heard.map((h) => h.name), speaking, keepAlive: !!keepAlive, files: [...files.keys()], levels: ctx ? Object.fromEntries(BUSES.map((b) => [b, +buses[b].gain.value.toFixed(3)])) : null, nodes: voices + loops.size, clipping, clips: Object.fromEntries([...clips].map(([f, c]) => [f, { there: c.buffer === undefined ? null : !!c.buffer, playing: !!c.src, at: c.src ? c.at : null, gain: c.amp ? +c.amp.gain.value.toFixed(3) : 0, out: c.out ? +c.out.gain.value.toFixed(3) : 0, level: +c.level.toFixed(3) }])) }; },
     forget() { heard.length = 0; },
     lastHeard(name) { for (let i = heard.length - 1; i >= 0; i--) if (heard[i].name === name) return heard[i]; return null; },
     meter() {
@@ -408,7 +455,7 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
     get data() { return data; },
     cueNames: () => Object.keys(data.cues),
   };
-  for (const k of ['setMuted', 'update', 'play', 'loop', 'music', 'fade', 'setLevel', 'say']) api[k] = guarded(api[k]);
+  for (const k of ['setMuted', 'update', 'play', 'loop', 'music', 'fade', 'setLevel', 'say', 'clip']) api[k] = guarded(api[k]);
   return api;
 }
 

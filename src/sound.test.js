@@ -331,6 +331,59 @@ test('a voice line shows its words, ducks the rest, only plays once and queues o
   assert.equal(s.say('one'), false, 'once only'); assert.ok(s.say('one', { again: true }));
 });
 
+// The buses as they're made, which are the four gains after the master's, in BUSES' order, to see where they're headed
+function withBuses(w) {
+  const gains = [], C = w.win.AudioContext;
+  w.win.AudioContext = class extends C { createGain() { const g = super.createGain(); gains.push(g); return g; } };
+  return () => ({ master: gains[0], music: gains[1], ambience: gains[2], effects: gains[3], voice: gains[4] });
+}
+
+test('somebody\'s own clip plays once from where it is, as loud as a voice line, with the night and the crowd dipped under it', async () => {
+  const w = fakeWorld({ respond: (f) => (f === 'stone.mp3' ? tone({ seconds: 3, amp: .3 }) : null) }), buses = withBuses(w), s = createSound(data(), { win: w.win }); w.touch(); await w.settle();
+  // each bus as it was made, and then where it's headed each time it's changed
+  const B = buses(), level = (b) => B[b].gain.target, before = Object.fromEntries(['music', 'ambience', 'effects', 'voice'].map((b) => [b, B[b].gain.value]));
+  s.update(0, 0, 0);
+  assert.ok(s.clip('stone.mp3', { x: 3, z: 0 })); await w.settle();
+  const src = w.made.sources.at(-1), c = () => s.state().clips['stone.mp3'];
+  assert.ok(src.started && src.buffer.duration === 3 && c().playing);
+  const amp = [...src.out][0], pan = [...amp.out][0], out = [...pan.out][0];
+  assert.ok(out.out.has(B.master), 'it goes straight to the master, so the mute has it');
+  assert.ok(level('ambience') < before.ambience * .6 && level('effects') < before.effects * .8 && level('music') < before.music, 'the night and the crowd dip under it');
+  assert.equal(level('voice'), before.voice);
+  assert.equal(s.clip('stone.mp3', { x: 3, z: 0 }), false, 'wanted again while it\'s going, it carries on');
+  assert.equal(w.made.sources.at(-1), src, 'and isn\'t started over or twice');
+  const near = c().gain; s.update(18, 0, 0);
+  assert.ok(c().gain < near / 3 && c().gain > 0, `quieter as he walks off: ${near} to ${c().gain}`);
+  s.update(40, 0, 0); assert.equal(c().gain, 0, 'and gone past where it reaches');
+  const was = out.gain.target; s.setLevel('effects', .5);
+  assert.ok(Math.abs(out.gain.target - was / 2) < 1e-9, 'it\'s turned down with the effects');
+  s.setLevel('effects', 1);
+  src.onended();
+  assert.ok(!c().playing && s.state().clipping === 0);
+  for (const b of Object.keys(before)) assert.ok(Math.abs(level(b) - before[b]) < 1e-9, `${b} comes back up after`);
+  assert.ok(s.clip('stone.mp3'), 'and it can be played again once it\'s done'); assert.notEqual(w.made.sources.at(-1), src);
+  assert.deepEqual(w.made.fetched.filter((f) => f === 'stone.mp3'), ['stone.mp3'], 'it\'s only ever asked for once');
+});
+
+test('a clip that isn\'t there plays nothing and says nothing, however often it\'s wanted', async () => {
+  const w = fakeWorld(), errors = []; w.win.console.error = (m) => errors.push(m);
+  const s = createSound(data(), { win: w.win }); w.touch(); await w.settle();
+  const made = w.made.sources.length, warned = w.made.warnings.length;
+  s.clip('stone.mp3'); await w.settle();
+  for (let i = 0; i < 3; i++) assert.equal(s.clip('stone.mp3'), false);
+  assert.equal(w.made.sources.length, made); assert.equal(s.state().clipping, 0);
+  assert.equal(s.state().clips['stone.mp3'].there, false);
+  assert.deepEqual([errors, w.made.warnings.slice(warned)], [[], []]);
+  assert.deepEqual(w.made.fetched.filter((f) => f === 'stone.mp3'), ['stone.mp3'], 'and it\'s only asked for once');
+});
+
+test('a clip wanted while it\'s on its way plays once it comes, and only once', async () => {
+  const w = fakeWorld({ respond: (f) => (f === 'stone.mp3' ? tone({ seconds: 2 }) : null) }), s = createSound(data(), { win: w.win }); w.touch(); await w.settle();
+  const made = w.made.sources.length;
+  assert.ok(s.clip('stone.mp3')); assert.ok(s.clip('stone.mp3')); await w.settle();
+  assert.equal(w.made.sources.length, made + 1);
+});
+
 test('nothing that goes wrong in here can reach the game', () => {
   const w = fakeWorld(), errors = []; w.win.console.error = (m) => errors.push(m);
   const s = createSound(data(), { win: w.win }); w.touch();

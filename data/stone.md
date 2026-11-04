@@ -2,6 +2,10 @@
 
 `data/stone.json` is what you read off one stone in the cemetery up Chunky Duffee Rd. `index.html` reads it, under "the cemetery". `docs/lore.md` has what the owner said about it.
 
+It's cut in the face of the stone at the head of the northernmost of the wide flat slabs, which the owner picked: number 1 on the map of the fourteen they were sent, north to south (CHUNKY-167). That's `CEMETERY.words` in `src/graves.js`. READ comes up standing on the slab or within 0.9 m of it, anywhere along it, and nothing points the way to it. The upright on its own in the middle, which had the words before, is an ordinary stone now.
+
+Reading it plays the owner's own clip, `audio/music/stone.mp3`, which is theirs to add. It's on no sheet and in no manifest, and `data/sound.md` has how it plays: once, from the stone, quieter as he walks off, with the night noise and the crowd dipped under it. Until the file's there, reading it plays nothing.
+
 | Field | Type | What it is |
 |---|---|---|
 | `version` | number | The schema's version. |

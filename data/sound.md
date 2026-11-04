@@ -83,6 +83,16 @@ The music and everything else dip under it, the words come up, and it plays once
 
 `hang`, `cut`, `river`, `bank`, `run`, `bitten`, `wake`, `town`, `failed`, `beans`, `grabbed`, `crowd`, `drive`, `wrecked`, `end`
 
+## Somebody's own clip
+
+A recording that's somebody's own is on no sheet and in no manifest. It's played by its file with `clip(file, { x, z, reach })`, the way the stone in the cemetery plays the owner's clip from `audio/music/stone.mp3` when it's read (`data/stone.md`). The file can be anything Chrome plays.
+
+- It's asked for the first time it's wanted, and only then. If it isn't there, nothing plays and nothing's said, then or after. The browser notes the one request that wasn't found, the way it does for any file, and the checks don't count that as an error.
+- It plays once, from x and z, as loud as a voice line and turned down with the effects, and quieter as he walks off, out to `reach`, 30 m unless it's asked otherwise.
+- The music, the night noise and the effects, which have the crowd in them, dip under it the way they do under a voice line, and come back up after.
+- It goes straight to the master, so the mute has it and nothing it dips does.
+- Wanted again while it's going, it carries on, and it's never started over or twice. Once it's done, it plays again the next time it's wanted.
+
 ## Making them with ElevenLabs on fal
 
 `tools/sound_prompts.json` describes every track and every sound. `tools/make-sound.mjs` sends it to ElevenLabs' models on fal, saves the files in `audio/music/` and `audio/sfx/`, writes their lines into `data/sound-new.json`, and records what was made in `audio/manifest.json`. Add a sound there and run it again.
