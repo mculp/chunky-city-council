@@ -18,11 +18,12 @@ const snap = async (name) => { if (shots) { await g(() => __game.step(.6, 1 / 24
 // ---------------- the first scene
 const early = await g(() => {
   const G = __game, out = {}; G.pause();
-  for (const phase of ['hang', 'swim', 'land', 'bridge', 'bitten', 'dream', 'wake']) { G.jump(phase); G.step(.3, 1 / 30); out[phase] = { here: G.hills.here(), far: G.hills.skyline.visible, off: G.hills.uniforms.uHills.value.image.width === 1, river: G.hills.uniforms.uRiverUp.value }; }
+  for (const phase of ['hang', 'swim', 'land', 'bridge', 'bitten', 'dream', 'wake']) { G.jump(phase); G.step(.3, 1 / 30); out[phase] = { here: G.hills.here(), far: G.hills.skyline.visible, off: G.hills.uniforms.uHills.value.image.width === 1, river: G.hills.uniforms.uRiverUp.value, switch: !document.getElementById('hillsAB').hidden }; }
   return out;
 });
 check('all through the opening he is at the bottom of the hills', Object.values(early).every((e) => e.here < .005 && e.river < .005), early);
 check('and they\'re not there at all, and no far land shows, until he wakes at the edge of town', Object.entries(early).every(([phase, e]) => e.far === (phase === 'wake') && e.off === (phase !== 'wake')), early);
+check('and nor is the switch for trying them taller', Object.entries(early).every(([phase, e]) => e.switch === (phase === 'wake')), early);
 
 await g(() => {
   const G = __game; G.jump('town'); G.S.flags.town = true; G.step(.3, 1 / 30);
@@ -48,8 +49,8 @@ await g(() => {
 const inTown = await g(() => ({ far: __game.hills.skyline.visible, here: __game.hills.here() }));
 check('in town the far land shows, and the bridge he wakes on is still at the bottom', inTown.far && inTown.here < .1, inTown);
 
-// ---------------- what's drawn is what the code says
-const gpu = await g(() => {
+// ---------------- what's drawn is what the code says, times however many times their real height they're being drawn
+await g(() => { window.drawnHills = () => {
   const G = __game, K = G.THREE, R = G.renderer, U = G.hills.uniforms, N = 256, pts = new Float32Array(N * 4);
   for (let i = 0; i < N; i++) {
     // all over the map, as a golden-ratio walk so that it's the same every time
@@ -70,10 +71,22 @@ const gpu = await g(() => {
   R.setRenderTarget(target); R.render(box, new K.OrthographicCamera(-1, 1, 1, -1, 0, 1)); R.readRenderTargetPixels(target, 0, 0, N, 1, out); R.setRenderTarget(null);
   U.uHillHere.value = was;
   let worst = 0, high = 0;
-  for (let i = 0; i < N; i++) { const h = G.hills.at(pts[i * 4], pts[i * 4 + 1]); worst = Math.max(worst, Math.abs(out[i * 4] - h)); high = Math.max(high, h); }
-  return { worst, high };
-});
-check(`the graphics card and the code agree on the land's height: ${(gpu.worst * 100).toFixed(1)} cm out at worst, over land up to ${gpu.high.toFixed(0)} m`, gpu.worst < .05 && gpu.high > 30, gpu);
+  for (let i = 0; i < N; i++) { const h = G.hills.at(pts[i * 4], pts[i * 4 + 1]) * U.uHillScale.value; worst = Math.max(worst, Math.abs(out[i * 4] - h)); high = Math.max(high, out[i * 4]); }
+  return { worst, high, k: U.uHillScale.value };
+}; });
+const gpu = await g(() => drawnHills());
+check(`the graphics card and the code agree on the land's height: ${(gpu.worst * 100).toFixed(1)} cm out at worst, over land up to ${gpu.high.toFixed(0)} m`, gpu.worst < .05 && gpu.high > 30 && gpu.k === 1, gpu);
+
+// ---------------- the switch the owner's trying them taller with, a tap at a time, standing where he is
+const says = () => g(() => document.getElementById('hillsAB').textContent);
+const before = await says();
+await page.tap('#hillsAB');
+const tall = await g(() => { __game.step(.1, T); return { ...drawnHills(), says: document.getElementById('hillsAB').textContent }; });
+await snap('0-twice-as-tall');
+check(`a tap on "${before}" under the sound draws them twice as tall, ${(tall.worst * 100).toFixed(1)} cm out at worst against the code's twice over, up to ${tall.high.toFixed(0)} m, and says "${tall.says}"`, tall.k === 2 && tall.worst < .1 && tall.high > 2 * gpu.high - 1 && tall.says !== before, tall);
+await page.tap('#hillsAB');
+const back = await g(() => { __game.step(.1, T); return { ...drawnHills(), says: document.getElementById('hillsAB').textContent }; });
+check(`and another puts them back the way they really are, "${back.says}"`, back.k === 1 && back.worst < .05 && back.says === before, back);
 
 // ---------------- everything goes up with them
 const programs = await g(() => {
