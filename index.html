@@ -2497,43 +2497,119 @@ function updateChurchSigns(step) {
     s.mat.color.setScalar(s.prop.down ? .07 : !reduceMotion && hash(step, i, 77) < .025 ? .62 : .96);
   });
 }
-// ================================================================ what's left of Robby's house
+// ================================================================ what's left of Robby's trailer
 // Where the owner says it all happened: the clearing in the woods on the east side of Chestnut St at true (-254.5, 200), with a dirt drive in from the road.
-// There's a camper in it now, and the owner chose the memorial. "I think the house burned down", and he didn't die, he moved to California. So in the clearing:
-// brick piers with the charred joists fallen off them, the chimney, and the front steps going up to nothing. He stands where the front room's floor used to be.
-const LOT = (() => { const [x, z] = atTrue(-254.5, 200); return { x, z }; })(), ROBBY = { x: LOT.x - 2.5, y: Y0 + .62, z: LOT.z + .5 }, HEARTH = { x: LOT.x + 2.9, z: LOT.z - 1 };
+// "I think the house burned down", and he didn't die, he moved to California. On Street View in 2014 it was a white single-wide, side-on to the road and up on
+// blocks, and there's a camper there now. The owner chose the memorial over the camper, and a burned trailer over a burned house. So: its steel on the blocks,
+// the tin walls warped and fallen, the roof in on the frame, block steps going up to a door that isn't there, and him at the foot of them.
+const LOT = (() => { const [x, z] = atTrue(-254.5, 200); return { x, z }; })(), ROBBY = { x: LOT.x - 4.4, y: Y0, z: LOT.z - .4 }, HEARTH = { x: LOT.x - 4.6, z: LOT.z + 3.2 };
 const charMat = new THREE.MeshStandardMaterial({ color: '#15110f', roughness: 1 }), concreteMat = new THREE.MeshStandardMaterial({ color: '#615d55', roughness: 1 });
-const burntBrick = (() => {
-  const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d'); g.fillStyle = '#2c1c18'; g.fillRect(0, 0, 128, 128);
-  for (let y = 0; y < 8; y++) for (let x = -1; x < 4; x++) { g.fillStyle = `hsl(${10 + hash(x + 9, y, 5) * 10},${34 + hash(x + 9, y, 6) * 16}%,${24 + hash(x + 9, y, 7) * 20}%)`; g.fillRect(x * 32 + (y % 2) * 16 + 1, y * 16 + 1, 30, 14); }
-  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  return triplanar(t, 1, { roughness: 1 });
-})();
-// The clearing's mown, from the road to the chimney, and the woods stand 3 m off the ruin, as they do from above. Where his lot was first, the big lawn north of the
-// Griffis Fountain bridge in front of structure 74582285, is still mown, with nothing on it.
-pad(LOT.x - 21.5, LOT.x + 5.5, LOT.z - 7, LOT.z + 7, 3, true);
+// What it's made of, in the world's own metres: concrete block 40 cm by 20, and ribbed tin, white where the paint's left and black and rust where it burned
+const lotTex = (paint) => { const cv = document.createElement('canvas'); cv.width = cv.height = 128; paint(cv.getContext('2d')); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
+const blockMat = triplanar(lotTex((g) => {
+  g.fillStyle = '#34312d'; g.fillRect(0, 0, 128, 128);
+  for (let y = 0; y < 4; y++) for (let x = -1; x < 2; x++) { const k = hash(x + 5, y, 21); g.fillStyle = `hsl(36,${4 + k * 6}%,${34 + k * 14}%)`; g.fillRect(x * 64 + (y % 2) * 32 + 2, y * 32 + 2, 60, 28); }
+}), 1.25, { roughness: 1 });
+const ribs = (g, dark) => { for (let x = 0; x < 128; x += 16) { g.fillStyle = `rgba(0,0,0,${dark})`; g.fillRect(x, 0, 2, 128); g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(x + 2, 0, 1, 128); } };
+const tinMat = triplanar(lotTex((g) => {
+  g.fillStyle = '#cbc5b8'; g.fillRect(0, 0, 128, 128); ribs(g, .3);
+  for (let i = 0; i < 9; i++) { g.fillStyle = `rgba(122,70,36,${.15 + hash(i, 1, 22) * .25})`; g.fillRect(hash(i, 2, 22) * 128, hash(i, 3, 22) * 90, 2 + hash(i, 4, 22) * 3, 20 + hash(i, 5, 22) * 40); }
+}), .625, { roughness: .8, metalness: .2 });
+const scorchMat = triplanar(lotTex((g) => {
+  g.fillStyle = '#211c1a'; g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 14; i++) { g.fillStyle = `rgba(${118 + hash(i, 1, 23) * 40},${56 + hash(i, 2, 23) * 22},28,${.22 + hash(i, 3, 23) * .3})`; g.beginPath(); g.ellipse(hash(i, 4, 23) * 128, hash(i, 5, 23) * 128, 6 + hash(i, 6, 23) * 16, 4 + hash(i, 7, 23) * 10, 0, 0, 7); g.fill(); }
+  ribs(g, .5);
+}), .625, { roughness: .9, metalness: .15 });
+// The clearing's mown, from the road to the back of it, and the woods stand 3 m off the trailer, as they do from above. Where his lot was first, the big lawn north
+// of the Griffis Fountain bridge in front of structure 74582285, is still mown, with nothing on it.
+pad(LOT.x - 21.5, LOT.x + 4.5, LOT.z - 10.5, LOT.z + 9, 3, true);
 { const [x, z] = atTrue(-255, 362); pad(x - 17, x + 30, z - 16, z + 16, 6, true); }
 around(LOT, () => {
-  const leaning = (x, z) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, 0, z));
+  const tilt = (x, y, z) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z));
   // Nobody can stand on a solid, so these are as tall as they need to be for a truck to hit them instead of driving through them, which is taller than they look
   const LOW_TOP = Y0 + .9;
-  // One at a time. The whole floor as one thing would be one big box, and a swing anywhere in it, at the flies say, would bring the lot down
-  for (const x of [-4, -1.4, 1.2, 3.8]) for (const z of [-6.4, -3.2, 0, 3.2, 6.4]) { if (hash(x * 10, z * 10, 11) < .2) continue; const h = .48 + hash(x * 10, z * 10, 12) * .26; breakable('pier', 2, () => { addBox(burntBrick, x, Y0 + h / 2, z, .44, h, .44, 1.1); solid(x - .22, x + .22, z - .22, z + .22, LOW_TOP); }, { chip: '#4a2a22' }); }
-  for (const [a, b] of [[[-4.2, .68, -6.6], [-4.2, .5, 1.5]], [[3.9, .7, -3], [1, .1, -1.9]], [[-3.8, .1, 3.4], [-.8, .7, 4.2]], [[.6, .7, 6.6], [3.6, .52, 6.2]], [[-1.4, .72, -6.4], [-1.4, .1, -2.6]], [[1.4, .1, 2], [2.6, .68, 4.9]]]) breakable('joist', 1, () => addBeam([a[0], Y0 + a[1], a[2]], [b[0], Y0 + b[1], b[2]], .2, .16, charMat, 1.1), { chip: '#2a2320' });
-  for (const [x, z, h, lx, lz] of [[-4.3, -6.5, 1.9, .06, -.04], [3.9, 6.5, 1.4, -.1, .05], [-4.2, 6.4, 2.4, .1, .08], [3.95, -6.4, 1.1, .04, -.09]]) breakable('joist', 1, () => { addBox(charMat, x, Y0 + h / 2, z, .17, h, .17, 1.1, leaning(lx, lz)); solid(x - .09, x + .09, z - .09, z + .09, Y0 + h); }, { rigid: true, chip: '#2a2320' });
-  const chimney = breakable('chimney', 7, () => {
-    addBox(burntBrick, 4.3, Y0 + .9, -1, 1.1, 1.8, 2.3); addBox(burntBrick, 4.35, Y0 + 4.1, -1, .8, 4.6, 1.1); addBox(burntBrick, 4.35, Y0 + 6.5, -1, 1, .2, 1.3);
-    addBox(charMat, 3.73, Y0 + .55, -1, .04, .95, 1.25, 0);
-    solid(3.75, 4.85, -2.15, .15, Y0 + 6.4);
-    kudzuAt(LOT.x + 4.8, Y0 + 1, LOT.z - 2.1); kudzuAt(LOT.x + 4.9, Y0 + 2.4, LOT.z - .7);
-  }, { rigid: true, chip: '#4a2a22' });
-  addBox(concreteMat, 3.1, Y0 + .05, -1, 1.3, .1, 2.3, .9);
-  // the front steps, going up to nothing
-  breakable('steps', 4, () => { for (const [x, h] of [[-6.8, .2], [-6.3, .4], [-5.8, .62]]) addBox(concreteMat, x, Y0 + h / 2, 0, .52, h, 2.3, 1.1); solid(-7.06, -5.54, -1.15, 1.15, LOW_TOP); }, { chip: '#615d55' });
-  // what was the kitchen: the stove's about all that doesn't burn
-  breakable('stove', 3, () => { addBox(steelMat, 1.3, Y0 + .46, 4.2, .76, .92, .68, 1.2); solid(.92, 1.68, 3.86, 4.54, Y0 + .92); }, { rigid: true, chip: '#3a2a22' });
-  // the memorial, out front where you can see it from the road, and it's the owner's words: he didn't die
-  LOT.chimney = chimney;
+  // A single-wide's size, 16.5 m by 4.3, with its two steel rails 2.5 m apart and its floor .85 m up
+  const HALF = 8.25, SIDE = 2.15, RAIL = 1.25, FLOOR = Y0 + .85;
+  // The blocks it stood on, under the rails. One at a time: the whole lot as one thing would be one big box, and a swing anywhere in it would bring it all down
+  for (const x of [RAIL, -RAIL]) for (let i = 0; i < 8; i++) {
+    const z = -7.7 + i * 2.2, k = hash(x * 10, i, 11); if (k < .05) continue;
+    const h = k > .82 ? .4 : .6, lean = (hash(x * 10, i, 13) - .5) * .12;
+    breakable('pier', 2, () => { addBox(blockMat, x, Y0 + h / 2, z, .4, h, .2, 1.1, tilt(lean, 0, 0)); solid(x - .2, x + .2, z - .1, z + .1, LOW_TOP); }, { chip: '#6b675f' });
+  }
+  // The frame's steel, rusted since the fire and bowed where the heat had it: the rails, the cross members, the outriggers the walls stood on, and the hitch to
+  // the north on its jack. It doesn't come apart, and it's as much in the way as a wall.
+  for (const x of [RAIL, -RAIL]) {
+    const bow = [[-HALF, .73], [-4.1, .69], [0, .75], [4.1, .68], [HALF, .72]], at = (i) => [x + (hash(x * 10, i, 14) - .5) * .06, Y0 + bow[i][1], bow[i][0]];
+    for (let i = 1; i < bow.length; i++) addBeam(at(i - 1), at(i), .12, .25, steelMat, 1.2);
+    solid(x - .07, x + .07, -HALF, HALF, LOW_TOP);
+  }
+  for (let i = 0; i < 8; i++) if (hash(i, 2, 15) > .25) addBeam([-RAIL, Y0 + .66, -7.15 + i * 2.05], [RAIL, Y0 + .64 + (hash(i, 3, 15) - .5) * .1, -7.15 + i * 2.05], .06, .1, steelMat, 1);
+  for (let i = 0; i < 9; i++) for (const s of [-1, 1]) if (hash(i, s, 16) > .3) addBeam([s * RAIL, Y0 + .8, -8 + i * 2], [s * SIDE, Y0 + .8 - hash(i, s, 17) * .12, -8 + i * 2], .05, .08, steelMat, 1);
+  for (const s of [-1, 1]) addBeam([s * RAIL, Y0 + .72, -HALF], [s * .08, Y0 + .6, -HALF - 1.6], .1, .16, steelMat, 1.2);
+  addBox(steelMat, 0, Y0 + .6, -HALF - 1.72, .16, .14, .3, 1.1); addBox(steelMat, .22, Y0 + .32, -HALF - 1.2, .07, .56, .07, 1); addBox(blockMat, .22, Y0 + .05, -HALF - 1.2, .4, .1, .2, 1);
+  solid(-.15, .15, -HALF - 1.9, -HALF - 1.4, LOW_TOP);
+  kudzuAt(LOT.x + .25, Y0 + .35, LOT.z - HALF - 1.25);
+  // what's left of the floor: a few charred joists across the rails, and the ones that burned through hanging off them
+  for (const [a, b] of [[[-2, .86, -6.9], [2, .86, -6.8]], [[-2.05, .86, -2.2], [.3, .4, -2.6]], [[.4, .85, -2.3], [2.1, .84, -2.2]], [[-2, .85, 1.9], [2.05, .87, 2]], [[-1.9, .86, 5.4], [-.2, .1, 5.9]], [[1.1, .15, 6.6], [2.1, .86, 6.9]]]) addBeam([a[0], Y0 + a[1], a[2]], [b[0], Y0 + b[1], b[2]], .1, .2, charMat, 1.1);
+  // The tin walls. Each sheet stands on the edge of the floor, white up to what's left of the paint and scorched black above that and round the windows, and
+  // leans out as the heat bent it. A side runs along z at x = s * SIDE, an end along x at z = s * HALF, and a sheet stands from a0 to a1 along it.
+  const sheet = (end, s, a0, a1, h, lean, win) => {
+    const q = end ? tilt(s * lean, 0, 0) : tilt(0, 0, -s * lean), up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+    const part = (b0, b1, y0, y1, mat) => {
+      const b = (b0 + b1) / 2, y = (y0 + y1) / 2, [fx, fz] = end ? [b, s * HALF] : [s * SIDE, b];
+      addBox(mat, fx + up.x * y, FLOOR + up.y * y, fz + up.z * y, end ? b1 - b0 : .04, y1 - y0, end ? .04 : b1 - b0, 1.1, q);
+    };
+    if (win) { part(a0, a1, 0, .95, tinMat); part(a0, win[0], .95, 1.85, scorchMat); part(win[1], a1, .95, 1.85, scorchMat); part(a0, a1, 1.85, h, scorchMat); }
+    else { const w = h * .55; part(a0, a1, 0, w, tinMat); part(a0, a1, w, h, scorchMat); }
+    const top = FLOOR + h * Math.cos(lean);
+    if (end) solid(a0, a1, s * HALF - .05, s * HALF + .05, top); else solid(s * SIDE - .05, s * SIDE + .05, a0, a1, top);
+  };
+  const wall = (end, s, a0, a1, h, lean, win = null, more = null) => breakable('siding', 1.6, () => { sheet(end, s, a0, a1, h, lean, win); more?.(); }, { rigid: true, chip: '#b9b3a7' });
+  // and the sheets that came down, lying out on the grass where they fell
+  const fallen = (end, s, a0, a1, far) => {
+    const b = (a0 + a1) / 2, [ax, az] = end ? [b, s * HALF] : [s * SIDE, b], dx = end ? 0 : s, dz = end ? s : 0;
+    addBeam([ax + dx * .1, Y0 + .45, az + dz * .1], [ax + dx * far, Y0 + .05, az + dz * far], a1 - a0, .04, scorchMat, 1.1);
+  };
+  // the side facing the road
+  wall(false, -1, -HALF, -6.7, 2.25, .05);
+  wall(false, -1, -6.7, -5, 2.2, .07, [-6.3, -5.4]);
+  wall(false, -1, -5, -3.3, 1.5, .35);
+  fallen(false, -1, -3.3, -1.7, 2.2);
+  wall(false, -1, -1.7, -.85, 2.2, .04);
+  wall(false, -1, .05, 1.65, 2.1, .1, [.55, 1.3]);
+  fallen(false, -1, 1.65, 3.3, 2.1);
+  wall(false, -1, 3.3, 4.95, 1.9, -.08);
+  wall(false, -1, 4.95, 6.6, 1.6, .5);
+  wall(false, -1, 6.6, HALF, 2.25, .03, null, () => kudzuAt(LOT.x - SIDE - .1, Y0 + 1, LOT.z + 7.4));
+  // The door's gone, and its frame with it. The storm door's still on its hinge, swung out over the steps.
+  addBox(scorchMat, -SIDE - .44, FLOOR + 1, .13, .04, 1.95, .9, 1.1, tilt(0, 1.75, 0));
+  // the back
+  wall(false, 1, -HALF, -6.6, 2.25, .04);
+  wall(false, 1, -6.6, -4.95, 2.2, .06, [-6.2, -5.4]);
+  wall(false, 1, -4.95, -3.3, 2.1, .03);
+  wall(false, 1, -3.3, -1.65, 1.7, -.3);
+  wall(false, 1, -1.65, 0, 2.2, .08);
+  wall(false, 1, 1.65, 3.3, 2.15, .05);
+  wall(false, 1, 3.3, 4.95, 2.25, .02);
+  wall(false, 1, 4.95, 6.6, 2.1, .09, [5.4, 6.1]);
+  fallen(false, 1, 6.6, HALF, 2.2);
+  // the north end over the hitch, and the south end, mostly down
+  wall(true, -1, -SIDE, 0, 2.25, .04, [-1.6, -.8], () => { kudzuAt(LOT.x - 1.2, Y0 + 1.2, LOT.z - HALF - .12); kudzuAt(LOT.x - .4, Y0 + 2.2, LOT.z - HALF - .1); });
+  wall(true, -1, 0, SIDE, 2.25, .06);
+  wall(true, 1, 0, SIDE, 1.4, .25);
+  fallen(true, 1, -SIDE, 0, 2.2);
+  // the roof's in: two sheets of it down across the frame
+  addBeam([2, FLOOR + 2, -6], [-.8, Y0 + .95, -5.6], 2.6, .04, steelMat, 1.1);
+  addBeam([-2, FLOOR + 1.7, 6.2], [.8, Y0 + .9, 6.6], 2, .04, steelMat, 1.1);
+  // what doesn't burn: the stove, gone through the floor onto its side between the rails, and the tub at the far end
+  breakable('stove', 3, () => { addBox(steelMat, .2, Y0 + .4, -3.8, .76, .92, .68, 1.2, tilt(.2, .3, .35)); solid(-.2, .6, -4.2, -3.4, Y0 + .9); }, { rigid: true, chip: '#3a2a22' });
+  addBox(new THREE.MeshStandardMaterial({ color: '#8f897d', roughness: .9 }), -.35, Y0 + .3, 7, .75, .5, 1.5, 1.1, tilt(0, .08, .06));
+  // the block steps, going up to a door that isn't there
+  breakable('steps', 4, () => { for (const [x, h] of [[-3.24, .25], [-2.82, .5], [-2.4, .75]]) addBox(blockMat, x, Y0 + h / 2, -.4, .42, h, 1.3, 1.1); solid(-3.45, -2.19, -1.05, .25, LOW_TOP); }, { chip: '#6b675f' });
+  // where he'll cook the deer meat: a ring of blocks in the yard off the steps, black in the middle
+  addBox(charMat, -4.6, Y0 + .015, 3.2, .9, .03, .9, 0);
+  for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283 + .3; addBox(blockMat, -4.6 + Math.cos(a) * .55, Y0 + .1, 3.2 + Math.sin(a) * .55, .4, .2, .2, 1, tilt(0, a + Math.PI / 2, 0)); }
+  // the memorial, out front at the top of the drive where you can see it from the road, and it's the owner's words: he didn't die
   LOT.memorial = breakable('sign', 1.5, () => {
     for (const z of [-1, 1]) addBox(charMat, -12, Y0 + .85, z, .1, 1.7, .1, 1);
     solid(-12.05, -11.9, -1.13, 1.13, Y0 + 1.85); solid(-11.65, -11.55, -1.8, -1.7, Y0 + 2.2);
@@ -2582,7 +2658,7 @@ function updateFlies(dt, step) {
   for (let i = 0; i < n; i++) {
     const a = hash(i, 1, 41) * 6.283 + step * (.2 + hash(i, 2, 41) * .5) * (i % 2 ? 1 : -1), r = (.3 + hash(i, 3, 41) * .95) * wide;
     flyPos[i * 3] = ROBBY.x + Math.cos(a) * r + (hash(i, step, 42) - .5) * .18;
-    flyPos[i * 3 + 1] = ROBBY.y + 1.05 + Math.sin(a * 1.7 + i) * .75 * wide + (hash(i, step, 43) - .5) * .18;
+    flyPos[i * 3 + 1] = ROBBY.y + 1.6 + Math.sin(a * 1.7 + i) * .75 * wide + (hash(i, step, 43) - .5) * .18;
     flyPos[i * 3 + 2] = ROBBY.z + Math.sin(a) * r + (hash(i, step, 44) - .5) * .18;
   }
   flyGeo.attributes.position.needsUpdate = true;
@@ -6883,7 +6959,7 @@ let stepT = 0, lastStepIdx = -1;
 // ================================================================ main loop
 const clock = new THREE.Clock();
 // ================================================================ what he hears
-const METAL_PROPS = new Set(['tractor', 'bin', 'sign', 'pump', 'icebox', 'cooler', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'trailer', 'boxcar', 'cart', 'bleachers', 'net', 'trampoline', 'propane', 'signal', 'cabinet']);
+const METAL_PROPS = new Set(['tractor', 'bin', 'sign', 'pump', 'icebox', 'cooler', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'trailer', 'boxcar', 'cart', 'bleachers', 'net', 'trampoline', 'propane', 'signal', 'cabinet', 'siding']);
 const VEHICLE_LOOPS = ['engine.car', 'engine.pickup', 'engine.quad', 'engine.golf', 'vehicle.road', 'vehicle.dirt', 'vehicle.skid'];
 const SCORE = { title: 'title', hang: 'hang', fall: 'fall', land: 'bank', bridge: 'run', bitten: 'bite', dream: 'dream', wake: 'wake', grabbed: 'grabbed', fail: 'failed', end: 'end' };
 const FEVER_QUIET = { bitten: .25, dream: 0, wake: .5 };

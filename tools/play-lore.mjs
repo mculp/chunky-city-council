@@ -97,7 +97,7 @@ const felled = await g(() => { const G = __game, a = C.fish.position.toArray(); 
 check('a hammer brings it down, and the fish with it', felled.down && felled.fell > 1, felled);
 await snap('charlie-down');
 
-// ---- Robby's: the house that burned down, in the clearing off Chestnut St where the owner says it all happened. He said these words the once.
+// ---- Robby's: the trailer that burned down, in the clearing off Chestnut St where the owner says it all happened. He said these words the once.
 const LINE = 'hey man, help me get these flies out of here so we can cook some deer meat';
 const tap = async (id = '#bA') => { await page.tap(id); await g(() => __game.step(.05)); };
 const word = () => page.textContent('#bA'), said = () => g(() => __game.state().dialog);
@@ -119,7 +119,7 @@ check('and it\'s on his right, going into town', walk.side, walk);
 await snap('robby-from-road');
 // and nothing of his is left on the lawn north of the bridge where it was first, in front of somebody's home
 const lawn = await g(() => {
-  const G = __game, [x, z] = G.map.fromTrue(-255, 362), s = G.structures.find((o) => o.id === 74582285), his = new Set(['pier', 'joist', 'chimney', 'steps', 'stove', 'sign']);
+  const G = __game, [x, z] = G.map.fromTrue(-255, 362), s = G.structures.find((o) => o.id === 74582285), his = new Set(['pier', 'joist', 'chimney', 'siding', 'steps', 'stove', 'sign']);
   return { left: G.wreck.props.filter((p) => his.has(p.kind) && Math.hypot(p.cx - x, p.cz - z) < 20).length, there: G.houseAt(s.wx, s.wz) === s, hurt: G.wreck.damage.has(s), floor: G.floorAt(s.wx, s.wz), lawn: G.floorAt(x, z) };
 });
 check('nothing of his is left on the lawn where it was first', lawn.left === 0 && Math.abs(lawn.lawn - 6.15) < .1, lawn);
@@ -144,7 +144,7 @@ check('you can hear them, close to', buzzing, await g(() => R.loop()));
 
 // he asks
 const up = await g(() => walkTo(R.at.x - 1.4, R.at.z + .6, .4));
-check('he can get up to him, past the steps', up.d < 1, up);
+check('he can get up to him, at the foot of his steps', up.d < 1, up);
 await g(() => __game.step(.1));
 check('the button says TALK', await word() === 'TALK', await word());
 await snap('robby-up-to-him');
@@ -187,12 +187,12 @@ const fed = await g(() => { const G = __game; G.step(.2); return { hp: G.S.hp, c
 check('and it fills his hearts', fed.hp === 3 && !fed.cooking && fed.ate && /hearts full/.test(fed.toast), fed);
 
 // what's solid and what isn't
-const solid = await g(() => { const G = __game; return { robby: G.blocked(R.at.x, R.at.z, 6.15), chimney: G.blocked(R.lot.x + 4.3, R.lot.z - 1, 7), steps: G.blocked(R.lot.x - 6.3, R.lot.z, 6.15) }; });
-check('he isn\'t solid, and the chimney and the steps are', !solid.robby && solid.chimney && solid.steps, solid);
+const solid = await g(() => { const G = __game; return { robby: G.blocked(R.at.x, R.at.z, 6.15), frame: G.blocked(R.lot.x - 1.25, R.lot.z + 5, 6.15), steps: G.blocked(R.lot.x - 2.9, R.lot.z - .4, 6.15) }; });
+check('he isn\'t solid, and the trailer\'s frame and its steps are', !solid.robby && solid.frame && solid.steps, solid);
 const through = await g(() => { const G = __game; G.place(R.at.x - .9, R.at.z); return walkTo(R.at.x + .5, R.at.z, .3, 3); });
 check('and you can walk straight through him', through.d < .6, through);
-const stops = await g(() => { const G = __game; G.place(R.lot.x + 1, R.lot.z - 1); const w = walkTo(R.lot.x + 7, R.lot.z - 1, .5, 4); return { w, x: G.player.pos.x - R.lot.x }; });
-check('and the chimney stops him', stops.w.d > 2 && stops.x < 3.9, stops);
+const stops = await g(() => { const G = __game; G.place(R.lot.x - 4, R.lot.z + 5); const w = walkTo(R.lot.x + 3, R.lot.z + 5, .5, 4); return { w, x: G.player.pos.x - R.lot.x }; });
+check('and the trailer stops him walking into it', stops.w.d > 2 && stops.x < -1.5, stops);
 
 // a swing near a pier takes that pier, not the whole floor
 const piers = await g(() => { const G = __game, list = G.wreck.props.filter((p) => p.kind === 'pier' && Math.hypot(p.cx - R.lot.x, p.cz - R.lot.z) < 10); return list.length; });
