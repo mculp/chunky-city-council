@@ -1,6 +1,6 @@
 // Runs every check, the node tests and the browser suites, a few at once and longest first, and says how long each took.
 //
-//   node tools/check.mjs [--jobs 3] [--only a,b] [--skip a,b] [--changed [base]] [--dry] [--at <commit>] [--timeout 600] [--no-retry]
+//   node tools/check.mjs [--jobs 3] [--only a,b] [--skip a,b] [--changed [base]] [--dry] [--at <commit>] [--timeout 600] [--no-retry] [--shots]
 //
 // The checks are package.json's scripts, plus the variants below, less what spends money or writes files.
 // --changed runs only what a change could break: the uncommitted changes, or the last commit when there are none, or
@@ -18,6 +18,8 @@
 //   such as fling for the crowd's pose, aura and shoes
 // - everything, for a new dependency or a change to tools/browser.mjs
 // --dry says what would run, and why, without running it.
+// --shots has every check that takes --shots keep its screenshots, under the run's folder in data/raw/check/. It isn't the
+// default because some checks step the game on to each screenshot, so with it they play a little differently.
 // Other sessions run Chrome on this machine too, and a few suites fail on frame time or a dropped connection when it's
 // busy, so anything that fails is run again on its own at the end. Passing then makes it flaky, not failed.
 // --at runs a commit from a scratch copy, so the worktree can change underneath it. The last run's times decide what
@@ -124,6 +126,7 @@ if (args.includes('--changed')) {
 let chosen = checks.filter((c) => (!only.size || only.has(c.name) || only.has(c.name.split(' ')[0])) && !skip.has(c.name) && (!why.size || why.has(c.name)));
 // a check whose tool runs Python can't run without the venv; data/roads.md says how to make one
 const sourceOf = (c) => { const tool = pkg.scripts[c.name.split(' ')[0]].match(/tools\/[\w.-]+\.mjs/)?.[0]; return tool ? readFileSync(join(dir, tool), 'utf8') : ''; };
+const shooting = (c) => args.includes('--shots') && sourceOf(c).includes("'--shots'");
 const noVenv = existsSync(join(dir, '.venv')) ? [] : chosen.filter((c) => sourceOf(c).includes('.venv'));
 chosen = chosen.filter((c) => !noVenv.includes(c));
 if (noVenv.length) console.log(`skipping ${noVenv.map((c) => c.name).join(', ')}: there's no .venv here (data/roads.md says how to make one)`);
@@ -134,7 +137,7 @@ chosen = chosen.filter((c) => !noTiger.includes(c));
 if (noTiger.length) console.log(`skipping ${noTiger.map((c) => c.name).join(', ')}: data/raw/ hasn't got TIGER's ${zips[0]}${zips.length > 1 ? ` or ${zips.length - 1} more` : ''} (tools/fetch_tiger.py fetches them)`);
 if (!chosen.length) { console.log('nothing to run'); process.exit(1); }
 if (args.includes('--dry')) {
-  for (const c of chosen) console.log(`${c.name}${why.has(c.name) ? `  (${why.get(c.name)})` : ''}`);
+  for (const c of chosen) console.log(`${c.name}${why.has(c.name) ? `  (${why.get(c.name)})` : ''}${shooting(c) ? ', keeping its screenshots' : ''}`);
   process.exit(0);
 }
 
@@ -150,7 +153,8 @@ const running = new Set();
 const stop = (child, signal) => { try { process.kill(-child.pid, signal); } catch {} };
 const run = (c, alone) => new Promise((done) => {
   const log = join(logs, c.name.replace(/[^\w.-]+/g, '_') + (alone ? '.alone' : '') + '.log'), fd = openSync(log, 'w'), t0 = Date.now();
-  const child = spawn('npm', c.argv, { cwd: dir, stdio: ['ignore', fd, fd], detached: true, env: { ...process.env, FORCE_COLOR: '0' } });
+  const argv = shooting(c) ? [...c.argv, ...(c.argv.includes('--') ? [] : ['--']), '--shots', join(logs, 'shots', c.name.replace(/[^\w.-]+/g, '_'))] : c.argv;
+  const child = spawn('npm', argv, { cwd: dir, stdio: ['ignore', fd, fd], detached: true, env: { ...process.env, FORCE_COLOR: '0' } });
   running.add(child);
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; stop(child, 'SIGTERM'); setTimeout(() => stop(child, 'SIGKILL'), 5000); }, limit);
