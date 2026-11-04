@@ -217,6 +217,17 @@ try {
 
   // ---------------- a wave, and the map
   {
+    // WAVE goes where SHAMBLE does, which a town that's shared hasn't got, and above it if it ever shows, so they're never on top of each other
+    const slot = await on(b, () => {
+      const w = document.getElementById('bW'), h = document.getElementById('bH'), was = h.hidden;
+      const box = (e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, h: r.height }; };
+      h.hidden = false; const shamble = box(h), over = box(w);
+      h.hidden = true; const wave = box(w);
+      h.hidden = was;
+      return { shamble, wave, over };
+    });
+    const off = Math.hypot(slot.wave.x - slot.shamble.x, slot.wave.y - slot.shamble.y), apart = slot.over.y + slot.over.h <= slot.shamble.y || slot.shamble.y + slot.shamble.h <= slot.over.y;
+    check(`WAVE is where SHAMBLE would be on B's phone, ${off.toFixed(0)} px off it, and ${apart ? 'clear of it' : 'on top of it'} when SHAMBLE shows`, slot.wave.h > 0 && off < 1 && apart, slot);
     const before = (await bodyOf(a, B.id))?.waves ?? 0;
     await b.page.tap('#bW');
     const waved = await until(async () => { const s = await bodyOf(a, B.id); return s && s.waves !== before && Math.max(...s.arms) > 120 ? s : null; }, 2000);
@@ -317,6 +328,18 @@ try {
     const tag = (await on(a, () => __net.tags())).find((t) => t.id === C.id);
     check(`with his name over him: "${tag?.text}"`, tag?.text === 'Matt', tag);
     await snap(a, '06-a-sees-the-hero');
+    // and on everyone else's map he's in the orange of his own arrow, a way up the road so that A's arrow isn't over him
+    await onRoad(c, A.x + 60, await on(c, (x) => __game.map.zAt('us_80', x), A.x + 60));
+    await sleep(600);
+    const H = await me(c);
+    await a.page.keyboard.press('m');
+    await until(() => on(a, () => __game.mapState().open));
+    await on(a, (at) => __game.mapCamTo({ x: at.x, z: at.z, scale: 1.5 }), H);
+    await sleep(200);
+    const dot = await on(a, (id) => __net.dotOnMap(id), C.id);
+    check(`he's an orange dot on A's map, like his own arrow: ${dot ? dot.rgb.join(',') : 'nothing'}`, dot && Math.abs(dot.rgb[0] - 0xec) < 30 && Math.abs(dot.rgb[1] - 0x80) < 30 && Math.abs(dot.rgb[2] - 0x3a) < 30, dot);
+    await a.page.keyboard.press('Escape');
+    await until(() => on(a, () => !__game.mapState().open));
 
     const d = await serveAndOpen({ viewport: { width: 390, height: 844 }, query: `${query}#hero=${HERO}` });
     pages.push(d);

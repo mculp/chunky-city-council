@@ -38,8 +38,9 @@ const CSS = `
 #joinSay{min-height:1.6em;color:var(--cream)}
 .nettag{position:fixed;left:0;top:0;z-index:3;pointer-events:none;font-size:10px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;color:var(--cream);background:var(--panel);border:1px solid var(--line);padding:2px 6px;will-change:transform}
 .nettag[hidden]{display:none}
-#bW{position:absolute;right:9px;bottom:228px;width:54px;height:54px;font-size:10px;background:var(--panel);color:var(--cream);border-color:var(--cream);box-shadow:0 3px 0 var(--ink)}
+#bW{position:absolute;right:9px;bottom:162px;width:54px;height:54px;font-size:10px;background:var(--panel);color:var(--cream);border-color:var(--cream);box-shadow:0 3px 0 var(--ink)}
 #bW[hidden]{display:none}
+#bH:not([hidden])~#bW{bottom:228px}
 body.watching .ctl,body.watching #keyStrip{visibility:hidden}`;
 
 // A private window can refuse storage outright, and then who they are lasts as long as the page
@@ -445,14 +446,15 @@ export function together(G) {
       nameTags(list);
       shownList = list;
     },
-    // a dot for each of them on the map, cyan like everyone else on it, with their names on the big one
+    // a dot for each of them on the map, cyan like everyone else on it and the hero in the orange of his own arrow, with their
+    // names on the big one
     onMap(g, v, dpr, big = false) {
       if (!started) return;
       for (const w of shownList) {
-        const [x, y] = toScreen(v, w.x, w.z);
+        const [x, y] = toScreen(v, w.x, w.z), hue = w.hero ? MAPC.rust : MAPC.cyan;
         if (x < -10 || y < -10 || x > g.canvas.width / dpr + 10 || y > g.canvas.height / dpr + 10) continue;
-        g.beginPath(); g.arc(x, y, big ? 5 : 3.5, 0, 7); g.fillStyle = MAPC.cyan; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.stroke(); g.fill();
-        if (big && w.name) drawLabel(g, w.name, x + 11, y, '13px Bungee, Impact, sans-serif', MAPC.cyan, 0, 'left');
+        g.beginPath(); g.arc(x, y, big ? 5 : 3.5, 0, 7); g.fillStyle = hue; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.stroke(); g.fill();
+        if (big && w.name) drawLabel(g, w.name, x + 11, y, '13px Bungee, Impact, sans-serif', hue, 0, 'left');
       }
       if (big) lastMap = { v, dpr, g };
     },
