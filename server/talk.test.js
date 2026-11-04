@@ -66,6 +66,14 @@ test('what goes to OpenRouter is the owner\'s key, a model off the list, the mes
   assert.equal(sent.stream, undefined);
 });
 
+test('his turns and theirs go on just as the game sent them, in turn and ending on his, since some models won\'t take any other order', async () => {
+  // what src/talk.js sends once he's answered: what they're told, him walking up, their line and his answer
+  const turns = [SAID[0], { role: 'user', content: 'He walks up.' }, { role: 'assistant', content: WORDS }, { role: 'user', content: 'Doing alright, Coop?' }];
+  const { go, up } = talk();
+  await go(ask(body({ messages: turns })));
+  assert.deepEqual(up.calls[0].body.messages, turns);
+});
+
 test('the page can only pick a model that\'s on the list, for trying them side by side', async () => {
   const other = Object.keys(MODELS)[1], { go, up } = talk();
   assert.equal((await go(ask(body({ model: other })))).json.model, other);
