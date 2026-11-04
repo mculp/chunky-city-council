@@ -150,13 +150,18 @@ check('picked up the can on the near shelf', (await can(1)).got, await can(1));
 for (const [name, x, z, reach] of [['round to the gap', ...at([42.8, -11.62]), .4], ['past the counter', ...at([39.7, -11.62]), .4], ['the back shelf can', ...at([39.3, -9.2]), .3]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
 check('picked up the can on the back shelf', (await can(0)).got, await can(0));
 for (const [name, x, z, reach] of [['back past the counter', ...at([39.7, -11.62]), .4], ['and through the gap', ...at([42.8, -11.62]), .4], ['to the door', ...at([43.9, -12.87]), .5], ['out the door', ...at([47.7, -12.87]), .6]]) { r = await walkTo(x, z, reach); blockedCheck(name, r); }
-for (const [i, name] of [[2, 'the can by the mobile home'], [3, 'the can under the water tower']]) {
+for (const [i, name] of [[2, 'the can by the mobile home'], [3, 'the can in front of the brick house']]) {
+  // the second is a long way west, and the way there is out onto US 80 and along it, as anyone would go, and not in through the gas station's store and out of its door
+  if (i === 3) { r = await g(() => { const M = __game.map, [x] = M.fromTrue(-60, 0); return walkTo(x, M.zAt('us_80', x), 1); }); blockedCheck('out onto US 80', r); }
   const c = await can(i); r = await walkTo(c.x, c.z, .8); blockedCheck(name, r);
   check(`picked up ${name}`, (await can(i)).got, await can(i));
 }
 s = await st(); check('ten beans by now and only Miss Bobby left', s.beans === 10 && /Miss Bobby is at her house by the town hall on Commerce St/.test(s.obj), [s.beans, s.obj]); await snap('07-cans');
 
-// her house by the town hall and the sweeping, which takes it past twelve
+// her house by the town hall and the sweeping, which takes it past twelve. From out west the arrow's straight line goes through houses, so it's back along US 80 to
+// Commerce St first, and then up to the front of her door, well clear of the end of her van, whose corner he can get caught on if he comes at it from the south
+r = await g(() => { const M = __game.map, n = M.nodes.find((q) => q.roads.includes('us_80') && q.roads.includes('commerce_st')); return walkTo(n.x, n.z, 2); }); blockedCheck('back along US 80 to Commerce St', r);
+r = await g(() => { const d = __game.doors.bobby; return walkTo(d.x + d.nx * 4.5, d.z + d.nz * 4.5, 1); }); blockedCheck('up to the front of her door', r);
 r = await g(() => followArrow()); blockedCheck('follow the arrow to Miss Bobby\'s', r);
 d = await talk('bobby', 'Miss Bobby'); await snap('08-bobby');
 await choose(0); s = await choose(0); check('sweeping', s.mode === 'sweep', s.mode);

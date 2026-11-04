@@ -1654,7 +1654,7 @@ function breakProp(p, dx = 0, dz = 0) {
     return { g: h.g, first: h.first, count: h.count, from: A.slice(at, at + len), nor: h.g.attributes.normal.array.slice(at, at + len), to: new Float32Array(len) };
   });
   const land = p.landed && (() => p.landed(p, dirx, dirz));
-  if (p.rigid || p.whole) {
+  if (p.rigid) {
     const objs = p.objs.map((o) => ({ o, pos: o.position.clone(), quat: o.quaternion.clone() })), high = max.y - min.y;
     falling.push({ boxes, objs, t: 0, T: p.T ?? Math.min(1.2, .45 + high * .07), pivot: [p.cx, p.pivotY ?? min.y, p.cz], dirx, dirz, angle: Math.PI / 2 - .05, lift: (p.pivotY ? TOWN_Y - p.pivotY + 1 : 0) + .08, end: () => { dust(p.cx + dirx * high * .5, p.cz + dirz * high * .5, dirx, dirz, Math.min(high, 12), 1.6); land?.(); } });
     return;
@@ -1747,7 +1747,6 @@ const PLACES = {
   church: landing(-311, -211.6, 68.5, -8),
   // on the gravel by the main line, where the sidings were
   boxcar: landing(10, 52.4, 0, 0),
-  tower: landing(-330, 15, 100, -14),
 };
 function around(place, fn) { OX = place.x; OZ = place.z; fn(); OX = OZ = 0; }
 // What's inside the real town hall. The walls and roof are the building's own.
@@ -2293,25 +2292,10 @@ breakable('steps', 3, () => { const s = byDoor(BOBBY_DOOR, .55, 0); addBox(stone
 flushBuckets();
 // and the front yard her van's parked on, levelled like the house is, or it'd be standing on the slope down to the road
 { const v = byDoor(BOBBY_DOOR, 2.45, 4.3); pad(v.x - 2.6, v.x + 1.8, v.z - 3.6, v.z + 3.6, 4); }
-// water tower with the town's name
-// Knock out two of its legs and the whole thing goes over, and what it lands on knows about it
-let towerProp = null, towerLegs = 0, beaconLive = true;
-const towerLegProps = [];
-around(PLACES.tower, () => {
-  pad(95, 105, -19, -9);
-  for (const [x, z] of [[-2.2, -2.2], [2.2, -2.2], [-2.2, 2.2], [2.2, 2.2]]) towerLegProps.push(breakable('leg', 3, () => { addBeam([100 + x * 1.4, Y0, -14 + z * 1.4], [100 + x, Y0 + 13, -14 + z], .25, .25, steelMat, 1.2); }, { low: true, whole: true, broke(p, dirx, dirz) {
-    if (++towerLegs >= 2) { for (const q of towerLegProps) if (!q.down) breakProp(q, dirx, dirz); breakProp(towerProp, dirx, dirz); }
-  } }));
-  towerProp = breakable('tower', 6, () => { addBeam([97.2, Y0 + 6, -16.8], [102.8, Y0 + 6, -11.2], .1, .1, steelMat, 0); addBeam([102.8, Y0 + 6, -16.8], [97.2, Y0 + 6, -11.2], .1, .1, steelMat, 0); solid(96, 104, -18, -10, Y0 + .2); }, { rigid: true, T: 1.9, chip: '#7f8d90', broke(p, dirx, dirz) { beaconLive = false; for (const q of towerLegProps) if (!q.down) breakProp(q, dirx, dirz); }, landed(p, dirx, dirz) { thud(p.cx + dirx * 15, Y0 + 1, p.cz + dirz * 15, 10, 4); } });
-  flushBuckets();
-});
-const towerX = 100 + PLACES.tower.x, towerZ = -14 + PLACES.tower.z;
-// the name goes round its side and its ends are bare, which shows from below and when it's on its back
-const towerEnd = new THREE.MeshStandardMaterial({ color: '#7d8f95', roughness: .8, metalness: .2 });
-const towerTank = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 4.6, 32, 1), [new THREE.MeshStandardMaterial({ map: textTex(['CHUNKY'], 1024, 256, '#9fb3b8', '#2a1c26', '150px Bungee, Impact, sans-serif', { grime: true }), roughness: .8, metalness: .2 }), towerEnd, towerEnd]);
-towerTank.position.set(towerX, Y0 + 15.3, towerZ); towerTank.rotation.y = -Math.PI / 2 - .5; outline(towerTank, INK, 1.6); scene.add(towerTank); towerProp.objs.push(towerTank);
-const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(3.8, 2, 32), roofMat); towerRoof.position.set(towerX, Y0 + 18.6, towerZ); outline(towerRoof, INK, 1.4); scene.add(towerRoof); towerProp.objs.push(towerRoof);
-const beacon = new THREE.Mesh(new THREE.SphereGeometry(.18, 10, 8), lit('#ff2a2a', 4)); beacon.position.set(towerX, Y0 + 19.7, towerZ); scene.add(beacon); towerProp.objs.push(beacon);
+// A tank on legs with the town's name on it stood here, where there isn't one in life, until it was taken out. The grime on its lettering took 2000 draws on
+// rnd(). What draws on it from here to where the town's props leave the random sequence, further down, is the kudzu on the burnt cars and the
+// flicker of the barrels, so the same 2000 are drawn and thrown away and neither changes.
+for (let i = 0; i < 2000; i++) rnd();
 // burnt cars, power poles, fire barrels, the town sign
 const burnt = new THREE.MeshStandardMaterial({ color: '#2a2024', roughness: 1, metalness: .3 });
 {
@@ -4298,7 +4282,8 @@ const canLabel = textTex(['BEANS'], 256, 128, '#c8452a', '#f6e8c8', '52px Bungee
 const canMat = [new THREE.MeshStandardMaterial({ map: canLabel, roughness: .6, metalness: .2, emissive: '#3a1006' }), new THREE.MeshStandardMaterial({ color: '#c9ccd2', metalness: .9, roughness: .3 })];
 const PICKUPS = [
   [38.3 + PLACES.hall.x, Y0 + 1.75, -9.2 + PLACES.hall.z], [41.3 + PLACES.hall.x, Y0 + 1.75, -14 + PLACES.hall.z],
-  (() => { const [x, z] = atTrue(-18.8, -54.5); return [x, Y0 + .3, z]; })(), [towerX, Y0 + .3, towerZ], [BOX.x + 1.5, Y0 + .9, BOX.z - 2]
+  // the first two are on the town hall's shelves, then one on the ground by the mobile home, one in front of the porch of the red brick house on the south side of US 80 down its drive from the road, and one by the boxcar
+  (() => { const [x, z] = atTrue(-18.8, -54.5); return [x, Y0 + .3, z]; })(), (() => { const [x, z] = atTrue(-346.8, -6.3); return [x, Y0 + .3, z]; })(), [BOX.x + 1.5, Y0 + .9, BOX.z - 2]
 ].map(([x, y, z]) => {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(.11, .11, .26, 18), [canMat[0], canMat[1], canMat[1]]);
   m.position.set(x, y + .2, z); outline(m, INK, 1.5); scene.add(m);
@@ -6672,7 +6657,7 @@ for (const f of fires) f.burner = burnAt(f.home.x, Y0 + .95, f.home.z, .58, Infi
 const mapData = buildMapData({ roads: MAP.roads, lanes: MAP.lanes, rail: MAP.rail, river: MAP.river, ponds: WATER.ponds.map((p) => p.ring), structures: STRUCTURES, fields: FIELDS });
 const MINI = { size: 116, scale: .42, step: -1, ctx: $('miniC').getContext('2d') };
 const MAP_PLACES = [
-  ["Stuckey's Bridge", 0, 0, 3], ['Chunky River Bridge', WAKE_BRIDGE.x, WAKE_BRIDGE.z, 2], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-57.7, -62.1), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Ball field', ...atTrue(-345, -495), 3], ['Boxcar', BOX.x, BOX.z, 2], ['Water tower', PLACES.tower.x + 100, PLACES.tower.z - 14, 1],
+  ["Stuckey's Bridge", 0, 0, 3], ['Chunky River Bridge', WAKE_BRIDGE.x, WAKE_BRIDGE.z, 2], ['Gas station', ...atTrue(-87.85, -31.1), 3], ['Town hall', ...atTrue(-57.7, -62.1), 2], ['Post office', POST_OFFICE.wx, POST_OFFICE.wz, 2], ['Ball field', ...atTrue(-345, -495), 3], ['Boxcar', BOX.x, BOX.z, 2],
   ...SIGN_SHEET.churches.map((c) => ['Church', ...atTrue(c.x, c.z), 2]),
   ...TRESTLES.map((t) => ['Trestle', t.x, t.z, 2]),
 ].sort((a, b) => b[3] - a[3]);
@@ -6798,7 +6783,7 @@ let stepT = 0, lastStepIdx = -1;
 // ================================================================ main loop
 const clock = new THREE.Clock();
 // ================================================================ what he hears
-const METAL_PROPS = new Set(['tractor', 'bin', 'sign', 'pump', 'icebox', 'cooler', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'tower', 'leg', 'trailer', 'boxcar', 'cart', 'bleachers', 'net', 'trampoline', 'propane', 'signal', 'cabinet']);
+const METAL_PROPS = new Set(['tractor', 'bin', 'sign', 'pump', 'icebox', 'cooler', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'trailer', 'boxcar', 'cart', 'bleachers', 'net', 'trampoline', 'propane', 'signal', 'cabinet']);
 const VEHICLE_LOOPS = ['engine.car', 'engine.pickup', 'engine.quad', 'engine.golf', 'vehicle.road', 'vehicle.dirt', 'vehicle.skid'];
 const SCORE = { title: 'title', hang: 'hang', fall: 'fall', land: 'bank', bridge: 'run', bitten: 'bite', dream: 'dream', wake: 'wake', grabbed: 'grabbed', fail: 'failed', end: 'end' };
 const FEVER_QUIET = { bitten: .25, dream: 0, wake: .5 };
@@ -7127,7 +7112,7 @@ function tick(dt, draw = true) {
   if (lootGroup.visible) for (const c of LOOT) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
   for (const f of fires) { const k = .8 + .2 * Math.sin(time * 11 + f.ph) * Math.sin(time * 7.3 + f.ph); f.pl.intensity = (f.duty ? 34 : f.out ? 0 : 12) * k; }
   stepScreen(); stepCrt(); stepBell(dt);
-  beacon.visible = beaconLive && Math.floor(time * 1.2) % 2 === 0; { const dip = Math.random() < .02 && !reduceMotion; gasLight.intensity = (dip ? 2 : 9) * gasPower; gasStrip.material.color.copy(GAS_STRIP).multiplyScalar(dip ? .25 : 1); }
+  { const dip = Math.random() < .02 && !reduceMotion; gasLight.intensity = (dip ? 2 : 9) * gasPower; gasStrip.material.color.copy(GAS_STRIP).multiplyScalar(dip ? .25 : 1); }
   if (!driving && boomLight <= 0) gLight.intensity = 14 * (.8 + .2 * Math.sin(time * 9.7));
 
   // ---------------- camera
