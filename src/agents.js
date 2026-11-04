@@ -64,9 +64,11 @@ export function personOf(id, data, looks = []) {
   const family = id % 4 < 2 ? data.families[id % 4] : id % 8 === 2 ? data.families[2] : data.others[Math.floor(roll(id, 4) * data.others.length)];
   // what they mutter, if they've gone quiet: one of data/folks.json's, by their number
   const says = data.mutters?.length ? data.mutters[Math.floor(roll(id, 13) * data.mutters.length)] : '';
+  // and on the way home from being flung by what he's driving, the same way
+  const flungSays = data.flung?.length ? data.flung[Math.floor(roll(id, 14) * data.flung.length)] : '';
   return {
     // her is which list the name came from, which is all the game knows of who a man or a woman is. It goes with what woke someone, in src/horde.js's why, when what did was him hitting them.
-    id, first, family, name: `${first} ${family}`, says, her: kind === 'women',
+    id, first, family, name: `${first} ${family}`, says, flungSays, her: kind === 'women',
     temper: roll(id, 5), nerve: roll(id, 6), nosy: roll(id, 7), homebody: roll(id, 8), tagalong: roll(id, 9),
     looks: { look, phase: roll(id, 10) * 6.28, limp: roll(id, 11) < .5 ? 0 : 1, size: .94 + roll(id, 12) * .12 },
     hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, fooled: {}, when: 0, seen: 0, met: false, shun: null, where: null,

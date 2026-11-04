@@ -49,6 +49,10 @@ export const TUNING = {
   wading: .55,                     // how much of their pace they keep in the water, wading out of it. Nobody goes in after anything.
   goesUnder: 1.2,                  // seconds to go down, for anyone the train throws in
   thrownFalls: 15,                 // m/s², for anyone thrown
+  // Hit by what he's driving at 40 mph or more, they go flying, limp: up over the top of it about one time in three and ahead of it otherwise, the faster the higher and further,
+  // bouncing a couple of times, less each time, and lying in a heap however they come down
+  flingFrom: 17.9,                 // m/s, which is 40 mph
+  flungOver: .35, bounces: 2, bounce: .34, bounceFrom: 2.5,
   // Nobody dies. The cottonmouths have whoever the train throws in and the current takes them, and they come up a little way downstream, on the bank, soaked, with a snake hanging off a sleeve, and walk home.
   below: [10, 18],                 // seconds under before they come up, by their number
   current: 3.5,                    // metres a second it takes them, which is how far downstream they come up: 35 to 63 m
@@ -87,12 +91,12 @@ export const RUN_SPEED = 4.4;
 const hypot = Math.hypot, TRY = [0, .8, 1.6, 2.4, 3.1];
 function turn(from, to, k) { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return from + d * k; }
 
-// world: { blocked(x, z, y), water(x, z), floorAt(x, z), wander(s) -> [x, z], rand(), folks: src/agents.js's, or nothing and they're nobody,
+// world: { blocked(x, z, y, flying), flying for anyone in the air, water(x, z), floorAt(x, z), wander(s) -> [x, z], rand(), folks: src/agents.js's, or nothing and they're nobody,
 //          quiet(s) whether someone just come out has gone quiet, or nothing and nobody has, reaching(s) as one of them starts to reach for him, once for each time,
 //          comeUp(s, { metres, side, home }) -> { x, z, bank: [x, z] } where the river brings someone up, which is src/river.js's, or nothing and it's where they went under }
 //          sees(s, p) whether one of them can see him from where it stands, or nothing and it's walls from world.blocked,
 // on: { grab(grab), free(), overrun(), spotted(s) when one of them sees through his act, roused(s, why) as one stops and turns to him before it comes, thrown(s, hit),
-//       splash(s) into the water, surfaced(s) up again downstream, drop(s) when the snake lets go }
+//       splash(s) into the water, surfaced(s) up again downstream, drop(s) when the snake lets go, flung(s) as one goes flying, bounce(s, speed) as one hits the ground and goes up again }
 export function createHorde(world, tuning = {}, on = {}) {
   const T = { ...TUNING, ...tuning }, all = [], active = [], noises = [], looks = [], lights = [], zones = [], F = world.folks;
   let clock = 0, mercy = 0, hearAt = 0, watch = { x: 0, z: 0 };
@@ -257,8 +261,10 @@ export function createHorde(world, tuning = {}, on = {}) {
   // There's no lure. Nothing draws a crowd, not a train and not an alarm and not a bell, since everyone in Chunky has heard all of them every day for years, and nobody follows anything
   // into the water: a noise rouses the ones near enough to hear it, and a bottle makes them look. The one real lure is supper, which isn't here yet.
   // Knocked flat: anyone within r goes over, thrown clear, and lies there a while. It says how many. They remember it, and so does whoever was there.
-  h.knock = (x, z, r, seconds, by = 'hit') => {
+  // going is how fast what hit them was going, { vx, vz, still }, and at T.flingFrom or more they go flying (fling, below). still is reduced motion, with nobody turning over.
+  h.knock = (x, z, r, seconds, by = 'hit', going = null) => {
     let n = 0;
+    const flung = going && hypot(going.vx, going.vz) >= T.flingFrom ? going : null;
     // nobody thinks of a fire or the train as something he did
     const his = by !== 'fire' && by !== 'train';
     let victim = null, nearest = Infinity;
@@ -271,8 +277,11 @@ export function createHorde(world, tuning = {}, on = {}) {
       // and what they were doing and where they were, which is how they're drawn for a moment before they go over
       s.hitAs = s.state === ROUSED ? SHAMBLE : s.state; s.fromX = s.x; s.fromZ = s.z; s.reaching = 0; s.rouse = null; s.rank = 0;
       s.state = STUNNED; s.timer = seconds; s.alert = 1; s.moving = 0; s.flat = s.flatFor = seconds; n++;
-      const k = 1 + (1 - d / r) * 2.4, nx = s.x + dx / (d || 1) * k, nz = s.z + dz / (d || 1) * k;
-      if (open(s, nx, nz)) { s.x = nx; s.z = nz; s.y = world.floorAt(nx, nz); }
+      if (flung) fling(s, flung, dx, dz);
+      else {
+        const k = 1 + (1 - d / r) * 2.4, nx = s.x + dx / (d || 1) * k, nz = s.z + dz / (d || 1) * k;
+        if (open(s, nx, nz)) { s.x = nx; s.z = nz; s.y = world.floorAt(nx, nz); }
+      }
       if (s.who) F.hurt(s.who, s.x, s.z, by);
       if (d < nearest) { nearest = d; victim = s; }
     }
@@ -310,16 +319,36 @@ export function createHorde(world, tuning = {}, on = {}) {
     }
     return n;
   };
+  // Flying, limp, off whatever side of its middle they were on, whichever way it was going. Each flight's its own, by who they are and how many times it's happened to them,
+  // so nothing's asked of world.rand(). They're sent home sore once they're up, the same as from the train, and he's long gone by then.
+  function fling(s, f, dx, dz) {
+    const sp = hypot(f.vx, f.vz) || 1, ux = f.vx / sp, uz = f.vz / sp, times = s.flings = (s.flings ?? 0) + 1;
+    const r = (salt) => roll((s.who ? s.who.id : 1e6 + s.look) * 31 + times, salt), still = !!f.still;
+    const side = Math.sign(dx * -uz + dz * ux) || (r(30) < .5 ? -1 : 1), over = r(31) < T.flungOver, faster = Math.max(0, sp - T.flingFrom);
+    const along = sp * (over ? .38 + r(32) * .12 : 1.05 + r(32) * .2), across = side * (1.5 + r(33) * 3.5), up = (over ? 7.5 : 4) + faster * .3 + r(34) * 2;
+    s.thrown = { vx: ux * along - uz * across, vz: uz * along + ux * across, vy: up, spin: still ? 0 : (r(35) < .5 ? -1 : 1) * (6 + r(36) * 6), twist: still ? 0 : (r(37) < .5 ? -1 : 1) * (2 + r(38) * 6), limp: true, bounces: 0 };
+    // how they flop, which is the page's to draw: the same every time for this flight, and held where it was once they're down
+    s.tumble = 0; s.twist = 0; s.flop = { seed: r(39) * 100, t: 0, still }; s.hitAs = undefined; s.sent = true; s.flung = true;
+    s.y = world.floorAt(s.x, s.z) + .3;
+    h.on.flung?.(s);
+  }
   function fly(s, dt) {
     const f = s.thrown, nx = s.x + f.vx * dt, nz = s.z + f.vz * dt;
     s.tumble += f.spin * dt;
-    if (!world.blocked(nx, nz, s.y)) { s.x = nx; s.z = nz; } else { f.vx *= -.2; f.vz *= -.2; }
+    if (f.limp) { s.twist += f.twist * dt; if (!s.flop.still) s.flop.t += dt; }
+    // what stops them in the air is a wall, and not whatever threw them, which they go up and over
+    if (!world.blocked(nx, nz, s.y, true)) { s.x = nx; s.z = nz; } else { f.vx *= -.2; f.vz *= -.2; }
     f.vy -= T.thrownFalls * dt; s.y += f.vy * dt;
     // into the water, and the river has them
     if (world.water(s.x, s.z) && s.y < (world.level?.(s.x, s.z) ?? -Infinity)) { s.thrown = null; s.tumble = 0; dive(s); h.on.splash?.(s); return; }
     const floor = world.floorAt(s.x, s.z);
     if (s.y > floor) return;
-    s.y = floor; s.thrown = null; s.tumble = 0;
+    s.y = floor;
+    // limp, they bounce, less each time, and stay however they come down
+    if (f.limp && f.vy < -T.bounceFrom && f.bounces < T.bounces) { f.bounces++; h.on.bounce?.(s, -f.vy); f.vy *= -T.bounce; f.vx *= .55; f.vz *= .55; f.spin *= -.5; f.twist *= .6; return; }
+    // and how far over they'd turned, from upright, -π to π, which is whether they're laid on their back or their front
+    if (f.limp) s.flop.land = Math.atan2(Math.sin(s.tumble), Math.cos(s.tumble));
+    s.thrown = null; s.tumble = 0;
   }
 
   // Where someone's home is: the door for anyone who lives somewhere, and for the rest wherever they came out and go about from
@@ -340,7 +369,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     s.y = world.floorAt(s.x, s.z);
     s.under = s.sinking = s.swept = undefined;
     // awake, whatever had them down, and not after anybody
-    s.flat = 0; s.hitAs = undefined; s.thrown = null; s.tumble = 0; s.reaching = 0; s.started = false;
+    s.flat = 0; s.hitAs = undefined; s.thrown = null; s.tumble = 0; s.twist = 0; s.flop = null; s.reaching = 0; s.started = false;
     s.state = SHAMBLE; s.alert = 0; s.lost = 0; s.moving = 0; s.stuck = 0; s.side = 0; s.sus = 0; s.timer = 20;
     // they have to get out first, and nothing draws them back in
     s.wading = true; s.climbing = true;
@@ -355,13 +384,17 @@ export function createHorde(world, tuning = {}, on = {}) {
   // Another step of the way: where they're going while they're on it, and false once they're there, or have given up
   function headHome(s) {
     const [x, z] = homeOf(s), left = hypot(x - s.x, z - s.z);
-    if (left < T.homeIs || clock > s.homeBy) { s.homeward = false; return false; }
+    if (left < T.homeIs || clock > s.homeBy) { s.homeward = false; s.flung = false; return false; }
     s.tx = x; s.tz = z; s.timer = left / (T.speed[SHAMBLE] * (s.sore > 0 ? T.soreSpeed : 1)) + 3;
     return true;
   }
   h.calm = () => {
     if (h.grab) h.grab = null;
-    for (const s of all) { s.state = SHAMBLE; s.alert = 0; s.timer = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; s.moving = 0; s.sent = false; s.rouse = null; s.rank = 0; s.cool = 0; s.reaching = 0; s.ring = null; }
+    for (const s of all) {
+      // anyone down from the train or from being flung gets up sore and goes home all the same, which was never about him
+      if (s.sent && (s.thrown || s.flat > 0)) { s.resumes = false; s.rouse = null; s.rank = 0; s.reaching = 0; s.ring = null; continue; }
+      s.state = SHAMBLE; s.alert = 0; s.timer = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; s.moving = 0; s.sent = false; s.rouse = null; s.rank = 0; s.cool = 0; s.reaching = 0; s.ring = null;
+    }
   };
   // When they've dragged him off: the nearest n stand round where he went down, folded over and looking down at him, and stay there till unring() or calm()
   h.ring = (x, z, n, r) => {
@@ -486,8 +519,8 @@ export function createHorde(world, tuning = {}, on = {}) {
       s.timer -= T.thinkEvery;
       // nobody's up while they've still got time down, which is what anything asking how long that is goes by
       if (s.timer > 0 || s.flat > 0) return;
-      // run down by the train, they've had enough of whatever they were at: up, sore, and off home
-      if (s.sent) { sore(s); goHome(s); s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; return; }
+      // run down by the train or flung, they've had enough of whatever they were at: up, sore, and off home
+      if (s.sent) { sore(s); goHome(s); s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; s.flop = null; s.twist = 0; return; }
       // up again. Anyone who'd keep away from him does. Whoever was after him and was thrown off him, or knocked over by something that wasn't him, goes straight back if there's room for them,
       // and gives up if there isn't: they never stopped. Whoever he hurt comes for him, which takes a second of standing there first like anyone else coming for him. And anyone else goes back
       // to what they were doing: it wasn't him, and it's nothing to them.

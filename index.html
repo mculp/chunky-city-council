@@ -4520,7 +4520,35 @@ const NPCS = {
   // he didn't die, he moved to California
   robby: makeNPC({ id: 'robby', name: 'Robby', x: ROBBY.x, z: ROBBY.z, y: ROBBY.y, yaw: -Math.PI / 2, ghost: true, ph: 1.7 })
 };
-for (const n of Object.values(NPCS)) if (!n.ghost) solid(n.root.position.x - .4, n.root.position.x + .4, n.root.position.z - .4, n.root.position.z + .4, Y0 + 2);
+for (const n of Object.values(NPCS)) if (!n.ghost) { solid(n.root.position.x - .4, n.root.position.x + .4, n.root.position.z - .4, n.root.position.z + .4, Y0 + 2); n.box = SOLIDS.at(-1); n.top = n.box[4]; n.spot = n.root.position.clone(); }
+// The cast jump clear of anything coming at them at more than 4 m/s, the way the kids on four-wheelers keep out of its way: a hop off to whichever side of it they're on, as far as clears
+// it, or the other way if that's into a wall or the water. They watch it go by and hop back onto their spot, once neither he nor anything's stood on it. They're nothing to run into while they're off it,
+// and they're off again if anything else comes at them. It's never anything random, so the opening's sequence isn't touched.
+const JUMP = { from: 4, within: .9, clear: 1.4, hop: .35, high: .5, watch: 1.6 };
+function jumpClear(n, dt) {
+  const r = n.root.position, j = n.jump;
+  if (!j || j.t >= JUMP.hop) for (const v of driving ? [driving, ...loose] : loose) {
+    const vx = v.loose ? v.loose.vx : Math.sin(v.yaw) * v.f - Math.cos(v.yaw) * v.s, vz = v.loose ? v.loose.vz : Math.cos(v.yaw) * v.f + Math.sin(v.yaw) * v.s, sp = Math.hypot(vx, vz);
+    if (sp < JUMP.from) continue;
+    // in its way: along where it's going, from its back to a second or so ahead of its front, and no further to the side than it's wide
+    const ux = vx / sp, uz = vz / sp, dx = r.x - v.x, dz = r.z - v.z, along = dx * ux + dz * uz, across = dz * ux - dx * uz;
+    if (along < -v.K.length / 2 || along > v.K.length / 2 + sp * JUMP.within || Math.abs(across) > v.K.width / 2 + .6) continue;
+    const first = across < 0 ? -1 : 1;
+    for (const side of [first, -first]) {
+      const go = side * (v.K.width / 2 + JUMP.clear) - across, x = r.x - uz * go, z = r.z + ux * go;
+      if (blocked(x, z, n.spot.y + .5) || floorOnce(x, z) < WATER.level(x, z) - .1) continue;
+      n.jump = { x0: r.x, z0: r.z, x1: x, z1: z, t: 0 }; n.box[4] = -Infinity;
+      return;
+    }
+  }
+  if (!j) return;
+  j.t += dt;
+  const back = j.t > JUMP.hop + JUMP.watch;
+  if (back && (Math.hypot(player.pos.x - n.spot.x, player.pos.z - n.spot.z) < .9 || [driving, ...loose].some((v) => v && inVehicle(v, n.spot.x, n.spot.z, .5)) || parkedAt(n.spot.x, n.spot.z, n.spot.y + .5))) { j.t = JUMP.hop + JUMP.watch; return; }
+  const k = Math.min(1, back ? (j.t - JUMP.hop - JUMP.watch) / JUMP.hop : j.t / JUMP.hop), [ax, az, bx, bz] = back ? [j.x1, j.z1, n.spot.x, n.spot.z] : [j.x0, j.z0, j.x1, j.z1];
+  r.set(ax + (bx - ax) * k, n.spot.y + Math.sin(Math.PI * k) * JUMP.high, az + (bz - az) * k);
+  if (back && k >= 1) { n.jump = null; n.box[4] = n.top; }
+}
 
 // ================================================================ bean cans
 const canLabel = textTex(['BEANS'], 256, 128, '#c8452a', '#f6e8c8', '52px Bungee, Impact, sans-serif');
@@ -4634,10 +4662,15 @@ const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
     #include <fog_pars_vertex>
     void main(){
       vQ=position.xy; vA=iAura; vFlat=position.z;
-      vec3 feet=(instanceMatrix*vec4(0.,0.,0.,1.)).xyz; float far=max(iAura.x,iAura.y*.55);
+      vec3 feet=(instanceMatrix*vec4(0.,0.,0.,1.)).xyz, streak=instanceMatrix[2].xyz; float far=max(iAura.x,iAura.y*.55), flying=step(.01,length(streak));
       vec4 mvPosition;
-      if(position.z<.5){ mvPosition=viewMatrix*vec4(feet+vec3(0.,${AURA_UP}*instanceMatrix[1].y,0.),1.); mvPosition.xy+=position.xy*vec2(1.25,1.45)*(1.+max(0.,iAura.y-1.)*.7); }
-      else mvPosition=viewMatrix*vec4(feet+vec3(position.x,0.,position.y)*(.7+far*1.2)+vec3(0.,.05,0.),1.);
+      if(position.z<.5){
+        mvPosition=viewMatrix*vec4(feet+vec3(0.,${AURA_UP}*instanceMatrix[1].y,0.),1.); mvPosition.xy+=position.xy*vec2(1.25,1.45)*(1.+max(0.,iAura.y-1.)*.7);
+        // in the air, the corners on the side they're coming from are left behind them, which is the streak
+        vec2 s=(viewMatrix*vec4(streak,0.)).xy; float l=length(s); if(l>.01) mvPosition.xy-=s*max(0.,-dot(position.xy,s/l));
+      }
+      // and there's no glow on the ground under anyone in the air
+      else mvPosition=viewMatrix*vec4(feet+vec3(position.x,0.,position.y)*(.7+far*1.2)*(1.-flying)+vec3(0.,.05,0.),1.);
       mvPosition.xyz+=viewMatrix[1].xyz*hillOver(feet.xz);
       gl_Position=projectionMatrix*mvPosition;
       #include <fog_vertex>
@@ -4689,6 +4722,15 @@ const leanOf = (s) => (s.bentFor === s.hips ? s.bend : (s.bentFor = s.hips, s.be
 const DEEPEST = Math.max(leanFor(0), KNEEL_FOLD);
 // Knocked down: held a step as they were, gone over in a third of a second, and getting up at the end of it, which takes at most this long, with their legs this far back on their knees
 const HIT_HOLD = 1 / 12, HIT_FALL = .3, GET_UP = 2.4, KNEEL = 1.05, SMOOTH = (t) => THREE.MathUtils.smoothstep(t, 0, 1);
+// Flung by what he's driving (src/horde.js's fling), they're limp: every joint swings on its own, this far either side of where it's centred, in radians, as two waves apiece at about these
+// speeds, which is a new shape on every 12 fps step. Each flight has its own seed, so no two are alike, and once they're down it's held wherever it was, which is the heap they lie in. With
+// reduced motion nothing swings, and they're held in the one shape the whole way.
+// Down, it's a heap: flat on whichever of their back or front they were nearer, rolled `side` of however far they'd twisted past that, and their arms and legs, splayed however they were,
+// brought down to the ground, which is `flat` of the way they were raised off it, so nothing goes into the road.
+const FLOP = { lean: [.3, .9], list: .6, head: [.3, .9], arm: [-1.2, 2], out: [.2, 1.2], leg: [-.4, 1.2], spread: [.08, .6], fast: [7, 10.3], side: .25, flat: .3 };
+const flopOf = (f, k) => Math.sin(f.t * (FLOP.fast[0] + k * 1.3) + f.seed * (k + 1) * 1.7) * .6 + Math.sin(f.t * (FLOP.fast[1] + k * .7) + f.seed * (k * 2.3 + .5)) * .4;
+// and anyone in the air, flung or thrown by the train, has their glow streak out behind them as far as they go in this many seconds
+const AURA_STREAK = .1;
 const crowdShown = [];
 // How high someone's hips are, sat in each of them, and how their straight limbs go
 const SEATED = { car: { hip: .8, arms: -1.2, legs: -1.3 }, pickup: { hip: 1.04, arms: -1.2, legs: -1.3 }, quad: { hip: 1.02, arms: -1, legs: -.62 } };
@@ -4700,7 +4742,8 @@ const overHead = (s, v) => (s.hdy === undefined ? v.set(s.x, s.y + hillUp(s.x, s
 const MUTTER = { reach: 7, gap: [9, 16], lasts: 3.2, rise: 16 };
 const mutterSlots = Array.from({ length: 2 }, () => { const e = document.createElement('div'); e.className = 'mutter'; e.hidden = true; $('mutters').appendChild(e); return { e, s: null, at: 0 }; }), _mut = new THREE.Vector3();
 let mutterLook = 0;
-const muttering = (s) => s.quiet && (s.state === SHAMBLE || s.state === CURIOUS) && !(s.flat > 0) && s.under === undefined && !s.thrown && !!s.who?.says;
+// and anyone flung on their way home mutters as they go, keeping away from him or not
+const muttering = (s) => s.quiet && (s.state === SHAMBLE || s.state === CURIOUS || (s.flung && s.state === AVOIDING)) && !(s.flat > 0) && s.under === undefined && !s.thrown && !!s.who?.says;
 function drawMutters() {
   const P = player.pos, on = S.mode === 'town';
   // someone new twice a second, if there's room
@@ -4714,7 +4757,8 @@ function drawMutters() {
       overHead(s, _mut); if (_mut.z >= 1 || Math.abs(_mut.x) > .95 || Math.abs(_mut.y) > .95) continue;
       best = s; bd = d;
     }
-    if (best) { free.s = best; free.at = time; free.w = 0; free.e.textContent = frogWord(best) ?? best.who.says; best.mutterNext = time + MUTTER.gap[0] + hash2(best.who.id, Math.floor(time)) * (MUTTER.gap[1] - MUTTER.gap[0]); }
+    // and on the way home from being flung, what they think of it
+    if (best) { free.s = best; free.at = time; free.w = 0; free.e.textContent = (best.flung && best.who.flungSays) || (frogWord(best) ?? best.who.says); best.mutterNext = time + MUTTER.gap[0] + hash2(best.who.id, Math.floor(time)) * (MUTTER.gap[1] - MUTTER.gap[0]); }
   }
   for (const m of mutterSlots) {
     const s = m.s, age = time - m.at;
@@ -4793,6 +4837,15 @@ function poseCrowd(s, i, step) {
     const fell = !downed ? 0 : struck ? Math.min(1, Math.max(0, since - HIT_HOLD) / HIT_FALL) : Math.min(1, since * 7);
     const getUp = downed && !s.thrown ? Math.min(GET_UP, s.flatFor * .4) : 0, rise = getUp ? Math.max(0, 1 - s.flat / getUp) : 0;
     const lie = downed ? Math.min(SMOOTH(fell), 1 - SMOOTH(rise * 2)) : 0, kneel = rise < .5 ? SMOOTH(rise * 2) : 1 - SMOOTH(rise * 2 - 1);
+    // flung, they're all floppy in the air and a heap once they're down (FLOP), and it comes back together over the first half of getting up, the same as lying down does
+    const flop = seat ? null : s.flop, floppy = !flop ? 0 : s.thrown ? 1 : downed ? 1 - SMOOTH(rise * 2) : 0, jig = (k) => (flop ? flopOf(flop, k) : 0);
+    // how far into the heap they are, how many half turns they'd rolled, which is whether they're face down (1) or up (-1), and a joint's angle brought down to the ground: over
+    // their head or along their side for an arm, which can go either way, and along the body for a leg
+    const heap = flop && !s.thrown ? SMOOTH(fell) : 0, over = heap ? Math.round(s.twist / Math.PI) : 0, facing = heap && (flop.land > 0) !== (Math.abs(over) % 2 === 1) ? 1 : -1;
+    const ground = (a, arm) => {
+      const m = Math.abs(a), t = facing * (!arm ? m * FLOP.flat : m < Math.PI / 2 ? m * FLOP.flat : Math.PI - (Math.PI - m) * FLOP.flat);
+      return a + (t + Math.PI * 2 * Math.round((a - t) / (Math.PI * 2)) - a) * heap;
+    };
     const st = held ? s.hitAs : s.state, after = st === HUNTING || st === SWARM || st === GRABBING, away = st === AVOIDING, still = !s.moving && st !== GRABBING, low = (after || away) && s.scuttle;
     // sore, from the train: slower, with more of a limp, and bent a little more
     const sore = s.sore > 0;
@@ -4809,12 +4862,20 @@ function poseCrowd(s, i, step) {
     const slide = struck ? 1 - SMOOTH(fell) : 0, px = s.x + ((s.fromX ?? s.x) - s.x) * slide, pz = s.z + ((s.fromZ ?? s.z) - s.z) * slide;
     _cb.compose(_cp.set(px, seat ? s.y : s.y + (1.43 - drop) * size * (1 - lie) + .28 * lie + Math.abs(Math.sin(p)) * .03, pz), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(size));
     if (back) _cb.multiply(_cl.makeTranslation(0, 0, -back));
-    if (lie) _cb.multiply(_cl.makeRotationX(-1.45 * lie));
-    if (s.tumble) _cb.multiply(_cl.makeRotationX(s.tumble));
+    if (flop) {
+      // over however they're turning in the air, and once they're down, from however far over they came down onto whichever of their back or front they were nearer, rolled however they'd twisted
+      _cb.multiply(_cl.makeRotationX(s.thrown ? s.tumble : (flop.land > 0 ? 1.45 : -1.45) * lie + (1 - SMOOTH(fell)) * (flop.land ?? 0)));
+      if (s.twist) _cb.multiply(_cl.makeRotationY((s.twist + (over * Math.PI * (1 - FLOP.side) - s.twist * (1 - FLOP.side)) * heap) * floppy));
+    } else {
+      if (lie) _cb.multiply(_cl.makeRotationX(-1.45 * lie));
+      if (s.tumble) _cb.multiply(_cl.makeRotationX(s.tumble));
+    }
     // the top half leans from the hips, so the feet stay on the ground. It doubles over going down, rears back a little reaching for him, and wobbles on its knees.
     const crumple = struck && fell > 0 && fell < 1 ? Math.sin(fell * Math.PI) * .8 : 0;
-    const list = (s.phase - 3.14) * .035, lean = Math.max(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : seat ? .16 : 0, fold) + crumple - grip * .25 + (sore && !lie ? SORE.bent : 0);
-    _cl.makeRotationFromEuler(_ce.set(lean, 0, list + (st === STUNNED ? Math.sin(step * .9) * .12 + kneel * Math.sin(step * .7 + s.phase) * .16 : Math.sin(p) * (after ? .05 : .1))));
+    const list = (s.phase - 3.14) * .035, stood = Math.max(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : seat ? .16 : 0, fold) + crumple - grip * .25 + (sore && !lie ? SORE.bent : 0);
+    // and in the heap, bent a little at the hips off the ground rather than into it
+    const limp = FLOP.lean[0] + jig(0) * FLOP.lean[1], lean = stood + (limp + (-facing * Math.abs(limp) * FLOP.flat - limp) * heap - stood) * floppy;
+    _cl.makeRotationFromEuler(_ce.set(lean, 0, (list + (st === STUNNED ? Math.sin(step * .9) * .12 + kneel * Math.sin(step * .7 + s.phase) * .16 : Math.sin(p) * (after ? .05 : .1))) * (1 - floppy) + jig(1) * FLOP.list * (1 - heap * .7) * floppy));
     const e = _cl.elements; _cl.setPosition(-ZOMBIE_HIP * e[4], ZOMBIE_HIP - ZOMBIE_HIP * e[5], -ZOMBIE_HIP * e[6]);
     _cu.multiplyMatrices(_cb, _cl).toArray(bodies, i * 16);
     // Their head hangs from the neck: tipped back with the mouth open stood up, hanging forward and down once they're folded over, and resting when they're down. It follows how far over
@@ -4822,12 +4883,13 @@ function poseCrowd(s, i, step) {
     const hung = SMOOTH((fold - HEAD.from) / (HEAD.to - HEAD.from));
     let tip = HEAD.back + (HEAD.hang - HEAD.back) * hung - grip * .3 + (reduceMotion ? 0 : Math.sin(p * 1.7 + 1) * HEAD.loose * hung * (still ? .3 : 1));
     if (seat) tip = HEAD.seated; else if (lie) tip += (HEAD.rest - tip) * lie;
+    if (floppy) tip += (FLOP.head[0] + jig(2) * FLOP.head[1] + (HEAD.rest - FLOP.head[0] - jig(2) * (FLOP.head[1] - .15)) * heap - tip) * floppy;
     crowdHead.setX(i, tip - HEAD.pitch);
     // where the top of their head is, or their neck if that's higher, for whatever's said over it
     _cp.set(0, NECK[1] + CROWN[0] * Math.cos(tip) - CROWN[1] * Math.sin(tip), NECK[2] + CROWN[0] * Math.sin(tip) + CROWN[1] * Math.cos(tip)).applyMatrix4(_cu);
     if (_cn.set(0, .2, .05).applyMatrix4(_cu).y > _cp.y) _cp.copy(_cn);
     s.hdx = _cp.x - s.x; s.hdy = _cp.y - s.y; s.hdz = _cp.z - s.z; s.lean = lean; s.lie = lie; s.kneel = kneel;
-    // Their arms hang straight down from the shoulders whatever the fold, which is the lean taken off, so they're straight down in the world. They're loose, swinging a little as they go and a good
+    // Their arms hang straight down from the shoulders whatever the fold, which is the lean taken off, so they're straight down in the world. They're floppy, swinging a little as they go and a good
     // deal scuttling, and they never reach for the ground. Stood up to run at him or keep away they have them out or up instead, coming into it as they come up out of the fold.
     const up = (after || away) && !low, sway = still ? ARM.still : low ? ARM.scuttle : ARM.walk, give = 1 - ARM.short * SMOOTH((fold - (DEEPEST - ARM.from)) / ARM.from);
     // and on their knees, folded over, how far out to the sides they hold them: all the way once they're folded over as far as they kneel, and not at all while they're still coming up
@@ -4837,13 +4899,15 @@ function poseCrowd(s, i, step) {
       let reach = seat ? SEATED[seat.kind].arms : after ? -1.3 + Math.sin(p * 1.3 + a * 2) * .16 : st === CURIOUS ? -.4 - a * .25 : st === STUNNED ? .15 : away ? -2.1 + a * .35 + swing * .12 : st === TRAILING && still ? -.03 : swing * .18 - .1 - (a === s.limp ? .22 : .04);
       if (!seat) { const hang = -lean + (st === GRABBING ? -.6 : swing * sway) - (a === s.limp ? .06 : 0); reach += (hang - reach) * (up ? Math.min(1, fold / .6) : 1 - lie); }
       if (grip) reach += (-2.3 + a * .15 - reach) * grip;
+      if (floppy) reach += (ground(FLOP.arm[0] + jig(3 + a) * FLOP.arm[1], true) - reach) * floppy;
       if (a === 0) s.arm = lean + reach;
-      _cl.makeRotationFromEuler(_ce.set(reach, 0, side * ((after ? .03 : .07) + out))).setPosition(side * .205, .06, 0);
+      _cl.makeRotationFromEuler(_ce.set(reach, 0, side * ((after ? .03 : .07) + out + floppy * (FLOP.out[0] + Math.abs(jig(5 + a)) * FLOP.out[1])))).setPosition(side * .205, .06, 0);
       _cm.multiplyMatrices(_cu, _cl);
       // a cottonmouth hanging off the sleeve of one of them: its head's got hold halfway down, and the rest hangs. With reduced motion it only hangs.
       if (s.snake > 0 && !seat && a === (s.who ? s.who.id : s.look) % 2) hangSnake(_cm, s, step);
       _cm.scale(_cs.set(1, give, 1)).toArray(arms, (i * 2 + a) * 16);
-      _cl.makeRotationFromEuler(_ce.set(seat ? SEATED[seat.kind].legs : -swing * stride * (a === s.limp ? (sore ? SORE.limp : .55) : 1) + legs0, 0, side * (seat ? .1 : .03))).setPosition(side * .1, ZOMBIE_HIP, 0);
+      const leg = seat ? SEATED[seat.kind].legs : -swing * stride * (a === s.limp ? (sore ? SORE.limp : .55) : 1) + legs0;
+      _cl.makeRotationFromEuler(_ce.set(leg + (ground(FLOP.leg[0] + jig(7 + a) * FLOP.leg[1], false) - leg) * floppy, 0, side * (seat ? .1 : .03 + floppy * (FLOP.spread[0] + Math.abs(jig(9 + a)) * FLOP.spread[1])))).setPosition(side * .1, ZOMBIE_HIP, 0);
       _cm.multiplyMatrices(_cb, _cl).toArray(legs, (i * 2 + a) * 16);
     }
     // how far gone they are comes from a number they already have, since asking for a new one would change what everyone does after it. Anyone who's burnt down is past the line, and nobody else.
@@ -4855,7 +4919,43 @@ function poseCrowd(s, i, step) {
     if (!seat) { _cp.set(0, AURA_UP / TOWN_SCALE - 1.43, 0).applyMatrix4(downed ? _cb : _cu); _cm.makeScale(1, Math.max(.1, (_cp.y - s.y) / AURA_UP), 1).setPosition(_cp.x, s.y, _cp.z); }
     else _cm.makeTranslation(px, seat.y, pz);
     _cm.toArray(auras, i * 16); crowdAuraZ.setXYZ(i, far, s.ring ? 1 + FLARE * RING.glow : hot + grip * FLARE, look);
+    // and in the air, which way it streaks and how far, which the shader takes from where the matrix would keep which way is forward, since it's never turned. It's movement, so reduced motion has none.
+    const air = !seat && !reduceMotion && s.thrown;
+    auras[i * 16 + 8] = air ? air.vx * AURA_STREAK : 0; auras[i * 16 + 9] = air ? air.vy * AURA_STREAK : 0; auras[i * 16 + 10] = air ? air.vz * AURA_STREAK : 0;
   }
+}
+
+// ================================================================ a shoe off someone flung
+// Now and then someone flung by what he's driving loses a shoe, which comes off as they go and lands somewhere else, and it's the only thing that ever comes off anyone. It's an old work
+// boot or a sneaker gone grey, by their flight, and it lies wherever it stops, on its sole, its side or upside down, until it's been there a couple of minutes or he's long gone, and the
+// oldest makes room for the next. With reduced motion nobody loses one.
+const SHOES = { n: 6, chance: .35, lasts: 120, gone: 200, half: .06 };
+const shoeGeo = mergeGeometries([new THREE.BoxGeometry(.1, .07, .27).translate(0, -.035, .01), new THREE.BoxGeometry(.088, .08, .12).translate(0, .03, -.065)]);
+const shoes = new THREE.InstancedMesh(shoeGeo, new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap: toonGrad }), SHOES.n), shoeInk = new THREE.InstancedMesh(shoeGeo, outlineMat(INK, 1.3, 0), SHOES.n);
+shoeInk.instanceMatrix = shoes.instanceMatrix; shoes.count = shoeInk.count = 0; shoes.frustumCulled = shoeInk.frustumCulled = false; scene.add(shoes, shoeInk);
+const shoeList = [], SHOE_COLOURS = [new THREE.Color('#4a3426'), new THREE.Color('#b9b2a3')], _shoeM = new THREE.Matrix4(), _shoeQ = new THREE.Quaternion(), _shoeE = new THREE.Euler(), _shoeV = new THREE.Vector3(), _shoeS = new THREE.Vector3(1, 1, 1);
+function loseShoe(s) {
+  const t = s.thrown, r = (k) => hash2(Math.floor(s.flop.seed * 1e4), k);
+  if (r(1) > SHOES.chance) return;
+  if (shoeList.length >= SHOES.n) shoeList.shift();
+  shoeList.push({ x: s.x, y: s.y + .3, z: s.z, vx: t.vx * (.55 + r(2) * .35) + (r(3) - .5) * 5, vy: t.vy + 1.5 + r(4) * 3, vz: t.vz * (.55 + r(5) * .35) + (r(6) - .5) * 5,
+    yaw: r(7) * 6.28, roll: 0, pitch: 0, spin: (r(8) - .5) * 30, flip: (r(10) - .5) * 24, at: time, down: false, colour: SHOE_COLOURS[r(9) < .55 ? 0 : 1] });
+}
+function stepShoes(dt) {
+  if (!shoeList.length && !shoes.count) return;
+  for (let i = shoeList.length - 1; i >= 0; i--) {
+    const o = shoeList[i];
+    if (time - o.at > SHOES.lasts || Math.hypot(o.x - player.pos.x, o.z - player.pos.z) > SHOES.gone) { shoeList.splice(i, 1); continue; }
+    if (o.down) continue;
+    o.vy -= 15 * dt; o.x += o.vx * dt; o.y += o.vy * dt; o.z += o.vz * dt; o.roll += o.spin * dt; o.pitch += o.flip * dt;
+    const fl = floorOnce(o.x, o.z) + SHOES.half;
+    if (o.y > fl) continue;
+    o.y = fl;
+    if (o.vy < -3) { o.vy *= -.3; o.vx *= .5; o.vz *= .5; o.spin *= .5; o.flip *= .5; SFX.play('hit.wood', { x: o.x, z: o.z, rate: 1.7, gain: .2 }); }
+    else { o.down = true; o.pitch = 0; o.roll = Math.round(o.roll / (Math.PI / 2)) * (Math.PI / 2); }
+  }
+  shoeList.forEach((o, i) => { shoes.setMatrixAt(i, _shoeM.compose(_shoeV.set(o.x, o.y, o.z), _shoeQ.setFromEuler(_shoeE.set(o.pitch, o.yaw, o.roll, 'YXZ')), _shoeS)); shoes.setColorAt(i, o.colour); });
+  shoes.count = shoeInk.count = shoeList.length; shoes.instanceMatrix.needsUpdate = true; if (shoes.instanceColor) shoes.instanceColor.needsUpdate = true;
 }
 
 // ================================================================ water moccasins
@@ -6190,7 +6290,8 @@ const horde = createHorde({
   quiet: (s) => !burntDown(s.who, Math.hypot(...MAP.toGame(s.x, s.z))),
   // and how far over they stand goes with it
   hips: (s) => hipsOf(s.who, Math.hypot(...MAP.toGame(s.x, s.z))),
-  blocked: (x, z, y) => blocked(x, z, y) || floorOnce(x, z) - y > .7 || (driving !== null && inVehicle(driving, x, z, .3)),
+  // and what he's driving, except to anyone it's thrown up in the air, who goes over it
+  blocked: (x, z, y, flying) => blocked(x, z, y) || floorOnce(x, z) - y > .7 || (!flying && driving !== null && inVehicle(driving, x, z, .3)),
   water: (x, z) => floorOnce(x, z) < WATER.level(x, z) - .1,
   level: (x, z) => WATER.level(x, z),
   floorAt: floorOnce,
@@ -6210,6 +6311,9 @@ const horde = createHorde({
   roused(s, why) { rousedLog.push({ at: time, kind: why.kind }); if (rousedLog.length > 64) rousedLog.shift(); },
   thrown(s, hit) { SFX.play('hit.flesh', { x: s.x, z: s.z }); spray(s.x, s.y + 1, s.z, hit.hard ? (FEW ? 6 : 12) : 3, .1, 5, .22, .95, .45, hit.vx * .05, hit.vz * .05); },
   splash(s) { addRipple(s.x, s.z, .4, 0); SFX.play('splash.small', { x: s.x, z: s.z }); },
+  // flung by what he's driving: a thud and a little dust each time they come down and go up again, and now and then a shoe off them, which lands somewhere else
+  flung(s) { if (!s.flop.still) loseShoe(s); },
+  bounce(s, speed) { SFX.play('hit.flesh', { x: s.x, z: s.z, rate: .72, gain: Math.min(1, speed / 9) }); puff(s.x, s.y + .15, s.z, .35 + speed * .03, .6, .5); },
   spotted(s) { susFlash = s; susFlashUntil = time + .9; SFX.play('groan.hunt', { x: s.x, z: s.z }); glitch(.3, .15); },
   grab() { shambling = false; SFX.play('groan.grab'); SFX.play('hurt', { gain: .6 }); SFX.say('grabbed'); S.mode = 'grabbed'; HP.kind = 'struggle'; HP.speed = 0; player.kb.set(0, 0); if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35); },
   free() { SFX.play('hit.flesh'); S.mode = 'town'; HP.kind = 'run'; player.inv = 1.2; prompt(null); glitch(.4, .2); },
@@ -6744,10 +6848,11 @@ function updateDrive(dt) {
   if (r.landed > 6 && !reduceMotion) cam.shake = Math.min(.5, r.landed * .04);
   if (r.damage > 0) vehDirty = true;
   let done = r.wrecked || (v.drowned && !was);
-  // the crowd: anyone in front goes over, and it costs a little. Sitting still, they get at it.
+  // the crowd: anyone in front goes over, and it costs a little, and at 40 mph they go flying (horde.T.flingFrom). Sitting still, they get at it.
   if (folkOut) {
     if (speed > 3) {
-      const dir = v.f < 0 ? -1 : 1, n = horde.knock(v.x + fx * dir * K.length * .35, v.z + fz * dir * K.length * .35, K.width / 2 + .8, downByTruck(speed), 'truck') + horde.knock(v.x, v.z, K.width / 2 + .6, downByTruck(speed), 'truck');
+      const dir = v.f < 0 ? -1 : 1, going = { vx: fx * v.f - fz * v.s, vz: fz * v.f + fx * v.s, still: reduceMotion };
+      const n = horde.knock(v.x + fx * dir * K.length * .35, v.z + fz * dir * K.length * .35, K.width / 2 + .8, downByTruck(speed), 'truck', going) + horde.knock(v.x, v.z, K.width / 2 + .6, downByTruck(speed), 'truck', going);
       if (n) { SFX.play('hit.flesh'); v.f *= Math.pow(.97, n); if (hurtVehicle(v, .5 * n)) done = true; vehDirty = true; if (!reduceMotion) cam.shake = Math.max(cam.shake, .18); }
     } else if ((vehClawT -= dt) <= 0) {
       vehClawT = .5;
@@ -7050,7 +7155,7 @@ function updateLoose(dt) {
     // and whoever's in the way
     const P = player.pos;
     if (sp > 3) {
-      if (folkOut) horde.knock(v.x, v.z, v.K.length / 2 + .3, downByTruck(sp), 'truck');
+      if (folkOut) horde.knock(v.x, v.z, v.K.length / 2 + .3, downByTruck(sp), 'truck', { vx: l.vx, vz: l.vz, still: reduceMotion });
       if (!driving && Math.abs(P.y - v.y) < 1.4 && inVehicle(v, P.x, P.z, .3)) hurtBy('wreck', P.x - v.x, P.z - v.z, 7, v);
     }
     v.yaw += l.turn * dt; v.pitch += l.pitch * dt; v.roll += l.roll * dt;
@@ -8006,8 +8111,10 @@ function tick(dt, draw = true) {
     if (d.obj.position.y > 0) { d.v.y -= 9.8 * dt; d.obj.position.addScaledVector(d.v, dt); if (d.obj.position.y <= 0) addRipple(d.obj.position.x, d.obj.position.z, .3, d.glow ? 1 : 0); }
     else { d.sink += dt; d.obj.position.y = -d.sink * .25; d.obj.rotation.z += dt * .3; if (d.obj === lantern) lanternLight.intensity = 3 * Math.max(0, 1 - d.sink / 9); }
   }
+  stepShoes(dt);
   // townsfolk idle and turn toward you when you're close
   for (const n of Object.values(NPCS)) {
+    if (n.box) jumpClear(n, dt);
     n.ph += dt; n.rig.body.position.y = TOWN_HIPS + Math.sin(n.ph * 1.6) * (n.ghost ? .05 : .012);
     const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z);
     const want = d < 7 && (M === 'town' || M === 'dialog' || M === 'drive') ? Math.atan2(player.pos.x - n.root.position.x, player.pos.z - n.root.position.z) : n.yaw;
@@ -8216,6 +8323,9 @@ if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, farm: FARM, dock: DOCK, onDock, sound: SFX, singers, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, church: { house: CHURCH_HOUSE, at: CF.at, door: () => wallsOf(CHURCH_HOUSE, Y0).doors[0], steeple: churchSteeple, steeplePos: STEEPLE, steepleShown: () => churchSteepleOn.visible, us80: US80_CHURCH, us80Shown: () => us80Steeple.visible, roundWindow, rope: ROPE, bellInReach, ring: ringBell, ringing: () => bellLeft > 0, strokes: () => bellStrokes, BELL, pantry, PANTRY, today, owes: pantryOwes, shown: () => pantryCans.count, shelf: PANTRY_SHELF }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
+    // flung by what he's driving: the shoes that came off and how many are drawn, which way and how far each one's glow is drawn streaking, and the cast, where they are and whether anything can hit them
+    fling: { shoes: () => shoeList.map((o) => ({ x: o.x, y: o.y, z: o.z, down: o.down, roll: o.roll })), drawnShoes: () => shoes.count, streak: (s) => { const i = crowdShown.indexOf(s), a = crowdAura.instanceMatrix.array; return i < 0 ? null : [a[i * 16 + 8], a[i * 16 + 9], a[i * 16 + 10]]; },
+      cast: () => Object.entries(NPCS).filter(([, n]) => n.box).map(([id, n]) => ({ id, x: n.root.position.x, y: n.root.position.y, z: n.root.position.z, spot: [n.spot.x, n.spot.z], jumping: !!n.jump, solid: n.box[4] > -Infinity })), JUMP, loose },
     THREE, hills: { at: HILLS.at, slope: HILLS.slope, follow: HILLS.follow, terraces: HILLS.terraces, here: () => HILL.uHillHere.value, uniforms: HILL, flat: hillsFlat, skyline },
     stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead },
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },

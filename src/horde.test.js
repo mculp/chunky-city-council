@@ -948,6 +948,106 @@ describe('they give up', () => {
   });
 });
 
+describe('hit with a truck at 40 mph', () => {
+  const MPH40 = TUNING.flingFrom, away = { ...still, x: -100 };
+  // where they first come down and how high they went on the way, at one speed, by who they are
+  const flight = (speed, look = 7) => {
+    const h = createHorde(field()), s = h.add(1, 0, { look });
+    run(h, away, .05);
+    h.knock(0, 0, 3, 15, 'truck', { vx: speed, vz: 0 });
+    let top = 0; const from = s.x;
+    while (s.thrown && s.thrown.bounces === 0) { h.update(1 / 60, away); top = Math.max(top, s.y); }
+    return { top, far: Math.hypot(s.x - from, s.z), s, h };
+  };
+
+  test('at 40 mph and up they go flying, and slower they\'re knocked over as ever', () => {
+    const { s } = flight(MPH40 + .1);
+    assert.ok(s.flung && s.flop, 'flung'); assert.ok(s.flat > 0, 'and down');
+    const h = createHorde(field()), slow = h.add(1, 0);
+    run(h, away, .05);
+    assert.equal(h.knock(0, 0, 3, 15, 'truck', { vx: MPH40 - .5, vz: 0 }), 1);
+    assert.equal(slow.thrown ?? null, null); assert.ok(!slow.flung); assert.ok(slow.x > 1.5 && slow.x < 5, `knocked to ${slow.x}`); assert.equal(slow.y, 0);
+  });
+
+  test('the faster he\'s going, the higher and further they go', () => {
+    const a = flight(MPH40), b = flight(MPH40 * 1.5);
+    assert.ok(a.top > .5, `${a.top} m up at 40 mph`); assert.ok(a.far > 4, `and ${a.far} m`);
+    assert.ok(b.top > a.top + .5, `${b.top} against ${a.top} m up`); assert.ok(b.far > a.far * 1.3, `${b.far} against ${a.far} m`);
+  });
+
+  test('they bounce, less each time, and lie however they come down, then get up sore and go home', () => {
+    const bounced = [], h = createHorde(field(), {}, { bounce: (o, speed) => bounced.push(speed) }), s = h.add(1, 0);
+    run(h, away, .05);
+    h.knock(0, 0, 3, 12, 'truck', { vx: MPH40 * 1.2, vz: 0 });
+    for (let t = 0; s.thrown && t < 5; t += 1 / 60) h.update(1 / 60, away);
+    assert.equal(s.thrown, null, 'down'); assert.equal(s.y, 0);
+    assert.ok(bounced.length >= 1 && bounced.length <= TUNING.bounces, `${bounced.length} bounces`);
+    for (let i = 1; i < bounced.length; i++) assert.ok(bounced[i] < bounced[i - 1], 'less each time');
+    assert.ok(Math.abs(s.flop.land) <= Math.PI, 'and how far over they came down');
+    const lying = { x: s.x, z: s.z, twist: s.twist, land: s.flop.land };
+    run(h, away, 8);
+    assert.ok(h.down(s) > 0); assert.equal(s.x, lying.x, 'not going anywhere'); assert.equal(s.twist, lying.twist, 'or rolling over');
+    run(h, away, 6);
+    assert.equal(h.down(s), 0, 'up'); assert.equal(s.flop, null); assert.equal(s.twist, 0);
+    assert.equal(s.state, SHAMBLE); assert.ok(s.homeward && s.sore > 0, 'sore and on the way home'); assert.ok(s.flung, 'and still flung on the way');
+    for (let t = 0; t < 90 && s.homeward; t += 1 / 30) h.update(1 / 30, away);
+    assert.ok(!s.homeward && !s.flung, 'home, and over it'); assert.equal(s.dead, undefined);
+  });
+
+  test('every flight\'s a little different, and nothing\'s asked of the random numbers for it', () => {
+    let asked = 0;
+    const h = createHorde(field({ rand: () => { asked++; return rand(); } })), s = h.add(1, 0), seen = new Set();
+    for (let i = 0; i < 6; i++) {
+      s.x = 1; s.z = 0; s.y = 0; s.flat = 0; s.state = SHAMBLE; s.thrown = null; s.under = undefined;
+      run(h, away, .05);
+      const was = asked;
+      assert.equal(h.knock(0, 0, 3, 15, 'truck', { vx: MPH40 * 1.1, vz: 0 }), 1);
+      assert.equal(asked, was, 'not one random number');
+      const f = s.thrown; seen.add(`${f.vx.toFixed(2)} ${f.vz.toFixed(2)} ${f.vy.toFixed(2)} ${f.spin.toFixed(2)} ${f.twist.toFixed(2)}`);
+    }
+    assert.equal(seen.size, 6, 'six different flights');
+  });
+
+  test('some go up over the top and some off ahead of it, off whichever side they were on', () => {
+    let over = 0, ahead = 0;
+    for (let look = 0; look < 40; look++) {
+      const h = createHorde(field()), s = h.add(1, look % 2 ? .6 : -.6, { look });
+      run(h, away, .05); h.knock(0, 0, 3, 15, 'truck', { vx: MPH40, vz: 0 });
+      if (s.thrown.vx < MPH40 * .6) over++; else ahead++;
+      assert.equal(Math.sign(s.thrown.vz), Math.sign(s.z), 'off their own side');
+    }
+    assert.ok(over >= 6 && ahead >= 18, `${over} over, ${ahead} ahead`);
+  });
+
+  test('what threw them doesn\'t stop them in the air, and a wall does', () => {
+    const h = createHorde(field({ blocked: (x, z, y, flying) => !flying && x > 2 })), s = h.add(1, 0);
+    run(h, away, .05); h.knock(0, 0, 3, 15, 'truck', { vx: MPH40, vz: 0 });
+    run(h, away, .3);
+    assert.ok(s.x > 3, `through to ${s.x}`);
+    const g = createHorde(field({ blocked: (x) => x > 4 })), t = g.add(1, 0);
+    run(g, away, .05); g.knock(0, 0, 3, 15, 'truck', { vx: MPH40, vz: 0 });
+    for (let k = 0; k < 120 && t.thrown; k++) g.update(1 / 60, away);
+    assert.ok(t.x <= 4, `stopped at ${t.x}`);
+  });
+
+  test('calming everyone down, as coming to after a try does, leaves anyone flung to get up sore and go home all the same', () => {
+    const h = createHorde(field()), s = h.add(1, 0), t = h.add(-20, 0);
+    run(h, away, .05); h.knock(0, 0, 3, 6, 'truck', { vx: MPH40, vz: 0 }); t.state = HUNTING;
+    for (let k = 0; s.thrown && k < 300; k++) h.update(1 / 60, away);
+    h.calm();
+    assert.equal(s.state, STUNNED); assert.ok(h.down(s) > 0, 'still down'); assert.equal(t.state, SHAMBLE, 'and anyone else calmed as ever');
+    run(h, away, 8);
+    assert.equal(h.down(s), 0); assert.ok(s.homeward && s.sore > 0, 'up, sore and going home'); assert.equal(s.flop, null);
+  });
+
+  test('with reduced motion they fly without turning over or flailing', () => {
+    const h = createHorde(field()), s = h.add(1, 0);
+    run(h, away, .05); h.knock(0, 0, 3, 15, 'truck', { vx: MPH40 * 1.3, vz: 0, still: true });
+    run(h, away, .4);
+    assert.ok(s.y > 0 && s.x > 4, 'still flying'); assert.equal(s.tumble, 0); assert.equal(s.twist, 0); assert.equal(s.flop.t, 0);
+  });
+});
+
 describe('knocked over by something that isn\'t him', () => {
   const p = { ...still, noise: 14, canGrab: false };
   // after him already, without waiting for the second

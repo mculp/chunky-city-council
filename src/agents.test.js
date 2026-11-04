@@ -132,6 +132,12 @@ describe('who they are', () => {
     assert.equal(new Set(list.map((w) => w.says)).size, data.mutters.length);
     assert.equal(personOf(41, data, looks).says, personOf(41, data, looks).says);
   });
+
+  test('and flung by what he\'s driving, one of the two lines the Creative Director wrote for the way home, by their number', () => {
+    assert.deepEqual(data.flung, ['...had the right of way...', '...nobody signals no more...']);
+    assert.ok(list.every((w) => data.flung.includes(w.flungSays)));
+    assert.equal(new Set(list.map((w) => w.flungSays)).size, 2);
+  });
 });
 
 describe('how they take it', () => {

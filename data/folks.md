@@ -143,7 +143,7 @@ Then that one stops and turns to him and comes, and so does anyone gone quiet wi
 
 Anyone whose number is under 90°, folded further over than a table, comes for him folded over like that and **scuttles**: a quick shuffle on their feet with their arms swinging, and never on their hands. They're 8% quicker than the ones who stand up: 3.24 m/s hunting against 3. That's about half of the ones who've gone quiet and every one who's burnt down. At 4.4, and a good deal more with RUN, he always gets away from either.
 
-**Muttering.** Within 7 m of him, someone gone quiet who's on the screen says their line over their head, small and faint. It's one of the twenty in `mutters`, picked by their number, which the Creative Director wrote. It lasts 3.2 seconds, drifting up a little as it fades, and the same person doesn't say it again for 9 to 16 seconds. It's two at once at most, with someone new twice a second. With reduced motion it's there at once and fades out without moving. Within 220 m of Toni's house, once he's seen one of her frogs, about a third of them, a different third every 40 seconds, ask him `word` from `data/toni.json` instead: "Did she show you Tuba?", with one of the frogs he's seen, picked by their number. `data/toni.md` has the rest. That's all anyone in the crowd says, and nothing new is made up for them. Whether they should say more, with a real AI model, is the owner's call.
+**Muttering.** Within 7 m of him, someone gone quiet who's on the screen says their line over their head, small and faint. It's one of the twenty in `mutters`, picked by their number, which the Creative Director wrote. It lasts 3.2 seconds, drifting up a little as it fades, and the same person doesn't say it again for 9 to 16 seconds. It's two at once at most, with someone new twice a second. With reduced motion it's there at once and fades out without moving. Within 220 m of Toni's house, once he's seen one of her frogs, about a third of them, a different third every 40 seconds, ask him `word` from `data/toni.json` instead: "Did she show you Tuba?", with one of the frogs he's seen, picked by their number. `data/toni.md` has the rest. On the way home after being flung by what he's driving, it's their line from `flung` instead, below. That's all anyone in the crowd says, and nothing new is made up for them. Whether they should say more, with a real AI model, is the owner's call.
 
 The numbers are `HOW.burnt`, `HOW.burntOut` and `HOW.hips` in `src/agents.js`, `riled`, `snatch` and `scuttle` in `src/horde.js`, and `MUTTER` in `index.html`. `npm run quiet` plays it in Chrome.
 
@@ -191,6 +191,20 @@ Two things used to end someone for good, and nothing does now. Whatever's happen
 
 **The train** throws whoever it hits clear of the tracks, which is `trainThrows` in `index.html`. They lie where they land, in the ditch, for 30 to 36 seconds if it was the side of it and 45 to 55 if it was the front, longer than any swing or blast or pickup keeps anyone down, getting up included. Then they get up, and they're **sore**: whatever they were doing they've had enough of it, so even someone who was after him goes home, at 0.7 of their pace, with a limp, and for `soreFor`, 20 seconds more once they're there. The front throws them further and harder than the side. With reduced motion they don't turn over on the way. Nobody holds it against him, but they keep off the spot, as they do a fire, and `data/railroad.md` has the rest. Someone thrown off a trestle lands in the river.
 
+**Flung.** Anything he's driving at 40 mph or more (`flingFrom`, 17.9 m/s) sends whoever it hits flying instead of knocking them over, which is `fling` in `src/horde.js`:
+
+- **Where they go.** About one in three (`flungOver`) go up over the top of it and come down behind. The rest go off ahead of it, off whichever side of its middle they were on.
+- **How far.** The faster it's going, the higher and further: at 45 mph, about 1.3 to 3.2 m up and 14 to 29 m on. They bounce off the road once or twice (`bounces`), less each time, and come down in a heap however they land.
+- **No two alike.** Each flight's worked out from who they are and how many times it's happened to them, so it's a little different every time and nothing asks the random numbers.
+- **The vehicle.** It takes the hit as a crash, a little at a time, and goes on. It doesn't stop them in the air, but a wall does.
+- **Down, then home.** They lie there as long as anything driven keeps anyone down, 16 to 20 seconds from when they land, so he's long gone. Then they get up **sore** and go home, the same as from the train, and `horde.calm()` doesn't change that.
+- **It counts as him hitting them**, the same as a swing, and they remember it. If he's still about when they're up, they keep away from his truck or come for him like anyone else.
+- **What they say.** One who's gone quiet mutters on the way, over their head like the other mutters. It's one of the two lines in `flung`, by their number, even while they're keeping away from him.
+- **A shoe.** Now and then one loses a shoe, which lands somewhere else. Nothing else ever comes off anyone.
+- **Who flies.** Only the crowd and the people at home. The kids on four-wheelers can't be touched. The cast hop clear of anything coming at them at more than 4 m/s and hop back onto their spot once it's gone by.
+
+`docs/art-direction.md` says what it looks like, and `npm run fling` plays it on a phone.
+
 **The river** has whoever the train throws in. Nobody follows anything into it. They go under, and the cottonmouths and the current have them for 10 to 18 seconds, by their number. The current's `current`, 3.5 m/s, so they come up 35 to 63 m downstream, which is far enough that nobody's near when they come up and close enough that he can see it, and inside the 150 m the crowd's worked out for. `src/river.js` says where:
 
 - Downstream is the way TIGER draws the river, from its upper end to its lower, so further along a line is further downstream. That was checked against the survey's elevations along it, and `src/river.test.js` keeps it that way round.
@@ -201,7 +215,7 @@ Two things used to end someone for good, and nothing does now. Whatever's happen
 
 Then they walk home to dry off. They're **soaked** for `dries`, 80 seconds: the cloth is dark and cold, with pale glints where the moon would find it, all of it for the first 40 and then drying. A cottonmouth hangs off one sleeve for 14 to 30 seconds by their number, and then lets go. `docs/art-direction.md` says what it looks like.
 
-Things that are only a number on them, and nowhere else: `under`, `swept`, `wet`, `snake`, `sore`, `homeward`. None of them is saved, so after a reload everyone's dry and on their feet.
+Things that are only a number on them, and nowhere else: `under`, `swept`, `wet`, `snake`, `sore`, `homeward`, `flung`, and how they flop, `flop` and `twist`. None of them is saved, so after a reload everyone's dry and on their feet.
 
 ## Shambling with them
 
@@ -259,7 +273,8 @@ The driver's drawn from the same instances as the crowd, sitting where he'd sit,
 | `others` | Everyone else's family names |
 | `women`, `men` | First names. Their lengths mustn't be divisible by 17, which is how many they skip at a time. |
 | `dressed` | A look that says which list its wearer's name comes from. Anyone else's is either. |
-| `mutters` | What the ones who've gone quiet mutter, one line each, picked by their number. The Creative Director wrote them, and they're the only words anyone in the crowd says. |
+| `mutters` | What the ones who've gone quiet mutter, one line each, picked by their number. The Creative Director wrote them, and with `flung` they're the only words anyone in the crowd says. |
+| `flung` | What one who's gone quiet mutters on the way home after being flung by what he's driving, one of the two by their number. The Creative Director wrote them. |
 
 ## Adding to it
 
