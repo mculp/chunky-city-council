@@ -1,4 +1,5 @@
-// Goes round the compound on Pine Forest Rd on a phone-sized page, with the game's own movement and real taps: up the measured drive from the road, in through every door, plays what's in the shed
+// Goes round the compound on Pine Forest Rd on a phone-sized page, with the game's own movement and real taps: up the measured drive from the road, into the woods along the road in a
+// pickup, a four-wheeler and a golf cart, which stop them everywhere but the drive, in through every door, plays what's in the shed
 // with the crowd listening, swims the pool, goes down the hill to the cabin and along its decks past the swing to the cinema and the studio, watches the screen, and breaks the projector
 // and the tank. Then that a still of the screen is all there is for anyone who's asked for less motion.
 //
@@ -103,6 +104,59 @@ const knocked = await g(() => {
   return { down: S.prop.down, t: +t.toFixed(1) };
 });
 check(`  and a truck driven into it from the road knocks it down (${knocked.t} s)`, knocked.down, knocked);
+
+// ---------------- the woods along the road in front of it. Off the road flat out into them anywhere along the frontage but the drive, square on and at an angle, a pickup is
+// stopped in them, and a four-wheeler and a golf cart, which are narrow enough to get between the trees, are stopped at the fence in front of them. Then the pickup turns in
+// off the road at the drive, with the phone's stick, and goes up it.
+const woods = await g(() => {
+  const G = __game, T = 1 / 30, road = G.map.roadById.get('pine_forest_rd').pts, F = G.compound.front, [cx, cz] = true2(1000, 660);
+  // how far off the road's line x, z is, the nearest point of it, and which way's square off it to the east there
+  const off = (x, z) => {
+    let best = { d: Infinity };
+    for (let i = 1; i < road.length; i++) {
+      const [ax, az] = road[i - 1], [bx, bz] = road[i], dx = bx - ax, dz = bz - az, l = Math.hypot(dx, dz), t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (l * l))), qx = ax + dx * t, qz = az + dz * t, d = Math.hypot(x - qx, z - qz);
+      if (d < best.d) best = { d, x: qx, z: qz, ex: dz > 0 ? dz / l : -dz / l, ez: dz > 0 ? -dx / l : dx / l };
+    }
+    return best;
+  };
+  const away = (kind) => G.vehicles.find((o) => o.kind === kind && !o.wrecked && Math.hypot(o.x - cx, o.z - cz) > 300);
+  // nose to the woods from the road's east half, flat out, until it's stopped, and how far off the road's line that is
+  const ram = (v, tz, turn) => {
+    const q = off(...true2(851, tz)), x = q.x + q.ex * 1.2, z = q.z + q.ez * 1.2;
+    G.getIn(v); v.x = x; v.z = z; v.y = G.floorAt(x, z); v.yaw = Math.atan2(q.ex, q.ez) + turn; v.f = v.K.top; v.s = 0; v.hp = v.K.hp; G.sim(T, T);
+    for (let t = 0; t < 5 && (t < 1 || Math.hypot(v.f, v.s) > .3); t += T) { G.stick(0, 1); G.sim(T, T); }
+    G.stick(0, 0); const d = off(v.x, v.z).d; if (G.driving()) G.getOut(true); G.sim(T, T);
+    return d;
+  };
+  const pickup = away('pickup'), out = { trees: F.trees.length, tries: 0, deepest: 0, fence: 0, small: [] };
+  // the small ones first, while the fence is whole
+  for (const kind of ['quad', 'golf']) { const v = away(kind); if (v) { out.small.push(kind); for (const tz of kind === 'quad' ? [600, 690, 780] : [640, 710, 765]) out.fence = Math.max(out.fence, ram(v, tz, 0)); } }
+  for (let tz = 560; tz <= 795; tz += 15) [0, .5, -.5].forEach((turn, k) => {
+    if (Math.abs(tz + k * 5 - 736) < 20) return;
+    out.deepest = Math.max(out.deepest, ram(pickup, tz + k * 5, turn)); out.tries++;
+  });
+  out.deepest = +out.deepest.toFixed(1); out.fence = +out.fence.toFixed(1); out.far = F.far;
+  // and in at the drive: south down the road and round to the left up it, with the wheels turned for the point 5 m on along the way from wherever it is, at about 5 m/s
+  const lane = G.map.lanes.filter((l) => measured.includes(l.id)).sort((a, b) => b.length - a.length)[0];
+  const way = [true2(851, 700), true2(851, 724), true2(851.3, 729.5), true2(853.2, 734), true2(857.4, 736), ...lane.pts.slice(1, 4)], v = pickup, K = v.K;
+  const along = [0]; for (let k = 1; k < way.length; k++) along.push(along[k - 1] + Math.hypot(way[k][0] - way[k - 1][0], way[k][1] - way[k - 1][1]));
+  const at = (L) => { const k = Math.max(1, along.findIndex((a) => a >= L)), f = (L - along[k - 1]) / (along[k] - along[k - 1]); return k < 1 || L >= along.at(-1) ? way.at(-1) : [way[k - 1][0] + (way[k][0] - way[k - 1][0]) * f, way[k - 1][1] + (way[k][1] - way[k - 1][1]) * f]; };
+  G.getIn(v); [v.x, v.z] = way[0]; v.y = G.floorAt(...way[0]); v.yaw = 0; v.f = v.s = 0; v.hp = K.hp; G.sim(T, T);
+  let t = 0, gone = 0;
+  for (; t < 40 && Math.hypot(way.at(-1)[0] - v.x, way.at(-1)[1] - v.z) > 2.5; t += T) {
+    // how far along the way it's got: the nearest of its points from here on, near enough
+    for (let L = gone; L < gone + 8; L += .25) { const [px, pz] = at(L), [qx, qz] = at(gone); if (Math.hypot(px - v.x, pz - v.z) < Math.hypot(qx - v.x, qz - v.z)) gone = L; }
+    const [ax, az] = at(gone + 5); let d = Math.atan2(ax - v.x, az - v.z) - v.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+    const wheels = Math.atan(2 * K.wheelbase * Math.sin(d) / 5), most = K.lock / (1 + Math.abs(v.f) / K.top * 1.5), go = Math.abs(d) > .3 ? 3 : 5;
+    G.stick(Math.max(-1, Math.min(1, -wheels / most)), Math.abs(v.f) > go + .5 ? -1 : Math.abs(v.f) > go - .5 ? 0 : 1); G.sim(T, T);
+  }
+  G.stick(0, 0); out.drive = { up: Math.hypot(way.at(-1)[0] - v.x, way.at(-1)[1] - v.z) <= 2.5, t: +t.toFixed(1), hurt: v.hp < K.hp, long: Math.round(lane.s[3]) };
+  if (G.driving()) G.getOut(true); G.sim(.2, .2);
+  return out;
+});
+check(`a pickup flat out off the road into the woods is stopped in them, ${woods.tries} times all along the frontage, square on and at an angle, ${woods.deepest} m from the road at most`, woods.tries >= 30 && woods.deepest < woods.far + 3, woods);
+check(`  and a four-wheeler and a golf cart are stopped at the fence in front of them, ${woods.fence} m from the road`, woods.small.length === 2 && woods.fence < 6, woods);
+check(`  and it turns in at the drive and goes ${woods.drive.long} m up it, touching nothing`, woods.drive.up && !woods.drive.hurt, woods.drive);
 
 // ---------------- no woods where it's been cleared
 const clear = await g(() => {

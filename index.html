@@ -267,6 +267,7 @@ import { makeLine, createTrains } from './src/trains.js';
 import { trainGeometries, TRAIN_LAMPS, gateArm } from './src/trainmodels.js';
 import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, feedBin, stockTank, frog, frogThroat, frogLids } from './src/things.js';
 import { CEMETERY, layGraves, graveSolid, onSlab, slabHead, fromCemetery } from './src/graves.js';
+import { FRONTAGE, GRASS_PINES, woodsAlong, fenceAlong, inWoods } from './src/frontage.js';
 import { createSong } from './src/song.js';
 import { RING as SHROOMS, tripAt, settle as settleRing, ringAt, pickRing } from './src/rings.js';
 import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/volley.js';
@@ -830,6 +831,13 @@ let swimY = 0;   // how high the water he's swimming in is
 const OPENING_ROAD = MAP.opening.road;
 // where things stand, in true metres from town center, so that they move with the map if its bands change
 const atTrue = (x, z) => MAP.fromTrue(x, z);
+// Along Pine Forest Rd where it passes the compound: woods a car gets in only by the drive, and the fence in front of them. src/frontage.js says where, in true metres from the road's line.
+// The fence is built heavier than the farm's, so that a four-wheeler or a golf cart, which is narrow enough to get between the trees, doesn't get through it either.
+const FRONT = (() => {
+  const line = MAP.roadById.get('pine_forest_rd').pts.map(([x, z]) => MAP.toGame(x, z)), trees = woodsAlong(line, hash), at = trees.map((t) => atTrue(t.x, t.z));
+  const x0 = Math.min(...at.map(([x]) => x)) - 3, x1 = Math.max(...at.map(([x]) => x)) + 3, z0 = Math.min(...at.map(([, z]) => z)) - 3, z1 = Math.max(...at.map(([, z]) => z)) + 3;
+  return { trees, far: FRONTAGE.far, fences: fenceAlong(line).map((run) => Object.assign(run.map(([x, z]) => atTrue(x, z)), { hp: 3 })), has: (x, z) => x > x0 && x < x1 && z > z0 && z < z1 && inWoods(line, ...MAP.toGame(x, z)) };
+})();
 // The Chunky River Bridge on Griffis Fountain Rd, at the edge of town: one lane wide, 30.7 m long, where he comes to
 const WAKE_ROAD = 'griffis_fountain_rd', WAKE_BRIDGE = MAP.crossings.find((c) => c.road === WAKE_ROAD && c.with === 'river');
 const WAKE_HALF = 2.15, WAKE_SPAN = 30.7;
@@ -1105,7 +1113,8 @@ function swayMat(params) {
   // A tree the map's river or roads took keeps its place in the random sequence and draws at no size, so the rest stay put.
   const seat = (x, z) => { const g = groundH(x, z); return g < 2.2 ? null : g; };
   // Any of them can come down, and the first scene's are found the same way as the rest
-  const firstCells = new Map(), cellKey = (cx, cz) => (cx + 32768) * 65536 + cz + 32768;
+  // and those put where they stand on purpose (FRONT), which have meshes of their own as well
+  const firstCells = new Map(), cellKey = (cx, cz) => (cx + 32768) * 65536 + cz + 32768, FIRST = { trunks, blobs, cones };
   const firstTree = (x, z, h, pine, size, ti, ci) => { const k = cellKey(Math.floor(x / 11), Math.floor(z / 11)); if (!firstCells.has(k)) firstCells.set(k, []); firstCells.get(k).push({ x, z, h, pine, size, ti, ci, first: true }); };
   for (const [x, , z, k] of hard) {
     const h = seat(x, z), gone = h === null, th = 3.2 * k; M.compose(P.set(x, h + th / 2, z), Q.identity(), gone ? S.setScalar(0) : S.set(k, th, k)); trunks.setMatrixAt(ti++, M);
@@ -1154,7 +1163,7 @@ function swayMat(params) {
     } else if (FARM.young(x, z)) {
       const rx = (cx + .5) * CELL, h = groundH(rx, z);
       if (r(0) < .9 && padWeight(rx, z) === 0 && MAP.roadGrid.nearest(rx, z) > 7) t = { x: rx, z, h, r, pine: true, young: true, size: .5 + r(4) * .35 };
-    } else if (r(0) < .62 && !first && !FARM.clear(x, z) && (FARM.edge(x, z) || fbm(x * .012 + 40, z * .012 + 40, 77, 1e6, 2) > .36)) {
+    } else if (r(0) < .62 && !first && !FARM.clear(x, z) && !FRONT.has(x, z) && (FARM.edge(x, z) || fbm(x * .012 + 40, z * .012 + 40, 77, 1e6, 2) > .36)) {
       const h = groundH(x, z), rd = MAP.roadGrid.nearest(x, z), half = rd < 32 ? MAP.roadGrid.seg.owner.width / 2 : 0;
       if (h >= 2.2 && rd > half + 4 && MAP.railGrid.nearest(x, z) > 6 && padWeight(x, z) === 0 && !(WATER.look(x, z) && WATER.d < 2)) { const pine = r(3) < .33; t = { x, z, h, r, pine, size: pine ? .8 + r(4) * .7 : .7 + r(4) * .9 }; }
     }
@@ -1199,9 +1208,9 @@ function swayMat(params) {
   }
   let lastX = 1e9, lastZ = 1e9, filled = 0;
   function redrawTree(t) {
-    if (!t.first && t.filled !== filled) return;   // it's not one of the ones being drawn right now
+    if (!t.first && !t.set && t.filled !== filled) return;   // it's not one of the ones being drawn right now
     standing(t); brokenTree(t);
-    const n = t.pine ? 3 : 5, tm = t.first ? trunks : pt, crown = t.first ? (t.pine ? cones : blobs) : (t.pine ? pc : pb);
+    const n = t.pine ? 3 : 5, own = t.set ?? (t.first ? FIRST : null), tm = own ? own.trunks : pt, crown = own ? (t.pine ? own.cones : own.blobs) : (t.pine ? pc : pb);
     tm.setMatrixAt(t.ti, TM[0]); for (let k = 1; k <= n; k++) crown.setMatrixAt(t.ci + k - 1, TM[k]);
     tm.instanceMatrix.needsUpdate = crown.instanceMatrix.needsUpdate = true;
   }
@@ -1341,6 +1350,24 @@ function swayMat(params) {
     if (wreckMode !== 'quiet') { const [x, y, z] = treeCrown(t); spray(x, y - 1, z, FEW ? 3 : 6, .12, 1.6, .05, .04, .05); }
     broken('tree', t);
   };
+  // The woods along Pine Forest Rd by the compound, and the few pines in the grass across the road from them: where they stand is said, not hashed, and each is drawn
+  // the way one of the hashed woods would be, in meshes of their own. They're found, hit, felled and burnt the same as the rest.
+  {
+    const list = [...FRONT.trees.map((w) => ({ ...w, seed: 950 })), ...GRASS_PINES.map(([x, z, size], i) => ({ x, z, size, pine: true, i, j: 0, seed: 970 }))], pines = list.filter((w) => w.pine).length;
+    const set = { trunks: new THREE.InstancedMesh(trunks.geometry, trunks.material, list.length), blobs: new THREE.InstancedMesh(blobGeo, blobs.material, (list.length - pines) * 5), cones: new THREE.InstancedMesh(coneGeo, cones.material, pines * 3) };
+    const lines = [new THREE.InstancedMesh(blobGeo, o1.material, set.blobs.count), new THREE.InstancedMesh(coneGeo, o2.material, set.cones.count)], g = new THREE.Group();
+    lines[0].instanceMatrix = set.blobs.instanceMatrix; lines[1].instanceMatrix = set.cones.instanceMatrix;
+    let bi = 0, ci = 0;
+    list.forEach((w, ti) => {
+      const [x, z] = atTrue(w.x, w.z), t = { x, z, h: groundH(x, z), pine: w.pine, size: w.size, r: (n) => hash(w.i, w.j, w.seed + n), set, ti, ci: w.pine ? ci : bi };
+      poolTree(t); set.trunks.setMatrixAt(ti, TM[0]);
+      if (t.pine) for (let k = 1; k <= 3; k++) { set.cones.setMatrixAt(ci, TM[k]); set.cones.setColorAt(ci, TC[k]); ci++; }
+      else for (let k = 1; k <= 5; k++) { set.blobs.setMatrixAt(bi, TM[k]); set.blobs.setColorAt(bi, TC[k]); bi++; }
+      const key = cellKey(Math.floor(x / CELL), Math.floor(z / CELL)); if (!firstCells.has(key)) firstCells.set(key, []); firstCells.get(key).push(t);
+    });
+    for (const m of [set.trunks, set.blobs, set.cones, ...lines]) { m.frustumCulled = false; g.add(m); }
+    scene.add(g); const [cx, cz] = atTrue(866, 680); DISTANT.push({ obj: g, x: cx, z: cz, r: 420 });
+  }
 }
 // ================================================================ water (no reflection pass, so it stays light on phones)
 const rip = Array.from({ length: 16 }, () => new THREE.Vector4(0, 0, -100, 0)), ripG = new Array(16).fill(0);
@@ -3968,13 +3995,14 @@ const WIRE_MAT = new THREE.MeshStandardMaterial({ color: '#8b8f8d', alphaMap: WI
 const FENCE_POST = new THREE.MeshStandardMaterial({ color: '#342d29', roughness: 1 });
 {
   // A run of three spans goes over at a time. It's cut wherever a road, a building or water is in the way, and the ends of a cut get a braced post, as at the real gates.
+  // The same fence runs along Pine Forest Rd in front of the compound's woods, from FRONT, with braced posts either side of the drive.
   const SPAN = 4, SPANS = 3, HIGH = 1.1, SQUARE = 300, cells = new Map();
   const inTheWay = (x, z) => { const rd = MAP.roadGrid.nearest(x, z); return (rd < MAP.roadGrid.reach && rd < MAP.roadGrid.seg.owner.width / 2 + 1.4) || !!houseAt(x, z) || !!WATER.in(x, z); };
-  for (const line of FARM.fences) {
+  for (const line of [...FARM.fences, ...FRONT.fences]) {
     const posts = [line[0]];
     for (let i = 1; i < line.length; i++) { const [ax, az] = line[i - 1], [bx, bz] = line[i], n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / SPAN)); for (let k = 1; k <= n; k++) posts.push([ax + (bx - ax) * k / n, az + (bz - az) * k / n]); }
     const runs = [];
-    for (let i = 0; i < posts.length - 1; i += SPANS) { const here = posts.slice(i, Math.min(i + SPANS, posts.length - 1) + 1); runs.push({ here, cut: here.some(([x, z]) => inTheWay(x, z)) || here.slice(1).some(([x, z], k) => inTheWay((x + here[k][0]) / 2, (z + here[k][1]) / 2)) }); }
+    for (let i = 0; i < posts.length - 1; i += SPANS) { const here = posts.slice(i, Math.min(i + SPANS, posts.length - 1) + 1); runs.push({ here, hp: line.hp ?? .5, cut: here.some(([x, z]) => inTheWay(x, z)) || here.slice(1).some(([x, z], k) => inTheWay((x + here[k][0]) / 2, (z + here[k][1]) / 2)) }); }
     runs.forEach((run, i) => {
       if (run.cut) return;
       run.braced = [!runs[i - 1] || runs[i - 1].cut, !runs[i + 1] || runs[i + 1].cut];
@@ -3994,7 +4022,7 @@ const FENCE_POST = new THREE.MeshStandardMaterial({ color: '#342d29', roughness:
         pos.push(px, ya, pz, qx, yb, qz, qx, yb + HIGH, qz, px, ya + HIGH, pz); uvs.push(along, 0, along + L, 0, along + L, 1, along, 1); idx.push(n, n + 1, n + 2, n, n + 2, n + 3); along += L;
       }
       run.count = pos.length / 3 - run.first;
-      run.prop = breakable('fence', .5, () => {
+      run.prop = breakable('fence', run.hp, () => {
         for (let i = 1; i < here.length; i++) { const w = [here[i - 1][0], here[i - 1][1], here[i][0], here[i][1], Math.max(ys[i - 1], ys[i]) + HIGH, .06]; PROP_WALLS.push(w); PROP.walls.push(w); }
         here.forEach(([x, z], i) => addBox(FENCE_POST, x, ys[i] + (HIGH + .06) / 2, z, .09, HIGH + .06, .09, 0));
         [0, 1].forEach((end) => {
@@ -9325,7 +9353,7 @@ if (TEST) {
     THREE, hills: { at: HILLS.at, slope: HILLS.slope, follow: HILLS.follow, terraces: HILLS.terraces, tracks: HILLS.tracks, here: () => HILL.uHillHere.value, uniforms: HILL, flat: hillsFlat, skyline },
     stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, STONE_CLIP, WORDS_SLAB, GRAVE_TURN, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead, song, fromCemetery: (x, z) => fromCemetery(x, z, CEMETERY_EDGE) },
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : castIron) },
-    compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, screen: () => screenMesh, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach, sign: TAXIDERMY_SIGN },
+    compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, screen: () => screenMesh, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach, sign: TAXIDERMY_SIGN, front: FRONT },
     lures: { LYING, lyingNear, flying, popping, ALARMS, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
     horde, folks, traffic, homes: HOMES, putBack, HOME: { SEE: HOME_SEE, PUT: HOME_PUT }, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, horns: hornLog, blasts: () => blastsBlown, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, kept: putBack.length, roused: horde.active.filter((s) => s.state === ROUSED).length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf,
     // the river's, for the tests: which way it flows and where it brings someone up, and what's drawn of someone soaked: how soaked the graphics card has them, the snakes on sleeves and the ones falling
