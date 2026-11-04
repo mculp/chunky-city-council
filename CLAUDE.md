@@ -6,22 +6,9 @@ Read `docs/art-direction.md` before changing anything visible. `reference/stucke
 
 The owner sends lore for the story. It goes in `docs/lore.md` in their words as soon as it's sent, built or not. Nothing gets added to it.
 
-## Rules
-
-- All art is procedural three.js. Don't add image, model or texture files.
-- Only the hero has his hoodie and his taped head. They're the owner's own. Everyone else is a radiating zombie of some degree, as the owner said in `docs/lore.md`, wearing a look from `data/looks.json`, and nobody else wears a hood.
-- No real trademarks on labels, signs, filenames or docs. Use invented brands or the orange warning triangle.
-- No Gen Z or Gen Alpha slang in game text.
-- What's really there is the source of truth: Street View and the satellite, Google Earth's included. Roads start from Census TIGER/Line data and buildings from USA Structures, but don't rely on either alone, and where one disagrees with what Street View and the satellite show, correct it to match. Don't commit any of their imagery. The owner isn't selling the game or making money from it: it's just for fun.
-- Buildings come from FEMA and ORNL's USA Structures, which is CC BY 4.0, so its credit stays with it. What a building looks like goes in `tools/structure_notes.json`, in words, and so does where its footprint's wrong. No business names, people's names or street addresses go in there, because most of these are someone's home. Real businesses go under invented names.
-- No music without rights. `data/sound.md` says what's known about the rights to what's in `audio/`.
-- Keep it working on a phone with touch controls. The target is 30+ zombies on screen at 30 fps.
-- Keep `prefers-reduced-motion` working.
-
 ## Making decisions
 
-- Technical questions: decide, and record the assumption in the PR.
-- Creative questions: don't invent characters, what the zombies are, story or dialogue. Stop and ask the owner.
+- Technical questions: decide, and record the assumption in the commit.
 
 ## Stack
 
@@ -31,6 +18,7 @@ The owner sends lore for the story. It goes in `docs/lore.md` in their words as 
 ## Data
 
 - Game data is JSON under `data/`, such as `data/roads.json`, with its schema documented alongside it.
+- Roads start from Census TIGER/Line data and buildings from FEMA and ORNL's USA Structures, which is CC BY 4.0, so its credit stays with it. Street View and the satellite, Google Earth's included, are what they're checked and corrected against, and none of Google's imagery is committed. What a building looks like, and where its footprint's wrong, is in `tools/structure_notes.json`, in words and without street addresses.
 - The smaller roads and a drive to every building are in `data/lanes.json`, documented in `data/lanes.md`. To everything that asks what road is here they're roads, but `MAP.roads` stays the graph.
 - The big farm south of the Chunky River Bridge, where the woods stop and its fences, is in `data/farm.json`, documented in `data/farm.md`.
 - Dialogue and the relationship meters are in `data/cast.json`, documented in `data/cast.md`.

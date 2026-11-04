@@ -2,7 +2,7 @@
 
 `data/looks.json` holds what everyone but the hero had on, and how far gone each of the cast is. `src/looks.js` draws it onto canvases when the game loads, and `index.html` puts those on the cast and the crowd. `npm test` checks the file.
 
-The hero isn't in here. His hoodie and his taped head are his alone, and nobody else in the game gets them or wears a hood. See `docs/art-direction.md`.
+The hero isn't in here. See `docs/art-direction.md`.
 
 Everyone in here is a radiating zombie of some degree, which is the owner's word for it, in `docs/lore.md`. What they're wearing is invented, as ordinary clothes for around here. There's no lettering on anything.
 

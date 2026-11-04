@@ -8,7 +8,7 @@ Real places are by structure id, never an address. Most of these are someone's h
 
 > npcs should not be rektguys. I may put an nft gate on this and allow people to play as their own rektguys or other PFP. npcs should be radiating zombies of varying degrees
 
-**In the game:** everyone but the player is one, and nobody else wears a hood. `docs/art-direction.md` says what that looks like. Decided around it:
+**In the game:** everyone but the player is one. `docs/art-direction.md` says what that looks like. Decided around it:
 
 - "Radiating" is read as radium green: cracks that spread from the breastbone, clothes burning through to char, eyes that go from pinpricks to full sockets, and chalk strokes coming off them. The green is a guess, and so is the rest of how it looks.
 - "Varying degrees" is one number for each of them, from nearly a person to not much but char and light. Most are in the middle.

@@ -6,7 +6,7 @@ The game should look like a hand-drawn GIF you can walk around in. It's a real 3
 
 ## How it's made
 
-Everything is procedural three.js. The game has no image, model or texture files, and new art should keep it that way. Draw it in code with the helpers in `index.html`:
+Everything so far is drawn in code with three.js, using the helpers in `index.html`:
 
 | Helper | What it does |
 |---|---|
@@ -43,11 +43,9 @@ This approach came from a failed one. Flat shapes drawn in code and set against 
 - Dark fists outlined in orange.
 - A long-neck bottle with a white chalk outline (`#f6f2ea`) and glowing cyan liquid (`#3ad9d2`). The label is black with an orange warning triangle and no lettering. The liquid stays level as the bottle tips, so it runs up into the neck.
 
-**All of this is his alone.** He's the owner's own, and nobody else in the game gets his scribbled hoodie, his orange line or the tape. Don't reuse them to save time, not even on someone in the distance.
-
 ## Everyone else
 
-Everyone else is a radiating zombie, and how far gone they are varies. That's the owner's word for it, in `docs/lore.md`. How they look is below, and the owner can overrule any of it. Nobody but the player wears a hood. `data/looks.md` explains `data/looks.json`.
+Everyone else is a radiating zombie, and how far gone they are varies. That's the owner's word for it, in `docs/lore.md`. How they look is below, and the owner can overrule any of it. `data/looks.md` explains `data/looks.json`.
 
 - **A thin person.** Narrow and stooped, with long arms and a small bare head hanging forward on its neck (`ZOMBIE_SHAPE`), so that you can tell them from him by shape alone, a long way off. They were people from around here, and they've still got on what they had on: flannel, overalls, camo with a hunter's vest, a church dress, coveralls, or no shirt. It's all in crayon rather than his scribble, with the paper's tooth in it, going dark into the outline, and it never blooms, whatever light they're standing in.
 - **How far gone** is one number from 0 to 1, and everything below goes by it. `drawRadiation` draws one map of when each spot gives way, and `zombieMat` compares the map to the number, so someone at any stage costs the same as anyone else.
@@ -172,7 +170,6 @@ The game has the reference's clean character, holds, timed bursts, full bottle, 
 - Bungee for titles, prompts, names and buttons. IBM Plex Mono for everything else.
 - Keep words sparse outside dialogue. The reference scene shows only its name, by design.
 - Any words that appear must be readable.
-- No Gen Z or Gen Alpha slang in game text.
 
 ## Motion
 
@@ -186,7 +183,6 @@ Touch comes first, because the game is played on a phone. The left thumb moves a
 
 ## What stays out of this repo
 
-- **Real trademarks.** Bottle labels and signs use invented brands or the warning triangle alone. In-world brands can come from the same family as DEL MUERTO, VOODOO HEAT, BLACK SUN, GRAVEYARD SHIFT and DEEP END. Check that a name isn't a real brand before using it.
 - **Music without rights.** The existing video captures of the bridge scene are cut to a commercial track with no licence, so neither they nor the track belong here.
 - **Google's imagery.** Street View and the satellite are the source of truth for where things are and what they look like. Roads start from Census TIGER/Line data and buildings from USA Structures, and they're corrected wherever Street View and the satellite show something else, but none of the pictures go in the repo.
 - **Reference images,** until the owner decides they can be public.

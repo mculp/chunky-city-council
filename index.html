@@ -4322,7 +4322,7 @@ function poseHero(tq) {
 }
 
 // ================================================================ townsfolk
-// What they had on is in data/looks.json, and so is how far gone each of the cast is. Nobody gets the hero's hoodie or his face: those are his alone.
+// What they had on is in data/looks.json, and so is how far gone each of the cast is.
 const LOOKS = await (await fetch('data/looks.json')).json();
 const canvasFor = (w, h, draw, repeat) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; draw(cv.getContext('2d')); return toTex(cv, repeat); };
 // The line goes from dead chalk to burning as they go, and hotter again once they've noticed something
