@@ -1,0 +1,48 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "optparse"
+require_relative "../lib/council"
+
+USAGE = <<~TEXT
+  Usage: bin/council build TICKET [--config FILE] [--ticket-file FILE] [--no-linear] [--dry-run]
+         bin/council discard TICKET [--config FILE]
+TEXT
+
+options = {config: File.join(Council::ROOT, "config/council.json"), linear: true}
+parser = OptionParser.new do |opts|
+  opts.banner = USAGE
+  opts.on("--config FILE") { |value| options[:config] = value }
+  opts.on("--ticket-file FILE") { |value| options[:ticket_file] = value }
+  opts.on("--no-linear", "Leave Linear alone after landing") { options[:linear] = false }
+  opts.on("--dry-run", "Say what would happen, and start nothing") { options[:dry_run] = true }
+end
+
+begin
+  parser.parse!(ARGV)
+  command, id = ARGV.shift(2)
+  abort USAGE unless %w[build discard].include?(command) && (id || options[:ticket_file])
+  config = Council::Config.load(options[:config])
+  Council.boot(config)
+  if command == "discard"
+    Council::Builder.new(config, runner: nil).discard(id)
+    exit
+  end
+  ticket = Giraffe::Tickets.load(identifier: id, file: options[:ticket_file])
+  if options[:dry_run]
+    puts JSON.pretty_generate("ticket" => ticket.slice("id", "title", "url"), "game_repo" => config["game_repo"],
+                              "worktree" => File.join(config["worktrees"], ticket["id"]), "builder" => config.builder,
+                              "checks" => config.check_argv("<base>"), "lands_on" => config["branch"], "linear" => options[:linear])
+    exit
+  end
+  linear = options[:linear] && (config["linear"]["done"] || config["linear"]["comment"]) ? Council::Linear.new : nil
+  outcome = Council::Builder.new(config, runner: Council.subscription_runner(config), linear: linear).build(ticket)
+  puts JSON.pretty_generate(outcome.to_h)
+  exit(outcome.status == "landed" ? 0 : 3)
+rescue StandardError => e
+  # Giraffe's errors are known only once it has loaded.
+  raise unless e.is_a?(Council::Error) || (defined?(Giraffe::Error) && e.is_a?(Giraffe::Error))
+  warn "council: #{e.message}"
+  exit 1
+end

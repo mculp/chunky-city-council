@@ -1,0 +1,13 @@
+{
+  "bash": [
+    "node tools/check.mjs",
+    "node --test",
+    "npm test",
+    "git status",
+    "git diff",
+    "git log",
+    "git show"
+  ],
+  "subagents": "sonnet",
+  "effort": "medium"
+}

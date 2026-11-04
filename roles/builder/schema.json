@@ -1,0 +1,23 @@
+{
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "questions": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1}
+      },
+      "required": ["questions"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "questions": {"type": "array", "items": {"type": "string", "minLength": 1}, "maxItems": 0},
+        "subject": {"type": "string", "minLength": 1},
+        "summary": {"type": "string", "minLength": 1},
+        "checks_run": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      },
+      "required": ["questions", "subject", "summary", "checks_run"],
+      "additionalProperties": false
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "game_repo": "~/code/chunky-survival",
+  "giraffe": "~/code/giraffe-rb",
+  "worktrees": "~/.chunky-city-council/worktrees",
+  "branch": "main",
+  "github_repo": "mculp/chunky-survival",
+  "check": ["node", "tools/check.mjs", "--changed", "{base_sha}"],
+  "check_timeout": 3600,
+  "linked": ["node_modules", ".venv", "data/raw"],
+  "protected": ["docs/lore.md", ".github/", "CLAUDE.md", ".claude/"],
+  "builder": {
+    "model": "opus",
+    "budget_usd": 8.0,
+    "max_turns": 200,
+    "call_timeout": 5400
+  },
+  "linear": {"done": true, "comment": true}
+}
