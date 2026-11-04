@@ -279,9 +279,11 @@ try {
   check(`B sees the pickup go ${away(lane, drove).toFixed(1)} m with A in it`, away(lane, drove) > 4 && !!seenTruck, { lane, drove, seenTruck });
   const seat = await bodyOf(b, A.id);
   check(`and A sat in it, ${seat ? away(seat, drove).toFixed(2) : '?'} m from its middle`, seat && away(seat, drove) < 1.5 && seat.seated, seat);
-  // it's still rolling: out it gets, and it stops dead where A gets out, on A's phone
+  // it's still rolling: out it gets, and it stops dead where A gets out, on A's phone. Out of one that's going, A dives out and rolls
+  // (CHUNKY-168), and is up again before anything else.
   await a.page.keyboard.press('e');
   await until(async () => !(await state(a)).drive);
+  await until(async () => (await state(a)).kind === 'run', 6000);
   await sleep(500);
   const where = (p) => on(p, (i) => { const v = __game.vehicles[i]; return { x: v.x, z: v.z, yaw: v.yaw, by: v.net ?? null }; }, truck.i);
   const leftOnA = await where(a), left = await where(b);
@@ -305,7 +307,9 @@ try {
     const moved = Math.hypot(after.pos[0] - bx, after.pos[2] - bz), passed = (await state(a)).drive;
     check(`A drives the pickup through where B's standing (${Math.hypot(passed.x - v.x, passed.z - v.z).toFixed(1)} m), and it nudges B ${moved.toFixed(1)} m aside`, Math.hypot(passed.x - v.x, passed.z - v.z) > ahead && moved > .5, { before, after, passed });
     check('without a scratch: B\'s hearts, B on their feet, and nothing flashing', after.hp === before.hp && after.mode === 'town' && after.kind === 'run' && !(after.inv > 0), after);
+    // and out, and if it's still going A dives out of it and is up again first
     await a.page.keyboard.press('e'); await until(async () => !(await state(a)).drive);
+    await until(async () => (await state(a)).kind === 'run', 6000);
   }
   {
     const Bnow = await me(b);

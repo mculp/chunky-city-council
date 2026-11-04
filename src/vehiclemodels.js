@@ -290,6 +290,21 @@ export function vehicleGeometries() {
   return out;
 }
 
+// The driver's door, hanging open on one he's jumped out of (CHUNKY-168): how far out its side is, where the door's back and front edges are along it,
+// and its bottom and top. It's hung at its front edge, and where it was is the dark of the inside. A four-wheeler and a golf cart haven't got one, and the
+// church's name goes across the van's, so that one's only the door.
+const DOORS = { car: [1.12, -.55, .9, .44, 1.06], pickup: [1.18, -.5, 1.12, .52, 1.18], coupe: [.93, -.9, .48, .22, .88], coupe99: [.95, -.84, .92, .24, .88], van: [1.12, .5, 1.42, .45, 1.39, false] };
+export const DOOR_OPEN = 1;
+export function doorGeometries() {
+  const out = {};
+  for (const [kind, [x, z0, z1, y0, y1, hole = true]] of Object.entries(DOORS)) {
+    const h = y1 - y0, L = z1 - z0, door = painted(new THREE.BoxGeometry(.05, h, L).translate(.025, (y0 + y1) / 2, -L / 2).rotateY(-DOOR_OPEN).translate(x, 0, z1), PAINT);
+    const geo = mergeGeometries(hole ? [door, box(x + .004, (y0 + y1) / 2, (z0 + z1) / 2, .008, h, L, DARK)] : [door]);
+    out[kind] = { geo, line: smoothed(geo) };
+  }
+  return out;
+}
+
 // Where the lamps are, on one side: the other's the mirror of it
 export const LAMPS = {
   car: { head: [.72, .84, 2.54], tail: [.78, .88, -2.56] },

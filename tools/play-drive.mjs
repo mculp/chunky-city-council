@@ -130,15 +130,21 @@ for (const kind of KINDS) {
   const turning = await g(() => { const G = __game, p = openRun(220), v = move(p.x, p.z, Math.PI / 2); G.key('w', true); G.sim(2.5, 1 / 30); const y0 = v.yaw; G.key('d', true); G.sim(.6, 1 / 30); const right = v.yaw - y0; G.key('d', false); G.key('a', true); G.sim(1.2, 1 / 30); G.key('a', false); G.key('w', false); return { right, left: v.yaw - y0 - right }; });
   check(`${kind}: D turns it right and A turns it left`, turning.right < -.05 && turning.left > .05, turning);
 
-  // ---------------- too fast to get out, then out
-  // the door won't open, which its handle says, and nothing on the screen does: what the game asks the sound for, whether or not it's on yet
+  // ---------------- out of it going, then out of it stood still
+  // At speed he dives out, and it goes on without him and stops, which npm run bail looks at closely. Its handle doesn't rattle, and nothing's
+  // said: what the game asks the sound for, whether or not it's on yet.
   const fast = await g(() => {
     const G = __game, p = openRun(220), v = move(p.x, p.z, Math.PI / 2), asked = [], play = G.sound.play;
     G.sound.play = function (name, o) { asked.push([name, o?.rate ?? 1]); return play.call(this, name, o); };
-    v.f = 12; G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); G.sim(.7, 1 / 30); G.sound.play = play;
-    return { mode: G.S.mode, toast: G.state().toast, rattles: asked.filter(([name, rate]) => name === 'vehicle.door' && rate > 1.5).length };
+    v.f = 12; G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false);
+    const went = { mode: G.S.mode, driving: !!G.driving(), roll: G.bail.roll()?.phase, coasting: G.bail.coasting().includes(v) };
+    let t = 0; for (; t < 15 && (G.bail.roll() || G.bail.coasting().includes(v)); t += 1 / 30) G.sim(1 / 30, 1 / 30);
+    G.sound.play = play;
+    return { ...went, t, kind: G.HP.kind, f: Math.hypot(v.f, v.s), wrecked: !!v.wrecked, toast: G.state().toast, rattles: asked.filter(([name, rate]) => name === 'vehicle.door' && rate > 1.5).length };
   });
-  check(`${kind}: he won't jump out at speed: the handle rattles twice, and nothing says why`, fast.mode === 'drive' && fast.rattles === 2 && !/slow/i.test(fast.toast), fast);
+  check(`${kind}: at 27 mph E has him dive out of it, and it goes on without him and stops`, fast.mode === 'town' && !fast.driving && fast.roll === 'air' && fast.coasting && fast.kind === 'run' && fast.f === 0 && !fast.wrecked && fast.rattles === 0 && !/slow/i.test(fast.toast), fast);
+  const again = await g((k) => window.board(k), kind);
+  check(`${kind}: and he can get back in it where it stopped`, again.mode === 'drive' && again.kind === kind, again);
   const o = await g(() => window.out());
   check(`${kind}: E gets him out, on his feet beside it`, o.mode === 'town' && o.gone && !o.inside && Math.abs(o.at[1] - o.floor) < .1, o);
   await snap(`${kind}-4-out`);

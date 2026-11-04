@@ -110,7 +110,8 @@ await tap('#bA');
 const seat = await g(() => ({ driving: !!G.driving(), kind: G.driving()?.kind, mode: G.S.mode, button: document.getElementById('bA').textContent.replace(/\s/g, '') }));
 check('a tap and he is in the pickup', seat.driving && seat.kind === 'pickup' && seat.button === 'GETOUT', seat);
 await snap('1-in-the-truck');
-// foot down to about 14 m/s, steering for the car with the stick, until it hits the car
+// foot down to about 14 m/s, steering for the car with the stick, until it hits the car, and then on the brakes till it's stopped, since out of
+// one that's still going he'd dive out (npm run bail has that)
 const drove = await g(() => {
   const d = G.driving(), out = { t: 0, speed: 0, noises: [] };
   for (let t = 0; t < 14; t += T) {
@@ -120,8 +121,9 @@ const drove = await g(() => {
     for (const e of H.noises) if (!out.noises.some((n) => n.kind === e.kind && n.r === e.r)) out.noises.push({ kind: e.kind, r: e.r });
     if (Math.hypot(car.x - d.x, car.z - d.z) < 6.2 && d.f < 4) break;
   }
+  G.stick(0, -1); for (let i = 0; i < 120 && Math.abs(d.f) > .3; i++) G.step(T, T);
   G.stick(0, 0); G.sim(.3, T);
-  return { ...out, w: take(), far: +Math.hypot(car.x - d.x, car.z - d.z).toFixed(1), driving: !!G.driving() };
+  return { ...out, w: take(), far: +Math.hypot(car.x - d.x, car.z - d.z).toFixed(1), driving: !!G.driving(), stopped: +d.f.toFixed(2) };
 });
 console.log(`     driving: ${drove.t.toFixed(1)} s at up to ${drove.speed.toFixed(0)} m/s; woke ${drove.w.roused.length} (${drove.w.roused.join(', ')}), ${drove.w.looked} looked up, ${drove.w.hunters} came, ${drove.w.peak} at most at once; noises ${JSON.stringify(drove.noises)}`);
 check('he drives into the parked car', drove.far < 6.5 && drove.noises.some((n) => n.kind === 'alarm' || n.kind === 'crash'), drove);

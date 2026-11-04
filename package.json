@@ -39,6 +39,7 @@
     "talk": "node tools/play-talk.mjs",
     "deaths": "node tools/play-deaths.mjs",
     "fling": "node tools/play-fling.mjs",
+    "bail": "node tools/play-bail.mjs",
     "lanes": "node tools/play-lanes.mjs",
     "sound": "node tools/play-sound.mjs",
     "sound:make": "node tools/make-sound.mjs",

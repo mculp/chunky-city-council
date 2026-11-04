@@ -262,7 +262,7 @@ import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRi
 import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, wallsOf, Sheet, PATTERN, hash2 } from './src/structures.js';
 import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
 import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, rimHit, placeVehicles, settle, speedOf } from './src/vehicles.js';
-import { vehicleGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
+import { vehicleGeometries, doorGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
 import { makeLine, createTrains } from './src/trains.js';
 import { trainGeometries, TRAIN_LAMPS, gateArm } from './src/trainmodels.js';
 import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, feedBin, stockTank, frog, frogThroat, frogLids } from './src/things.js';
@@ -4285,6 +4285,8 @@ const heroHood = buildHoodie(-.06, 0, 0, 4, 48, HERO_SHAPE);
 const heroHoodHung = buildHoodie(-.06, 0, .38, 4, 48, HERO_SHAPE);
 // swimming, it's up out of the water, looking where he's going
 const heroHoodSwim = buildHoodie(-.8, 0, 0, 4, 48, HERO_SHAPE);
+// and rolling, it flops over to whichever side of him's down, the other way from when he hangs, and back when he's on his back
+const heroHoodFlop = buildHoodie(-.06, 0, -.38, 4, 48, HERO_SHAPE);
 const heroFace = tapeMat(HERO_SHAPE);
 const heroHoodM = hoodMat(hatch[0], .32), heroSleeveM = new THREE.MeshToonMaterial({ map: hatch[1], emissiveMap: hatch[1], emissive: 0xffffff, emissiveIntensity: .32, gradientMap: toonGrad });
 const heroPantsM = new THREE.MeshToonMaterial({ map: pantsHatch[0], emissiveMap: pantsHatch[0], emissive: 0xffffff, emissiveIntensity: .35, gradientMap: toonGrad });
@@ -4350,6 +4352,8 @@ heroRoot.traverse(o => { o.layers.enable(1); if (o.material && o.material.userDa
 
 // pose the hero; limbs are redrawn 12 times a second (on twos), the body moves every frame
 const HP = { kind: 'hang', phase: 0, speed: 0, cut: 0, lag: 0, t: 0 };
+// out of a truck at speed and rolling, then getting up (CHUNKY-168): which of those, how long it's been, and how far over he is
+let roll = null;
 // A swing, as drawings: up over his shoulder, and down through whatever's in front of him. [hand x, y, z, the handle's turn]
 const SWING_POSES = [[.2, .34, -.2, -2.1], [.15, .5, -.08, -1], [.1, .16, .42, .85], [.08, -.26, .6, 1.75], [.08, -.36, .55, 2.15], [.2, -.46, .34, 2.5]], SWING_T = .46, SWING_AT = .2;
 // It turns him toward the nearest one he can reach in front of him: anywhere on his side of a right angle on a phone, and close to where he's looking with a mouse
@@ -4360,7 +4364,9 @@ const DOWN_FOR = { swing: 10, blast: 14, train: [30, 45] }, downByTruck = (speed
 let swingT = -1, swingHit = false, throwT = 0;
 function poseHero(tq) {
   const k = HP.kind, ph = HP.phase, R = hero, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
-  const head = k === 'hang' ? heroHoodHung : k === 'swim' ? heroHoodSwim : heroHood; if (R.hm.geometry !== head.geo) R.setHood(head);
+  const over = k === 'roll' && roll ? roll.beta : 0;
+  const head = k === 'hang' ? heroHoodHung : k === 'swim' ? heroHoodSwim : k === 'roll' ? (Math.sin(over) > .5 ? heroHoodHung : Math.sin(over) < -.5 ? heroHoodFlop : Math.cos(over) < 0 ? heroHoodSwim : heroHood) : heroHood;
+  if (R.hm.geometry !== head.geo) R.setHood(head);
   knife.visible = k === 'hang' && HP.cut > 0; broom.visible = k === 'sweep';
   if (bottle.parent === hero.body) bottle.visible = k === 'hang';
   if (k === 'hang') {
@@ -4414,6 +4420,14 @@ function poseHero(tq) {
       const s = i ? 1 : -1;
       R.arm(i, V3(s * (.36 + d * .14), -.6 + d * .78 + s * f, .08 + d * .5), V3(s * .7, -.35, -.25));
       R.leg(i, V3(s * .14, -1.36 + knees * .34, -knees * .62 * (i ? 1 : .8) + (1 - d) * (i ? -.1 : .06)), V3(s * .1, -1, .8), knees * .3);
+    }
+  } else if (k === 'roll') {
+    // out of the door with his hands out past his head, then over and over with them in to his chest and his legs everywhere
+    const f = Math.sin(tq * 17) * .1, out = roll?.phase === 'air';
+    for (let i = 0; i < 2; i++) {
+      const s = i ? 1 : -1;
+      R.arm(i, out ? V3(s * .26, .4, .3) : V3(-s * .04 + s * f, -.26 + f, .42), V3(s * .7, -.3, -.25));
+      R.leg(i, V3(s * (.15 + (out ? 0 : Math.abs(f) * .8)), -1.28, out ? -.12 : s * f * 1.6), V3(s * .1, -1, .8), .4);
     }
   } else if (k === 'struggle') {
     const f = Math.sin(tq * 21) * .16;
@@ -4544,9 +4558,17 @@ for (const n of Object.values(NPCS)) if (!n.ghost) { solid(n.root.position.x - .
 // it, or the other way if that's into a wall or the water. They watch it go by and hop back onto their spot, once neither he nor anything's stood on it. They're nothing to run into while they're off it,
 // and they're off again if anything else comes at them. It's never anything random, so the opening's sequence isn't touched.
 const JUMP = { from: 4, within: .9, clear: 1.4, hop: .35, high: .5, watch: 1.6 };
+// what's going: what he's driving, what's going on without him, and what's been thrown
+const _goingNow = [];
+function goingNow() {
+  _goingNow.length = 0; if (driving) _goingNow.push(driving);
+  for (const c of coasting) _goingNow.push(c.v);
+  for (const v of loose) _goingNow.push(v);
+  return _goingNow;
+}
 function jumpClear(n, dt) {
   const r = n.root.position, j = n.jump;
-  if (!j || j.t >= JUMP.hop) for (const v of driving ? [driving, ...loose] : loose) {
+  if (!j || j.t >= JUMP.hop) for (const v of goingNow()) {
     const vx = v.loose ? v.loose.vx : Math.sin(v.yaw) * v.f - Math.cos(v.yaw) * v.s, vz = v.loose ? v.loose.vz : Math.cos(v.yaw) * v.f + Math.sin(v.yaw) * v.s, sp = Math.hypot(vx, vz);
     if (sp < JUMP.from) continue;
     // in its way: along where it's going, from its back to a second or so ahead of its front, and no further to the side than it's wide
@@ -4563,7 +4585,7 @@ function jumpClear(n, dt) {
   if (!j) return;
   j.t += dt;
   const back = j.t > JUMP.hop + JUMP.watch;
-  if (back && (Math.hypot(player.pos.x - n.spot.x, player.pos.z - n.spot.z) < .9 || [driving, ...loose].some((v) => v && inVehicle(v, n.spot.x, n.spot.z, .5)) || parkedAt(n.spot.x, n.spot.z, n.spot.y + .5))) { j.t = JUMP.hop + JUMP.watch; return; }
+  if (back && (Math.hypot(player.pos.x - n.spot.x, player.pos.z - n.spot.z) < .9 || goingNow().some((v) => inVehicle(v, n.spot.x, n.spot.z, .5)) || parkedAt(n.spot.x, n.spot.z, n.spot.y + .5))) { j.t = JUMP.hop + JUMP.watch; return; }
   const k = Math.min(1, back ? (j.t - JUMP.hop - JUMP.watch) / JUMP.hop : j.t / JUMP.hop), [ax, az, bx, bz] = back ? [j.x1, j.z1, n.spot.x, n.spot.z] : [j.x0, j.z0, j.x1, j.z1];
   r.set(ax + (bx - ax) * k, n.spot.y + Math.sin(Math.PI * k) * JUMP.high, az + (bz - az) * k);
   if (back && k >= 1) { n.jump = null; n.box[4] = n.top; }
@@ -6413,8 +6435,8 @@ const horde = createHorde({
   quiet: (s) => !burntDown(s.who, Math.hypot(...MAP.toGame(s.x, s.z))),
   // and how far over they stand goes with it
   hips: (s) => hipsOf(s.who, Math.hypot(...MAP.toGame(s.x, s.z))),
-  // and what he's driving, except to anyone it's thrown up in the air, who goes over it
-  blocked: (x, z, y, flying) => blocked(x, z, y) || floorOnce(x, z) - y > .7 || (!flying && driving !== null && inVehicle(driving, x, z, .3)),
+  // and what he's driving, or what's going on without him, except to anyone it's thrown up in the air, who goes over it
+  blocked: (x, z, y, flying) => blocked(x, z, y) || floorOnce(x, z) - y > .7 || (!flying && ((driving !== null && inVehicle(driving, x, z, .3)) || coasting.some((c) => inVehicle(c.v, x, z, .3)))),
   water: (x, z) => floorOnce(x, z) < WATER.level(x, z) - .1,
   level: (x, z) => WATER.level(x, z),
   floorAt: floorOnce,
@@ -6560,7 +6582,8 @@ function updateCrowd(dt, M) {
   feel.acting = shambling;
   feel.noise = M === 'town' ? HP.speed / 4.4 * 14 : M === 'drive' && !driving.wrecked && !driving.drowned ? driving.K.noise * (.5 + .5 * Math.abs(driving.f) / driving.K.top) : 0;
   feel.hidden = (M !== 'town' && M !== 'grabbed' && M !== 'drive') || horde.inSanctuary(P.x, P.z) || barredIn(P);
-  feel.canGrab = M === 'town' && player.inv <= 0; feel.driving = M === 'drive';
+  // and nobody can get hold of him while he's rolling out of a truck and getting up
+  feel.canGrab = M === 'town' && player.inv <= 0 && !roll; feel.driving = M === 'drive';
   horde.update(dt, feel);
 }
 // ================================================================ vehicles
@@ -6592,6 +6615,13 @@ for (const [kind, n] of Object.entries(VEH_CAP)) {
   vehSeeds[kind] = new THREE.InstancedBufferAttribute(new Float32Array(n), 1).setUsage(THREE.DynamicDrawUsage); vehGeos[kind].geo.setAttribute('iSeed', vehSeeds[kind]);
   vehBodies[kind] = vehMesh(vehGeos[kind].geo, vehMat, n); vehBodies[kind].instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage);
   vehLines[kind] = vehMesh(vehGeos[kind].line, outlineMat(INK, 1.7), n, vehBodies[kind]);
+}
+// The driver's door standing open on any he's jumped out of, drawn where its body is, which is two draw calls a kind while there's one about
+const DOOR_CAP = 3, doorGeos = doorGeometries(), vehDoors = {}, vehDoorLines = {}, doorSeeds = {}, doorsUsed = {};
+for (const [kind, g] of Object.entries(doorGeos)) {
+  doorSeeds[kind] = new THREE.InstancedBufferAttribute(new Float32Array(DOOR_CAP), 1).setUsage(THREE.DynamicDrawUsage); g.geo.setAttribute('iSeed', doorSeeds[kind]);
+  vehDoors[kind] = vehMesh(g.geo, vehMat, DOOR_CAP); vehDoors[kind].instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(DOOR_CAP * 3), 3).setUsage(THREE.DynamicDrawUsage);
+  vehDoorLines[kind] = vehMesh(g.line, outlineMat(INK, 1.7), DOOR_CAP, vehDoors[kind]);
 }
 const VEH_WHEELS = Object.values(VEH_CAP).reduce((a, b) => a + b, 0) * 4;
 const vehWheels = vehMesh(vehGeos.wheel.geo, vehMat, VEH_WHEELS); vehWheels.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(VEH_WHEELS * 3).fill(1), 3);
@@ -6727,11 +6757,13 @@ traffic.T.cars = FEW ? 3 : 4; traffic.T.riders = FEW ? 2 : 3;
 
 // Which are drawn, nearest first, twice a second. Whoever's being driven is always one of them, in slot 0 so that its rust stays put.
 const vehShown = []; let vehPicked = -1, vehDirty = true, vehStep = -1, driving = null;
+// and what's going on without him since he jumped out of it, until it stops
+const coasting = [];
 function pickVehicles() {
   vehPicked = Math.floor(time * 2); vehShown.length = 0;
   const P = player.pos;
   // anyone moving comes before anything parked, so there's always room for them
-  for (const v of VEHICLES) { v.seen = v === driving ? -1 : Math.hypot(v.x - P.x, v.z - P.z); v.rank = v === driving ? -1e6 : v.ai ? v.seen - 1e4 : v.seen; if (v.seen < VEH_SEE) vehShown.push(v); }
+  for (const v of VEHICLES) { v.seen = v === driving ? -1 : Math.hypot(v.x - P.x, v.z - P.z); v.rank = v === driving ? -1e6 : v.ai || v.coast ? v.seen - 1e4 : v.seen; if (v.seen < VEH_SEE) vehShown.push(v); }
   vehShown.sort((a, b) => a.rank - b.rank); vehDirty = true;
 }
 const _vb = new THREE.Matrix4(), _vl = new THREE.Matrix4(), _vm = new THREE.Matrix4(), _ve = new THREE.Euler(0, 0, 0, 'YXZ'), _vs = new THREE.Vector3(), _vc = new THREE.Color(), vehUsed = {};
@@ -6739,13 +6771,14 @@ const toBody = (v) => _vb.makeRotationFromEuler(_ve.set(v.pitch, v.yaw, v.roll))
 // Redrawn every frame while he's driving, because a vehicle stepping along at twelve frames a second at thirty metres a second would be two metres at a time.
 // The wheels still turn on the game's own step.
 function drawVehicles(step) {
-  const moving = traffic.cars.length + traffic.riders.length > 0;
-  if (step !== vehStep) { if (driving) driving.shownSpin = driving.spin; if (moving) { for (const c of traffic.cars) c.v.shownSpin = c.v.spin; for (const c of traffic.riders) c.v.shownSpin = c.v.spin; } drawPuffs(); }
+  const moving = traffic.cars.length + traffic.riders.length + coasting.length > 0;
+  if (step !== vehStep) { if (driving) driving.shownSpin = driving.spin; if (moving) { for (const c of traffic.cars) c.v.shownSpin = c.v.spin; for (const c of traffic.riders) c.v.shownSpin = c.v.spin; for (const c of coasting) c.v.shownSpin = c.v.spin; } drawPuffs(); }
   if (vehTag.visible && S.mode !== 'town') vehTag.visible = false;
   vehStep = step;
   if (moving) drawTrafficLamps();
   if (!driving && !vehDirty && !moving) return;
   for (const k in VEH_CAP) vehUsed[k] = 0;
+  for (const k in vehDoors) doorsUsed[k] = 0;
   let w = 0;
   vanWords.visible = false; for (const k in camaroBadges) camaroBadges[k].visible = false;
   for (const v of vehShown) {
@@ -6753,6 +6786,10 @@ function drawVehicles(step) {
     vehUsed[v.kind]++;
     toBody(v).toArray(vehBodies[v.kind].instanceMatrix.array, i * 16);
     if (vehDirty) { _vc.copy(v.paint).lerp(VEH_BURNT, v.wrecked ? .94 : (1 - v.hp / K.hp) * .55); vehBodies[v.kind].setColorAt(i, _vc); vehSeeds[v.kind].array[i] = v.tone; }
+    if (v.open && vehDoors[v.kind] && doorsUsed[v.kind] < DOOR_CAP) {
+      const d = doorsUsed[v.kind]++; _vb.toArray(vehDoors[v.kind].instanceMatrix.array, d * 16);
+      vehDoors[v.kind].setColorAt(d, _vc.copy(v.paint).lerp(VEH_BURNT, v.wrecked ? .94 : (1 - v.hp / K.hp) * .55)); doorSeeds[v.kind].array[d] = v.tone;
+    }
     if (v.kind === 'van') { vanWords.matrix.copy(_vb); vanWords.matrixWorldNeedsUpdate = true; vanWords.visible = !v.wrecked; vanWordsMat.color.setScalar(1 - (1 - v.hp / K.hp) * .55); }
     const badges = camaroBadges[v.kind]; if (badges) { badges.matrix.copy(_vb); badges.matrixWorldNeedsUpdate = true; badges.visible = !v.wrecked; }
     for (let a = 0; a < 2; a++) for (const s of [-1, 1]) {
@@ -6765,6 +6802,11 @@ function drawVehicles(step) {
     const n = vehUsed[k], b = vehBodies[k], l = vehLines[k];
     b.count = l.count = n; b.visible = l.visible = n > 0; b.instanceMatrix.needsUpdate = true;
     if (vehDirty) { b.instanceColor.needsUpdate = true; vehSeeds[k].needsUpdate = true; }
+  }
+  for (const k in vehDoors) {
+    const n = doorsUsed[k], b = vehDoors[k], l = vehDoorLines[k];
+    b.count = l.count = n; b.visible = l.visible = n > 0;
+    if (n) { b.instanceMatrix.needsUpdate = b.instanceColor.needsUpdate = doorSeeds[k].needsUpdate = true; }
   }
   vehWheels.count = vehWheelLines.count = w; vehWheels.visible = vehWheelLines.visible = w > 0; vehWheels.instanceMatrix.needsUpdate = true;
   vehDirty = false;
@@ -6779,8 +6821,9 @@ const _tl = new THREE.Vector3(), _tq = new THREE.Quaternion(), _ts = new THREE.V
 function drawTrafficLamps() {
   const pos = trafficLamps.geometry.attributes.position, col = trafficLamps.geometry.attributes.color;
   let n = 0, pools = 0;
-  for (const list of [traffic.cars, traffic.riders]) for (const c of list) {
-    const v = c.v, L = LAMPS[v.kind]; if (!L || n >= TRAFFIC_MOST * 4) continue;
+  // and what's going on without him, its lamps on till it stops
+  for (const list of [traffic.cars, traffic.riders, coasting]) for (const c of list) {
+    const v = c.v, L = LAMPS[v.kind]; if (!L || v.wrecked || v.drowned || n >= TRAFFIC_MOST * 4) continue;
     const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw), away = Math.hypot(camera.position.x - v.x, camera.position.z - v.z) || 1, front = ((camera.position.x - v.x) * fx + (camera.position.z - v.z) * fz) / away;
     // a lamp's only seen from the end it's on, and not from right beside it, where a point's as big as the screen
     const close = sstep(3, 7, away), head = sstep(0, .5, front) * 1.3 * close, tail = sstep(0, .5, -front) * (c.ahead < 30 && c.what ? 1.4 : .45) * close;
@@ -6813,8 +6856,8 @@ function vehicleInReach() {
   const P = player.pos;
   let best = null, tag = null, td = 14;
   for (const v of vehShown) {
-    // nobody gets on with a kid, and nobody can get in something that's moving
-    if (v.wrecked || v.drowned || v.kid || (v.ai && Math.abs(v.f) > 1.2)) continue;
+    // nobody gets on with a kid, and nobody can get in something that's moving, his own that he's jumped out of included
+    if (v.wrecked || v.drowned || v.kid || ((v.ai || v.coast) && Math.abs(v.f) > 1.2)) continue;
     if (v.seen < td) { td = v.seen; tag = v; }
     if (!best && inVehicle(v, P.x, P.z, 1.5)) best = v;
   }
@@ -6825,8 +6868,8 @@ function vehicleInReach() {
 function getIn(v) {
   if (v.ai) traffic.letGo(v.ai, 'taken');
   for (const k in _engines) SFX.loop(`engine.${k}`, 0);
-  if (v.loose) { loose.splice(loose.indexOf(v), 1); v.loose = null; } else markVehicle(v, false);
-  driving = v; vehTag.visible = false; vehPicked = -1;
+  if (v.loose) { loose.splice(loose.indexOf(v), 1); v.loose = null; } else if (v.coast) { coasting.splice(coasting.indexOf(v.coast), 1); v.coast = null; } else markVehicle(v, false);
+  driving = v; v.open = false; vehTag.visible = false; vehPicked = -1; vehDirty = true;
   SFX.play('vehicle.door', { x: v.x, z: v.z }); if (!v.wrecked && !v.drowned) SFX.play('vehicle.start'); SFX.say('drive');
   S.mode = 'drive'; HP.kind = 'drive'; HP.speed = 0; prompt(null);
   heroRoot.rotation.order = 'YXZ'; hero.body.scale.setScalar(HERO_SCALE * v.K.size);
@@ -6835,33 +6878,145 @@ function getIn(v) {
   scene.add(gLight); gLight.color.set('#ffe6b0'); gLight.distance = 34; gLight.decay = 1.5; headlights.visible = true;
 }
 // A door that won't open says so with its handle, tried twice: the door's own sound, pitched up and short. Only one of it plays at
-// a time, so the second try waits for the first to finish.
+// a time, so the second try waits for the first to finish. That's when there's no room either side for it to open, and in a town
+// that's shared, when somebody else is in it already.
 function rattle(v) {
   if (!v) return;
   const at = { x: v.x, z: v.z };
   SFX.play('vehicle.door', { ...at, rate: 1.9, gain: .45 }); after(.6, () => SFX.play('vehicle.door', { ...at, rate: 2.1, gain: .35 }));
 }
-// The way out: his own side first, then the other, then behind and in front
+// Going any faster than he walks when he gets out, he shoves the door open and goes out of it headfirst, going the way it was as well as
+// out from it, so he hits the ground and rolls along it, over and over and slowing, then lies there face down a moment and gets up
+// (CHUNKY-168). The faster it was going, the farther and longer, and he's up in under three seconds whatever it was. None of it costs
+// him a heart, and whatever he rolls into still can. With reduced motion he's on the ground beside the door at once, and gets up.
+// push and pop are how hard he goes out and up, keep how much of what he was going he's still got when he lands, shortest and longest how
+// long the rolling lasts, in seconds, and up how long getting up does. drift and drag are what it does without him: how far off its line
+// it wanders, as a turn of the wheel, and how much quicker it slows in gear with nobody's foot on anything, in m/s².
+const BAIL = { from: 4.4, push: 2.6, pop: .6, keep: .8, shortest: .45, longest: 1.65, up: .8, drift: .03, drag: 1.4 };
+const _rollAxis = new THREE.Vector3(0, 0, 1), _rollQ = new THREE.Quaternion(), _rollE = new THREE.Euler();
+// The way out: his own side first, then the other, then behind and in front. Going any faster than he walks, it's out of one side or
+// the other, and a way out that's forced on him, by the tank going up or the end of the chapter or somebody else being in it, stops it
+// where it is first, the way it always has.
 function getOut(force = false) {
-  const v = driving, K = v.K, fx = Math.sin(v.yaw), fz = Math.cos(v.yaw);
-  if (!force && speedOf(v) > 7 && !v.wrecked) { rattle(v); return false; }
+  const v = driving, K = v.K, fx = Math.sin(v.yaw), fz = Math.cos(v.yaw), dive = !force && !v.drowned && speedOf(v) > BAIL.from;
   const sx = K.width / 2 + .8, sz = K.length / 2 + .8;
-  let spot = null;
-  for (const [along, across] of [[0, sx], [0, -sx], [-sz, 0], [sz, 0]]) {
+  let spot = null, side = 1;
+  for (const [along, across] of dive ? [[0, sx], [0, -sx]] : [[0, sx], [0, -sx], [-sz, 0], [sz, 0]]) {
     const x = v.x + fx * along + fz * across, z = v.z + fz * along - fx * across;
-    if (MAP.inBounds(x, z) && !blocked(x, z, v.y + .2) && floorAt(x, z) - v.y < .7) { spot = [x, z]; break; }
+    if (MAP.inBounds(x, z) && !blocked(x, z, v.y + .2) && floorAt(x, z) - v.y < .7) { spot = [x, z]; side = Math.sign(across) || 1; break; }
   }
   if (!spot && !force) { rattle(v); return false; }
   const [x, z] = spot ?? [v.x, v.z], y = floorAt(x, z);
-  driving = null; v.f = v.s = v.steer = 0; markVehicle(v, true); vehPicked = -1;
+  driving = null; vehPicked = -1;
+  // what he dives out of goes on without him, except in a town that's shared, where it's left where he got out, the same on every phone
+  if (dive && !net) coast(v); else { v.f = v.s = v.steer = 0; markVehicle(v, true); }
   heroRoot.rotation.set(0, v.yaw, 0); heroRoot.rotation.order = 'XYZ'; hero.body.scale.setScalar(HERO_SCALE);
   ghost.add(gLight); gLight.position.set(0, 0, 0); gLight.color.set('#ff9a46'); gLight.distance = 12; gLight.decay = 1.8; headlights.visible = false;
   player.pos.set(x, y, z); player.yaw = v.yaw; player.grounded = true; player.vy = 0; player.kb.set(0, 0);
   SFX.play('vehicle.door'); for (const n of VEHICLE_LOOPS) SFX.loop(n, 0);
   const lv = WATER.level(x, z);
   if (y < lv - .3) { swimY = lv; player.pos.y = lv; S.mode = 'swim'; HP.kind = 'swim'; objective('Swim to the bank.'); }
+  else if (dive) bail(v, side);
   else { S.mode = 'town'; HP.kind = 'run'; }
   return true;
+}
+// Out of the door on that side: going what it was going and out from it, lying across that with his head the way he went, so that
+// rolling's along it. k says which way round about him that is.
+function bail(v, side) {
+  const K = v.K, fx = Math.sin(v.yaw), fz = Math.cos(v.yaw), ox = fz * side, oz = -fx * side, P = player.pos;
+  const vx = fx * v.f - fz * v.s + ox * BAIL.push, vz = fz * v.f + fx * v.s + oz * BAIL.push, sp = Math.hypot(vx, vz) || 1, dx = vx / sp, dz = vz / sp;
+  const k = dz * ox - dx * oz < 0 ? -1 : 1;
+  S.mode = 'town'; S.act = null; HP.speed = 0; player.running = false; player.yaw = Math.atan2(dz * k, -dx * k);
+  if (reduceMotion) {
+    roll = { phase: 'up', t: 0, k, dx, dz, beta: 0, pitch: 1.46, out: v }; HP.kind = 'down'; HP.down = 1;
+    SFX.play('hit.flesh', { rate: .72, gain: .8 });
+    return;
+  }
+  // clear of the door, and of it, which doesn't hit him on his way out of it
+  P.set(v.x + ox * (K.width / 2 + .45) + fx * K.seat[2], v.y + K.seat[1] * .5, v.z + oz * (K.width / 2 + .45) + fz * K.seat[2]);
+  roll = { phase: 'air', t: 0, k, dx, dz, vx, vz, vy: BAIL.pop, beta: 0, pitch: 1.2, half: 0, from: 0, to: 0, t0: 0, T: 1, v0x: 0, v0z: 0, out: v };
+  HP.kind = 'roll'; player.grounded = false;
+}
+// He hits the ground with what he's got left of it, and rolls over a whole number of times, more the faster it is, so that he finishes
+// face down
+function land(r, fl) {
+  const P = player.pos, was = Math.hypot(r.vx, r.vz) || 1, u = was * BAIL.keep, turns = u < 1 ? 0 : Math.max(1, Math.round(1 + u * .12));
+  P.y = fl; r.phase = 'roll'; r.t = 0; r.pitch = 1.46;
+  r.T = turns ? Math.min(BAIL.longest, BAIL.shortest + u * .06) : .25; r.v0x = r.vx / was * u; r.v0z = r.vz / was * u;
+  r.from = 0; r.to = r.k * turns * Math.PI * 2; r.t0 = 0; r.half = 0;
+  SFX.play('hit.flesh', { rate: .72, gain: .8 }); footstep(1.5);
+  if (!reduceMotion) cam.shake = Math.max(cam.shake, .25);
+  if (!pavedAt(P.x, P.z)) puff(P.x - r.dx * .6, fl + .1, P.z - r.dz * .6, .16 + u * .008, .55, .5);
+  if (folkOut) horde.noise(P.x, P.z, 16, .6, 'bounce');
+}
+function stepRoll(dt) {
+  const r = roll, P = player.pos;
+  // whatever's had him since, a train, the river or the fever, has him now
+  if (S.mode !== 'town' || trainGot) { roll = null; if (HP.kind === 'roll') HP.kind = 'air'; return; }
+  r.t += dt;
+  if (r.phase === 'up') {
+    // up on the 12 fps step, the way he gets up after the fever, and he dusts himself off
+    HP.down = 1 - sstep(0, BAIL.up, Math.floor(r.t * 12) / 12);
+    if (!r.dusted && r.t > BAIL.up * .45) { r.dusted = true; for (const s of [-1, 1]) puff(P.x + Math.cos(player.yaw) * s * .32, P.y + .7, P.z - Math.sin(player.yaw) * s * .32, .1, .6, .4); }
+    if (r.t >= BAIL.up) { roll = null; HP.kind = 'run'; HP.down = 0; player.grounded = true; }
+    return;
+  }
+  const air = r.phase === 'air';
+  if (!air) { const left = Math.max(0, 1 - r.t / r.T); r.vx = r.v0x * left; r.vz = r.v0z * left; }
+  let nx = P.x + (r.vx + player.kb.x) * dt, nz = P.z + (r.vz + player.kb.y) * dt;
+  player.kb.multiplyScalar(Math.exp(-dt * 5));
+  // into anything that'd stop him on his feet he stops, and finishes the turn he's on where he is
+  const into = (x, z) => floorAt(x, z) - P.y > .6 || blockedInTown(x, z, P.y + .3);
+  if (into(nx, nz)) {
+    if (!into(nx, P.z)) nz = P.z; else if (!into(P.x, nz)) nx = P.x; else { nx = P.x; nz = P.z; }
+    if (nx === P.x && nz === P.z && !r.stopped) {
+      r.stopped = true; r.vx = r.vz = r.v0x = r.v0z = 0;
+      if (!air) { r.from = r.beta; r.to = r.k * Math.round(Math.abs(r.beta) / (Math.PI * 2)) * Math.PI * 2; r.t0 = r.t; r.T = r.t + .3; }
+      SFX.play('hit.flesh', { rate: .6, gain: .5 });
+    }
+  }
+  P.x = nx; P.z = nz;
+  const fl = floorAt(P.x, P.z);
+  if (air) {
+    r.vy -= 15 * dt; P.y += r.vy * dt; r.pitch = Math.min(1.46, r.pitch + dt * 3);
+    if (P.y <= fl) land(r, fl);
+  } else {
+    P.y += (fl - P.y) * Math.min(1, dt * 18);
+    const e = Math.min(1, (r.t - r.t0) / Math.max(.01, r.T - r.t0));
+    r.beta = r.from + (r.to - r.from) * (1 - (1 - e) * (1 - e));
+    // a scuff each time he's over onto his front or his back
+    const half = Math.floor(Math.abs(r.beta) / Math.PI + .5);
+    if (half > r.half) { r.half = half; footstep(.5 + .7 * (1 - e)); if (!pavedAt(P.x, P.z)) puff(P.x - r.dx * .7, fl + .06, P.z - r.dz * .7, .08 + .08 * (1 - e), .45, .35); }
+    if (r.t >= r.T) { r.phase = 'up'; r.t = 0; r.beta = r.to; HP.kind = 'down'; HP.down = 1; player.grounded = true; }
+  }
+  // and into the water, off a bank or a bridge
+  const lv = WATER.level(P.x, P.z);
+  if (P.y < lv + .05 && fl < lv - .3) { roll = null; SFX.play('splash.small'); swimY = lv; P.y = lv; S.mode = 'swim'; HP.kind = 'swim'; objective('Swim to the bank.'); }
+}
+// What he's jumped out of goes on without him, its door hanging open, off its line a little and slowing, until it stops or it hits
+// something. To the crowd and the cast it's anything that's going, and it's parked again where it stops.
+function coast(v) {
+  const c = { v, drift: (hash(Math.round(v.x), Math.round(v.z), 1681) < .5 ? -1 : 1) * BAIL.drift, T: { puff: 0, smoke: 0 } };
+  v.coast = c; v.open = true; coasting.push(c); vehDirty = true;
+}
+function updateCoasting(dt) {
+  const P = player.pos;
+  for (let i = coasting.length - 1; i >= 0; i--) {
+    const c = coasting[i], v = c.v;
+    // thrown by something, which has it now
+    if (v.loose || v === driving) { coasting.splice(i, 1); v.coast = null; continue; }
+    const was = v.drowned, r = stepVehicle(v, { gas: 0, steer: c.drift, brake: false }, dt, DRIVE_WORLD);
+    if (v.grounded) v.f -= Math.sign(v.f) * Math.min(Math.abs(v.f), BAIL.drag * dt);
+    if (vehicleGoes(v, r, dt, false, c.T) || (v.drowned && !was)) wreckedNow(v, false);
+    // and him, if it comes at him, but not on his way out of it
+    if (!driving && roll?.out !== v && speedOf(v) > 3 && Math.abs(P.y - v.y) < 1.4 && inVehicle(v, P.x, P.z, .3)) hurtBy('wreck', P.x - v.x, P.z - v.z, 7, v);
+    vehDirty = true;
+    // stopped, and it can't stop with him in it, or on what he's driving
+    if (speedOf(v) < .3 && !(driving && Math.hypot(driving.x - v.x, driving.z - v.z) < (driving.K.length + v.K.length) / 2)) {
+      v.f = v.s = v.steer = 0; settle(v, floorAt); markVehicle(v, true); coasting.splice(i, 1); v.coast = null;
+      if (!driving && Math.abs(P.y - v.y) < 1.4) { const L = Math.hypot(P.x - v.x, P.z - v.z) || 1, ux = (P.x - v.x) / L, uz = (P.z - v.z) / L; for (let k = 0; k < 24 && inVehicle(v, P.x, P.z, .32); k++) { P.x += ux * .25; P.z += uz * .25; } }
+    }
+  }
 }
 // Dust, in the same flat-shaded lumps as the leaves, swelling and gone in a second
 const VEH_PUFFS = matchMedia('(pointer:coarse)').matches ? 18 : 30, VEH_NOWHERE = new THREE.Matrix4().makeScale(0, 0, 0), vehRand = (() => { let s = 20261101; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
@@ -6924,33 +7079,32 @@ function pickUpLoot(reach) {
   }
 }
 const DRIVE_WORLD = { blocked: (x, z, y) => blockedInTown(x, z, y) || !!looseAt(x, z, y), floorAt, level: WATER.level, road: onRoad, edge: (x, z) => !MAP.inBounds(x, z), ram };
-let vehPuffT = 0, vehClawT = 0, vehSmokeT = 0;
-function wreckedNow(v) {
-  vehDirty = true; SFX.play(v.drowned ? 'flood' : 'crash', { x: v.x, z: v.z }); SFX.say('wrecked');
+let vehClawT = 0;
+const DRIVEN_T = { puff: 0, smoke: 0 };
+// mine is whether he's in it: one he isn't in doesn't shake the camera, and it's heard from where it is
+function wreckedNow(v, mine = true) {
+  vehDirty = true; SFX.play(v.drowned ? 'flood' : 'crash', { x: v.x, z: v.z }); if (mine) SFX.say('wrecked');
   if (!v.drowned) wreckVehicle(v);
-  if (!reduceMotion) cam.shake = .6; glitch(.9, .35);
+  if (mine) { if (!reduceMotion) cam.shake = .6; glitch(.9, .35); }
   for (let i = 0; i < 7; i++) puff(v.x + (vehRand() - .5) * 2.4, v.y + .6 + vehRand(), v.z + (vehRand() - .5) * 2.4, (.8 + vehRand() * .6) * (v.drowned ? .4 : 1), 1 + vehRand() * .5, v.drowned ? 2 : 3, .09, .08, .095);
   if (folkOut) horde.noise(v.x, v.z, 60, 2);
 }
-function updateDrive(dt) {
-  const v = driving, K = v.K, was = v.drowned;
-  // On a phone one thumb does it all: pushing the stick off to the side keeps the gas on. Pull it back to brake.
-  const thumb = touchStick.length(), gas = thumb > .2 && touchStick.y > -.35 ? Math.max(input.y, thumb * .85) : input.y, braking = touchBtn.b || keys.has(' ');
-  const r = stepVehicle(v, { gas, steer: input.x, brake: braking }, dt, DRIVE_WORLD), speed = speedOf(v), fx = Math.sin(v.yaw), fz = Math.cos(v.yaw);
-  player.pos.set(v.x, v.y, v.z); player.yaw = v.yaw; player.grounded = true;
-  // getting his breath back in the seat
-  if (player.ran) { player.stamina = Math.min(1, player.stamina + RUN.rest * dt); if (player.stamina > RUN.recover) player.winded = false; if (player.stamina >= 1) player.ran = false; }
+// What one does to everything else as it goes, whether he's driving it or it's going on without him: what it goes through and into, the
+// crowd in front of it, and the dust and the smoke, on timers of its own in T. Whether that's wrecked it.
+function vehicleGoes(v, r, dt, mine, T) {
+  const K = v.K, speed = speedOf(v), fx = Math.sin(v.yaw), fz = Math.cos(v.yaw), at = mine ? null : { x: v.x, z: v.z };
   // what it went through
   if (r.smash > 0) {
     vehDirty = true;
-    if (!reduceMotion) cam.shake = Math.max(cam.shake, Math.min(.55, .12 + r.smash / SMASH_J * .07));
-    if (r.smash > SMASH_J * 2.5) glitch(.5, .18);
+    if (mine && !reduceMotion) cam.shake = Math.max(cam.shake, Math.min(.55, .12 + r.smash / SMASH_J * .07));
+    if (mine && r.smash > SMASH_J * 2.5) glitch(.5, .18);
     if (folkOut) horde.noise(v.x, v.z, 40, 1.5);
   }
   // what it hit
   if (r.hit > 1.5) {
     for (const o of vehShown) {
-      if (o === v || Math.hypot(o.x - v.x, o.z - v.z) > (o.K.length + K.length) / 2 + 1.2) continue;
+      // and not what he's driving, or anything else going without him, which would be left parked where it's going
+      if (o === v || o === driving || o.coast || Math.hypot(o.x - v.x, o.z - v.z) > (o.K.length + K.length) / 2 + 1.2) continue;
       // another vehicle takes it too, and shoves along if there's room
       const dx = o.x - v.x, dz = o.z - v.z, L = Math.hypot(dx, dz) || 1, push = Math.min(2.4, r.hit * .12 * K.mass / o.K.mass);
       markVehicle(o, false);
@@ -6962,34 +7116,45 @@ function updateDrive(dt) {
       break;
     }
   }
-  if (r.hit > 7) SFX.play('crash', { gain: Math.min(1, r.hit / 18) });
-  if (r.smash > 0) SFX.play('break.wood', { gain: Math.min(1, .3 + r.smash / SMASH_J * .3) });
-  if (r.landed > 6) SFX.play('hit.wood', { rate: .6, gain: Math.min(1, r.landed / 12) });
-  if (r.hit > 7 && !reduceMotion) cam.shake = Math.min(.6, r.hit * .03);
-  if (r.hit > 14) glitch(.7, .25);
+  if (r.hit > 7) SFX.play('crash', { ...at, gain: Math.min(1, r.hit / 18) });
+  if (r.smash > 0) SFX.play('break.wood', { ...at, gain: Math.min(1, .3 + r.smash / SMASH_J * .3) });
+  if (r.landed > 6) SFX.play('hit.wood', { ...at, rate: .6, gain: Math.min(1, r.landed / 12) });
+  if (mine && r.hit > 7 && !reduceMotion) cam.shake = Math.min(.6, r.hit * .03);
+  if (mine && r.hit > 14) glitch(.7, .25);
   if (r.hit > 7 && folkOut) horde.noise(v.x, v.z, 40, 1.5);
-  if (r.landed > 6 && !reduceMotion) cam.shake = Math.min(.5, r.landed * .04);
+  if (mine && r.landed > 6 && !reduceMotion) cam.shake = Math.min(.5, r.landed * .04);
   if (r.damage > 0) vehDirty = true;
-  let done = r.wrecked || (v.drowned && !was);
-  // the crowd: anyone in front goes over, and it costs a little, and at 40 mph they go flying (horde.T.flingFrom). Sitting still, they get at it.
-  if (folkOut) {
-    if (speed > 3) {
-      const dir = v.f < 0 ? -1 : 1, going = { vx: fx * v.f - fz * v.s, vz: fz * v.f + fx * v.s, still: reduceMotion };
-      const n = horde.knock(v.x + fx * dir * K.length * .35, v.z + fz * dir * K.length * .35, K.width / 2 + .8, downByTruck(speed), 'truck', going) + horde.knock(v.x, v.z, K.width / 2 + .6, downByTruck(speed), 'truck', going);
-      if (n) { SFX.play('hit.flesh'); v.f *= Math.pow(.97, n); if (hurtVehicle(v, .5 * n)) done = true; vehDirty = true; if (!reduceMotion) cam.shake = Math.max(cam.shake, .18); }
-    } else if ((vehClawT -= dt) <= 0) {
-      vehClawT = .5;
-      let n = 0; for (const s of horde.active) if (s.state >= HUNTING && s.state <= SWARM && inVehicle(v, s.x, s.z, 1)) n++;
-      if (n) { if (hurtVehicle(v, .4 * n)) done = true; vehDirty = true; if (!reduceMotion) cam.shake = Math.max(cam.shake, .1); }
-    }
+  let done = r.wrecked;
+  // the crowd: anyone in front goes over, and it costs a little, and at 40 mph they go flying (horde.T.flingFrom)
+  if (folkOut && speed > 3) {
+    const dir = v.f < 0 ? -1 : 1, going = { vx: fx * v.f - fz * v.s, vz: fz * v.f + fx * v.s, still: reduceMotion };
+    const n = horde.knock(v.x + fx * dir * K.length * .35, v.z + fz * dir * K.length * .35, K.width / 2 + .8, downByTruck(speed), 'truck', going) + horde.knock(v.x, v.z, K.width / 2 + .6, downByTruck(speed), 'truck', going);
+    if (n) { SFX.play('hit.flesh', { ...at }); v.f *= Math.pow(.97, n); if (hurtVehicle(v, .5 * n)) done = true; vehDirty = true; if (mine && !reduceMotion) cam.shake = Math.max(cam.shake, .18); }
   }
-  if (done) wreckedNow(v);
   // dust off the road, and smoke when it's hurting
-  if ((vehPuffT -= dt) <= 0 && speed > 4 && v.grounded && !r.wet && !pavedAt(v.x, v.z)) {
-    vehPuffT = .05 + .4 / speed;
+  if ((T.puff -= dt) <= 0 && speed > 4 && v.grounded && !r.wet && !pavedAt(v.x, v.z)) {
+    T.puff = .05 + .4 / speed;
     const side = vehRand() < .5 ? -1 : 1; puff(v.x - fx * K.length * .42 + fz * side * K.track + (vehRand() - .5) * .4, v.y + .12, v.z - fz * K.length * .42 - fx * side * K.track + (vehRand() - .5) * .4, .1 + speed * .012);
   }
-  if ((vehSmokeT -= dt) <= 0 && v.hp / K.hp < .4) { vehSmokeT = v.wrecked ? .13 : .26; puff(v.x + fx * K.length * .3 + (vehRand() - .5) * .5, v.y + 1.1, v.z + fz * K.length * .3 + (vehRand() - .5) * .5, .16 + vehRand() * .16, 1.1, 3, .07, .062, .075); }
+  if ((T.smoke -= dt) <= 0 && v.hp / K.hp < .4) { T.smoke = v.wrecked ? .13 : .26; puff(v.x + fx * K.length * .3 + (vehRand() - .5) * .5, v.y + 1.1, v.z + fz * K.length * .3 + (vehRand() - .5) * .5, .16 + vehRand() * .16, 1.1, 3, .07, .062, .075); }
+  return done;
+}
+function updateDrive(dt) {
+  const v = driving, K = v.K, was = v.drowned;
+  // On a phone one thumb does it all: pushing the stick off to the side keeps the gas on. Pull it back to brake.
+  const thumb = touchStick.length(), gas = thumb > .2 && touchStick.y > -.35 ? Math.max(input.y, thumb * .85) : input.y, braking = touchBtn.b || keys.has(' ');
+  const r = stepVehicle(v, { gas, steer: input.x, brake: braking }, dt, DRIVE_WORLD), speed = speedOf(v);
+  player.pos.set(v.x, v.y, v.z); player.yaw = v.yaw; player.grounded = true;
+  // getting his breath back in the seat
+  if (player.ran) { player.stamina = Math.min(1, player.stamina + RUN.rest * dt); if (player.stamina > RUN.recover) player.winded = false; if (player.stamina >= 1) player.ran = false; }
+  let done = vehicleGoes(v, r, dt, true, DRIVEN_T) || (v.drowned && !was);
+  // Sitting still, the crowd get at it
+  if (folkOut && speed <= 3 && (vehClawT -= dt) <= 0) {
+    vehClawT = .5;
+    let n = 0; for (const s of horde.active) if (s.state >= HUNTING && s.state <= SWARM && inVehicle(v, s.x, s.z, 1)) n++;
+    if (n) { if (hurtVehicle(v, .4 * n)) done = true; vehDirty = true; if (!reduceMotion) cam.shake = Math.max(cam.shake, .1); }
+  }
+  if (done) wreckedNow(v);
   arriving(); pickUpCans(2.4); pickUpGas(2.4);
   // what it sounds like
   const running = !v.wrecked && !v.drowned, k = speed / K.top, tar = pavedAt(v.x, v.z);
@@ -7928,13 +8093,15 @@ function crowdVoices() {
   }
 }
 // Whoever's going by, the nearest of each kind of engine. He hears his own over anyone's when he's driving.
-const GOING_BY = 70, _engines = { car: 0, pickup: 0, quad: 0 }, _revs = { car: 1, pickup: 1, quad: 1 };
+const GOING_BY = 70, _engines = { car: 0, pickup: 0, quad: 0, golf: 0 }, _revs = { car: 1, pickup: 1, quad: 1, golf: 1 };
+let coastHeard = false;
 function goingBy(P) {
   if (driving) return;
   for (const k in _engines) _engines[k] = 0;
-  for (const list of [traffic.cars, traffic.riders]) for (const c of list) {
-    const v = c.v, k = Math.max(0, 1 - Math.hypot(v.x - P.x, v.z - P.z) / GOING_BY), loud = k * k * .75;
-    if (loud > _engines[v.kind]) { _engines[v.kind] = loud; _revs[v.kind] = .72 + 1.2 * Math.abs(v.f) / v.K.top; }
+  // and what's going on without him since he got out of it, which is still running till it stops
+  for (const list of [traffic.cars, traffic.riders, coasting]) for (const c of list) {
+    const v = c.v, e = v.K.sound ?? v.kind, k = Math.max(0, 1 - Math.hypot(v.x - P.x, v.z - P.z) / GOING_BY), loud = v.wrecked || v.drowned ? 0 : k * k * .75;
+    if (loud > _engines[e]) { _engines[e] = loud; _revs[e] = .72 + 1.2 * Math.abs(v.f) / v.K.top; }
   }
   for (const k in _engines) SFX.loop(`engine.${k}`, _engines[k], _revs[k]);
 }
@@ -7942,7 +8109,8 @@ function soundTick(dt, M) {
   const P = player.pos;
   SFX.update(P.x, P.z, cam.yaw);
   if (!SFX.unlocked || boardOpen) return;
-  if (townFull && folkOut) goingBy(P);
+  // and once more after the last of what was going without him has stopped, which leaves its engine off
+  if ((townFull && folkOut) || coasting.length || coastHeard) { goingBy(P); coastHeard = coasting.length > 0; }
   // when a try ends it's the fever's music, out of tune, and coming to it's the bridge's
   SFX.music(M === 'fail' && died?.placed ? 'wake' : SCORE[M] ?? (M === 'swim' && !S.flags.town ? 'river' : time < huntedUntil ? 'chase' : 'town'));
   // his feet, once a stride
@@ -8092,8 +8260,11 @@ function tick(dt, draw = true) {
     }
     if (!S.flags.town) ghost.position.set(-17.5, 1.3 + Math.sin(time * 2) * .12, 7.5);
   } else if (M !== 'land' && M !== 'bridge') { for (const s of SNAKES) if (s.state !== 'wander' || Math.random() < .3) s.update(dt); }
+  // ---------------- out of a truck at speed, rolling and getting up, which is all he does till he's up
+  const rolled = !!roll;
+  if (roll) stepRoll(dt);
   // ---------------- on foot (bank, bridge, town)
-  if (M === 'land' || M === 'bridge' || M === 'town') {
+  if ((M === 'land' || M === 'bridge' || M === 'town') && !rolled) {
     const dir = moveDir(); const want = Math.min(1, dir.length());
     // Holding RUN: faster, until he's out of breath, and he gets it back once he lets up. In the air he keeps what he left the ground with.
     // running's the first thing that gives him away
@@ -8215,6 +8386,7 @@ function tick(dt, draw = true) {
   // it takes a while to leave him
   if (feverLeft > 0) { feverLeft = Math.max(0, feverLeft - dt * FEVER_FADES); feverTo(feverLeft * feverLeft * .8); }
   if (M === 'drive') updateDrive(dt);
+  if (coasting.length) updateCoasting(dt);
   if (townFull && S.flags.town && !folkOut) bringOutFolk();
   if (folkOut) {
     updateCrowd(dt, S.mode);
@@ -8231,6 +8403,13 @@ function tick(dt, draw = true) {
     heroRoot.position.copy(player.pos); heroRoot.rotation.set(0, player.yaw, 0);
     if (HP.kind === 'swim') { hero.body.position.set(0, .2, 0); hero.body.rotation.set(.95, 0, Math.sin(HP.phase) * .08); }
     else if (HP.kind === 'down') { const d = HP.down, e = d * d; hero.body.position.set(0, HERO_HIPS + (.3 - HERO_HIPS) * Math.min(1, d * 1.08), 0); hero.body.rotation.set(.3 * (1 - d) + 1.46 * e, 0, Math.sin(Math.floor(time * 12) * .9) * .05 * (1 - d) + .16 * e); }
+    // Rolling, he's lying the way he lies face down, turned over about the line down the middle of him, which is a little off the ground,
+    // and a whole number of turns of it leaves him just as he lies to get up
+    else if (HP.kind === 'roll' && roll) {
+      const b = roll.beta, p = roll.pitch;
+      hero.body.position.set(-.06 * Math.sin(b), .24 + .06 * Math.cos(b), 0);
+      hero.body.quaternion.setFromAxisAngle(_rollAxis, b).multiply(_rollQ.setFromEuler(_rollE.set(p, 0, .16 * p / 1.46)));
+    }
     else { const bob = Math.abs(Math.sin(HP.phase)) * .05 * Math.min(1, HP.speed / 4); hero.body.position.set(0, HERO_HIPS + bob, 0); hero.body.rotation.set(HP.kind === 'struggle' ? .32 : .1 * Math.min(1, HP.speed / 4) + .22 * player.runK, 0, 0); }
   }
   // In the crowd's fever the camera's where he lies, looking up at them, so none of him is drawn: from there he'd be the inside of his hood
@@ -8277,11 +8456,18 @@ function tick(dt, draw = true) {
     if (camera.up.y !== 1) camera.up.set(0, 1, 0);
     const swim = M === 'swim' || (M === 'fail' && !S.flags.bridgeStarted) || M === 'fall';
     const car = S.mode === 'drive' ? driving : null, carSpeed = car ? speedOf(car) : 0;
-    const lying = M === 'bitten' || M === 'wake' || M === 'fail' ? HP.kind === 'down' ? HP.down : 0 : 0;
+    const lying = roll ? (HP.kind === 'down' ? HP.down : 1) : M === 'bitten' || M === 'wake' || M === 'fail' ? HP.kind === 'down' ? HP.down : 0 : 0;
     const tgt = car ? new THREE.Vector3(car.x, car.y + car.K.camLook, car.z) : heroRoot.position.clone().add(new THREE.Vector3(0, swim ? .55 : 1.55 - lying * 1.15, 0));
     const moving = Math.hypot(input.x, input.y) > .1;
     // In something with an engine it swings round behind it by itself, once it's moving
     if (car) { if (carSpeed > 1.5 && time - lastLook > 1.2) cam.yaw += angDiff(cam.yaw, car.yaw + Math.PI) * Math.min(1, dt * 2.6); }
+    // Rolling out of one, it's behind him the way he's going, turned as much as a third of the way to side-on toward what he got out of, so that
+    // it's in view on a phone held upright by the time he's face down, going on without him, and it never turns over with him
+    else if (roll) {
+      const along = Math.atan2(roll.dx, roll.dz), o = roll.out?.coast ? roll.out : null;
+      const toward = o ? along + clamp(angDiff(along, Math.atan2(o.x - player.pos.x, o.z - player.pos.z)), -.55, .55) : along;
+      if (time - lastLook > 1.2) cam.yaw += angDiff(cam.yaw, toward + Math.PI) * Math.min(1, dt * 2.6);
+    }
     // On foot it does too, for a thumb that's busy, but with a mouse it stays where it's put, and A and D go sideways
     else if (moving && time - lastLook > 1.2 && M !== 'fall' && !mouseHeld()) cam.yaw += angDiff(cam.yaw, player.yaw + Math.PI) * Math.min(1, dt * 1.6);
     // round to the side of him as he goes down, so you can see it
@@ -8564,6 +8750,9 @@ if (TEST) {
     },
     npcs: Object.fromEntries(Object.entries(NPCS).map(([k, n]) => [k, { x: n.root.position.x, z: n.root.position.z }])), doors: { rocky: ROCKY_DOOR, bobby: BOBBY_DOOR }, tank: tankProp, pickups: PICKUPS, vanWords,
     vehicles: VEHICLES, vehShown, driving: () => driving, getIn, getOut, kinds: KINDS, vehicleFits, vehicleInReach,
+    // out of one at speed (CHUNKY-168): how far into it he is, what's going on without him, the doors drawn standing open, and which hood he has on,
+    // 0 to 3: his own, flopped one way, flopped the other, and back
+    bail: { BAIL, roll: () => roll && { ...roll }, coasting: () => coasting.map((c) => c.v), doors: () => Object.fromEntries(Object.entries(vehDoors).map(([k, m]) => [k, m.visible ? m.count : 0])), hood: () => [heroHood, heroHoodHung, heroHoodFlop, heroHoodSwim].findIndex((h) => h.geo === hero.hm.geometry) },
     wreck: { strike, blast, blastCan, thud, toss, damage, breakProp, props: PROPS, falling, swing, burnAt, burners, catchTree, treesNear, treeBlocks, fellTree, gasCans: GAS_CANS, wreckVehicle, explodeVehicle, startFree, housesNear, trees: (x, z, r) => { const out = []; treesNear(x, z, r, (t) => out.push(t)); return out; } },
     openMap, closeMap, updateMini, mapState: () => ({ open: mapOpen, cam: mapCam, mini: !$('mini').hidden, name: $('miniName').hidden ? '' : $('miniName').textContent }), mapCamTo(c) { mapCam = { ...mapCam, ...c }; drawFullMap(); },
     // where the title card's camera is in a town that's shared, which can be moved
