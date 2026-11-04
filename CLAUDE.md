@@ -57,6 +57,8 @@ Then open http://localhost:8000.
 
 `npm test` runs `node --test` for data and logic. Name test files `*.test.js`.
 
+`npm run talk:host` plays the server for the characters' own words in Cloudflare's runtime on this machine, against a stand-in for OpenRouter so nothing's spent: a line and what it cost, a page on another site turned away, the month's cap, a phone asking too fast, and the month still spent after a restart. What it does is `server/talk.js`, and `server/worker.js` puts it on Cloudflare with the owner's key, which only the owner puts in.
+
 `npm run check` runs everything below and `npm test` too, three at a time and longest first, and runs anything that fails again on its own. `-- --changed` runs only what the uncommitted changes, or the last commit, could break, `-- --dry` says what it would run, and `-- --at <commit>` checks a commit from a copy so the worktree can change meanwhile.
 
 `npm run smoke` plays Chapter 1 in real Chrome and fails on a wrong beat or a console error. It needs `npm i` first and takes `--shots dir` for screenshots and `--touch` for a phone viewport.
