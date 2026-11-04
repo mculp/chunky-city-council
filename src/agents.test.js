@@ -15,7 +15,7 @@ const someone = (F, like, skip = -1) => { for (let i = 0; i < 2000; i++) { if (i
 let seed = 1;
 const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 const field = (F, extra = {}) => ({ blocked: () => false, water: () => false, floorAt: () => 0, wander: (s) => [s.x, s.z], rand, folks: F, ...extra });
-const still = { x: 0, z: 0, y: 0, noise: 0, light: 0, beans: 0, night: 1, hidden: false, canGrab: true };
+const still = { x: 0, z: 0, y: 0, noise: 0, beans: 0, night: 1, hidden: false, canGrab: true };
 const run = (h, p, seconds, dt = 1 / 30) => { for (let t = 0; t < seconds; t += dt) h.update(dt, p); };
 // Adds the person with this number: everybody before them is added too, a long way off
 const bring = (h, F, w, x, z) => { let s; do { s = h.add(1e5, 1e5); } while (s.who !== w); s.x = s.tx = s.homeX = x; s.z = s.tz = s.homeZ = z; return s; };

@@ -112,7 +112,7 @@ const heard = await g(() => {
   const scared = who((w) => w.nerve < .12 && w.temper < .5), far = who((w) => w.nerve < .12 && w.temper < .5);
   const told = who((w) => w.family === scared.who.family && w.nerve > .3 && w.nerve < .7), stranger = who((w) => w.family !== scared.who.family && w.nerve > .3 && w.nerve < .7);
   put(window.plain2 = who((w) => w.nerve > .3 && w.nerve < .7), 1.1); put(scared, 12); put(far, 40); stand(0);
-  G.horde.update(.01, { x: G.player.pos.x, z: G.player.pos.z, y: 0, noise: 0, light: 0, beans: 0, night: 1, hidden: true, canGrab: false });
+  G.horde.update(.01, { x: G.player.pos.x, z: G.player.pos.z, y: 0, noise: 0, beans: 0, night: 1, hidden: true, canGrab: false });
   G.horde.knock(G.player.pos.x + 1.1, G.player.pos.z, 1.5, 2.4);
   const out = { there: scared.who.there, moodNear: moodOf(scared), farThere: far.who.there };
   // and word of it, from someone standing with them, to their own and not to anyone else

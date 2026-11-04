@@ -8,7 +8,7 @@ let seed = 1;
 beforeEach(() => { seed = 1; });
 const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 const field = (extra = {}) => ({ blocked: () => false, water: () => false, floorAt: () => 0, wander: (s) => [s.x, s.z], rand, ...extra });
-const still = { x: 0, z: 0, y: 0, noise: 0, light: 0, beans: 0, night: 1, hidden: false, canGrab: true };
+const still = { x: 0, z: 0, y: 0, noise: 0, beans: 0, night: 1, hidden: false, canGrab: true };
 const run = (h, p, seconds, dt = 1 / 30) => { for (let t = 0; t < seconds; t += dt) h.update(dt, p); };
 // after him: coming, or about to be
 const after = (s) => s.state === HUNTING || s.state === SWARM || s.state === GRABBING;
@@ -87,12 +87,6 @@ describe('senses', () => {
     assert.ok(smelt(12, 2.8), 'twelve at 2.8 m'); assert.ok(!smelt(12, 3.4), 'and not at 3.4 m');
     assert.ok(smelt(11, 2.3) && !smelt(11, 2.8), 'eleven cans reach less than that');
     assert.equal(TUNING.smellFrom, 5); assert.ok(Math.abs(TUNING.smellPerBean * 7 * TUNING.nightSense - 3) < 1e-9);
-  });
-
-  test('a light gives you away', () => {
-    const h = createHorde(field()), s = h.add(10, 0);
-    run(h, { ...still, light: 12 }, 1);
-    assert.ok(s.state >= CURIOUS);
   });
 
   test('curiosity turns to hunting if you keep it up, and it wears off if you don\'t', () => {
@@ -597,9 +591,9 @@ describe('shambling with them', () => {
 describe('gone quiet', () => {
   const quiet = (extra = {}) => field({ quiet: () => true, ...extra });
 
-  test('they leave him be, however much noise or light or beans he has on him', () => {
+  test('they leave him be, however much noise or beans he has on him', () => {
     const h = createHorde(quiet()), s = h.add(4, 0);
-    run(h, { ...still, noise: 20, light: 12, beans: 12 }, 5);
+    run(h, { ...still, noise: 20, beans: 12 }, 5);
     assert.equal(s.state, SHAMBLE); assert.equal(s.alert, 0); assert.equal(h.grab, null);
   });
 
@@ -814,7 +808,7 @@ describe('never for no reason', () => {
     run(h, p, 2); assert.ok(s.x < at[0] - 3, 'and now it comes');
   });
 
-  test('what\'s noted is what woke it: his engine, his light, the beans, a crash or a blast that drew it to him', () => {
+  test('what\'s noted is what woke it: his engine, the beans, a crash or a blast that drew it to him', () => {
     const kinds = (p, noise) => {
       const told = [], h = createHorde(field(), {}, { roused: (s, why) => told.push(why.kind) });
       h.add(12, 0);
@@ -823,7 +817,6 @@ describe('never for no reason', () => {
       return told[0];
     };
     assert.equal(kinds(walking({ driving: true, noise: 30 })), 'engine');
-    assert.equal(kinds({ ...still, light: 12, canGrab: false }), 'light');
     assert.equal(kinds({ ...still, beans: 12, canGrab: false, x: 12 - 2.6 }), 'beans');
     assert.equal(kinds({ ...still, canGrab: false, x: 12 - 1.5 }), 'close');
     assert.equal(kinds({ ...still, canGrab: false, x: 12 - 1.5 }, [12, 0, 26, 3]), 'crash', 'a crash that drew it');

@@ -133,7 +133,7 @@ export function createHorde(world, tuning = {}, on = {}) {
   function afterCount() { let n = 0; for (const o of active) if (isAfter(o) || (o.state === ROUSED && !o.rouse.over)) n++; return n; }
 
   // ---- Never for no reason. One that's about to come for him stops, turns to him and flares for a second first, and that's all anyone's told of it: nothing on screen says why. why is
-  // { kind, her }: kind is what woke it ('crash', 'beans', 'light', 'hit', 'cornered' and so on) and her is whether whoever he hit is a woman. It's what has to still be true by the end of the second
+  // { kind, her }: kind is what woke it ('crash', 'beans', 'hit', 'cornered' and so on) and her is whether whoever he hit is a woman. It's what has to still be true by the end of the second
   // for one that was woken by something about him (SENSES), and what the page keeps a log of for the tests.
   // rank is 1 for someone he's hurt, who gets in ahead of the rest if that's three already. It says whether it's roused: no, when it's three already, and it only looks up and goes back. One that's
   // already hunting him is coming for him, and is left alone, so it says yes and nothing changes: it isn't roused again, which would end its chase, and it doesn't send anyone else back.
@@ -456,14 +456,13 @@ export function createHorde(world, tuning = {}, on = {}) {
   // What he can be made out by at the moment, and how far, with what's said if that's what brings one for him. The furthest reach is what did it.
   function senseOf(p, sharp) {
     let kind = 'close', reach = T.touch;
-    const hear = p.noise * sharp, smell = smellOf(p.beans) * sharp, see = p.light * sharp;
+    const hear = p.noise * sharp, smell = smellOf(p.beans) * sharp;
     if (hear > reach) { reach = hear; kind = p.driving ? 'engine' : 'steps'; }
     if (smell > reach) { reach = smell; kind = 'beans'; }
-    if (see > reach) { reach = see; kind = 'light'; }
     return { kind, reach };
   }
   // and what woke one that was nothing but something about him, and not a crash or a hit, which has been and gone
-  const SENSES = new Set(['steps', 'engine', 'beans', 'light', 'close']);
+  const SENSES = new Set(['steps', 'engine', 'beans', 'close']);
   // Whether there's anything between them and him: walls and the like at head height, a couple of metres apart along the way. The page can do better, and say so.
   function lineClear(s, p) {
     const dx = p.x - s.x, dz = p.z - s.z, d = hypot(dx, dz), n = Math.ceil((d - .8) / T.sightStep);
@@ -688,7 +687,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     if (broke) h.on.free?.(); else h.on.overrun?.();
   }
 
-  // p: { x, z, y, noise, light, beans, night, hidden, canGrab, driving, acting }, and acting is him shambling along with them
+  // p: { x, z, y, noise, beans, night, hidden, canGrab, driving, acting }, and acting is him shambling along with them
   h.update = (dt, p) => {
     clock += dt; watch = p; mercy = Math.max(0, mercy - dt); F?.tick(dt);
     for (let i = noises.length - 1; i >= 0; i--) if (noises[i].until < clock) noises.splice(i, 1);
