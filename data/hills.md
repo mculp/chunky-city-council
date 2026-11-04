@@ -10,7 +10,7 @@
 
 It's fetched once at about 25 m a pixel east-west and 30 m north-south, which is coarser than the survey but finer than anything that can be told apart at night. Town comes out at 96 m, and the published figure's 97 m. The download is cached in `data/raw/hills/`, which is gitignored.
 
-Nothing's exaggerated. The heights are the real ones, over the river they run down to.
+The heights in the file are the real ones, over the river they run down to. They're drawn twice as tall as that, which is what the owner chose, under Twice as tall below.
 
 ## The world stays flat
 
@@ -58,9 +58,9 @@ The fog stops the ground at about 200 m, so the file's coarse heights are drawn 
 
 All of this is off until he wakes at the edge of town. `uHills` is a flat texture until then and the skyline's hidden, so the first chapter's frames are exactly what they were, right out to the horizon, where a far hill would otherwise show over the flat land by a pixel or two. The first scene's square is still kept flat in the data, because he can go back there.
 
-## Trying them taller
+## Twice as tall
 
-The owner's choosing between the hills as they really are and taller ones, so there's a switch under the sound button once the hills are on. A tap flips it between REAL HILLS and HILLS ×2, where he stands. `uHillScale` multiplies every height that's drawn, along with the skyline's and the ones the code works out for whatever's drawn over the land. The world underneath stays as flat as ever, and so does everything that's levelled in the file, so a pond stays level at twice the height. It's on real hills each time the game starts, and it comes out once the owner has chosen.
+The owner tried the hills as they really are against twice as tall, with a switch on the work link, standing in town, and chose twice as tall. So `uHillScale` is 2, and the switch has gone. It multiplies every height that's drawn, along with the skyline's and the ones the code works out for whatever's drawn over the land. The file keeps the real heights. The world underneath stays as flat as ever, and so does everything that's levelled in the file, so a pond stays level at twice the height.
 
 ## Schema
 
