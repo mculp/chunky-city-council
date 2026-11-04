@@ -93,8 +93,8 @@ if (args.includes('--changed')) {
     for (const c of checks) {
       if (toolOf(c) === f) add(c, f);
       if ((f.startsWith('audio/') || /sound/.test(f)) && c.name.startsWith('sound')) add(c, f);
-      if (/^server\/(talk|worker|wrangler)\b/.test(f) && c.name === 'talk:host') add(c, f);
-      if (/^server\/(town|host|worker|wrangler)\b/.test(f) && c.name === 'town:host') add(c, f);
+      if ((/^server\/(talk|worker|wrangler)\b/.test(f) || f === 'tools/wrangler-dev.mjs') && c.name === 'talk:host') add(c, f);
+      if ((/^server\/(town|host|worker|wrangler)\b/.test(f) || f === 'tools/wrangler-dev.mjs') && c.name === 'town:host') add(c, f);
       if ((/^server\/(town|index|host)\b/.test(f) || f === 'src/names.js') && c.name === 'net') add(c, f);
     }
   }

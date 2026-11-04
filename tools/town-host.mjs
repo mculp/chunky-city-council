@@ -5,44 +5,24 @@
 //
 //   npm run town:host
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { encodePose, decodeMessage, say } from '../src/net.js';
+import { wranglerDev } from './wrangler-dev.mjs';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
-const WRANGLER = 'wrangler@4.154.0', HERO = 'a-secret-only-the-owner-has-1386', BUILD = { at: 1, world: 'the-same-vehicles' };
+const HERO = 'a-secret-only-the-owner-has-1386', BUILD = { at: 1, world: 'the-same-vehicles' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, what, ms = 10000) => { const end = Date.now() + ms; while (!fn()) { if (Date.now() > end) throw new Error(`timed out waiting for ${what}`); await sleep(20); } };
-const freePort = () => new Promise((r) => { const s = createServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => r(port)); }); });
 
 const kept = mkdtempSync(join(tmpdir(), 'chunky-town-'));
-let worker = null;
 // The Worker as wrangler dev runs it, with what it keeps in `kept`, so it's still there after a stop and a start
-async function start() {
-  const port = await freePort();
-  worker = spawn('npx', ['--yes', WRANGLER, 'dev', '--config', 'server/wrangler.jsonc', '--ip', '127.0.0.1', '--port', String(port), '--persist-to', kept,
-    '--var', `CHUNKY_HERO:${createHash('sha256').update(HERO).digest('hex')}`],
-  { cwd: ROOT, detached: true, env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
-  await new Promise((ok, no) => {
-    let said = '';
-    const late = setTimeout(() => no(new Error(`wrangler dev never said it was ready:\n${said}`)), 180000);
-    const hear = (d) => { said += d; if (/Ready on/.test(said)) { clearTimeout(late); ok(); } };
-    worker.stdout.on('data', hear); worker.stderr.on('data', hear);
-    worker.once('exit', (code) => { clearTimeout(late); no(new Error(`wrangler dev stopped (${code}):\n${said}`)); });
-  });
-  return `ws://127.0.0.1:${port}/town`;
-}
-function stop() {
-  if (!worker) return Promise.resolve();
-  const was = worker; worker = null;
-  return new Promise((r) => { was.once('exit', r); try { process.kill(-was.pid, 'SIGTERM'); } catch { r(); } });
-}
+const dev = wranglerDev({ cwd: ROOT, args: ['--config', 'server/wrangler.jsonc', '--persist-to', kept, '--var', `CHUNKY_HERO:${createHash('sha256').update(HERO).digest('hex')}`] });
+const start = async () => `ws://127.0.0.1:${await dev.start()}/town`, stop = () => dev.stop();
 
 // A phone, on a page at chunky.ms unless it's said where: it says hello as soon as it's open
 const phones = [];

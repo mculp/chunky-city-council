@@ -4,15 +4,15 @@
 //
 //   npm run talk:host
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { wranglerDev } from './wrangler-dev.mjs';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
-const WRANGLER = 'wrangler@4.154.0', CAP = 0.0005, COST = 0.0002, WORDS = '{"say":"Well, look who it is."}';
+const CAP = 0.0005, COST = 0.0002, WORDS = '{"say":"Well, look who it is."}';
 
 // OpenRouter, as far as this needs it: every line costs the same
 const heard = [];
@@ -26,30 +26,12 @@ const openrouter = createServer((req, res) => {
   });
 });
 await new Promise((r) => openrouter.listen(0, '127.0.0.1', r));
-const freePort = () => new Promise((r) => { const s = createServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => r(port)); }); });
 
 const kept = mkdtempSync(join(tmpdir(), 'chunky-talk-'));
-let worker = null;
 // The Worker as wrangler dev runs it, with what it keeps in `kept`, so it's still there after a stop and a start
-async function start() {
-  const port = await freePort();
-  worker = spawn('npx', ['--yes', WRANGLER, 'dev', '--config', 'server/wrangler.jsonc', '--ip', '127.0.0.1', '--port', String(port), '--persist-to', kept,
-    '--var', 'OPENROUTER_KEY:sk-on-this-machine', '--var', `OPENROUTER_URL:http://127.0.0.1:${openrouter.address().port}/v1/chat/completions`, '--var', `CAP_USD:${CAP}`],
-  { cwd: ROOT, detached: true, env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
-  await new Promise((ok, no) => {
-    let said = '';
-    const late = setTimeout(() => no(new Error(`wrangler dev never said it was ready:\n${said}`)), 180000);
-    const hear = (d) => { said += d; if (/Ready on/.test(said)) { clearTimeout(late); ok(); } };
-    worker.stdout.on('data', hear); worker.stderr.on('data', hear);
-    worker.once('exit', (code) => { clearTimeout(late); no(new Error(`wrangler dev stopped (${code}):\n${said}`)); });
-  });
-  return `http://127.0.0.1:${port}`;
-}
-function stop() {
-  if (!worker) return Promise.resolve();
-  const was = worker; worker = null;
-  return new Promise((r) => { was.once('exit', r); try { process.kill(-was.pid, 'SIGTERM'); } catch { r(); } });
-}
+const dev = wranglerDev({ cwd: ROOT, args: ['--config', 'server/wrangler.jsonc', '--persist-to', kept,
+  '--var', 'OPENROUTER_KEY:sk-on-this-machine', '--var', `OPENROUTER_URL:http://127.0.0.1:${openrouter.address().port}/v1/chat/completions`, '--var', `CAP_USD:${CAP}`] });
+const start = async () => `http://127.0.0.1:${await dev.start()}`, stop = () => dev.stop();
 const ask = (at, { phone = 'a-phone-of-their-own-1234', origin = 'https://chunky.ms', method = 'POST' } = {}) => fetch(`${at}/talk`, {
   method, headers: { 'Content-Type': 'text/plain', ...(origin && { Origin: origin }) },
   body: method === 'POST' ? JSON.stringify({ phone, messages: [{ role: 'user', content: 'Hey, Coop.' }] }) : undefined,
