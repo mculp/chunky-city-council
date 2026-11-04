@@ -318,3 +318,27 @@ test('in a town that\'s shared what they remember is the town\'s: it starts as t
   talk.share(null);
   assert.deepEqual(talk.mind('coop').said, ['A line in the game on its own.'], 'and it\'s the phone\'s own again');
 });
+
+// ---------------- how they feel about whoever it is, in a town that's shared
+test('online, how they feel about whoever it is goes to them in a line of its own, rounded, and nothing\'s said when it\'s neither way', () => {
+  const ask = (felt, as = { name: 'Junebug' }) => messagesFor({ data: DATA, who: 'coop', mind: { visits: 1, notes: [], said: [], ...felt }, me: 'me', as })[0].content;
+  assert.ok(ask({ trust: 1 }).includes('They\'ve been by to talk to you once before.\nYou\'ve come to trust them a little.\n'), ask({ trust: 1 }));
+  assert.ok(ask({ trust: -2.4, fear: 2.6 }).includes('You don\'t trust them. You\'re scared of them.'));
+  assert.ok(ask({ trust: 3 }, { hero: true, name: 'River' }).includes('You\'d stick your neck out for him.'), 'the hero too, online');
+  assert.equal(ask({ trust: .4, fear: .4 }), ask({}));
+  const story = (felt) => messagesFor({ data: DATA, who: 'coop', mind: { visits: 1, notes: [], said: [], ...felt }, me: 'me' })[0].content;
+  assert.equal(story({ trust: 3, fear: 3 }), story({}), 'and in the game on its own it\'s the story\'s meters, which pick its lines');
+});
+
+test('online, how they feel moves as the story\'s meters do, and each of them it moves is told to the town', () => {
+  const sent = [], talk = createTalk({ data: DATA, cast: CAST, fetch: async () => ({}) });
+  talk.share({ coop: { notes: [], said: [], visits: 1, trust: 2.5 }, rocky: { notes: [], said: [], visits: 0, trust: 'lots' } }, (c) => sent.push(c));
+  assert.equal(talk.mind('rocky').trust, undefined, 'only numbers come from the town');
+  talk.feel('coop', 'trust', 1);
+  assert.deepEqual(sent, [{ who: 'coop', trust: 3, fear: 0 }, { who: 'bobby', trust: -.5, fear: 0 }], 'within its range, and warming to Coop cools Miss Bobby');
+  sent.length = 0; talk.feel('coop', 'trust', -1);
+  assert.deepEqual(sent, [{ who: 'coop', trust: 2, fear: 0 }], 'and falling out with him earns nothing back with her');
+  sent.length = 0; talk.feel('rocky', 'fear', -1);
+  assert.deepEqual(sent, [], 'and nothing\'s told when nothing moves');
+  assert.deepEqual([talk.mind('coop').trust, talk.mind('bobby').trust], [2, -.5]);
+});

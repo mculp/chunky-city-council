@@ -14,10 +14,19 @@ export function parseCondition(text) {
   throw new Error(`Can't read the condition "${text}"`);
 }
 
+const bounded = (data, meter, v) => Math.max(data.meters[meter].min, Math.min(data.meters[meter].max, v));
+// How a meter moves, within its range. A tie only fires on a gain: helping one person costs you with another, but falling out with
+// them doesn't earn it back. `meters` is each person's by id, and it's moved where it is. In a town that's shared (CHUNKY-169) it's
+// the meters of how they feel about one player, so a tie to someone without any there is nothing.
+export function moveMeter(data, meters, id, meter, by) {
+  meters[id][meter] = bounded(data, meter, meters[id][meter] + by);
+  if (by > 0) for (const t of data.ties) if (t.when === id && t.meter === meter && meters[t.then]) meters[t.then][meter] = bounded(data, meter, meters[t.then][meter] + by * t.factor);
+}
+
 export function createPeople(data, { store = null } = {}) {
   const KEY = `chunky.people.v${data.version}`, byId = new Map(data.cast.map((c) => [c.id, c]));
   const blank = () => Object.fromEntries(data.cast.map((c) => [c.id, Object.fromEntries(Object.keys(data.meters).map((m) => [m, 0]))]));
-  const bound = (meter, v) => Math.max(data.meters[meter].min, Math.min(data.meters[meter].max, v));
+  const bound = (meter, v) => bounded(data, meter, v);
   let meters = blank(), met = new Set(), kept = {};
   const people = { data };
 
@@ -46,12 +55,7 @@ export function createPeople(data, { store = null } = {}) {
   people.known = () => data.cast.filter((c) => c.known || met.has(c.id));
   people.meet = (id) => { if (!met.has(id)) { met.add(id); save(); } };
 
-  // A tie only fires on a gain: helping one person costs you with another, but falling out with them doesn't earn it back
-  people.change = (id, meter, by) => {
-    meters[id][meter] = bound(meter, meters[id][meter] + by);
-    if (by > 0) for (const t of data.ties) if (t.when === id && t.meter === meter) meters[t.then][meter] = bound(meter, meters[t.then][meter] + by * t.factor);
-    save();
-  };
+  people.change = (id, meter, by) => { moveMeter(data, meters, id, meter, by); save(); };
 
   // ctx is what the game's holding: { flags, items, beans, addBeans(n), pantry, fromPantry() }
   people.check = (when, ctx) => (when || []).every((text) => {

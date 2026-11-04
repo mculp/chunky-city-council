@@ -5491,7 +5491,7 @@ let saveStore = null; try { saveStore = localStorage; mouse.speed = clamp(+saveS
 const people = createPeople(await (await fetch('data/cast.json')).json(), { store: saveStore });
 Object.assign(S.flags, people.flags());
 // Their own words (CHUNKY-107): src/talk.js and data/talk.json. The game's own pages ask the talk server, and ?test asks nothing until a test says where.
-const talk = createTalk({ data: await (await fetch('data/talk.json')).json(), store: saveStore, fetch: (...a) => window.fetch(...a) });
+const talk = createTalk({ data: await (await fetch('data/talk.json')).json(), cast: people.data, store: saveStore, fetch: (...a) => window.fetch(...a) });
 if (!TEST) talk.on(talkUrl(talk.data, location));
 // The church's pantry: what's on its shelves comes and goes with the church signs' days. data/cast.md says how.
 const pantry = createPantry({ store: saveStore }), today = () => (signNow === null ? dayOf() : dayOf(new Date(signNow)));
@@ -6128,7 +6128,7 @@ function openDialog(id) {
   if (net && fresh && !node.say && !talk.ready()) { nod(who); return; }
   if (fresh) { convo = { who, turns: [], moved: {}, last: null, care: false }; comeBack.delete(who); }
   const own = id === who && !convo.care && (!!convo.last || (net ? wouldTalk(who) : wouldSayNew(who, node)));
-  // who's met them and how they feel are the story's, and a town that's shared leaves them as they were
+  // who's met them and how they feel in the story are the story's, and a town that's shared leaves them as they were
   if (!net) { people.meet(who); people.apply(node.do, played); }
   SFX.play('ui.tap');
   if (S.mode !== 'dialog') faceWhoever(NPCS[who]);
@@ -6174,14 +6174,15 @@ function ownWords(node) {
   });
 }
 // What they've said goes into what they remember, after what he said or his walking up, so the talk goes his, theirs, his, and anything
-// it does to how they feel about him: each of trust and fear moves once a visit at most, by a point
+// it does to how they feel about him: each of trust and fear moves once a visit at most, by a point. Online it's how they feel about
+// whoever it is, which the town keeps.
 function took(who, r, heard = null) {
   convo.turns.push({ role: 'user', content: heardAs(talk.data, heard, talkAs()) }, { role: 'assistant', content: JSON.stringify({ say: r.say }) });
   talk.said(who, r.say);
   if (r.remember) talk.note(who, r.remember);
   for (const e of r.do) {
     const m = e.meter.split('.')[1];
-    if (!convo.moved[m]) { convo.moved[m] = e.by; if (!net) people.apply([e], played); }
+    if (!convo.moved[m]) { convo.moved[m] = e.by; if (net) talk.feel(who, m, e.by); else people.apply([e], played); }
   }
   convo.last = { say: r.say, replies: r.replies };
 }

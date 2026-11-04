@@ -4,7 +4,8 @@
 // Where everyone is goes as bytes, twenty times a second each way: a pose from each phone, and from the server a snapshot of
 // everyone's. Everything else goes now and then as words, a JSON object with its kind in `t`:
 //   from a phone:   hello { key, name, look, hero?, build? }, keep { beans, items, gas },
-//                   mind { who, said } or { who, note, about, at } or { who, visit: true }, for what the cast remember of them
+//                   mind { who, said } or { who, note, about, at } or { who, visit: true } or { who, trust, fear }, for what the
+//                   cast remember of them and how they feel about them
 //   from the town:  welcome { id, name, look, hero, saved, minds, cars }, who { players: [{ id, name, look, hero }] },
 //                   car { v, x, y, z, yaw }, bump { ride }, no { why, say }
 export const NET_RATE = 20, NET_MAX = 25, POSE_BYTES = 18;

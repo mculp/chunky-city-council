@@ -34,7 +34,7 @@ Online (CHUNKY-169, and the bible's section 19), there's nothing of the story to
 - **The nod.** With none of those left, TALK opens nothing: they look at whoever it is and dip their head once, over 0.6 s. Answering them when nothing new comes in time, what they said last stays up with only Later. while they nod. TALK stays, so pressing it again gets another nod.
 - **The 988 Lifeline** is the same as anywhere.
 - **What they remember** of each player is the town's, under "What they remember", and goes with them if the town lets them go, which is once a thousand others have been by since. A town that doesn't say what they remember, as one from before this doesn't, leaves it on the phone as it was.
-- **How they feel** isn't kept online, and nothing there goes by it. Trust and fear, and who's met them, are the story's, in the game on its own, and talking online leaves them as they were.
+- **How they feel** about each player is the town's, kept with what they remember of them, and moved the way the story moves its meters (`moveMeter` in `src/people.js`). A line moves trust or fear by a point, each once a visit at most, within the story's ranges, and warming to Coop cools Miss Bobby by half as much, and the other way round. They're told how they feel, rounded, from `online.feel`, in a line after how many times that player's been by, and nothing's said of it while it's neither way. The hero gets it too, for how they feel about him online. In the game on its own nothing's said of it, since there the meters pick the story's lines, and the story's ask is the same to the letter. Who's met them, and how they feel in the story, are the story's, and talking online leaves them as they were.
 
 ## What every line is held to
 
@@ -72,7 +72,7 @@ It's kept in `localStorage` under `chunky.talk.v1`, for each of them:
 
 With each ask goes the last 10 of what they've said, their notes about him and how many times he's been by, along with what's going on: his beans, what he's carrying, what's happened (`happened`) and the crowd being out (`tonight`). If it's over the server's 6000 letters, what they've said goes first, the oldest first, then their notes, then the start of the visit.
 
-In the town everyone shares (CHUNKY-169) it's the town's instead. It comes with the welcome, and each change goes to the town as it happens, a line said, a note kept or a visit over, and none of it goes onto the phone, whose own is the game on its own's. The town keeps as much as the phone does and no more, for each player by the hash of their phone's key, beside the town itself: in `data/raw/town.json` on this machine, and as an entry of its own, `mind:<hash>`, on Cloudflare. `docs/multiplayer.md` says why.
+In the town everyone shares (CHUNKY-169) it's the town's instead, with `trust` and `fear` for how they feel about that player once they feel anything. It comes with the welcome, and each change goes to the town as it happens, a line said, a note kept, a visit over or how they feel as it is now, and none of it goes onto the phone, whose own is the game on its own's. The town keeps as much as the phone does and no more, for each player by the hash of their phone's key, beside the town itself: in `data/raw/town.json` on this machine, and as an entry of its own, `mind:<hash>`, on Cloudflare. `docs/multiplayer.md` says why.
 
 Each note says who it's about so that they can one day tell one of them what another did. The town keeps each player's apart, so for now they only know what each did themselves.
 
@@ -94,7 +94,7 @@ An ask is about 4,700 letters, which is about 1,200 tokens, and a line back is u
 | `world` | string[] | The world, as each of them is told it. |
 | `him` | string | Who he is, as they're told it. |
 | `opener` | string | What's asked when he walks up, with `{They}` and `{walk}` for whoever it is. |
-| `online` | object | The town everyone shares: `them`, who anyone but the hero is, as they're told it, with `{name}` for their name; and `lines`, by cast id, what each says there when there's nothing new: `first`, `back`, `any`, and Coop's `hero`. |
+| `online` | object | The town everyone shares: `them`, who anyone but the hero is, as they're told it, with `{name}` for their name; `feel`, how they feel about whoever it is, as they're told it: `trust`, a line for each of -3 to 3, and `fear`, one for each of 0 to 3, with `""` for nothing said; and `lines`, by cast id, what each says there when there's nothing new: `first`, `back`, `any`, and Coop's `hero`. |
 | `tonight` | string | What's told them while the crowd's out. |
 | `rules` | string[] | How to answer, a line each, and what every line's held to, with `{they}`, `{them}`, `{their}`, `{themselves}`, `{have}`, `{are}` and `{say}` for whoever it is. |
 | `people` | object | Each of them, by cast id: `name`; `sheet`, who they are; `place`, where they are; `voice`, how they talk; `samples`, their lines, for how they sound; and `spare`, the lines they can say any time. |

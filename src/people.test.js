@@ -2,7 +2,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
-import { createPeople, checkCast, parseCondition } from './people.js';
+import { createPeople, checkCast, parseCondition, moveMeter } from './people.js';
 
 const data = JSON.parse(readFileSync(new URL('../data/cast.json', import.meta.url)));
 const memory = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) }; };
@@ -84,6 +84,13 @@ describe('meters', () => {
     const p = createPeople(data);
     p.change('coop', 'trust', 1);
     assert.equal(p.get('coop', 'trust'), 1);
+  });
+
+  test('how a meter moves is one rule, which a town that\'s shared moves its own by, and a tie to someone not there is nothing', () => {
+    const meters = { coop: { trust: 2.5, fear: 0 }, bobby: { trust: 0, fear: 0 } };
+    moveMeter(data, meters, 'coop', 'trust', 1);
+    assert.deepEqual(meters, { coop: { trust: 3, fear: 0 }, bobby: { trust: -.5, fear: 0 } });
+    assert.doesNotThrow(() => moveMeter(data, { bobby: { trust: 0, fear: 0 } }, 'bobby', 'trust', 1));
   });
 });
 

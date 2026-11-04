@@ -3,12 +3,13 @@
 // night from across US 80 (CHUNKY-169). Two newcomers press it, one on a keyboard and one on a phone: the first time it asks for a name
 // each and a look, and they're straight into town out front of the gas station, where Coop can see them, on dry ground and with
 // nothing in the objective box, and the other's title card says there's one in town. Coop says each line written for online once and
-// then nods, and with the model on says something new, asked about them by name and as "they". A twelfth can of beans ends nothing,
+// then nods, and with the model on says something new, asked about them by name and as "they", and a line that warms him to them is
+// how he feels about them, told him from the next ask on. A twelfth can of beans ends nothing,
 // since a town that's shared has no chapters. Then each sees the other, by name and by look, walking, running, driving and swinging, and on
 // the map; a truck nudges someone aside and a swing goes through them, and nobody's hurt. A try that ends is the fever, with the other
 // seeing them lying where they went down, and they come to by the pumps. One goes into the river and comes back with Change your look,
 // out front of the gas station in a new look and with what they had, and the time after that Play takes them straight in, with Coop
-// remembering them from what the town kept. Then the hero's link, who starts there too with no chapters and is known to the cast:
+// remembering them, and how he and Miss Bobby feel about them, from what the town kept. Then the hero's link, who starts there too with no chapters and is known to the cast:
 // everyone sees the hero, and only one phone at a time is him. Fails on anything out of place or a console error.
 //
 //   npm i && npm run net -- [--shots dir]
@@ -214,7 +215,7 @@ try {
     await snap(a, '02-a-coop-nods');
     // and with the model back, something new, which is all he says now; then it's slow, and he nods with what he said up
     await scripted(a);
-    a.script.push(JSON.stringify({ say: 'Still standing up straight, I see.', mood: 'plain', do: [], remember: 'Comes back a lot.', replies: ['Still here.', 'You too.', 'Barely.'] }));
+    a.script.push(JSON.stringify({ say: 'Still standing up straight, I see.', mood: 'plain', do: [{ meter: 'trust', by: 1 }], remember: 'Comes back a lot.', replies: ['Still here.', 'You too.', 'Barely.'] }));
     await on(a, () => __game.talk.on('http://localhost:65533/talk'));
     const own = await talkTo(a, 'coop');
     const asked = a.heard.at(-1)?.messages ?? [], sys = asked[0]?.content ?? '';
@@ -224,6 +225,9 @@ try {
     const mid = await until(async () => { const s = await state(a), n = await on(a, () => __game.talk.nodding('coop')); return s.dialog && !s.dialog.waiting && n > .05 ? { ...s.dialog, opts: s.dialog.opts.map((o) => o.replace(/^\d\. /, '')), n } : null; }, 4000);
     check(`and when it's slow with nothing written left, what he said stays up with only Later. while he nods: "${mid?.say}"`, mid?.say === 'Still standing up straight, I see.' && mid.opts.join() === 'Later.', mid);
     check(`A's answer went as theirs: ${a.heard.at(-1)?.messages.at(-1)?.content}`, a.heard.at(-1)?.messages.at(-1)?.content === 'They say: "Barely."', a.heard.at(-1)?.messages.at(-1));
+    // what he said warmed him to them, which is how he feels about them from then on, and he's told it
+    const trusted = TALK.online.feel.trust[4].replace('{them}', 'them'), then = a.heard.at(-1)?.messages[0]?.content ?? '';
+    check(`and his line warmed him to A, so the next ask told him "${trusted}", and the one before didn't`, !sys.includes(trusted) && then.includes(trusted), { before: sys.includes(trusted), after: then.includes(trusted) });
     await later(a);
     await on(a, () => __game.talk.on(null));
   }
@@ -580,6 +584,9 @@ try {
       // and nothing of the game on its own's is touched: what the cast remember there, who's met them in the story, or how they feel about him
       const onPhone = await on(a, ([t, c]) => ({ talk: localStorage.getItem(`chunky.talk.v${t}`), people: localStorage.getItem(`chunky.people.v${c}`) }), [TALK.version, CAST.version]);
       check(`and Coop remembers A, from the town: with all he had written said, he nods, ${dip ? (dip * 57.3).toFixed(0) : 0}°, and none of it, nor the story's meeting him, is kept on A's phone`, !nodded && dip > .05 && !onPhone.talk && !onPhone.people, { nodded, dip, onPhone });
+      // and how they feel about A came back from the town too: Coop warmer, and Miss Bobby a little cooler for it, as in the story
+      const felt = await on(a, () => ['coop', 'bobby'].map((w) => __game.talk.mind(w).trust));
+      check(`and so does how they feel about A: Coop's trust ${felt[0]}, and Miss Bobby's ${felt[1]} for it, as the story's tie has it`, felt[0] === 1 && felt[1] === -.5, felt);
     }
     // and back out on US 80, where there's room beside them for the hero
     await onRoad(a, spot.x, spot.z); await sleep(300); A = await me(a);

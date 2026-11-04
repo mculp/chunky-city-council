@@ -9,6 +9,7 @@
 // as "they", since nobody's said what anyone goes by. That's `as`, { name, hero }, and without it it's him, as it's always been.
 import { TALK_URL, PHONE_KEY, makeKey } from './net.js';
 import { NAME_MOST } from './names.js';
+import { moveMeter } from './people.js';
 
 export const LIMITS = {
   words: 30,        // a line's under this many words
@@ -29,6 +30,7 @@ export const LIMITS = {
 const REST = { off: 300, cap: 3600, fast: 15, slow: 30, bad: 300 };
 
 const blankMind = () => ({ notes: [], said: [], visits: 0 });
+const FELT = ['trust', 'fear'];   // the meters a line can move, and so how they feel about whoever it is online
 
 // How what's put to them says whoever's talking to them: each {word} in the rules and the lines below is said one way for him and the
 // other for anyone else. His are what the story's always said, to the byte.
@@ -179,13 +181,20 @@ export function writtenFallback(data, who, { mind = blankMind(), as, story = nul
 }
 
 const listed = (items) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
+// Online, how they feel about whoever it is, as the story shows its meters: rounded, and nothing said when it's neither way. In the
+// game on its own it's the story's meters, which pick its lines, so nothing's said of it there.
+function feelings(data, mind, as) {
+  if (!as) return '';
+  const F = data.online.feel, at = (list, v, low) => list[Math.max(0, Math.min(list.length - 1, Math.round(v ?? 0) - low))];
+  return [at(F.trust, mind.trust, -3), at(F.fear, mind.fear, 0)].filter(Boolean).map((t) => spoken(t, as)).join(' ');
+}
 // Everything that goes with one line: who they are, the world, what's going on, what they remember of him and what they've said to him,
 // and how to answer, then this visit's talk so far and what he's just said, or that he's walked up. `here` is what's going on: his beans,
 // what he's carrying, what's happened and what's happening tonight. What they've said goes first, the oldest of it first, then their
 // oldest notes, then the start of this visit, until it all fits under the server's limit. Only the words around what's remembered, said
 // and carrying are said for whoever it is, never those themselves.
 export function messagesFor({ data, who, here = {}, mind = blankMind(), turns = [], heard = null, me = '', as }) {
-  const p = data.people[who], beans = here.beans ?? 0;
+  const p = data.people[who], beans = here.beans ?? 0, feel = feelings(data, mind, as);
   let said = mind.said.slice(-LIMITS.sent), notes = mind.notes.filter((n) => n.about === me).slice(-LIMITS.notes), talk = turns.slice(-LIMITS.turns);
   const build = () => {
     const system = [
@@ -196,6 +205,7 @@ export function messagesFor({ data, who, here = {}, mind = blankMind(), turns = 
       `Where you are: ${p.place}.`,
       '',
       `${whoItIs(data, as)}${mind.visits ? ` ${spoken("{They've}", as)} been by to talk to you ${mind.visits === 1 ? 'once' : `${mind.visits} times`} before.` : ''}`,
+      ...(feel ? [feel] : []),
       `${spoken('{They} {have}', as)} ${beans} ${beans === 1 ? 'can' : 'cans'} of beans${here.carrying?.length ? `, and ${spoken("{they're}", as)} carrying ${listed(here.carrying)}` : ''}.`,
       ...(here.happened?.length ? [`What's happened: ${here.happened.join(' ')}`] : []),
       ...(here.tonight ? [here.tonight] : []),
@@ -225,8 +235,8 @@ export function talkUrl(data, { search = '', origin = '' } = {}) {
 
 // The game's side of the talk server, and what they remember. It asks only once it's been told where, and it leaves them to their
 // written lines for a while whenever the server says it can't answer. `store` is localStorage or anything like it, and a browser that
-// won't keep anything just doesn't remember.
-export function createTalk({ data, store = null, fetch = globalThis.fetch, now = Date.now } = {}) {
+// won't keep anything just doesn't remember. `cast` is data/cast.json, whose meters and ties how they feel moves by online.
+export function createTalk({ data, cast = null, store = null, fetch = globalThis.fetch, now = Date.now } = {}) {
   const KEY = `chunky.talk.v${data.version}`, PHONE = 'chunky.talk.phone';
   let url = null, restUntil = 0, minds = {}, phone = null, asking = 0, waiting = [], shared = null;
   const mind = (who) => (minds[who] ??= blankMind());
@@ -240,7 +250,7 @@ export function createTalk({ data, store = null, fetch = globalThis.fetch, now =
     if (!PHONE_KEY.test(phone ?? '')) { phone = makeKey(); try { store?.setItem(PHONE, phone); } catch { /* not kept */ } }
     return phone;
   }
-  // what they remember, from what was kept: only the ones that talk, and only what would be kept
+  // what they remember, from what was kept: only the ones that talk, and only what would be kept, with how they feel online
   function take(kept) {
     for (const [who, m] of Object.entries(kept ?? {})) {
       if (!Object.hasOwn(data.people, who) || !m || typeof m !== 'object') continue;
@@ -249,6 +259,7 @@ export function createTalk({ data, store = null, fetch = globalThis.fetch, now =
         said: (Array.isArray(m.said) ? m.said : []).filter((s) => typeof s === 'string').slice(-LIMITS.said),
         visits: Number.isFinite(m.visits) ? m.visits : 0,
       };
+      for (const meter of FELT) if (Number.isFinite(m[meter])) minds[who][meter] = m[meter];
     }
   }
   function load() { try { take(JSON.parse(store.getItem(KEY))?.minds); } catch { /* nothing saved */ } }
@@ -270,6 +281,17 @@ export function createTalk({ data, store = null, fetch = globalThis.fetch, now =
     visited(who) { mind(who).visits++; changed(who, { visit: true }); },
     said(who, text) { const m = mind(who); if (!m.said.includes(text)) { m.said.push(text); keep(m.said, LIMITS.said); changed(who, { said: text }); } },
     note(who, text, about = talk.me()) { const m = mind(who), at = now(); m.notes.push({ about, text, at }); keep(m.notes, LIMITS.notes); changed(who, { note: text, about, at }); },
+    // Online (CHUNKY-169), how they feel about whoever's playing moves by the story's own rule (src/people.js), and each of them it
+    // moves is told to the town as they are now
+    feel(who, meter, by) {
+      const meters = Object.fromEntries(data.who.map((w) => [w, Object.fromEntries(FELT.map((f) => [f, mind(w)[f] ?? 0]))]));
+      moveMeter(cast, meters, who, meter, by);
+      for (const w of data.who) {
+        const m = mind(w);
+        if (FELT.every((f) => meters[w][f] === (m[f] ?? 0))) continue;
+        Object.assign(m, meters[w]); changed(w, { ...meters[w] });
+      }
+    },
     // In a town that's shared (CHUNKY-169) what they remember of whoever's playing is the town's, apart from the phone's own game's:
     // it's what the town had, and each change is told to it with `tell`. share(null) has it the phone's own again.
     share(kept, tell) { minds = {}; shared = kept ? tell : null; if (kept) take(kept); else load(); },

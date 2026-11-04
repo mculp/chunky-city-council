@@ -262,6 +262,16 @@ test('the same phone back before it\'s been kept still has it, and once it\'s ke
   assert.deepEqual(mindsIn(c.out, c.id).coop.said, ['From where it was kept.']);
 });
 
+test('how each of them feels about someone is kept with what they remember, as numbers within the story\'s ranges', () => {
+  const t = createTown(), a = t.join(hello()).id;
+  t.mind(a, { who: 'coop', trust: 9, fear: -2 }); t.mind(a, { who: 'bobby', trust: -.5, fear: 1 });
+  for (const bad of [{ who: 'rocky', trust: 'lots', fear: 0 }, { who: 'rocky', trust: 1 }, { who: 'rocky', trust: NaN, fear: 0 }]) t.mind(a, bad);
+  const [[, m]] = t.keepMinds();
+  assert.deepEqual(m, { coop: { ...blank, trust: 3, fear: 0 }, bobby: { ...blank, trust: -.5, fear: 1 } });
+  const r = t.join({ ...hello(), minds: { coop: { ...blank, visits: 1, trust: -7, fear: 'x' } } });
+  assert.deepEqual(mindsIn(r.out, r.id), { coop: { ...blank, visits: 1, trust: -3 } }, 'and tidied the same way as it comes back');
+});
+
 test('memories that couldn\'t be kept are kept next time', () => {
   const t = createTown(), a = t.join(hello()).id;
   t.mind(a, { who: 'coop', visit: true });

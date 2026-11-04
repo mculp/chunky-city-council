@@ -20,6 +20,10 @@
   "opener": "({They} {walk} up to talk to you.)",
   "online": {
     "them": "\"{name}\" is from Chunky. They quit too, and then they un-quit: they're standing all the way up and not glowing, which is rare enough that you noticed. They're not the one who came up out of the river.",
+    "feel": {
+      "trust": ["You don't trust {them} one bit.", "You don't trust {them}.", "You don't much trust {them}.", "", "You've come to trust {them} a little.", "You trust {them}.", "You'd stick your neck out for {them}."],
+      "fear": ["", "You're a little uneasy around {them}.", "You're wary of {them}.", "You're scared of {them}."]
+    },
     "lines": {
       "coop": {
         "first": "Well. Another one standing up straight. Gas is gas and jerky's jerky. Dominoes are at the picnic table, if you've got beans.",

@@ -42,11 +42,13 @@ function carried(state) {
 }
 
 // What the cast remember of someone, by which of them it is, as much as src/talk.js keeps and no more: what they've said to them,
-// the last 24, what they've kept about them, the newest 12, each about someone by a hash, and how many times they've been by
-const MIND = { cast: 8, said: 24, notes: 12, words: 240, about: 64 }, WHO = /^[a-z]{1,16}$/;
+// the last 24, what they've kept about them, the newest 12, each about someone by a hash, and how many times they've been by. And how
+// they feel about them, once they feel anything, as far as data/cast.json's meters go.
+const MIND = { cast: 8, said: 24, notes: 12, words: 240, about: 64 }, WHO = /^[a-z]{1,16}$/, FEEL = { trust: [-3, 3], fear: [0, 3] };
 const words = (s) => typeof s === 'string' && s.length > 0 && s.length <= MIND.words;
 const aNote = (n) => words(n?.text) && typeof n.about === 'string' && n.about.length <= MIND.about;
 const newest = (list, most) => { if (list.length > most) list.splice(0, list.length - most); };
+const felt = (meter, v) => Math.max(FEEL[meter][0], Math.min(FEEL[meter][1], v));
 function tidyMinds(kept) {
   const minds = {};
   for (const [who, m] of Object.entries(kept && typeof kept === 'object' ? kept : {})) {
@@ -57,6 +59,7 @@ function tidyMinds(kept) {
       said: (Array.isArray(m.said) ? m.said : []).filter(words).slice(-MIND.said),
       visits: counted(m.visits),
     };
+    for (const meter of Object.keys(FEEL)) if (Number.isFinite(m[meter])) minds[who][meter] = felt(meter, m[meter]);
   }
   return minds;
 }
@@ -160,8 +163,8 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
       if (p) { p.heard = clock(); Object.assign(saved.get(p.keyHash), carried(state)); dirty = true; }
       return [];
     },
-    // one of the cast said something to them, kept something about them, or a visit's over: `who` is which of them, with `said`,
-    // with `note`, `about` and `at`, or with `visit`
+    // one of the cast said something to them, kept something about them, a visit's over, or how they feel about them has moved:
+    // `who` is which of them, with `said`, with `note`, `about` and `at`, with `visit`, or with `trust` and `fear` as they are now
     mind(id, m) {
       const p = here.get(id);
       if (!p || !WHO.test(m?.who ?? '')) return [];
@@ -172,6 +175,7 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
       if (words(m.said)) { if (one.said.includes(m.said)) return []; one.said.push(m.said); newest(one.said, MIND.said); }
       else if (aNote({ text: m.note, about: m.about })) { one.notes.push({ about: m.about, text: m.note, at: Number.isFinite(m.at) ? m.at : 0 }); newest(one.notes, MIND.notes); }
       else if (m.visit === true) one.visits = counted(one.visits + 1);
+      else if (Number.isFinite(m.trust) && Number.isFinite(m.fear)) { one.trust = felt('trust', m.trust); one.fear = felt('fear', m.fear); }
       else return [];
       all[m.who] = one; unkept.add(p.keyHash);
       return [];
