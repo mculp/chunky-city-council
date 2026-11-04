@@ -1,8 +1,9 @@
-// Swings at one of them walking straight at him, the way the ticket says to try it: standing still, ten times on a phone-sized page with real taps and ten
-// times on a laptop with real clicks, from straight ahead and from off to one side, stood up and low and quick, tapped as soon as they're in reach and as late
-// as while they're reaching for him. Each time the swing has to land before they get hold of him, and without one they do. Then how long one stays down,
-// lying there and getting up slowly, with him stood over it the whole time, and the picture holding and tearing when a swing lands, which it doesn't with
-// reduced motion.
+// First, one of them walking straight at him with the sound on: with his hood in the way, all that warns him is its glow flaring and one groan as its hands go up,
+// and the glow's back once it has hold of him. Then swings at one of them walking straight at him, the way the ticket says to try it: standing still, ten times on
+// a phone-sized page with real taps and ten times on a laptop with real clicks, from straight ahead and from off to one side, stood up and low and quick, tapped as
+// soon as they're in reach and as late as while they're reaching for him. Each time the swing has to land before they get hold of him, and without one they do. Then
+// how long one stays down, lying there and getting up slowly, with him stood over it the whole time, and the picture holding and tearing when a swing lands, which
+// it doesn't with reduced motion, though the glow still flares.
 //
 // Chrome won't give a headless page the mouse, so the laptop stands in for that with what the page would be told, as npm run keys does.
 //
@@ -21,7 +22,7 @@ const helpers = () => {
   const G = __game; G.pause(); G.jump('town'); G.S.flags.town = true; G.S.flags.ended = G.S.flags.arrived = true; G.step(.1);
   document.getElementById('card').style.display = 'none';
   G.bringOutCrowd();
-  window.G = G; window.H = G.horde; window.F = G.folks; window.T = 1 / 30; window.P = () => G.player.pos;
+  window.G = G; window.H = G.horde; window.F = G.folks; window.T = 1 / 30; window.P = () => G.player.pos; window.Snd = G.sound;
   window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; document.getElementById('fail').hidden = true; };
   // stood on US 80 west of town, facing along it, with everyone else a long way off and nobody remembering anything
   const a0 = G.map.sOn('us_80', ...G.map.fromTrue(-600, -20)), p = G.map.along('us_80', a0 + 40), q = G.map.along('us_80', a0 + 41), yaw = Math.atan2(q.x - p.x, q.z - p.z);
@@ -82,6 +83,29 @@ const snap = async (name) => { if (shots) await page.screenshot({ path: `${shots
 await g(helpers);
 const K = await g(() => ({ up: kinds.up.who.name, low: kinds.low.who.name, reach: H.T.grabReach, windUp: H.T.windUp }));
 console.log(`     ${K.up} comes stood up and ${K.low} comes low and quick. They get hold of him from ${K.reach} m, ${K.windUp} s after they're close enough.`);
+
+// With the camera behind him, one coming straight at him is behind his hood by the time it reaches, so what warns him is its glow flaring and one groan as its hands go up.
+// Nothing makes a sound until a real key or touch, and the groan's file has to have come down first. A groan's gap is in real seconds, which the next trial doesn't wait for, so this goes first.
+await page.keyboard.press('x');
+const ready = await page.waitForFunction(() => { const s = Snd.state(); return s.ctx === 'running' && s.waiting === 0 && s.files.includes('groan.reach'); }, null, { timeout: 30000 }).then(() => true, () => false);
+check('the sound is on, started by a real key press, and the groan for reaching has come down', ready && (await g(() => Snd.state().unlocked)), await g(() => Snd.state()));
+const reach = await g(() => {
+  clear(); const s = kinds.up; send(s, 0); Snd.forget();
+  const r = { before: null, flare: [], hands: null, groaned: null };
+  // stepped with the picture drawn, since that's where the glow comes from, until it's nearly got hold of him
+  for (let t = 0; t < 5 && !H.grab && !(s.reaching > H.T.windUp * .9); t += T) {
+    G.step(T, T);
+    if (s.reaching > 0) { r.hands ??= +t.toFixed(2); r.flare.push(G.glow(s)); } else r.before = G.glow(s);
+    if (r.groaned === null && Snd.lastHeard('groan.reach')) r.groaned = +t.toFixed(2);
+  }
+  return { ...r, peak: Math.max(0, ...r.flare), reaching: +(s.reaching ?? 0).toFixed(2), groans: Snd.state().heard.filter((n) => n === 'groan.reach').length, grab: !!H.grab };
+});
+await snap('0-reaching-for-him');
+const held = await g(() => { const s = kinds.up; for (let t = 0; t < 2 && !H.grab; t += T) G.step(T, T); G.step(.3, T); return { glow: G.glow(s), grab: !!H.grab, groans: Snd.state().heard.filter((n) => n === 'groan.reach').length }; });
+console.log(`     coming at him its glow is ${reach.before}, and with its hands going up ${reach.flare.map((v) => v.toFixed(2)).join(', ')}, then ${held.glow} once it has hold of him`);
+check('its glow flares past full as its hands go up, and keeps climbing the longer it reaches', reach.hands !== null && reach.before !== null && reach.before <= 1 && reach.peak > 1.5 && reach.flare.every((v, i) => i === 0 || v >= reach.flare[i - 1]) && !reach.grab, reach);
+check('it groans once, as its hands go up', reach.groaned !== null && reach.groaned === reach.hands && reach.groans === 1, reach);
+check('and its glow is back to what it was once it has hold of him, with no second groan', held.grab && held.glow !== null && held.glow <= 1 && held.groans === 1, held);
 
 // left alone, it gets hold of him half a second after it's close enough
 const none = await g(() => {
@@ -178,6 +202,15 @@ const calm = await g(() => {
 });
 check(`with reduced motion a swing still knocks it down, for ${calm.took} s, and the picture doesn't hold or tear`, calm.down && !calm.grab && !calm.torn && Math.abs(calm.took - 10) < .2, calm);
 await snap('5-reduced-motion-up-again');
+// the flare is brightness and not movement, so reduced motion keeps it
+const calmFlare = await g(() => {
+  clear(); const s = kinds.up; send(s, 0);
+  let peak = 0;
+  for (let t = 0; t < 5 && !H.grab && !(s.reaching > H.T.windUp * .9); t += T) { G.step(T, T); peak = Math.max(peak, G.glow(s) ?? 0); }
+  return +peak.toFixed(2);
+});
+check(`with reduced motion its glow still flares as its hands go up, to ${calmFlare}`, calmFlare > 1.5, calmFlare);
+await snap('6-reduced-motion-reaching-for-him');
 check('no console errors with reduced motion', errors.length === 0, errors.slice(0, 5));
 await still.close();
 

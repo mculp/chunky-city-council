@@ -50,6 +50,7 @@
     "groan.low": { "gain": 0.283, "reach": 45, "spread": 0.14, "max": 3, "gap": 0.2, "file": ["audio/sfx/groan.low.1.mp3", "audio/sfx/groan.low.2.mp3", "audio/sfx/groan.low.3.mp3", "audio/sfx/groan.low.4.mp3"] },
     "groan.hunt": { "gain": 0.785, "reach": 50, "spread": 0.12, "max": 3, "gap": 0.14, "file": ["audio/sfx/groan.hunt.1.mp3", "audio/sfx/groan.hunt.2.mp3", "audio/sfx/groan.hunt.3.mp3", "audio/sfx/groan.hunt.4.mp3"] },
     "groan.grab": { "gain": 0.641, "reach": 20, "spread": 0.08, "max": 2, "gap": 0.3, "file": ["audio/sfx/groan.grab.1.mp3", "audio/sfx/groan.grab.2.mp3", "audio/sfx/groan.grab.3.mp3"] },
+    "groan.reach": { "gain": 0.7, "reach": 24, "spread": 0.06, "max": 2, "gap": 0.25, "rate": 1.4, "file": ["audio/sfx/groan.hunt.1.mp3", "audio/sfx/groan.hunt.2.mp3", "audio/sfx/groan.hunt.3.mp3", "audio/sfx/groan.hunt.4.mp3"] },
     "amb.wind": { "bus": "ambience", "gain": 0.342, "file": "audio/sfx/amb.wind.1.mp3" },
     "amb.river": { "bus": "ambience", "gain": 1.245, "file": "audio/sfx/amb.river.1.mp3" },
     "amb.crickets": { "bus": "ambience", "gain": 0.098, "file": "audio/sfx/amb.crickets.1.mp3" },
