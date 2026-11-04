@@ -169,7 +169,8 @@ check('a click goes to where he comes to, on the church steps, safe, with the cr
 
 // ---------------- the church
 r = await g(() => {
-  const G = __game, H = G.horde, P = G.player.pos, Z = H.zones[0]; clearCrowd(); G.S.beans = 12;
+  // the church's is the circle among the places nobody goes, beside the compound on Pine Forest Rd's box
+  const G = __game, H = G.horde, P = G.player.pos, Z = H.zones.find((a) => a.r !== undefined); clearCrowd(); G.S.beans = 12;
   crowdRing(10, Z.r + 3, Z);
   const res = { noticed: 0, inside: 0 };
   // he's making all the noise he can inside
