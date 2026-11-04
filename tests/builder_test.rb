@@ -43,6 +43,9 @@ class BuilderTest < Minitest::Test
     git(@tmp, "init", "-q", "--bare", "-b", "main", @origin)
     git(@tmp, "clone", "-q", @origin, @game)
     git(@game, "checkout", "-q", "-B", "main")
+    # The council commits and rebases with the checkout's own identity, as on the Mac mini.
+    git(@game, "config", "user.name", "t")
+    git(@game, "config", "user.email", "t@t")
     write(@game, "README.md", "game\n")
     write(@game, "docs/lore.md", "Only Matt's words.\n")
     write(@game, ".gitignore", "node_modules/\n")
