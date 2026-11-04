@@ -12,24 +12,21 @@
 import { PHONE_KEY } from '../src/net.js';
 
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-// `hedge` is when the fallback's asked alongside a pick that hasn't answered yet. In the trial the fallback was never slower than
-// 0.7 s, which leaves it time to answer inside `wait`.
-export const TALK = { body: 8192, messages: 24, chars: 6000, wait: 2500, hedge: 1800, tokens: 200 };
-// The cheap models it'll use, and what OpenRouter charged a million tokens in and out on 2026-11-03, for working out what a line
-// cost when OpenRouter doesn't say. Trying them side by side on Coop and Miss Bobby (tools/talk-trial.mjs, 2026-11-04) picked the
-// first, for how they sound, and the second to answer when the first can't. A page can only name another, for trying them again.
-// z-ai/glm-5.3-flash is off the list: OpenRouter only runs it reasoning, and these are asked with reasoning off.
-// The last three are to try, at the owner's ask on 2026-11-04, at that day's prices. Muse Spark only answers reasoning, so it's
-// given the least it'll take, as `reasoning`, and room to do it in, as `tokens`.
+// `hedge` is when the fallback's asked alongside a pick that hasn't answered yet. In the trial the pick was never slower than
+// 0.53 s and the fallback took 1.2 s at the median, so by 1 s the pick really is slow, and the fallback still has time inside `wait`.
+export const TALK = { body: 8192, messages: 24, chars: 6000, wait: 2500, hedge: 1000, tokens: 200 };
+// The cheap models it'll use, and what OpenRouter charged a million tokens in and out the day each was put on the list, for working
+// out what a line cost when OpenRouter doesn't say. Trying them side by side on Coop and Miss Bobby (tools/talk-trial.mjs,
+// 2026-11-04) picked the first, for how they sound, and the second to answer when the first can't. A page can only name another, for
+// trying them again. z-ai/glm-5.3-flash and Meta's Muse Spark aren't on it: OpenRouter only runs them reasoning, and these are asked
+// with reasoning off.
 export const MODELS = {
+  'deepseek/deepseek-v4.1-flash-1017': { in: 0.15, out: 0.6 },
   'google/gemma-4-26b-a4b-it': { in: 0.06, out: 0.18 },
   'meta-llama/llama-3.1-8b-instruct': { in: 0.05, out: 0.08 },
   'mistralai/mistral-nemo': { in: 0.029, out: 0.03 },
   'qwen/qwen3.7-flash': { in: 0.03, out: 0.13 },
   'mistralai/mistral-small-3.2-24b-instruct': { in: 0.075, out: 0.2 },
-  'deepseek/deepseek-v4.1-flash-1017': { in: 0.15, out: 0.6 },
-  'meta/muse-spark-1.3': { in: 1.25, out: 4.25, reasoning: { effort: 'minimal' }, tokens: 1000 },
-  'meta/muse-spark-open': { in: 1.25, out: 4.25, reasoning: { effort: 'low' }, tokens: 1000 },
 };
 export const [MODEL, FALLBACK] = Object.keys(MODELS);
 const ROLES = new Set(['system', 'user', 'assistant']);
@@ -83,11 +80,13 @@ async function askOne({ fetch, url, key, model, messages, signal, log }) {
       method: 'POST', signal,
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model, messages, max_tokens: MODELS[model].tokens ?? TALK.tokens, temperature: 0.9, reasoning: MODELS[model].reasoning ?? { enabled: false },
+        model, messages, max_tokens: TALK.tokens, temperature: 0.9, reasoning: { enabled: false },
         response_format: { type: 'json_object' }, provider: { sort: 'latency', data_collection: 'deny' },
       }),
     });
     const json = await res.json().catch(() => null);
+    // given up on while OpenRouter was still sending it, which it starts with a 200 before the words are ready
+    if (signal.aborted) return { quiet: 'off' };
     if (res.status === 402 || (res.status === 403 && /limit/i.test(json?.error?.message ?? ''))) return { quiet: 'cap' };
     const reply = json?.choices?.[0]?.message?.content;
     if (!res.ok || json?.error || typeof reply !== 'string' || !reply.trim()) {
@@ -115,7 +114,7 @@ function askModels({ fetch, url, key, models, messages, wait, hedge, clock, log 
       over = true; clearTimeout(alongside); clearTimeout(late);
       const left = asked.filter((a) => !a.back);
       for (const a of left) a.stop.abort();
-      const charged = left.reduce((n, a) => n + priced(a.model, chars / 4, MODELS[a.model].tokens ?? TALK.tokens), 0);
+      const charged = left.reduce((n, a) => n + priced(a.model, chars / 4, TALK.tokens), 0);
       resolve(charged ? { ...said, charged } : said);
     };
     const next = () => {
