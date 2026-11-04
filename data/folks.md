@@ -1,6 +1,6 @@
 # Folks
 
-Everyone in the crowd is somebody. `data/folks.json` holds what they can be called, `src/agents.js` works out what each of them is like and keeps what they remember of him, and `src/horde.js` does what that says. `npm test` checks the file and the logic, and `npm run agents` plays it in Chrome.
+Everyone in the crowd is somebody. `data/folks.json` holds what they can be called, `src/agents.js` works out what each of them is like and keeps what they remember of him, and `src/horde.js` does what that says. `src/river.js` says where the river brings someone up. `npm test` checks the file and the logic, and `npm run agents` plays it in Chrome.
 
 The cast in `data/cast.json` are separate. They've always remembered him, through their meters.
 
@@ -29,7 +29,7 @@ Everyone has a number, starting from 0, and everything about who they are comes 
 | `homebody` | How much they stay put | How far they'll go from where they started |
 | `tagalong` | How much they'd rather go with somebody | Whether they go along with their own family |
 
-The numbers are `hash`-like rolls and not `crowdRand`, since asking that for anything new would change what everybody does after it.
+The numbers are `hash`-like rolls and not `crowdRand`, since asking that for anything new would change what everybody does after it. How long the river keeps someone under, which bank they're set down on and how long the snake hangs on are rolled the same way, from their number, and so they're the same for the same person every time.
 
 ## What they remember
 
@@ -46,11 +46,12 @@ Only what's happened is saved, under `chunky.folks.v1`, the same way as the cast
 | `fooled` | How many times each kind of lure has worked on them |
 | `when`, `seen` | The play clock when something last happened, and when he was last close |
 | `met` | Whether he's been around them long enough to know their name, which takes 1.5 seconds |
-| `gone` | The river had them, so they don't come back and the next number comes out in their place |
 | `shun` | Where they were last hurt |
 | `where` | Where they got to, so they're there the next time. Only for someone he's met. |
 
 The clock's the one thing kept with them, and only runs while playing.
+
+There was a `gone` here once, for whoever the river had, and the next number came out in their place. Nobody's lost to anything now, so it's not kept and not written. A save from before that says some people are gone, and they're back: it's read with that left out, and what else it says of them is kept. `version` hasn't changed, because that would have wiped everything else everyone remembers.
 
 ## How they are with him
 
@@ -78,7 +79,7 @@ Otherwise it's how bold they are: `nerve`, plus up to a fifth either way for `te
 And whatever their mood:
 
 - **Vehicles.** Anyone a vehicle's hit gets out of the way of one, even if they'd come at him on foot.
-- **Places.** They won't wander within 20 m of where they were last hurt. A fire or the train counts for this and nothing else, because nobody thinks of either as something he did.
+- **Places.** They won't wander within 20 m of where they were last hurt. A fire, the train or the river counts for this and nothing else, because nobody thinks of any of them as something he did.
 - **Lures.** A kind of lure stops working on someone after it's fooled them 2 to 5 times, the nosiest soonest. They stay on him, and a different kind still works. The church bell on Church St is a kind of its own, so the same people stop coming to it too.
 - **Family.** The ones who go along with others follow the nearest of their family within 20 m who'd sooner go their own way, which keeps anyone from going in a ring. That's why you see two or three walking together.
 - **Word.** Someone who was there or was hit tells anyone in their family who's within 8 m, for 90 seconds. It only goes one step.
@@ -127,10 +128,30 @@ Nobody dies. Knocked down, they're down a while and get up again.
 - **The swing** lands 0.2 seconds after it starts, on anyone within 1.5 m of a point 0.9 m in front of him, or 1.9 m with the bat, so it reaches about 2.4 m. As it starts it turns him to the nearest one he could reach, within 2.8 m and sooner someone who's after him than someone who isn't, by up to a metre. On a phone that's anyone on his side of a right angle. With a mouse, where the camera looks is the aim, so it's only someone within 0.5 rad of it.
 - **Getting hold of him** takes them `windUp`, half a second of being within 0.95 m of him, with their hands coming up over their heads. A hit in that time stops it, and whoever's been reaching longest gets him first. So standing his ground and swinging at one coming straight at him lands first.
 - **The warning.** The camera's behind him, so one coming straight at him is behind his hood for those last metres and nobody can see it reach. `src/horde.js` tells the world once as each of them starts, with `world.reaching(s)`, and the page answers with one groan, higher and shorter than a hunter's, and with what's coming off them flaring as the hands go up: by `FLARE` (0.9) past the full glow of anyone after him, wider and hotter, so that it shows round his edges. It's brightness and not movement, so reduced motion keeps it. A hit or a grab ends it, and the next go starts it again.
-- **How long they're down**, getting up included, is `DOWN_FOR` in `index.html`: 10 seconds from a swing, whatever's in his hand, and 14 from a blast. A vehicle keeps them down 8 seconds and half a second more for every m/s it was doing, up to 20. A fire's still a second or so.
+- **How long they're down**, getting up included, is `DOWN_FOR` in `index.html`: 10 seconds from a swing, whatever's in his hand, and 14 from a blast. A vehicle keeps them down 8 seconds and half a second more for every m/s it was doing, up to 20. A fire's still a second or so. **The train's longer than all of them**, and it's the next section.
 - **Asking.** `horde.down(s)` says how long someone has left, and it's nothing for anyone on their feet. `horde.keepDown(s, seconds)` keeps them down at least that much longer, for anything that needs them to stay put, and says whether they were down. They're up again the moment it runs out.
 
 `npm run swing` tries it on a phone and a laptop.
+
+## Home, sore and soaked
+
+Two things used to end someone for good, and nothing does now. Whatever's happened, it's the same person at the end of it, with everything they remember, and the same number of people in town. Nobody new walks in to take anyone's place, so the horde never asks the page for anyone.
+
+**Home** is where someone goes back to. For anyone who lives somewhere it's the door, and for the rest it's wherever they came out and go about from, which is where `roam` measures how far they'll go. Someone on their way home has nothing else in mind. A noise or a lure still turns their head, and someone who comes for him on sight still does, and when that's over they go on home. It's `homeward` on them, and they give up after `homeFor`, 10 minutes, if they can't get there. Close enough is `homeIs`, 3 m, and they go on with their day from there, which for someone at home is the door, the house and the yard.
+
+**The train** throws whoever it hits clear of the tracks, which is `trainThrows` in `index.html`. They lie where they land, in the ditch, for 30 to 36 seconds if it was the side of it and 45 to 55 if it was the front, longer than any swing or blast or pickup keeps anyone down, getting up included. Then they get up, and they're **sore**: whatever they were doing they've had enough of it, so even someone who was after him goes home, at 0.7 of their pace, with a limp, and for `soreFor`, 20 seconds more once they're there. The front throws them further and harder than the side. With reduced motion they don't turn over on the way. Nobody holds it against him, but they keep off the spot, as they do a fire, and `data/railroad.md` has the rest. Someone thrown off a trestle lands in the river.
+
+**The river** has whoever wades in after a lure and is bitten, which takes 3 to 7 seconds in the water, and whoever's thrown in by the train. They go under, and the cottonmouths and the current have them for 10 to 18 seconds, by their number. The current's `current`, 3.5 m/s, so they come up 35 to 63 m downstream, which is far enough that nobody's near when they come up and close enough that he can see it, and inside the 150 m the crowd's worked out for. `src/river.js` says where:
+
+- Downstream is the way TIGER draws the river, from its upper end to its lower, so further along a line is further downstream. That was checked against the survey's elevations along it, and `src/river.test.js` keeps it that way round.
+- They come up in the water, 0.8 m deep or more, a little way off the bank, and wade out of it. Nothing draws them back in while they do, and the lure that took them in is spent for them after, so they don't go straight back in after it.
+- **On the bank they can walk home from**: on the side home's on, or by their number if it's no help, dry, inside the map, with 10 m clear ahead of them and 8 m along it either way, so not against a fence or a wall. If a bank won't do it's the other one, and if neither will, a shorter way down the river. Never in a pond, and never through one.
+- A pond or a pool has no downstream, so they come up on its shore towards home.
+- If there's nowhere at all, they come up where they went under and wade out of it.
+
+Then they walk home to dry off. They're **soaked** for `dries`, 80 seconds: the cloth is dark and cold, with pale glints where the moon would find it, all of it for the first 40 and then drying. A cottonmouth hangs off one sleeve for 14 to 30 seconds by their number, and then lets go. `docs/art-direction.md` says what it looks like.
+
+Things that are only a number on them, and nowhere else: `under`, `swept`, `wet`, `snake`, `sore`, `homeward`. None of them is saved, so after a reload everyone's dry and on their feet.
 
 ## Shambling with them
 

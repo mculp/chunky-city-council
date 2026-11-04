@@ -1,5 +1,6 @@
 // Moves the crowd without fighting it, on a phone-sized page, with real taps and the game's own movement: picks up a bottle, throws each lure off US 80 with a crowd on it and counts
-// who's left on the road, takes hunters off him, sets off a car alarm from across a lot, walks them into the water, and lets them get around someone it'll cost him with.
+// who's left on the road, takes hunters off him, sets off a car alarm from across a lot, walks them into the water (the cottonmouths have them, and the river brings them up again downstream, soaked, with
+// a snake on a sleeve, to walk home, the same people and the same number of them), and lets them get around someone it'll cost him with. The water is played again with reduced motion.
 //
 //   npm i && npm run lures [-- --shots dir]
 import { mkdirSync } from 'node:fs';
@@ -14,7 +15,7 @@ const g = (fn, arg) => page.evaluate(fn, arg);
 const snap = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.jpg`, type: 'jpeg', quality: 82 }); };
 const tap = async (id = '#bC') => { await page.tap(id); await g(() => __game.step(.05)); };
 
-await g(() => {
+const setup = () => {
   const G = __game; G.pause(); G.jump('town'); G.S.flags.town = true; G.S.flags.ended = G.S.flags.arrived = true; G.step(.1);
   document.getElementById('card').style.display = 'none';
   G.bringOutCrowd();
@@ -35,7 +36,8 @@ await g(() => {
   window.stand = (t, across, yaw) => { const p = us80(t); G.place(p.x, p.z + across); G.player.yaw = yaw; G.look(yaw + Math.PI, .3); G.S.mode = 'town'; G.HP.speed = 0; };
   window.flown = () => { for (let i = 0; i < 90 && G.lures.flying.some((f) => f.on); i++) G.step(1 / 30); };
   window.grabbed = () => !!G.horde.grab;
-});
+};
+await g(setup);
 
 // ---- the shoulder's got bottles on it, and he can pick one up
 const found = await g(() => {
@@ -188,40 +190,155 @@ check('so does a hammer, on a keyboard, and a golf cart hasn\'t got one', hammer
 await g(() => { const G = __game; G.step(16); });
 
 // ---- into the water after it
-const wet = await g(() => {
-  const G = __game; crowdOnRoad([]);
-  const isWet = (x, z) => G.floorAt(x, z) < G.water.level(x, z) - .1, dry = (x, z) => G.floorAt(x, z) > G.water.level(x, z) + .2 && !G.blocked(x, z, G.floorAt(x, z) + .1);
-  // somewhere in the river, well away from any bridge and as near town as that can be, and a place on the bank a bottle's throw from it. It only goes as far as it goes.
-  const [tx, tz] = G.map.fromTrue(0, 0), bridges = G.map.crossings.filter((k) => k.with === 'river');
-  const places = G.map.river.flat().filter(([x, z]) => G.map.inBounds(x, z) && Math.hypot(x, z) > 300 && bridges.every((k) => Math.hypot(k.x - x, k.z - z) > 90)).sort((p, q) => Math.hypot(p[0] - tx, p[1] - tz) - Math.hypot(q[0] - tx, q[1] - tz));
-  let spot = null, bank = null;
-  for (const [x, z] of places) {
-    if (bank) break;
-    if (!isWet(x, z) || G.floorAt(x, z) > G.water.level(x, z) - .6) continue;
-    for (let b = 0; b < 6.28 && !bank; b += .2) { const bx = x + Math.cos(b) * 20.9, bz = z + Math.sin(b) * 20.9; if (dry(bx, bz)) { let clear = true; for (let f = .1; f < .9; f += .1) if (G.blocked(bx + (x - bx) * f, bz + (z - bz) * f, 8)) clear = false; if (clear) { spot = { x, z }; bank = { x: bx, z: bz }; } } }
+// The cottonmouths have whoever goes in, and the current, and the river brings them up again downstream on the bank, soaked, with a snake on a sleeve, and they walk home. Nobody is lost, and nobody new walks in.
+const intoTheWater = async (pg, tag, calm, picture) => {
+  const e = (fn, arg) => pg.evaluate(fn, arg);
+  await e(() => {
+    const G = __game; crowdOnRoad([]);
+    const isWet = (x, z) => G.floorAt(x, z) < G.water.level(x, z) - .1, dry = (x, z) => G.floorAt(x, z) > G.water.level(x, z) + .2 && !G.blocked(x, z, G.floorAt(x, z) + .1);
+    // somewhere in the river, well away from any bridge and as near town as that can be, and a place on the bank a bottle's throw from it. It only goes as far as it goes.
+    const [tx, tz] = G.map.fromTrue(0, 0), bridges = G.map.crossings.filter((k) => k.with === 'river');
+    const places = G.map.river.flat().filter(([x, z]) => G.map.inBounds(x, z) && Math.hypot(x, z) > 300 && bridges.every((k) => Math.hypot(k.x - x, k.z - z) > 90)).sort((p, q) => Math.hypot(p[0] - tx, p[1] - tz) - Math.hypot(q[0] - tx, q[1] - tz));
+    let spot = null, bank = null;
+    for (const [x, z] of places) {
+      if (bank) break;
+      if (!isWet(x, z) || G.floorAt(x, z) > G.water.level(x, z) - .6) continue;
+      for (let b = 0; b < 6.28 && !bank; b += .2) { const bx = x + Math.cos(b) * 20.9, bz = z + Math.sin(b) * 20.9; if (dry(bx, bz)) { let clear = true; for (let f = .1; f < .9; f += .1) if (G.blocked(bx + (x - bx) * f, bz + (z - bz) * f, 8)) clear = false; if (clear) { spot = { x, z }; bank = { x: bx, z: bz }; } } }
+    }
+    const yaw = Math.atan2(spot.x - bank.x, spot.z - bank.z);
+    G.place(bank.x, bank.z); G.player.yaw = yaw; G.look(yaw + Math.PI, .3); G.S.mode = 'town'; G.S.items.bottle = 2; G.S.hand = 'bottle';
+    // ten of them on the banks, in earshot of it and not too close to him
+    const crowd = G.horde.all.slice(0, 10); let i = 0;
+    for (let r = 10; r < 30 && i < 10; r += 2) for (let a = 0; a < 6.28 && i < 10; a += .5) { const x = spot.x + Math.cos(a) * r, z = spot.z + Math.sin(a) * r; if (!dry(x, z) || Math.hypot(x - bank.x, z - bank.z) < 12) continue; const s = crowd[i++]; s.x = x; s.z = z; s.y = G.floorAt(x, z); s.tx = x; s.tz = z; s.next = i * .01; }
+    window.wetCrowd = crowd.slice(0, i); window.spot = spot; window.bank = bank; G.step(.1);
+    return { spot, bank, placed: i, all: G.horde.all.length };
+  });
+
+  await pg.tap('#bC'); await e(() => __game.step(.05));
+  await e(() => __game.step(.6)); await picture('water-going');
+  const sunk = await e(() => {
+    const G = __game, H = G.horde, was = H.all.length, inWater = (s) => G.floorAt(s.x, s.z) < G.water.level(s.x, s.z) - .1;
+    flown();
+    const landed = G.lures.lureSpots.at(-1), dist = Math.hypot(landed.x - spot.x, landed.z - spot.z);
+    // who they are and what they remember: he's been around them, so they know him
+    window.under = new Map(); window.up = [];
+    for (const s of wetCrowd) { G.folks.close(s.who, 5); under.set(s, { met: s.who.met, near: null }); }
+    const surfaced = H.on.surfaced; H.on.surfaced = (s) => { up.push({ s, x: s.x, z: s.z, wet: s.wet, dries: H.T.dries, snake: s.snake, snakeFor: H.T.snakeFor, sore: s.sore > 0, home: s.homeward, climbing: s.climbing, state: s.state, floor: G.floorAt(s.x, s.z), level: G.water.level(s.x, s.z), pond: !!G.water.in(s.x, s.z) }); surfaced?.(s); };
+    const counts = new Set([H.all.length]);
+    let most = 0, t = 0, quiet = 0;
+    // until the cottonmouths have the ones that went in, the current's brought them up, and they're out of the water, with a moment to spare
+    for (; t < 90 && (t < 12 || quiet < 4); t += .25) {
+      G.S.mode = 'town'; G.sim(.25, 1 / 30);
+      most = Math.max(most, wetCrowd.filter(inWater).length); counts.add(H.all.length);
+      for (const s of wetCrowd) if (s.under !== undefined && !under.get(s).near) under.get(s).near = G.river.path.near(s.x, s.z);
+      quiet = wetCrowd.some((s) => s.under !== undefined || s.climbing || (s.wading && inWater(s))) ? 0 : quiet + 1;
+    }
+    const went = [...under.values()].filter((o) => o.near).length;
+    return { placed: wetCrowd.length, landedWet: G.floorAt(landed.x, landed.z) < G.water.level(landed.x, landed.z) - .1, dist, most, went, up: up.length, lost: was - H.all.length, counts: [...counts], t };
+  });
+  console.log(`     ${tag}${sunk.went} of ${sunk.placed} went in after it and under, ${sunk.up} came up again, all by ${sunk.t.toFixed(0)} s`);
+  check(`${tag}a bottle in the water takes them in after it, and the cottonmouths have them: ${sunk.went} of ${sunk.placed}`, sunk.landedWet && sunk.most >= 3 && sunk.went >= 3, sunk);
+  check(`${tag}and the crowd is the same size all the way through: nobody is lost, and nobody new comes in`, sunk.lost === 0 && sunk.counts.length === 1, sunk);
+  const upAgain = await e(() => {
+    const G = __game, H = G.horde, total = (p) => { let v = p.s; for (let k = G.river.path.lines[p.line].prev; k >= 0; k = G.river.path.lines[k].prev) v += G.river.path.lines[k].length; return v; };
+    const mine = up.filter((u) => under.get(u.s)?.near);
+    return {
+      n: mine.length,
+      soaked: mine.every((u) => u.wet === u.dries), snake: mine.every((u) => u.snake >= u.snakeFor[0] && u.snake <= u.snakeFor[1]), sore: mine.filter((u) => u.sore).length,
+      inTheWater: mine.every((u) => u.floor < u.level - .1 && !u.pond && u.climbing), home: mine.every((u) => u.home && u.state === 0),
+      downstream: mine.map((u) => total(G.river.path.near(u.x, u.z)) - total(under.get(u.s).near)),
+      same: mine.every((u) => u.s.who === G.folks.person(u.s.who.id) && u.s.who.body === u.s), there: wetCrowd.every((s) => H.all.includes(s)),
+    };
+  });
+  check(`${tag}they all come up again: ${upAgain.n} of ${sunk.went}`, upAgain.n === sunk.went && upAgain.there && upAgain.same, upAgain);
+  check(`${tag}downstream, ${upAgain.downstream.map((d) => d.toFixed(0)).join(', ')} m, and not up the river`, upAgain.downstream.length > 0 && upAgain.downstream.every((d) => d > 5 && d < 70), upAgain);
+  check(`${tag}up in the water to wade out of it, soaked, with a snake on a sleeve, and heading home, not after anyone`, upAgain.soaked && upAgain.snake && upAgain.inTheWater && upAgain.home, upAgain);
+  // they walk home to dry off: out on the bank and drawn soaked, with the snake on a sleeve, which the graphics card has, and one of them in front of the camera
+  const drawn = await e(() => {
+    const G = __game, list = up.filter((u) => under.get(u.s)?.near).map((u) => u.s), P = G.player.pos;
+    const s = list.filter((o) => o.snake > 0).sort((a, b) => Math.hypot(a.x - P.x, a.z - P.z) - Math.hypot(b.x - P.x, b.z - P.z))[0];
+    if (!s) return { none: true, n: list.length, snakes: G.river.snakes() };
+    window.soaked = s;
+    // from dry ground a few metres off, level with them, which is up the bank from the river and not in it, with the camera behind him and a little to one side
+    let at = null;
+    for (let r = 5.5; r <= 9 && !at; r += 1.5) for (let a = 0; a < 6.28 && !at; a += .4) {
+      const x = s.x + Math.sin(a) * r, z = s.z + Math.cos(a) * r, f = G.floorAt(x, z);
+      if (f > G.water.level(x, z) + .3 && Math.abs(f - s.y) < 1 && !G.blocked(x, z, f) && !G.water.in(x, z)) at = { x, z };
+    }
+    const dx = at.x - s.x, dz = at.z - s.z;
+    G.place(at.x, at.z); G.player.yaw = Math.atan2(-dx, -dz); G.look(Math.atan2(dx, dz) + .4, .26); G.S.mode = 'town'; G.HP.speed = 0; G.step(.5, 1 / 24);
+    const wets = list.map((o) => G.river.wetOn(o)).filter((v) => v !== null);
+    // and the snake on its sleeve, step by step: it swings a little, or with reduced motion it only hangs
+    const seen = new Set();
+    for (let i = 0; i < 12; i++) { G.step(1 / 12, 1 / 24); const m = G.river.relative(s); if (m) seen.add(m.slice(0, 11).map((v) => (Math.round(v * 100) / 100 || 0).toFixed(2)).join()); }
+    return { shown: wets.length, wet: Math.min(...wets), snakes: G.river.snakes(), on: list.filter((o) => o.snake > 0).length, n: list.length, hung: seen.size };
+  });
+  check(`${tag}they're drawn soaked, with ${drawn.snakes?.drawn} snakes on sleeves`, !drawn.none && drawn.shown >= 1 && drawn.wet > .5 && drawn.snakes.drawn >= 1 && drawn.snakes.shown && drawn.snakes.calls === 2, drawn);
+  check(`${tag}and the snake ${calm ? 'only hangs' : 'swings a little'}`, calm ? drawn.hung === 1 : drawn.hung > 3, drawn);
+  await picture('water-after');
+  const home = await e(() => {
+    const G = __game, H = G.horde, list = up.filter((u) => under.get(u.s)?.near).map((u) => u.s), home = (s) => Math.hypot(s.x - s.homeX, s.z - s.homeZ);
+    const d0 = list.map(home);
+    G.S.mode = 'town'; G.sim(20, 1 / 30);
+    const out = list.map((s, i) => ({ dry: G.floorAt(s.x, s.z) >= G.water.level(s.x, s.z) - .1 && !G.water.in(s.x, s.z), out: !s.climbing && !s.wading, got: d0[i] - home(s) }));
+    // what they remember carries on: they know him still, the bottle is remembered, and so is where the river had them
+    const mem = list.map((s) => ({ met: s.who.met, near: s.who.near >= 5, fooled: (s.who.fooled.bottle ?? 0) >= 1, shun: !!s.who.shun, same: s.who === G.folks.person(s.who.id) }));
+    // and the rest of the day, in case anyone was owed
+    G.sim(60, 1 / 30);
+    return { out, mem, later: H.all.length };
+  });
+  check(`${tag}then out on the bank, on dry ground and not in a pond, and walking home, slower than they went about`, home.out.every((o) => o.dry && o.out && o.got > 1 && o.got / 20 < .8), home.out);
+  check(`${tag}and they're the same people: what they remember carries on, the bottle too, and where the river had them`, home.mem.every((m) => m.met && m.near && m.fooled && m.shun && m.same), home.mem);
+  check(`${tag}and nobody new walks into town to take their place, not in the next minute either`, home.later === sunk.counts[0], home);
+
+};
+await intoTheWater(page, '', false, snap);
+
+// ---- and wherever along the river someone goes under, there's a bank to come up on that they can walk home from: every 40 m of it inside the map, from either side
+const banks = await g(() => {
+  const G = __game, P = G.river.path;
+  const wet = (x, z) => G.floorAt(x, z) < G.water.level(x, z) - .1, open = (x, z) => G.map.inBounds(x, z) && !G.blocked(x, z, G.floorAt(x, z)) && !wet(x, z);
+  // can they walk away from here: a flood fill of 4 m cells that has to get 100 m from where it started without leaving the map or crossing anything
+  const escapes = (x0, z0) => {
+    const seen = new Set([0]), queue = [[0, 0]], C = 4; let n = 0, far = 0;
+    while (queue.length && n < 2500 && far < 100) {
+      const [i, j] = queue.shift(); n++; far = Math.max(far, Math.hypot(i, j) * C);
+      for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+        const ni = i + a, nj = j + b, k = ni * 100000 + nj;
+        if (seen.has(k) || Math.hypot(ni, nj) * C > 150) continue; seen.add(k);
+        if (open(x0 + ni * C, z0 + nj * C)) queue.push([ni, nj]);
+      }
+    }
+    return far >= 100;
+  };
+  const total = (p) => { let v = p.s; for (let k = P.lines[p.line].prev; k >= 0; k = P.lines[k].prev) v += P.lines[k].length; return v; };
+  const r = { tried: 0, none: 0, wet: 0, blocked: 0, pond: 0, trapped: [], up: 0, full: 0 };
+  for (let k = 0; k < P.lines.length; k++) {
+    if (P.lines[k].length < 5000) continue;
+    for (let s = 100; s < P.lines[k].length - 100; s += 40) {
+      const c = P.point(k, s);
+      if (!G.map.inBounds(c.x, c.z)) continue;
+      for (const side of [-1, 1]) {
+        const x = c.x - c.tz * 4 * side, z = c.z + c.tx * 4 * side;
+        if (!wet(x, z) || G.blocked(x, z, G.floorAt(x, z))) continue;
+        // with home on one bank or the other, a way off
+        const metres = 35 + (r.tried % 5) * 7, at = G.river.comeUp({ x, z }, { metres, side: (r.tried % 9) / 9, home: [c.x - c.tz * 300 * side, c.z + c.tx * 300 * side] });
+        r.tried++;
+        if (!at) { r.none++; continue; }
+        if (wet(...at.bank)) r.wet++;
+        if (G.blocked(at.bank[0], at.bank[1], G.floorAt(...at.bank))) r.blocked++;
+        if (G.water.in(...at.bank) || G.water.in(at.x, at.z)) r.pond++;
+        if (!escapes(...at.bank)) r.trapped.push(at.bank.map(Math.round));
+        const swept = total(P.near(at.x, at.z)) - total(P.near(x, z));
+        if (swept > -3) r.up++;
+        if (swept >= metres - 10) r.full++;
+      }
+    }
   }
-  const yaw = Math.atan2(spot.x - bank.x, spot.z - bank.z);
-  G.place(bank.x, bank.z); G.player.yaw = yaw; G.look(yaw + Math.PI, .3); G.S.mode = 'town'; G.S.items.bottle = 2; G.S.hand = 'bottle';
-  // ten of them on the banks, in earshot of it and not too close to him
-  const crowd = G.horde.all.slice(0, 10); let i = 0;
-  for (let r = 10; r < 30 && i < 10; r += 2) for (let a = 0; a < 6.28 && i < 10; a += .5) { const x = spot.x + Math.cos(a) * r, z = spot.z + Math.sin(a) * r; if (!dry(x, z) || Math.hypot(x - bank.x, z - bank.z) < 12) continue; const s = crowd[i++]; s.x = x; s.z = z; s.y = G.floorAt(x, z); s.tx = x; s.tz = z; s.next = i * .01; }
-  window.wetCrowd = crowd.slice(0, i); window.spot = spot; window.bank = bank; G.step(.1);
-  return { spot, bank, placed: i, all: G.horde.all.length };
+  return r;
 });
-await tap();
-await g(() => __game.step(.6)); await snap('water-going');
-const sunk = await g(() => {
-  const G = __game, was = G.horde.all.length, inWater = () => wetCrowd.filter((s) => G.floorAt(s.x, s.z) < G.water.level(s.x, s.z) - .1).length;
-  flown();
-  const landed = G.lures.lureSpots.at(-1), dist = Math.hypot(landed.x - spot.x, landed.z - spot.z);
-  let most = 0, t = 0;
-  for (; t < 45 && G.horde.all.length > was - 3; t += .25) { G.S.mode = 'town'; G.sim(.25, 1 / 30); most = Math.max(most, inWater()); }
-  const went = was - G.horde.all.length;
-  G.sim(4, 1 / 30);
-  return { placed: wetCrowd.length, landedWet: G.floorAt(landed.x, landed.z) < G.water.level(landed.x, landed.z) - .1, dist, most, went, wentAfter: was - G.horde.all.length, t };
-});
-check(`a bottle in the water takes them in after it, and the cottonmouths have them: ${sunk.wentAfter} of ${sunk.placed} gone in ${sunk.t.toFixed(0)} s`, sunk.landedWet && sunk.most >= 3 && sunk.went >= 3, sunk);
-await snap('water-after');
+check(`all along the river, ${banks.tried} places: somewhere dry to come up that's inside the map, not in a pond, with a way off it`, banks.tried > 300 && banks.none === 0 && banks.wet === 0 && banks.blocked === 0 && banks.pond === 0 && banks.trapped.length === 0, banks);
+check(`and it's downstream every time, and as far as the current took them in ${banks.full} of ${banks.tried}`, banks.up === banks.tried && banks.full > banks.tried * .9, banks);
 
 // ---- someone else's problem
 const coop = await g(() => {
@@ -285,6 +402,9 @@ await close();
     return { lit: [...new Set(lit)], popped, most };
   });
   check('with reduced motion a car alarm\'s lights stay on, and firecrackers don\'t flash', still.lit.length === 1 && still.lit[0] === 2 && still.popped === 1 && still.most <= 2, still);
+  // the water the same way, with nothing swung that doesn't have to be: the snake only hangs
+  await page.evaluate(setup);
+  await intoTheWater(page, 'with reduced motion, ', true, async () => {});
   check('no console errors', errors.length === 0, errors);
   await close();
 }

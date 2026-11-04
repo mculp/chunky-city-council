@@ -39,7 +39,7 @@ Asked whether Coop, Rocky and Miss Bobby should stop being zombies and be ordina
 **In the game, stunned:** a swing knocks one down for about ten seconds, getting up included, and they still can't be killed. They go over where they were hit, lie there, and get up slowly, on to their knees folded over first. A swing reaches further than they can grab, and it takes them half a second to get hold of him once they're close enough, so standing his ground and swinging lands first. Decided around it:
 
 - Ten seconds is from the hammer or the bat. A blast keeps them down longer, and so does a pickup, the faster it was going. How long each weapon keeps them down is to come.
-- What the train and the river do to them is as it was, and whether "nobody dies" covers those is with the Creative Director.
+- The Creative Director's ruling is that nobody dies, which covers the train and the river. The train throws them clear of the tracks and they lie in the ditch longer than any swing keeps anyone down, then get up sore and go home. The cottonmouths have whoever the river has, and the current takes them, and they come up downstream on the bank, soaked, with a snake on a sleeve, and walk home. It's the same person with what they remember, and nobody new walks into town in their place. `data/folks.md` has the numbers.
 
 ## Charlie Flake
 

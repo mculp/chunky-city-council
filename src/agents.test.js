@@ -244,10 +244,18 @@ describe('kept between sessions', () => {
     F.hurt(F.person(5), 0, 0, 'hit'); F.tick(HOW.saveEvery + 1); assert.equal(F.hasSave(), true);
   });
 
-  test('anyone the river had doesn\'t come back, and someone new takes their turn', () => {
-    const store = memory(), F = folks(store); F.next(); F.gone(F.person(1)); F.save();
-    const again = folks(store); assert.equal(again.next().id, 0); assert.equal(again.next().id, 2);
-    assert.deepEqual(again.met(), []);
+  test('nobody is lost to the river: an old save that says someone was comes back with them, and what it says of them is kept', () => {
+    const store = memory(), key = `chunky.folks.v${data.version}`;
+    store.setItem(key, JSON.stringify({ clock: 500, rows: { 1: { gone: true, hurt: 2, when: 400, met: true, near: 12 }, 3: { gone: true } } }));
+    const F = folks(store), one = F.person(1);
+    assert.equal(one.gone, undefined); assert.equal(one.hurt, 2); assert.equal(one.met, true); assert.equal(F.now(), 500);
+    assert.deepEqual([F.next().id, F.next().id, F.next().id, F.next().id], [0, 1, 2, 3], 'and everyone takes their turn, the one it lost too');
+    assert.deepEqual(F.met().map((w) => w.id), [1]);
+    // and what it writes next doesn't say it
+    F.hurt(F.person(5), 0, 0, 'hit'); F.save();
+    const rows = JSON.parse(store.getItem(key)).rows;
+    assert.ok(Object.values(rows).every((r) => r.gone === undefined), 'nobody\'s gone'); assert.equal(rows[1].hurt, 2); assert.equal(rows[3], undefined, 'and a row with nothing else in it takes no room');
+    assert.equal(F.gone, undefined);
   });
 
   test('a save that can\'t be read counts as none, and a browser that won\'t keep anything still plays', () => {
@@ -256,7 +264,7 @@ describe('kept between sessions', () => {
   });
 
   test('forgetting everyone means everyone', () => {
-    const store = memory(), F = folks(store), w = F.person(2); F.close(w, 5); F.hurt(w, 0, 0, 'hit'); F.fooled(w, 'bottle'); F.gone(F.person(0)); F.next(); F.save();
+    const store = memory(), F = folks(store), w = F.person(2); F.close(w, 5); F.hurt(w, 0, 0, 'hit'); F.fooled(w, 'bottle'); F.next(); F.save();
     F.forget();
     assert.equal(F.hasSave(), false); assert.equal(w.hurt, 0); assert.equal(F.mood(w), BE); assert.deepEqual(F.met(), []); assert.equal(F.next().id, 0);
   });
@@ -410,11 +418,45 @@ describe('what it does in the crowd', () => {
     assert.ok(u.who.got >= 1);
   });
 
-  test('the river has them for good', () => {
-    const F = folks(), h = createHorde(field(F, { water: () => true }), { bite: [.1, .1], goesUnder: .1 }), s = h.add(1, 0);
-    s.wading = true; h.lure(2, 0, 10, 5, true, 'bottle');
-    run(h, { ...still, x: 50, canGrab: false }, 2);
-    assert.equal(s.who.gone, true); assert.ok(!h.all.includes(s));
+  describe('the river gives them back', () => {
+    // water everywhere to start with, and downstream is south: dry just above where they come up
+    const wade = (F, w, extra = {}) => {
+      const h = createHorde(field(F, { water: (x, z) => z < 20, level: () => 0, floorAt: (x, z) => (z < 20 ? -2 : 0), comeUp: (s, how) => ({ x: s.x, z: 19, bank: [s.x, 21] }), ...extra }), { bite: [.1, .1] }), s = bring(h, F, w, 1, 0);
+      s.wading = true; h.lure(2, 0, 10, 5, true, 'bottle');
+      return { h, s };
+    };
+
+    test('the same person comes up, with everything they remember, and nobody new takes their turn', () => {
+      const F = folks(), w = someone(F, (x) => x.nerve > .5);
+      F.hurt(w, 3, 4, 'hit'); F.fooled(w, 'bottle'); F.close(w, 5);
+      const { h, s } = wade(F, w), hurt = w.hurt, mood = F.mood(w), n = h.all.length;
+      run(h, { ...still, x: 50, canGrab: false }, 1);
+      assert.ok(s.under !== undefined, 'under');
+      assert.deepEqual(w.shun, [1, 0], 'they remember where the river had them'); assert.equal(w.hurt, hurt, 'but not that it was him');
+      run(h, { ...still, x: 50, canGrab: false }, TUNING.goesUnder + TUNING.below[1] + 1);
+      assert.equal(s.under, undefined); assert.equal(s.who, w); assert.equal(w.body, s);
+      assert.equal(w.hurt, hurt); assert.equal(F.mood(w), mood); assert.equal(w.fooled.bottle >= 1, true); assert.equal(w.met, true);
+      assert.equal(h.all.length, n); assert.equal(w.gone, undefined);
+      assert.equal(F.next().id, n, 'and the next to come out is whoever was next, because nobody was sent for');
+    });
+
+    test('how long they\'re under, how far they\'re taken and how long the snake hangs on are theirs, from their number', () => {
+      const ids = [3, 8, 13, 21, 34, 55], swept = [], snake = [];
+      for (const id of ids) {
+        const run1 = () => {
+          const F = folks(), up = [], { h, s } = wade(F, F.person(id), {}); h.on.surfaced = (o) => up.push(o.snake);
+          const p = { ...still, x: 50, canGrab: false }; let t = 0;
+          for (; t < 60 && s.under === undefined; t += 1 / 30) h.update(1 / 30, p);
+          const was = s.swept, under = s.under;
+          for (let k = 0; k < 40 * 30 && s.under !== undefined; k++) h.update(1 / 30, p);
+          return [was, under, up[0]];
+        };
+        const [a, under, snk] = run1(), [b, under2, snk2] = run1();
+        assert.equal(a, b, 'the same every time'); assert.equal(under, under2); assert.equal(snk, snk2);
+        swept.push(a.toFixed(2)); snake.push(snk.toFixed(2));
+      }
+      assert.ok(new Set(swept).size >= 5 && new Set(snake).size >= 5, `${swept} ${snake}`);
+    });
   });
 
   test('being knocked over counts once however many things hit them at once', () => {
