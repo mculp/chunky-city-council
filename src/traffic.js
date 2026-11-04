@@ -31,7 +31,8 @@ const hypot = Math.hypot, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 function turn(from, to, k) { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return from + d * k; }
 
 // world: { roads, nodes, lanes, along(id, s), sOn(id, x, z), half(road, x, z), blocked(x, z, y), floorAt(x, z), someoneAt(x, z, r), rand(), add(kind, x, z, yaw) -> vehicle, remove(v),
-//          person(kind) -> who, out(car, why), mood(who) -> whether they'd run him down, roadNear(x, z) -> a road or nothing, laneAt(x, z, not) -> a lane or nothing, laneNear(x, z) -> a lane or nothing, touch(car), shut(x, z) -> whether there's a railroad crossing shut there, if there's such a thing }
+//          person(kind) -> who, out(car, why), mood(who) -> whether they'd run him down, roadNear(x, z) -> a road or nothing, laneAt(x, z, not) -> a lane or nothing, laneNear(x, z) -> a lane or nothing, touch(car), shut(x, z) -> whether there's a railroad crossing shut there, if there's such a thing,
+//          keepOut(x, z) -> whether it's somewhere nobody goes, which a kid turns round short of }
 // p: { x, z, y, driving }
 export function createTraffic(world, tuning = {}) {
   const T = { ...TRAFFIC, ...tuning }, cars = [], riders = [], nodeById = new Map(world.nodes.map((n) => [n.id, n]));
@@ -41,7 +42,7 @@ export function createTraffic(world, tuning = {}) {
   let nextCar = 0, nextRider = 0;
   const t = { cars, riders, T, on: true };
 
-  const noGo = (x, z) => hypot(x, z) < T.noGo;
+  const noGo = (x, z) => hypot(x, z) < T.noGo || !!world.keepOut?.(x, z);
   const limitOf = (r) => (r.surface !== 'asphalt' ? T.limits.unpaved : r.id === 'us_80' ? T.limits.highway : r.width >= 6.5 ? T.limits.wide : T.limits.narrow);
   const laneOff = (c, x, z) => { const half = world.half(c.road, x, z); return Math.max(0, half - c.v.K.width / 2 - .25) * .75 + Math.min(half / 2, c.v.K.width / 2) * .25; };
 
@@ -194,6 +195,8 @@ export function createTraffic(world, tuning = {}) {
       if (next) { const s = world.sOn(next.id, end.x, end.z); c.road = next; c.s = s; c.dir = s < next.length / 2 ? 1 : -1; }
       else { c.s = clamp(c.s, 0, c.road.length); c.dir = -c.dir; v.f = Math.min(v.f, 4); }
     }
+    // and round short of anywhere nobody goes
+    if (noGo(world.along(c.road.id, c.s).x, world.along(c.road.id, c.s).z)) { c.s = clamp(c.s - c.dir * v.f * dt, 0, c.road.length); c.dir = -c.dir; v.f = Math.min(v.f, 4); }
     const q = world.along(c.road.id, c.s), fx = q.tx * c.dir, fz = q.tz * c.dir;
     c.off += clamp(c.want - c.off, -T.swerveFast * dt, T.swerveFast * dt);
     const k = 1 - Math.exp(-dt * 7), nx = v.x + (q.x - fz * c.off - v.x) * k, nz = v.z + (q.z + fx * c.off - v.z) * k;

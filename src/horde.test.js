@@ -400,6 +400,27 @@ describe('the church', () => {
   });
 });
 
+describe('the compound on Pine Forest Rd, a box nobody goes into', () => {
+  const zone = { x0: 0, z0: -20, x1: 40, z1: 20, out: [-5, 0] }, inside = (s) => s.x > 0 && s.x < 40 && s.z > -20 && s.z < 20;
+  test('they won\'t step inside, whatever he does in there', () => {
+    const h = createHorde(field()); h.zones.push(zone); const s = h.add(-6, 0), q = h.add(-3, 12);
+    let went = false; for (let t = 0; t < 10; t += 1 / 30) { h.update(1 / 30, { ...still, x: 8, noise: 20, beans: 12, hidden: true }); if (inside(s) || inside(q)) went = true; }
+    assert.ok(!went);
+  });
+  test('one after him gives up at its edge when he goes in', () => {
+    const h = createHorde(field()); h.zones.push(zone); const s = h.add(-15, 0);
+    run(h, { ...still, x: -3, noise: 20 }, 2);
+    assert.ok(after(s), 'after him outside it');
+    let went = false; for (let t = 0; t < 20; t += 1 / 30) { h.update(1 / 30, { ...still, x: 10, hidden: true }); if (inside(s)) went = true; }
+    assert.ok(!went && !after(s), `${went ? 'went in' : 'kept on'} at ${s.x.toFixed(1)},${s.z.toFixed(1)}`);
+  });
+  test('and anyone caught inside it leaves by its way out', () => {
+    const h = createHorde(field()); const s = h.add(20, 6); h.zones.push(zone);
+    run(h, { ...still, x: 100, hidden: true }, 40);
+    assert.ok(!inside(s) && Math.hypot(s.x - zone.out[0], s.z - zone.out[1]) < 10, `at ${s.x.toFixed(1)},${s.z.toFixed(1)}`);
+  });
+});
+
 describe('grabbing', () => {
   // in reach and long enough to get hold of him
   const caught = (tuning, on) => { const h = createHorde(field(), tuning, on), s = h.add(.5, 0); s.state = HUNTING; run(h, still, TUNING.windUp + .05); return { h, s }; };

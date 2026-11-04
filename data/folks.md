@@ -119,6 +119,10 @@ One after him that loses him for `giveUp`, 8 seconds, stops for a second, folds 
 
 At 3 m/s against his 4.4 at a walk it takes 19 to 21 seconds in the open, and a good deal less round a corner. With RUN, at 8, it takes 9 to 13, depending on how close they were when it started. `npm run afternoon` plays both.
 
+## Where nobody goes
+
+`horde.zones` is the places none of them goes, each a circle, `{ x, z, r }`, or a box, `{ x0, z0, x1, z1, out }`. There are two: 28 m round the church on Church St, from when the crowd comes out until the church comes down, and the compound on Pine Forest Rd, always, from the edge of the road down to the river, which is `GROUNDS` in `index.html`. Nobody steps into one, whatever he does in there. While he's in one he can't be found, so his noise stirs nobody, and anyone after him stops at the edge, loses him and gives up. Anyone in one anyway leaves it, straight out of a circle and by its way out of a box, which for the compound is the drive. The kids on four-wheelers turn round short of the compound, and the river doesn't bring anyone up on its bank there. `npm run church` and `npm run compound` play both.
+
 ## Running
 
 He's always faster than any of them. The quickest of them comes for him folded over, at 3.24 m/s, which is 3 and 8% more, and under three quarters of the 4.4 he walks the stick at. RUN is 8 for about 20 seconds. There's no swarm any more, with its own state and speed: three of them together don't go any quicker, and nothing calls the rest over.

@@ -224,6 +224,12 @@ describe('kids on four-wheelers', () => {
     const { t, c } = rider({ things: [[OFF + 293, 170, 9], [OFF + 307, 170, 9]] }), p = him(300, 180); onLane(c); c.s = 165; c.v.z = 165;
     run(t, p, 1); assert.equal(c.dir, -1);
   });
+
+  test('they turn round short of somewhere nobody goes, like the compound on Pine Forest Rd', () => {
+    const { t, c, world } = rider(); onLane(c); world.keepOut = (x, z) => z > 200;
+    let furthest = 0, lanes = new Set(); run(t, him(5000), 60, 1 / 30, () => { furthest = Math.max(furthest, c.v.z); lanes.add(c.road.id); });
+    assert.ok(furthest < 201 && !lanes.has('lane2'), `as far as ${furthest.toFixed(1)}, on ${[...lanes]}`);
+  });
 });
 
 describe('a railroad crossing', () => {

@@ -134,7 +134,7 @@ for (const j of ['drums', 'guitar', 'bass', 'keyboard']) {
   check(`it says to play the ${j}, and the button says PLAY`, before.act === `Play the ${j}` && before.button === 'PLAY', before);
   await page.tap('#bA'); await page.waitForTimeout(30);
   const after = await g(() => { const G = __game; G.step(.05); return { played: [...played], noises: G.horde.noises.length, heard: G.horde.noises.at(-1) }; });
-  check(`  and a tap plays it, and the crowd hears`, after.played.some((n) => n.startsWith('jam.')) && (after.noises > before.noises || after.heard?.r >= 40), after);
+  check(`  and a tap plays it, as loud as anything`, after.played.some((n) => n.startsWith('jam.')) && (after.noises > before.noises || after.heard?.r >= 40), after);
   await g(() => { const G = __game; for (let i = 0; i < 30; i++) G.sim(1 / 30, 1 / 30); });
   if (j === 'drums') await snap('drums');
 }
@@ -151,6 +151,40 @@ const again = await g(() => {
 });
 check('playing them straight off, the second beat is the cymbal', again.beats.length >= 2 && again.beats[0] === 'jam.drum' && again.beats[1] === 'jam.cymbal', again.beats);
 check('hitting the drums with the hammer sounds them and chips them', again.after < again.hp && !again.down && again.hit.length > 0, again);
+
+// ---------------- nobody in it: two minutes of him in the shed with the drums going now and then, and six of the crowd about the road by the drive, who'd have it that home's
+// up the drive. None of them comes in, and three flung in off the road walk back out to it. The crowd's only about within 150 m of him, so it's here by the road that this can happen at all.
+const kept = await g(() => {
+  const G = __game, h = G.horde, Z = h.zones.find((a) => a.out), inside = (s) => s.x > Z.x0 && s.x < Z.x1 && s.z > Z.z0 && s.z < Z.z1, drums = G.compound.JAM[0], [ox, oz] = Z.out;
+  const crowd = h.all.filter((a) => a.state !== undefined && !a.home && !a.flat).slice(0, 9), at = [[-4, -30], [-3, -12], [-2, 6], [-4, 18], [1, -40], [0, 40], [12, -2], [24, -3], [16, 0]];
+  crowd.forEach((s, i) => { s.x = s.tx = ox + at[i][0]; s.z = s.tz = oz + at[i][1]; s.state = 0; s.timer = 0; });
+  const road = crowd.slice(0, 6), flung = crowd.slice(6), was = flung.every(inside), [hx, hz] = true2(880, 734);
+  for (const s of road) { s.homeX = hx; s.homeZ = hz; }
+  let came = 0, left = null;
+  for (let t = 1; t <= 120; t++) {
+    // the same noise the drums make when they're played
+    if (t % 20 === 1) h.noise(drums.x, drums.z, 40, 3, 'jam');
+    G.sim(1, 1 / 30);
+    came += road.filter(inside).length;
+    if (left === null && !flung.some(inside)) left = t;
+  }
+  return { n: crowd.length, was, came, left, still: crowd.filter(inside).length };
+});
+check(`over two minutes with the drums going, none of the crowd about the road comes in, and three flung in off it walk back out in ${kept.left} s`, kept.n === 9 && kept.was && kept.came === 0 && kept.left !== null && kept.left < 60 && kept.still === 0, kept);
+// and one chasing him up Pine Forest Rd gives up at the road when he turns in at the drive
+const chase = await g(() => {
+  const G = __game, h = G.horde, P = G.player.pos, Z = h.zones.find((a) => a.out), inside = (s) => s.x > Z.x0 && s.x < Z.x1 && s.z > Z.z0 && s.z < Z.z1, T = 1 / 30;
+  const s = h.all.find((a) => a.state !== undefined && !a.home && !a.flat && a.quiet === false && !inside(a));
+  G.place(...true2(852.5, 745)); G.sim(.1, .1);
+  [s.x, s.z] = true2(856, 768); s.tx = s.x; s.tz = s.z; s.state = 0; s.timer = 0; G.sim(.1, .1);
+  h.provoke(s, 'swing');
+  let t = 0, hunted = false, went = false;
+  for (; t < 1.6; t += T) { G.sim(T, T); hunted ||= s.state === 2; }
+  walkTo([true2(851.8, 737.5), true2(880, 734)], .8, 12);
+  for (let k = 0; k < 20 * 30; k++) { G.sim(T, T); hunted ||= s.state === 2; went ||= inside(s); }
+  return { hunted, went, state: s.state, grabbed: !!h.grab, him: inside({ x: P.x, z: P.z }), at: [+(s.x - Z.x0).toFixed(1), +(s.z - Z.z1).toFixed(1)] };
+});
+check('one chasing him up the road gives up at the road when he turns in at the drive, and never sets foot in it', chase.hunted && chase.him && !chase.went && chase.state !== 2 && !chase.grabbed, chase);
 
 // ---------------- the pool
 const pool = await g(() => {
@@ -285,17 +319,8 @@ const film = await g(() => {
 });
 check('it counts down', film.frames >= 5, film);
 check('it flickers', film.flick > 3, film);
-check('the crowd goes for its light', film.lit, film);
+check('its light is one the crowd goes for, though none of them can get in to it', film.lit, film);
 await snap('screen');
-const crowd = await g(() => {
-  const G = __game, C = G.compound, h = G.horde;
-  // a few that have wandered near it from the yard and the bank, each of whom might go and stand in it, or might not
-  const from = [[4, 22], [12, 18], [22, 8], [-4, 22], [17, 14], [8, 21]], near = h.all.filter((a) => a.state !== undefined && !a.home).slice(0, from.length);
-  near.forEach((s, i) => { s.x = C.spot.x + from[i][0]; s.z = C.spot.z + from[i][1]; s.state = 0; s.timer = 0; });
-  for (let i = 0; i < 40 * 30; i++) G.sim(1 / 30, 1 / 30);
-  return near.map((s) => ({ d: +Math.hypot(s.x - C.spot.x, s.z - C.spot.z).toFixed(1), state: s.state }));
-});
-check('of a few who wander near, someone ends up watching, for the light and not for him', crowd.some((s) => s.d < 10 && s.state === 0), crowd);
 const off = await g(() => { const G = __game, C = G.compound, was = C.projector.hp; G.wreck.breakProp(C.projector, 0, 1); G.sim(.2, .2); return { on: C.on(), lit: G.horde.lights.includes(C.spot), was }; });
 check('break the projector and that is the end of it', !off.on && !off.lit, off);
 

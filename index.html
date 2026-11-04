@@ -3463,6 +3463,9 @@ const STUDIO = 900020, CABIN = 900019;
   { const [x, z] = atTrue(979.3, 675.5); thing(out, 'digger', excavator(), x, z, -2.41, 6, { solid: [2.2, 2.2, 2], chip: '#d6a321' }); }
   flushBuckets(70);
 }
+// ---- its grounds, from the edge of Pine Forest Rd to the river, where the owner wants nobody. The crowd never goes in, and anyone of them who's in there anyway leaves by the
+// drive, as far as which anyone after him gives up at the road. The kids on four-wheelers turn round at the road, and the river doesn't bring anyone up on its bank.
+const GROUNDS = (() => { const [x0, z0] = atTrue(855.5, 572), [x1, z1] = atTrue(1088, 739); return { x0, z0, x1, z1, out: atTrue(850, 737), on: (x, z) => x > x0 && x < x1 && z > z0 && z < z1 }; })();
 // ---- the taxidermy sign at the road. The owner asked for it by name, so it's the one thing here that says whose it is, as it's carved on the listing's photo from
 // February 2018: two tall timber posts and a crossbar, a plain oval plaque hanging from the bar, and under that a board of weathered grey-green planks in a timber frame,
 // with the family's name in an arc over a buck and a doe and TAXIDERMY on a ribbon. The real one has the phone number on its last plank, and here that plank's bare. It's
@@ -6613,7 +6616,7 @@ const comeUp = surfacing(RIVER, {
   pond: (x, z) => !!WATER.in(x, z),
   depth: (x, z) => WATER.level(x, z) - floorOnce(x, z),
   floorAt: floorOnce,
-  blocked: (x, z, y) => blocked(x, z, y),
+  blocked: (x, z, y) => blocked(x, z, y) || GROUNDS.on(x, z),
 });
 // Who each of them is and what they remember of him is in src/agents.js and data/folks.json
 const folks = createFolks(await (await fetch('data/folks.json')).json(), { store: saveStore, looks: LOOKS.crowd });
@@ -6671,6 +6674,8 @@ const horde = createHorde({
   // and the snake lets go of the sleeve
   drop(s) { dropSnake(s); },
 });
+// The compound on Pine Forest Rd's off limits to all of them, always, from the start
+horde.zones.push(GROUNDS);
 // where they start: along the streets of town, thickest on US 80
 const CROWD_STREETS = [['us_80', atTrue(-615, -18), atTrue(185, 0), 56], ['church_st', atTrue(-1098, -379), atTrue(-281, -199), 20], ['adams_st', atTrue(-283, -23), atTrue(-285, -338), 20]];
 // `net` is playing together, from src/together.js, and null in a game on its own
@@ -6910,7 +6915,7 @@ const TRAFFIC_ID = { car: 5000, rider: 6000 }, trafficTurn = { car: 0, rider: 0 
 const unpaved = (r) => !!r && r.lane && r.surface !== 'asphalt';
 const traffic = createTraffic({
   roads: MAP.roads, nodes: MAP.nodes, along: MAP.along, sOn: MAP.sOn, half: roadHalf, rand: trafficRand,
-  blocked: blockedInTown, floorAt, shut: (x, z) => trains.shutAt(x, z),
+  blocked: blockedInTown, floorAt, shut: (x, z) => trains.shutAt(x, z), keepOut: GROUNDS.on,
   someoneAt(x, z, r) { for (const s of horde.active) if (Math.hypot(s.x - x, s.z - z) < r) return true; return false; },
   add(kind, x, z, yaw, who) {
     const v = makeVehicle(kind, x, z, yaw, floorAt(x, z)), list = PAINTS[kind];

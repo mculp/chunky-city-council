@@ -106,9 +106,11 @@ export function createHorde(world, tuning = {}, on = {}) {
   let clock = 0, mercy = 0, hearAt = 0, watch = { x: 0, z: 0 };
   const h = { all, active, noises, looks, lights, zones, T, grab: null, on };
 
-  h.inSanctuary = (x, z) => zones.some((a) => hypot(x - a.x, z - a.z) < a.r);
+  // A zone's a circle, { x, z, r }, or a box, { x0, z0, x1, z1, out }, where `out` is the way out of it for anyone caught inside
+  const inZone = (a, x, z) => (a.r !== undefined ? hypot(x - a.x, z - a.z) < a.r : x > a.x0 && x < a.x1 && z > a.z0 && z < a.z1);
+  h.inSanctuary = (x, z) => zones.some((a) => inZone(a, x, z));
   // Off limits, to anyone outside, always, and the bell doesn't change that. Anyone caught inside is on their way out, and can go round whatever's in the way.
-  const offLimits = (s, x, z) => zones.some((a) => hypot(x - a.x, z - a.z) < a.r && hypot(s.x - a.x, s.z - a.z) >= a.r);
+  const offLimits = (s, x, z) => zones.some((a) => inZone(a, x, z) && !inZone(a, s.x, s.z));
   const open = (s, x, z) => !world.blocked(x, z, s.y) && (s.wading || !world.water(x, z)) && !offLimits(s, x, z);
 
   h.add = (x, z, extra = {}) => {
@@ -559,10 +561,12 @@ export function createHorde(world, tuning = {}, on = {}) {
       else { s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.tx = s.x; s.tz = s.z; }
       return;
     }
-    // caught inside the church: out they go
+    // caught inside the church, or the compound on Pine Forest Rd: out they go, straight out of a circle and by its way out of a box
     for (const a of zones) {
-      const d = hypot(s.x - a.x, s.z - a.z);
-      if (d < a.r) { s.state = SHAMBLE; s.timer = 4; s.tx = a.x + (s.x - a.x) / (d || 1) * (a.r + 3); s.tz = a.z + (s.z - a.z) / (d || 1) * (a.r + 3); return; }
+      if (!inZone(a, s.x, s.z)) continue;
+      s.state = SHAMBLE; s.timer = 4;
+      if (a.out) { s.tx = a.out[0]; s.tz = a.out[1]; } else { const d = hypot(s.x - a.x, s.z - a.z) || 1; s.tx = a.x + (s.x - a.x) / d * (a.r + 3); s.tz = a.z + (s.z - a.z) / d * (a.r + 3); }
+      return;
     }
     const startled = Math.max(reach * 1.5, T.startle);
     if (s.turned > 0) s.turned -= T.thinkEvery;
