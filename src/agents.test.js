@@ -513,9 +513,10 @@ describe('what it does in the crowd', () => {
     const F = folks(), h = createHorde(field(F));
     for (let i = 0; i < 400; i++) h.add((i % 20) * 7, Math.floor(i / 20) * 7);
     for (let i = 0; i < 100; i++) F.hurt(F.person(i), 0, 0, 'hit');
-    const began = performance.now(), p = { ...still, x: 70, z: 70, noise: 14, canGrab: false };
+    // what it took this process to think, rather than the clock, so that something else busy on the machine can't push it over
+    const p = { ...still, x: 70, z: 70, noise: 14, canGrab: false }, began = process.cpuUsage();
     for (let i = 0; i < 300; i++) h.update(1 / 30, p);
-    const ms = (performance.now() - began) / 300;
+    const spent = process.cpuUsage(began), ms = (spent.user + spent.system) / 1000 / 300;
     assert.ok(ms < 4, `${ms.toFixed(2)} ms a frame for 400 of them`);
   });
 });
