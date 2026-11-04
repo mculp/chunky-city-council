@@ -30,14 +30,18 @@ await key('e'); st = await step(1.2); check('sawing', st.cut > .4 && st.cut < .6
 st = await step(1.3); check('rope cut', st.mode === 'fall', st.mode); await key('e', false); await snap('fall');
 st = await step(1.2); check('in the river', st.mode === 'swim', st.mode); await snap('splash');
 check('swim objective', /west bank/i.test(st.obj), st.obj);
-st = await step(1.6); check('cottonmouths toast', /cottonmouths/i.test(st.toast), st.toast);
+st = await step(1.6);
+const mocs = await g(() => { const P = __game.player.pos; return __game.river.moccasins().filter((s) => s.shown && Math.hypot(s.x - P.x, s.z - P.z) < 20).length; });
+check('cottonmouths in the water with him, and nothing says so', mocs >= 3 && !st.toast, { mocs, toast: st.toast });
 
 // swim to the west bank by hand: face it, hold forward
 await g(() => __game.look(Math.PI / 2 + .1, .28));
 await key('w');
 for (let i = 0; i < 40 && st.mode === 'swim'; i++) { st = await step(1); if (st.hp <= 1) await g(() => { __game.S.hp = 3; }); }
 await key('w', false);
-check('climbed out', st.mode === 'land', st.mode); check('noose off', /noose/i.test(st.toast), st.toast); await snap('bank');
+check('climbed out', st.mode === 'land', st.mode);
+const noose = await g(() => ({ off: __game.S.removedNoose, toast: __game.state().toast }));
+check('the noose is off him, and nothing says so', noose.off && !/noose/i.test(noose.toast), noose); await snap('bank');
 
 // up to the road and across the bridge with the planks falling behind
 await g(() => { __game.place(-23, 2); __game.look(-Math.PI / 2, .3); });

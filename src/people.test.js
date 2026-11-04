@@ -188,12 +188,13 @@ describe('dialogue', () => {
   });
 
   test('the steps are paid for out of the pantry, and she only asks while it has something', () => {
-    const p = createPeople(data), c = ctx(), why = [];
-    c.pantry = 2; c.fromPantry = (w) => { why.push(w); c.beans += c.pantry; c.pantry = 0; };
+    const p = createPeople(data), c = ctx();
+    let paid = 0;
+    c.pantry = 2; c.fromPantry = () => { paid++; c.beans += c.pantry; c.pantry = 0; };
     const asks = () => p.line('bobby', c).opts.some((o) => o.to === 'bobbyBeans');
     assert.ok(asks());
     p.apply(data.events.swept, c);
-    assert.deepEqual(why, ['Miss Bobby']); assert.equal(c.beans, 2); assert.ok(c.flags.swept);
+    assert.equal(paid, 1); assert.equal(c.beans, 2); assert.ok(c.flags.swept);
     assert.ok(!asks());
     c.flags.swept = false;
     assert.ok(!asks(), 'not with nothing on the shelves');

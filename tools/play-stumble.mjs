@@ -178,6 +178,23 @@ const cost = await g(() => { const G = __game, S = G.stumble; G.place(...true2(-
 console.log(`     looking over the stones: ${cost.calls} draw calls and ${cost.triangles} triangles`);
 await snap('over-the-stones');
 
+// ---------------- the stone's words with every button showing
+// nothing covers any of them: SHAMBLE, with the crowd out, and something to throw and something else to switch to
+await g(() => { const G = __game, S = G.stumble; G.bringOutCrowd(); G.S.items.bottle = 2; G.S.items.crackers = 1; G.place(S.STONE.x, S.STONE.z + 1); G.sim(.2, 1 / 30); });
+await tap(); await g(() => __game.sim(.1, 1 / 30));
+const covered = await g(() => {
+  const box = document.getElementById('prompt').getBoundingClientRect(), shown = [], over = [];
+  for (const b of document.getElementById('btns').children) {
+    const s = getComputedStyle(b);
+    if (s.display === 'none' || s.visibility === 'hidden') continue;
+    const r = b.getBoundingClientRect(); shown.push(b.id);
+    if (r.left < box.right && r.right > box.left && r.top < box.bottom && r.bottom > box.top) over.push(b.id);
+  }
+  return { read: __game.stumble.stoneRead(), shown, over, box: [box.left, box.top, box.right, box.bottom].map(Math.round), w: innerWidth };
+});
+check(`nothing covers the stone's words, with ${covered.shown.join(', ')} showing`, covered.read && !covered.over.length && ['bH', 'bC', 'bN'].every((id) => covered.shown.includes(id)) && covered.box[0] >= 0 && covered.box[2] <= covered.w, covered);
+await snap('the-stone-and-every-button');
+
 check('no console errors', errors.length === 0, errors);
 await close();
 

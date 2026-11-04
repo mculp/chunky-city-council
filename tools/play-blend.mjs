@@ -54,15 +54,17 @@ await g(() => {
     return out;
   };
   window.meters = () => [...document.querySelectorAll('.sus')].filter((e) => !e.hidden).length;
-  window.toastSays = () => document.getElementById('toast').textContent;
+  // What the game asks the sound for from listen() on, whether or not the sound's on yet. Nothing on the screen says when one of them sees
+  // through it or he's given himself away: the groan and the glitch do.
+  window.listen = () => { const play = G.sound.play, asked = []; G.sound.play = function (name, o) { asked.push(name); return play.call(this, name, o); }; window.heard = () => { G.sound.play = play; return asked; }; };
 });
 
 // ---- the button
 const btn = await g(() => { crowdOnRoad(); land(); const p = us80(-.1); G.place(p.x, p.z); G.step(.1); const b = document.getElementById('bH'); return { shown: !b.hidden && getComputedStyle(b).display !== 'none', words: b.textContent, on: G.shambling() }; });
 check('in town a phone has a SHAMBLE button', btn.shown && btn.words === 'SHAMBLE' && !btn.on, btn);
 await tap('#bH');
-const pressed = await g(() => { G.step(.05); return { on: G.shambling(), held: document.getElementById('bH').classList.contains('held'), says: toastSays() }; });
-check('a tap and he\'s shambling, and it says what gives him away', pressed.on && pressed.held && /run, fight or step into a light/.test(pressed.says), pressed);
+const pressed = await g(() => { G.step(.05); return { on: G.shambling(), held: document.getElementById('bH').classList.contains('held'), says: G.state().toast }; });
+check('a tap and he\'s shambling, the button stays down, and nothing says how it works', pressed.on && pressed.held && !/shambl|one of them|light/i.test(pressed.says), pressed);
 const pace = await g(() => { const p = us80(-.1), q = us80(0); G.look(Math.atan2(-(q.x - p.x), -(q.z - p.z)), .3); G.stick(0, 1); G.sim(.5, T); const a = { x: P().x, z: P().z }; G.sim(2, T); G.stick(0, 0); return Math.hypot(P().x - a.x, P().z - a.z) / 2; });
 check(`with the stick all the way over he goes no quicker than they do: ${pace.toFixed(2)} m/s`, pace > 1.1 && pace < 1.4, pace);
 
@@ -85,35 +87,39 @@ const close1 = await g(() => {
   const lot = crowdOnRoad(30), s = lot[14];
   land(); G.place(s.x + 1, s.z); G.stick(0, 0); if (!G.shambling()) { G.key('c', true); G.sim(T, T); G.key('c', false); }
   // and nobody gets hold of him while it's looked at, since being grabbed ends the act anyway
+  listen();
   let t = 0; while (s.state < 2 && t < 15) { G.place(s.x + 1, s.z); G.player.inv = .85; G.sim(.1, T); t += .1; }
   G.player.inv = .85; G.step(.05);
-  const others = lot.filter((o) => o !== s && o.state >= 2 && o.state <= 4).length;
-  return { t, state: s.state, others, says: toastSays(), on: G.shambling() };
+  const others = lot.filter((o) => o !== s && o.state >= 2 && o.state <= 4).length, asked = heard();
+  return { t, state: s.state, others, groan: asked.includes('groan.hunt'), glitch: asked.includes('glitch'), says: G.state().toast, on: G.shambling() };
 });
 await snap('2-seen-through');
-check(`stood right up against one, they see through it in ${close1.t.toFixed(1)} s, and it says so`, close1.state >= 2 && close1.t > 2 && close1.t < 10 && /sees through it/.test(close1.says), close1);
+check(`stood right up against one, they see through it in ${close1.t.toFixed(1)} s: it groans and the picture glitches, and nothing says so`, close1.state >= 2 && close1.t > 2 && close1.t < 10 && close1.groan && close1.glitch && !/through it/.test(close1.says), close1);
 check('but only them, and the act holds for everyone else', close1.others === 0 && close1.on, close1);
 
 // ---- giving himself away
 // whoever's within 14 m of him, which is everyone it gives him away to
 const ring = () => g(() => { const lot = crowdOnRoad(30), s = lot[14]; land(); G.place(s.x, s.z + 1.5); for (const o of lot) o.sus = 0; if (!G.shambling()) { G.key('c', true); G.sim(T, T); G.key('c', false); } G.sim(.3, T); window.near = lot.filter((o) => Math.hypot(o.x - P().x, o.z - P().z) < 14); return near.length; });
-const said = () => g(() => toastSays());
+// it groans and the picture glitches, and nothing's written
+const said = () => g(() => { const asked = heard(); return { groan: asked.includes('groan.hunt'), glitch: asked.includes('glitch'), toast: G.state().toast }; });
+const told = (says) => says.groan && says.glitch && !/away/.test(says.toast);
 // knocked flat counts, since they get up and come for him
 const after = () => g(() => { G.player.inv = .85; G.sim(1.5, T); G.step(.05); return { on: G.shambling(), turned: near.filter((s) => s.state >= 2 && s.state <= 6).length, closer: near.filter((s) => Math.hypot(s.x - P().x, s.z - P().z) < 6).length }; });
 let near = await ring();
 // RUN stays held a moment after a tap, which is plenty with the stick pushed
-await g(() => { G.stick(0, 1); });
+await g(() => { listen(); G.stick(0, 1); });
 await tap('#bR');
-let says = await said();
 await g(() => { G.stick(0, 0); });
 const ran = await after();
+let says = await said();
 // No more than three come for him, however many are close: the nearest three, and the rest look up and go back
-check(`running gives him away: ${ran.turned} of the ${near} within 14 m turn on him, no more than three, and it says so`, !ran.on && ran.turned === Math.min(near, 3) && /gave you away/.test(says), { near, ran, says });
+check(`running gives him away: ${ran.turned} of the ${near} within 14 m turn on him, no more than three, with a groan and a glitch and nothing written`, !ran.on && ran.turned === Math.min(near, 3) && told(says), { near, ran, says });
 near = await ring();
+await g(() => listen());
 await tap('#bA');
-says = await said();
 const swung = await after();
-check(`and so does a swing, standing still: ${swung.turned} of ${near}, and ${swung.closer} of them are on him in a second and a half`, !swung.on && swung.turned === Math.min(near, 3) && swung.closer >= Math.min(near, 3) && /gave you away/.test(says), { near, swung, says });
+says = await said();
+check(`and so does a swing, standing still: ${swung.turned} of ${near}, and ${swung.closer} of them are on him in a second and a half`, !swung.on && swung.turned === Math.min(near, 3) && swung.closer >= Math.min(near, 3) && told(says), { near, swung, says });
 const lit = await g(() => {
   const spot = G.station.spot; crowdOnRoad(30); land(); G.place(spot.x + 30, spot.z); if (!G.shambling()) { G.key('c', true); G.sim(T, T); G.key('c', false); }
   const was = G.shambling(); G.place(spot.x + 2, spot.z); G.sim(.3, T);

@@ -13,6 +13,8 @@ let failed = 0;
 const check = (name, ok, got) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ' -- got ' + JSON.stringify(got)}`); if (!ok) failed++; };
 const g = (fn, arg) => page.evaluate(fn, arg);
 const snap = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.jpg`, type: 'jpeg', quality: 82 }); };
+// how someone is with him, for what a check says: nothing in the game writes it
+const MOODS = ['leaving him be', 'after him', 'keeping away', 'following him'];
 
 await g(() => {
   const G = __game; G.pause(); G.fillTown(); G.jump('town'); G.S.flags.town = true; G.S.flags.ended = G.S.flags.arrived = true; G.step(.1);
@@ -96,13 +98,13 @@ const reason = await g(() => {
   const [x, z] = s.home.door; s.x = s.tx = x; s.z = s.tz = z; s.state = 0;
   G.place(x + s.home.nx * 1.1, z + s.home.nz * 1.1); const yaw = Math.atan2(-s.home.nx, -s.home.nz); G.player.yaw = yaw; G.look(yaw + Math.PI, .3); G.HP.speed = 0; G.step(.2);
   window.victim = s;
-  return { calm: s.who.calm, word: G.folks.word(s.who), mood: G.folks.mood(s.who), state: s.state };
+  return { calm: s.who.calm, mood: G.folks.mood(s.who), state: s.state };
 });
-check('someone at home to start with', reason.calm && reason.mood === 0 && reason.word === 'leaves you be', reason);
+check('someone at home to start with, leaving him be', reason.calm && reason.mood === 0, reason);
 await snap('2-at-home');
 await page.tap('#bA');
-const after = await g(() => { const G = __game; G.sim(.5, T); return { hurt: victim.who.hurt, flat: victim.flat, mood: G.folks.mood(victim.who), word: G.folks.word(victim.who) }; });
-check(`hit them and they don't leave him be any more: "${after.word}"`, after.hurt === 1 && after.flat > 0 && after.mood !== 0, after);
+const after = await g(() => { const G = __game; G.sim(.5, T); return { hurt: victim.who.hurt, flat: victim.flat, mood: G.folks.mood(victim.who) }; });
+check(`hit them and they don't leave him be any more: they're ${MOODS[after.mood]}`, after.hurt === 1 && after.flat > 0 && after.mood !== 0, after);
 await g(() => { const G = __game; G.folks.forget(); G.horde.calm(); });
 
 // ---- someone driving
@@ -200,12 +202,12 @@ const rammed = await g(() => {
   while (t < 5 && v.ai) { G.sim(T, T); t += T; }
   G.stick(0, 0); G.step(.1);
   const s = who.body;
-  const out = { t, freed: !v.ai, moved: Math.hypot(v.x - was.x, v.z - was.z), hurt: who.hurt, truck: who.truck, onFoot: !!s, fig: !!v.fig, name: who.name, mood: G.folks.mood(who), word: G.folks.word(who), loose: !!v.loose };
+  const out = { t, freed: !v.ai, moved: Math.hypot(v.x - was.x, v.z - was.z), hurt: who.hurt, truck: who.truck, onFoot: !!s, fig: !!v.fig, name: who.name, mood: G.folks.mood(who), loose: !!v.loose };
   d.f = d.s = 0; G.sim(.2, T); G.key('e', true); G.sim(T, T); G.key('e', false); G.sim(.2, T);
   out.mode = G.S.mode;
   return out;
 });
-check(`ram someone and ${rammed.name} is out of it, on foot, and "${rammed.word}"`, rammed.freed && rammed.onFoot && !rammed.fig && rammed.hurt >= 1 && rammed.truck >= 1 && rammed.mood !== 0, rammed);
+check(`ram someone and ${rammed.name} is out of it, on foot, and ${MOODS[rammed.mood]}`, rammed.freed && rammed.onFoot && !rammed.fig && rammed.hurt >= 1 && rammed.truck >= 1 && rammed.mood !== 0, rammed);
 await snap('4-rammed');
 
 // Taking someone's car when they've stopped
@@ -232,9 +234,9 @@ await page.tap('#bA');
 const took = await g(() => {
   const G = __game, c = takenCar, who = c.who; G.sim(.3, T);
   const s = who.body;
-  return { driving: G.driving() === c.v, ai: !!c.v.ai, onFoot: !!s, hurt: who.hurt, name: who.name, word: G.folks.word(who), near: s ? near(s) : null };
+  return { driving: G.driving() === c.v, ai: !!c.v.ai, onFoot: !!s, hurt: who.hurt, name: who.name, mood: G.folks.mood(who), near: s ? near(s) : null };
 });
-check(`and pulls ${took.name} out of it, who's on foot and "${took.word}"`, took.driving && !took.ai && took.onFoot && took.hurt === 1, took);
+check(`and pulls ${took.name} out of it, who's on foot and ${MOODS[took.mood]}`, took.driving && !took.ai && took.onFoot && took.hurt === 1, took);
 await g(() => { const G = __game, d = G.driving(); if (d) { d.f = d.s = 0; G.sim(.2, T); G.key('e', true); G.sim(T, T); G.key('e', false); G.sim(.2, T); } });
 
 // ---- the kids

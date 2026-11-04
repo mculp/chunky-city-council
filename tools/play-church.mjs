@@ -81,7 +81,7 @@ check('in Chapter 1 she\'ll have the steps swept', r && r.opts.includes('Can I g
 await page.locator('#dOpts button', { hasText: 'Can I get some beans?' }).tap(); await g(() => G.sim(.05, T));
 await page.locator('#dOpts button', { hasText: 'Sweep the steps.' }).tap(); await g(() => G.sim(.05, T));
 r = await g(() => { G.key('e', true); G.sim(3.5, T); G.key('e', false); G.sim(.1, T); return { beans: G.S.beans, swept: G.S.flags.swept, shown: C.shown(), toast: toastSays(), d: dialog() }; });
-check('swept for three, and three come off the church\'s shelf', r.beans === 3 && r.swept && r.shown === 6 && /\+3 beans · Miss Bobby/.test(r.toast), r);
+check('swept for three, and three come off the church\'s shelf, with nothing said after the count', r.beans === 3 && r.swept && r.shown === 6 && r.toast === '+3 beans', r);
 check('and then she has her say', r.d && /lantern man/.test(r.d.say) && !r.d.opts.includes('Can I get some beans?'), r.d);
 await snap('3-swept');
 r = await g(() => { land(); C.pantry.sweep(C.today(), 9); G.S.flags.swept = false; G.S.beans = 0; byBobby(); return C.shown(); });
@@ -142,8 +142,8 @@ r = await g(() => {
 check(`inside the door, by the rope, the button rings the bell: "${r.prompt}"`, /Ring the bell/.test(r.prompt) && r.reach, r);
 await g(() => G.sound.forget());
 await tap('#bA');
-r = await g(() => { G.sim(.3, T); return { ringing: C.ringing(), toast: toastSays(), heard: !!G.sound.lastHeard('church.bell'), again: C.bellInReach(), prompt: prompted() }; });
-check('a tap and it rings, and that is all it says', r.ringing && r.heard && /The bell's ringing\.$/.test(r.toast) && !/come/.test(r.toast), r);
+r = await g(() => { G.sim(.3, T); return { ringing: C.ringing(), toast: G.state().toast, heard: !!G.sound.lastHeard('church.bell'), again: C.bellInReach(), prompt: prompted() }; });
+check('a tap and it rings, and nothing\'s written on the screen about it', r.ringing && r.heard && !r.toast, r);
 check('and it can\'t be rung again while it\'s going', !r.again && !/Ring the bell/.test(r.prompt), r);
 // in there they can't find him, so it's no use to them: a couple of seconds of it and nobody has stirred
 r = await g(() => { G.player.inv = .85; G.sim(2, T); return { roused: G.horde.all.filter((s) => s.state === 8 || s.state === 2).length, noted: G.roused.log.length }; });

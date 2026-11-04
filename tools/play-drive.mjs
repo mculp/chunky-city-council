@@ -131,8 +131,14 @@ for (const kind of KINDS) {
   check(`${kind}: D turns it right and A turns it left`, turning.right < -.05 && turning.left > .05, turning);
 
   // ---------------- too fast to get out, then out
-  const fast = await g(() => { const G = __game, p = openRun(220), v = move(p.x, p.z, Math.PI / 2); v.f = 12; G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); return { mode: G.S.mode, toast: G.state().toast }; });
-  check(`${kind}: he won't jump out at speed`, fast.mode === 'drive' && /Slow down/.test(fast.toast), fast);
+  // the door won't open, which its handle says, and nothing on the screen does: what the game asks the sound for, whether or not it's on yet
+  const fast = await g(() => {
+    const G = __game, p = openRun(220), v = move(p.x, p.z, Math.PI / 2), asked = [], play = G.sound.play;
+    G.sound.play = function (name, o) { asked.push([name, o?.rate ?? 1]); return play.call(this, name, o); };
+    v.f = 12; G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); G.sim(.7, 1 / 30); G.sound.play = play;
+    return { mode: G.S.mode, toast: G.state().toast, rattles: asked.filter(([name, rate]) => name === 'vehicle.door' && rate > 1.5).length };
+  });
+  check(`${kind}: he won't jump out at speed: the handle rattles twice, and nothing says why`, fast.mode === 'drive' && fast.rattles === 2 && !/slow/i.test(fast.toast), fast);
   const o = await g(() => window.out());
   check(`${kind}: E gets him out, on his feet beside it`, o.mode === 'town' && o.gone && !o.inside && Math.abs(o.at[1] - o.floor) < .1, o);
   await snap(`${kind}-4-out`);
@@ -188,7 +194,7 @@ const wreck = await g(() => {
   const x = v.x, z = v.z; G.key("w", true); G.key("a", true); v.f = v.s = 0; G.sim(1, 1 / 30); G.key("w", false); G.key("a", false);
   return { wrecked: v.wrecked, tries, toast, moved: Math.hypot(v.x - x, v.z - z), hp: v.hp };
 });
-check(`${wreck.tries} crashes wreck it, it says so, and it won't go`, wreck.wrecked && wreck.hp === 0 && /Wrecked/.test(wreck.toast) && wreck.moved < .2, wreck);
+check(`${wreck.tries} crashes wreck it, nothing says so, and it won't go`, wreck.wrecked && wreck.hp === 0 && !/Wreck/.test(wreck.toast) && wreck.moved < .2, wreck);
 await g(() => __game.step(.6)); await snap('wrecked');
 const left = await g(() => { const G = __game, v = G.driving(), r = out(); G.step(.6); const a = v.yaw + Math.PI / 2; G.place(v.x + Math.sin(a) * (v.K.width / 2 + 1), v.z + Math.cos(a) * (v.K.width / 2 + 1)); G.step(.6); const said = G.state().prompt; G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); return { ...r, said, mode: G.S.mode }; });
 check('he climbs out of a wreck, and it can\'t be got back into', left.gone && left.mode === 'town' && !/Get in/.test(left.said), left);
@@ -213,7 +219,7 @@ const river = await g(() => {
   const m = G.S.mode, kind = G.state().kind; if (m === 'swim') { G.place(...G.map.fromTrue(-115, -58)); G.S.mode = 'town'; G.HP.kind = 'run'; }
   return { flooded, toast, m, kind, r };
 });
-check('in deep water the engine floods and it stops', river.flooded && /Flooded/.test(river.toast), river);
+check('in deep water the engine floods and it stops, and nothing says so', river.flooded && !/Flood/.test(river.toast), river);
 check('he gets out and he\'s swimming', river.m === 'swim' && river.kind === 'swim', river);
 
 // ---------------- the edge of the map

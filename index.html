@@ -56,23 +56,17 @@ body.talking #mini,body.talking #miniName{visibility:hidden}
 .obj{font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);padding:6px 10px;max-width:min(58vw,360px);text-align:right;line-height:1.4}
 .rep{font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);pointer-events:auto;max-width:min(58vw,360px)}
 .rep-head{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;min-height:30px;padding:4px 9px;margin:0;background:none;border:0;border-radius:0;box-shadow:none;color:var(--cream);font:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.rep-list{display:grid;grid-template-columns:auto auto;gap:3px 10px;padding:0 9px 7px;max-height:38vh;overflow-y:auto;justify-items:end}
+.rep-list{display:grid;gap:3px;padding:0 9px 7px;max-height:38vh;overflow-y:auto}
 .rep-list[hidden]{display:none}
 .rep-name{color:var(--dusk);justify-self:start}
-.rep-note{grid-column:1/-1;color:var(--dusk);font-size:9px;letter-spacing:.04em;margin-top:-2px}
-.rep-how{font-size:9px;letter-spacing:.04em;color:var(--rust);white-space:nowrap}
-#who{position:fixed;left:0;top:0;z-index:3;pointer-events:none;font-size:10px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;color:var(--cream);background:var(--panel);border:1px solid var(--line);padding:2px 6px;will-change:transform}
-#who[hidden]{display:none}
-#who b{font-weight:400;color:var(--rust);font-size:9px;letter-spacing:.04em;margin-left:6px}
 .mutter{position:fixed;left:0;top:0;z-index:3;pointer-events:none;font-size:10px;font-style:italic;letter-spacing:.03em;white-space:nowrap;color:var(--cream);text-shadow:0 0 3px var(--ink),0 1px 1px var(--ink);opacity:0;will-change:transform,opacity}
 .mutter[hidden]{display:none}
 #toniSays{position:fixed;left:0;top:0;z-index:3;pointer-events:none;max-width:min(230px,64vw);font-size:12px;line-height:1.3;letter-spacing:.02em;text-align:center;color:var(--cream);text-shadow:0 0 3px var(--ink),0 1px 1px var(--ink),0 0 7px var(--ink);opacity:0;will-change:transform,opacity}
 #toniSays[hidden]{display:none}
 @media (pointer:coarse){.rep-head{min-height:40px}}
-.pips{letter-spacing:2px;font-variant-numeric:tabular-nums}
 #prompt{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom, 0px) + 176px);transform:translateX(-50%);z-index:4;pointer-events:none;
-  font-family:var(--f-display);font-size:15px;letter-spacing:.03em;background:var(--panel);border:1px solid var(--line);padding:8px 14px;white-space:nowrap;text-align:center}
-#prompt .words{display:block;white-space:normal;width:min(84vw,520px);text-align:center;line-height:1.35}
+  font-family:var(--f-display);font-size:15px;letter-spacing:.03em;background:var(--panel);border:1px solid var(--line);padding:8px 14px;width:max-content;max-width:calc(100vw - 62px);text-align:center}
+#prompt .words{display:block;white-space:normal;width:min(520px,calc(100vw - 62px));text-align:center;line-height:1.35}
 #prompt .bar{display:block;height:5px;margin-top:7px;background:rgba(255,255,255,.14)}
 #prompt .bar i{display:block;height:100%;width:0;background:var(--rust)}
 #toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top, 0px) + 92px);transform:translateX(-50%);z-index:5;pointer-events:none;
@@ -191,7 +185,7 @@ body.talking #mute,body.talking #levels,body.talking #levelsBox{visibility:hidde
 </div>
 <div id="prompt" hidden></div>
 <div id="toast"></div>
-<div id="who" hidden></div><div id="susMeters"></div><div id="mutters"></div><div id="toniSays" hidden></div>
+<div id="susMeters"></div><div id="mutters"></div><div id="toniSays" hidden></div>
 <div id="sub" hidden></div>
 <div id="flash"></div>
 <div class="card" id="card"><div><h2 id="cardH"></h2><p id="cardP"></p></div></div>
@@ -218,7 +212,7 @@ body.talking #mute,body.talking #levels,body.talking #levelsBox{visibility:hidde
   <div class="pbox"><h2 id="failH"></h2><p id="failP"></p><button class="big" id="retry">Try again</button></div>
 </div>
 <div class="panel" id="end" hidden>
-  <div class="pbox"><h2>You came down.<br>You crossed over.<br><span>You got beans.</span></h2><p id="endP"></p><p>Chapter 2 · Supply and Demand · soon</p><button class="big" id="again">Keep walking</button><p class="credit">Buildings from USA Structures by ORNL and FEMA, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, changed to fit the game. Roads from the US Census. Roof colours from USDA NAIP.</p></div>
+  <div class="pbox"><h2>You came down.<br>You crossed over.<br><span>You got beans.</span></h2><p>Chapter 2 · Supply and Demand · soon</p><button class="big" id="again">Keep walking</button><p class="credit">Buildings from USA Structures by ORNL and FEMA, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, changed to fit the game. Roads from the US Census. Roof colours from USDA NAIP.</p></div>
 </div>
 
 <div class="panel" id="board" hidden></div>
@@ -2070,7 +2064,6 @@ const bellInReach = () => !churchSteeple.down && bellLeft <= 0 && Math.hypot(ROP
 function ringBell() {
   if (bellLeft > 0 || churchSteeple.down) return;
   bellLeft = BELL.seconds; bellNext = 0; if (folkOut) horde.noise(STEEPLE.x, STEEPLE.z, BELL.reach, BELL.seconds, 'bell');
-  toast("The bell's ringing.");
 }
 function stepBell(dt) {
   if (bellLeft > 0) {
@@ -2394,7 +2387,7 @@ const gasBarProp = breakable('bar', 4, null, { rigid: true, objs: [gasBar], wall
 const atGasDoor = () => !gasBarGone && Math.hypot(player.pos.x - GAS_DOOR.x, player.pos.z - GAS_DOOR.z) < 2 && insideRing(player.pos.x, player.pos.z, GAS_HOUSE.pts);
 function barGasDoor() {
   gasBarred = !gasBarred; gasBar.visible = gasBarred; gasBarProp.down = !gasBarred; gasBarWall[4] = gasBarred ? Y0 + 2.6 : -1e9;
-  SFX.play('vehicle.door', { x: GAS_DOOR.x, z: GAS_DOOR.z, rate: .75 }); toast(gasBarred ? 'Door barred' : 'Door unbarred');
+  SFX.play('vehicle.door', { x: GAS_DOOR.x, z: GAS_DOOR.z, rate: .75 });
   if (folkOut) horde.noise(GAS_DOOR.x, GAS_DOOR.z, 12, 2, 'door');
   if (!gasBarred) return;
   // not left standing in the doorway
@@ -2686,9 +2679,9 @@ function swatFlies(x, z) {
   fliesStir = 1;
   if (!S.flags.robbySaid) return;
   fliesLeft = Math.max(0, fliesLeft - .25);
-  if (fliesLeft <= 0) { cookFire = burnAt(HEARTH.x + .42, Y0 + .12, HEARTH.z, .38); skillet.visible = true; toast('The flies are out'); }
+  if (fliesLeft <= 0) { cookFire = burnAt(HEARTH.x + .42, Y0 + .12, HEARTH.z, .38); skillet.visible = true; }
 }
-function eatDeerMeat() { S.flags.ateDeerMeat = true; skillet.visible = false; S.hp = 3; player.stamina = 1; SFX.play('can.clink'); toast('Deer meat · hearts full'); if (cookFire) cookFire.T = cookFire.age + 6; }
+function eatDeerMeat() { S.flags.ateDeerMeat = true; skillet.visible = false; S.hp = 3; player.stamina = 1; SFX.play('can.clink'); toast('Deer meat'); if (cookFire) cookFire.T = cookFire.age + 6; }
 function updateFlies(dt, step) {
   const shown = fliesLeft > 0 && Math.hypot(camera.position.x - ROBBY.x, camera.position.z - ROBBY.z) < 70;
   flies.visible = shown; fliesStir = Math.max(0, fliesStir - dt * 1.4);
@@ -4687,29 +4680,6 @@ const SEATED = { car: { hip: .8, arms: -1.2, legs: -1.3 }, pickup: { hip: 1.04, 
 let crowdPicked = -1, crowdDrawn = -1, crowdSeated = 0;
 // Just over the top of someone's head, wherever it's got to, on the screen. Folded over their head hangs, so that's over their neck, the highest of them.
 const overHead = (s, v) => (s.hdy === undefined ? v.set(s.x, s.y + hillUp(s.x, s.z) + 2.05 * s.size * TOWN_SCALE, s.z) : v.set(s.x + s.hdx, s.y + s.hdy + hillUp(s.x, s.z) + .1, s.z + s.hdz)).project(camera);
-// The name of whoever's nearest, over their head, once he's been around them long enough to know it
-const WHO_REACH = 9, whoTag = document.getElementById('who'), _who = new THREE.Vector3();
-let whoNear = null, whoPicked = -1, whoSaid = '';
-function drawWho() {
-  // who that is, four times a second
-  if (Math.floor(time * 4) !== whoPicked) {
-    whoPicked = Math.floor(time * 4); whoNear = null;
-    if (S.mode === 'town' || S.mode === 'grabbed' || S.mode === 'drive') {
-      let best = WHO_REACH;
-      for (const s of horde.active) { if (!s.who?.met || s.under !== undefined) continue; const d = Math.hypot(s.x - player.pos.x, s.z - player.pos.z); if (d < best) { best = d; whoNear = s; } }
-      for (const c of traffic.cars) { const f = c.v.fig; if (!f || !c.who.met || c.v.f > 3) continue; const d = Math.hypot(c.v.x - player.pos.x, c.v.z - player.pos.z); if (d < best) { best = d; whoNear = f; } }
-    }
-  }
-  if (whoNear) {
-    overHead(whoNear, _who);
-    if (_who.z >= 1) whoNear = null;
-  }
-  if (!whoNear) { whoTag.hidden = true; return; }
-  const word = folks.word(whoNear.who), said = word ? `${whoNear.who.name} <b>${word}</b>` : whoNear.who.name;
-  if (said !== whoSaid) { whoSaid = said; whoTag.innerHTML = said; }
-  whoTag.hidden = false;
-  whoTag.style.transform = `translate(${((_who.x * .5 + .5) * innerWidth).toFixed(1)}px,${((-_who.y * .5 + .5) * innerHeight).toFixed(1)}px) translate(-50%,-100%)`;
-}
 // What the ones who've gone quiet mutter, every so often when he's close on foot: a few words, small and faint over their head, drifting up as they fade.
 // With reduced motion they're just there, and fade. The nearest first, one at a time from each, and never more than two at once. The words are data/folks.json's.
 const MUTTER = { reach: 7, gap: [9, 16], lasts: 3.2, rise: 16 };
@@ -4737,7 +4707,7 @@ function drawMutters() {
     if (!on || age > MUTTER.lasts || !muttering(s)) { m.s = null; m.e.hidden = true; continue; }
     overHead(s, _mut);
     if (_mut.z >= 1) { m.e.hidden = true; continue; }
-    const fade = Math.min(1, reduceMotion ? 1 : age / .3, MUTTER.lasts - age), up = (reduceMotion ? 0 : age / MUTTER.lasts * MUTTER.rise) + (s === whoNear ? 22 : 4);
+    const fade = Math.min(1, reduceMotion ? 1 : age / .3, MUTTER.lasts - age), up = (reduceMotion ? 0 : age / MUTTER.lasts * MUTTER.rise) + 4;
     m.e.hidden = false; m.e.style.opacity = (fade * .72).toFixed(2);
     // and kept on the screen, for anyone at the edge of it
     m.w ||= m.e.offsetWidth;
@@ -5357,7 +5327,7 @@ Object.assign(S.flags, people.flags());
 const pantry = createPantry({ store: saveStore }), today = () => (signNow === null ? dayOf() : dayOf(new Date(signNow)));
 // What she'd give him for the steps. Until Chapter 1's done she always has his three, or he couldn't get to twelve.
 const pantryOwes = () => (S.flags.ended ? pantry.owes(today()) : PANTRY.pays);
-function fromPantry(why) { const n = pantryOwes(); pantry.sweep(today(), n); showPantry(); if (n) addBeans(n, why); }
+function fromPantry() { const n = pantryOwes(); pantry.sweep(today(), n); showPantry(); if (n) addBeans(n); }
 showPantry();
 
 // ================================================================ Toni, at the burned house on Gallatin St
@@ -5608,14 +5578,32 @@ function pointAtObjective() {
   const shown = dist < 100 ? Math.round(dist / 5) * 5 : Math.round(dist / 10) * 10;
   if (hudCache.dist !== shown) { hudCache.dist = shown; $('objDist').textContent = `${shown} m`; }
 }
-let lastPrompt = '';
+let lastPrompt = '', promptHTML = '';
 function prompt(html, prog = null) {
   const key = html ? html + '|' + (prog === null ? '' : Math.round(prog * 100)) : '';
   if (key === lastPrompt) return; lastPrompt = key;
-  const el = $('prompt'); if (!html) { el.hidden = true; return; }
+  const el = $('prompt'); if (!html) { el.hidden = true; promptHTML = ''; return; }
   el.hidden = false; el.innerHTML = html + (prog !== null ? `<span class="bar"><i style="width:${Math.round(prog * 100)}%"></i></span>` : '');
+  if (html !== promptHTML) { promptHTML = html; placePrompt(); }
 }
 const touchUI = matchMedia('(pointer:coarse)').matches;
+// On a phone the words box keeps clear of the buttons, whichever are showing: it goes up over the highest of any it would sit on,
+// and back down when they've gone. It's only measured when the words, the buttons or the page's size change.
+function placePrompt() {
+  const el = $('prompt');
+  if (!touchUI || el.hidden) return;
+  el.style.bottom = '';
+  const P = el.getBoundingClientRect();
+  let top = P.bottom;
+  for (const b of $('btns').children) {
+    const s = getComputedStyle(b);
+    if (s.display === 'none' || s.visibility === 'hidden') continue;
+    const r = b.getBoundingClientRect();
+    if (r.left < P.right && r.right > P.left) top = Math.min(top, r.top);
+  }
+  if (top < P.bottom) el.style.bottom = `${Math.ceil(innerHeight - top + 10)}px`;
+}
+addEventListener('resize', placePrompt);
 const press = (label) => actWord(label, touchUI);
 function setHTML(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; $(id).innerHTML = v; } }
 function setHidden(id, v) { if (hudCache['h' + id] !== v) { hudCache['h' + id] = v; $(id).hidden = v; } }
@@ -5629,7 +5617,7 @@ function updateControls() {
   const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, thrown = thrownNow(), held = mouseHeld(), full = !!S.items.gerald, now = `${S.mode}|${act}|${map}|${thrown?.word}|${thrown?.n}|${thrown?.more}|${held}|${shambling}|${crowdOut}|${full}`;
   if (hudCache.controls === now) return; hudCache.controls = now;
   $('stam').classList.toggle('veh', S.mode === 'drive');
-  if (touchUI) { const { a, b, run, c, swap, shamble } = buttonsFor(S.mode, { act, thrown, crowd: crowdOut, full }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); setHidden('bC', !c); setHidden('bN', !swap); setHidden('bH', !shamble); $('bH').classList.toggle('held', shambling); $('bH').setAttribute('aria-pressed', shambling); if (c) { $('bC').innerHTML = c.replace(' ', '<br>'); $('bC').style.fontSize = thrown.word.length > 6 ? '10.5px' : '13px'; $('bC').setAttribute('aria-label', `Throw ${thrown.name}`); } return; }
+  if (touchUI) { const { a, b, run, c, swap, shamble } = buttonsFor(S.mode, { act, thrown, crowd: crowdOut, full }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); setHidden('bC', !c); setHidden('bN', !swap); setHidden('bH', !shamble); $('bH').classList.toggle('held', shambling); $('bH').setAttribute('aria-pressed', shambling); if (c) { $('bC').innerHTML = c.replace(' ', '<br>'); $('bC').style.fontSize = thrown.word.length > 6 ? '10.5px' : '13px'; $('bC').setAttribute('aria-label', `Throw ${thrown.name}`); } placePrompt(); return; }
   const list = keysFor(S.mode, { act, map, thrown, mouse: held, shambling, crowd: crowdOut, full });
   setHidden('keyStrip', !list.length); $('keyStrip').innerHTML = list.map(([key, what]) => `<span class="ks"><span class="kc">${key}</span>${what}</span>`).join('');
 }
@@ -5650,28 +5638,19 @@ function hudVitals() {
   setHidden('pockets', !town || !pockets); setHTML('pockets', pockets);
   if (town) drawPeople();
 }
-const pips = (v) => { const n = clamp(Math.round(v), -3, 3); return '■'.repeat(n + 3) + '□'.repeat(3 - n); };
-// Open on a desktop, shut on a phone, where a shut panel shows whoever just changed for a moment
-let peopleOpen = !touchUI, changedId = null, changedUntil = 0, changedFolk = null, folksDrawn = -1e9, folksMet = 0, folksLatest = [];
-const FOLKS_LISTED = 6;
+// The people he knows, by name: open on a desktop, shut on a phone. How any of them feels about him shows in how they talk to him and what they'll do
+// for him, and nobody in the crowd is on it until he knows their name.
+let peopleOpen = !touchUI;
 function drawPeople() {
-  if (people.recent) { changedId = people.recent; changedFolk = null; people.recent = null; changedUntil = time + 3; }
-  if (folks.recent) { changedFolk = folks.recent; folks.recent = null; changedUntil = time + 3; }
-  const known = people.known(), changed = !peopleOpen && time < changedUntil && !changedFolk && people.person(changedId), folk = !peopleOpen && time < changedUntil && changedFolk;
-  // who he's met in town, the latest few, redone once a second since it's a sort
-  if (time - folksDrawn > 1) { folksDrawn = time; folksMet = folks.met().length; folksLatest = folks.latest(FOLKS_LISTED); }
-  setHTML('repHead', folk ? `<span class="rep-name">${folk.name}</span><span class="rep-how">${folks.word(folk)}</span>` : changed ? `<span class="rep-name">${changed.short}</span><span class="pips">${pips(people.get(changed.id, 'trust'))}</span>` : `<span class="rep-name">People ${known.length + folksMet}</span><span>${peopleOpen ? '▾' : '▸'}</span>`);
+  const known = people.known();
+  setHTML('repHead', `<span class="rep-name">People ${known.length}</span><span>${peopleOpen ? '▾' : '▸'}</span>`);
   setHidden('repList', !peopleOpen);
-  if (peopleOpen) setHTML('repList', known.map((c) => {
-    const fear = Math.round(people.get(c.id, 'fear')), debt = people.get(c.id, 'debt');
-    const note = [fear > 0 && `Afraid of you ${fear}`, debt > 0 && `You owe ${debt}`, debt < 0 && `Owes you ${-debt}`].filter(Boolean).join(' · ');
-    return `<span class="rep-name">${c.short}</span><span class="pips">${pips(people.get(c.id, 'trust'))}</span>${note ? `<span class="rep-note">${note}</span>` : ''}`;
-  }).join('') + folksLatest.map((w) => `<span class="rep-name">${w.name}</span><span class="rep-how">${folks.word(w)}</span>`).join(''));
+  if (peopleOpen) setHTML('repList', known.map((c) => `<span class="rep-name">${c.short}</span>`).join(''));
 }
-$('repHead').addEventListener('click', () => { peopleOpen = !peopleOpen; changedUntil = 0; drawPeople(); });
+$('repHead').addEventListener('click', () => { peopleOpen = !peopleOpen; drawPeople(); });
 function flash() { const f = $('flash'); f.style.transition = 'none'; f.style.opacity = '.45'; requestAnimationFrame(() => { f.style.transition = ''; f.style.opacity = '0'; }); }
 function glitch(p, d) { SFX.play('glitch'); if (!reduceMotion) { triggerBurst(p, d, false, false); stepBurst(); } }
-function addBeans(n, why) { SFX.play('can.clink'); SFX.say('beans'); S.beans += n; toast(`+${n} beans${why ? ' · ' + why : ''}`); if (S.beans >= 12 && !S.flags.ended) { S.flags.ended = true; after(1.4, endChapter); } }
+function addBeans(n) { SFX.play('can.clink'); SFX.say('beans'); S.beans += n; toast(`+${n} beans`); if (S.beans >= 12 && !S.flags.ended) { S.flags.ended = true; after(1.4, endChapter); } }
 
 function hurt(dir, kind) {
   if (player.inv > 0 || S.mode === 'fail') return;
@@ -5679,7 +5658,6 @@ function hurt(dir, kind) {
   const l = Math.hypot(dir.x, dir.y) || 1; player.kb.set(dir.x / l * 4, dir.y / l * 4);
   addRipple(player.pos.x, player.pos.z, .35, 1);
   if (S.hp <= 0) fail(kind === 'deck' ? 'Cottonmouth on the boards.' : 'The cottonmouths got you.', kind === 'deck' ? 'Jump it next time.' : `Keep moving. Hold ${fastWord(touchUI)} to get away.`);
-  else toast(kind === 'deck' ? 'Bit on the bridge' : 'Bit');
 }
 function fail(h, p) {
   SFX.play('fail'); SFX.say('failed');
@@ -5763,8 +5741,6 @@ function startSweep() { const s = byDoor(BOBBY_DOOR, .55, 0); S.mode = 'sweep'; 
 function endChapter() {
   if (driving) getOut(true);
   S.mode = 'end'; prompt(null); $('dialog').hidden = true;
-  const known = people.known().map((c) => ({ c, trust: Math.round(people.get(c.id, 'trust')) })), best = [...known].sort((a, b) => b.trust - a.trust)[0];
-  $('endP').textContent = `${known.map(({ c, trust }) => `${c.short} ${trust >= 0 ? '+' : ''}${trust}`).join(' · ')}. ${best.trust > 0 ? best.c.name + ' has your back.' : 'Nobody trusts you yet.'}`;
   $('end').hidden = false; SFX.say('end');
   bringOutCrowd();
 }
@@ -5803,7 +5779,6 @@ function startSwim(retry) {
   player.yaw = -Math.PI / 2 - .25; player.stamina = 1; player.inv = 1.2; S.hp = 3; if (retry) { cam.yaw = player.yaw + Math.PI; cam.snap = true; }
   heroRoot.quaternion.identity();
   objective('Swim to the west bank. Follow the lantern.');
-  if (!retry) after(1.5, () => toast('Cottonmouths in the water'));
 }
 function startBridge() {
   S.mode = 'bridge'; S.flags.bridgeStarted = true; HP.kind = 'run'; S.hp = Math.max(S.hp, 1);
@@ -5976,13 +5951,13 @@ const horde = createHorde({
   roused(s, why) { rousedLog.push({ at: time, kind: why.kind }); if (rousedLog.length > 64) rousedLog.shift(); },
   thrown(s, hit) { SFX.play('hit.flesh', { x: s.x, z: s.z }); spray(s.x, s.y + 1, s.z, hit.hard ? (FEW ? 6 : 12) : 3, .1, 5, .22, .95, .45, hit.vx * .05, hit.vz * .05); },
   splash(s) { addRipple(s.x, s.z, .4, 0); SFX.play('splash.small', { x: s.x, z: s.z }); },
-  spotted(s) { susFlash = s; susFlashUntil = time + .9; toast('One of them sees through it.'); SFX.play('groan.hunt', { x: s.x, z: s.z }); glitch(.3, .15); },
+  spotted(s) { susFlash = s; susFlashUntil = time + .9; SFX.play('groan.hunt', { x: s.x, z: s.z }); glitch(.3, .15); },
   grab() { shambling = false; SFX.play('groan.grab'); SFX.play('hurt', { gain: .6 }); SFX.say('grabbed'); S.mode = 'grabbed'; HP.kind = 'struggle'; HP.speed = 0; player.kb.set(0, 0); if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35); },
   free() { SFX.play('hit.flesh'); S.mode = 'town'; HP.kind = 'run'; player.inv = 1.2; prompt(null); glitch(.4, .2); },
   overrun() {
     SFX.play('hurt'); S.mode = 'town'; HP.kind = 'run'; player.inv = 1.4; prompt(null); S.hp -= 1; if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35);
     if (S.hp <= 0) { fail('They dragged you off.', `Keep moving. Mash ${press('FREE')} to break free.`); return; }
-    if (S.beans > 0) { S.beans -= 1; toast('-1 beans · they got a can'); } else toast('Keep moving');
+    if (S.beans > 0) { S.beans -= 1; toast('-1 beans'); }
   },
   // the river's done with whoever the train threw in, a little way downstream: up out of the water, soaked, with a snake on a sleeve
   surfaced(s) { addRipple(s.x, s.z, .5, 0); if (!reduceMotion) spray(s.x, WATER.level(s.x, s.z) + .1, s.z, FEW ? 4 : 8, .07, 2.6, .55, .8, .85); SFX.play('splash.small', { x: s.x, z: s.z, gain: .9 }); },
@@ -6056,13 +6031,12 @@ const SHAMBLE_LIT = .3;
 function toggleShamble() {
   if (!crowdOut && !shambling) return;
   shambling = !shambling;
-  if (shambling && !S.flags.toldShamble) { S.flags.toldShamble = true; toast('Shambling. They take you for one of them, until you run, fight or step into a light.'); }
 }
 // Running, fighting or a light: anyone close turns on him at once
 function giveAway() {
   if (!shambling) return;
   shambling = false;
-  if (folkOut && horde.unmask(feel)) { toast('That gave you away.'); SFX.play('groan.hunt'); glitch(.35, .2); }
+  if (folkOut && horde.unmask(feel)) { SFX.play('groan.hunt'); glitch(.35, .2); }
 }
 // How close each of them is to seeing through it, over the heads of the nearest few. On a phone most of them are beside him or behind him, off the screen, so theirs sit at its edge on their side.
 const SUS_N = 5, susEls = Array.from({ length: SUS_N }, () => { const e = document.createElement('div'); e.className = 'sus'; e.hidden = true; e.innerHTML = '<b><i></i></b>'; $('susMeters').appendChild(e); return e; }), _sus = new THREE.Vector3();
@@ -6086,7 +6060,7 @@ function drawSus() {
       // at the edge, an arrow says which way they are
       e.hidden = false; e.firstChild.firstChild.style.width = `${Math.round(k * 100)}%`; e.classList.toggle('hot', k > .66); e.classList.toggle('edge', edge > 1);
       if (edge > 1) e.dataset.side = Math.abs(x) / .86 >= Math.abs(y) / .8 ? (x < 0 ? 'l' : 'r') : y < 0 ? 'b' : 'r';
-      e.style.transform = `translate(${((x * .5 + .5) * innerWidth).toFixed(1)}px,${((-y * .5 + .5) * innerHeight - (s === whoNear && edge <= 1 ? 22 : 4)).toFixed(1)}px) translate(-50%,-100%)`;
+      e.style.transform = `translate(${((x * .5 + .5) * innerWidth).toFixed(1)}px,${((-y * .5 + .5) * innerHeight - 4).toFixed(1)}px) translate(-50%,-100%)`;
     }
   }
   for (let i = n; i < SUS_N; i++) susEls[i].hidden = true;
@@ -6374,17 +6348,24 @@ function getIn(v) {
   // the ghost's light has nothing to do once he's in town, and one more light in the scene would cost every material on every phone
   scene.add(gLight); gLight.color.set('#ffe6b0'); gLight.distance = 34; gLight.decay = 1.5; headlights.visible = true;
 }
+// A door that won't open says so with its handle, tried twice: the door's own sound, pitched up and short. Only one of it plays at
+// a time, so the second try waits for the first to finish.
+function rattle(v) {
+  if (!v) return;
+  const at = { x: v.x, z: v.z };
+  SFX.play('vehicle.door', { ...at, rate: 1.9, gain: .45 }); after(.6, () => SFX.play('vehicle.door', { ...at, rate: 2.1, gain: .35 }));
+}
 // The way out: his own side first, then the other, then behind and in front
 function getOut(force = false) {
   const v = driving, K = v.K, fx = Math.sin(v.yaw), fz = Math.cos(v.yaw);
-  if (!force && speedOf(v) > 7 && !v.wrecked) { toast('Slow down first'); return false; }
+  if (!force && speedOf(v) > 7 && !v.wrecked) { rattle(v); return false; }
   const sx = K.width / 2 + .8, sz = K.length / 2 + .8;
   let spot = null;
   for (const [along, across] of [[0, sx], [0, -sx], [-sz, 0], [sz, 0]]) {
     const x = v.x + fx * along + fz * across, z = v.z + fz * along - fx * across;
     if (MAP.inBounds(x, z) && !blocked(x, z, v.y + .2) && floorAt(x, z) - v.y < .7) { spot = [x, z]; break; }
   }
-  if (!spot && !force) { toast('No room to get out'); return false; }
+  if (!spot && !force) { rattle(v); return false; }
   const [x, z] = spot ?? [v.x, v.z], y = floorAt(x, z);
   driving = null; v.f = v.s = v.steer = 0; markVehicle(v, true); vehPicked = -1;
   heroRoot.rotation.set(0, v.yaw, 0); heroRoot.rotation.order = 'XYZ'; hero.body.scale.setScalar(HERO_SCALE);
@@ -6446,12 +6427,12 @@ function arriving() { if (!S.flags.arrived && Math.hypot(player.pos.x - NPCS.coo
 // Picking something up from right at the feet of one who's gone quiet is starting something with them, as src/horde.js has it
 const tookFrom = (c) => { if (folkOut) horde.took(c.x, c.z); };
 function pickUpCans(reach) {
-  for (const c of PICKUPS) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; c.m.visible = false; tookFrom(c); addBeans(1, 'found'); townObjective(); hudVitals(); }
+  for (const c of PICKUPS) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; c.m.visible = false; tookFrom(c); addBeans(1); townObjective(); hudVitals(); }
 }
 function pickUpLoot(reach) {
   for (const c of LOOT) if (!c.got && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) {
     c.got = true; c.m.visible = false; tookFrom(c);
-    if (c.kind === 'beans') { addBeans(1, 'found'); townObjective(); }
+    if (c.kind === 'beans') { addBeans(1); townObjective(); }
     else { S.items[c.kind] = (S.items[c.kind] ?? 0) + 1; SFX.play('can.clink'); toast(`+1 ${(LURES[c.kind]?.name ?? LOOT_NAMES[c.kind]).toLowerCase()}`); }
     hudVitals();
   }
@@ -6460,7 +6441,7 @@ const DRIVE_WORLD = { blocked: (x, z, y) => blockedInTown(x, z, y) || !!looseAt(
 let vehPuffT = 0, vehClawT = 0, vehSmokeT = 0;
 function wreckedNow(v) {
   vehDirty = true; SFX.play(v.drowned ? 'flood' : 'crash', { x: v.x, z: v.z }); SFX.say('wrecked');
-  if (v.drowned) toast('Flooded'); else wreckVehicle(v);
+  if (!v.drowned) wreckVehicle(v);
   if (!reduceMotion) cam.shake = .6; glitch(.9, .35);
   for (let i = 0; i < 7; i++) puff(v.x + (vehRand() - .5) * 2.4, v.y + .6 + vehRand(), v.z + (vehRand() - .5) * 2.4, (.8 + vehRand() * .6) * (v.drowned ? .4 : 1), 1 + vehRand() * .5, v.drowned ? 2 : 3, .09, .08, .095);
   if (folkOut) horde.noise(v.x, v.z, 60, 2);
@@ -6473,7 +6454,6 @@ function updateDrive(dt) {
   player.pos.set(v.x, v.y, v.z); player.yaw = v.yaw; player.grounded = true;
   // getting his breath back in the seat
   if (player.ran) { player.stamina = Math.min(1, player.stamina + RUN.rest * dt); if (player.stamina > RUN.recover) player.winded = false; if (player.stamina >= 1) player.ran = false; }
-  if (r.edge && !S.flags.toldEdge) { S.flags.toldEdge = true; toast('Nothing that way.'); after(12, () => { S.flags.toldEdge = false; }); }
   // what it went through
   if (r.smash > 0) {
     vehDirty = true;
@@ -6768,14 +6748,12 @@ function hurtBy(kind, dx, dz, force = 6) {
     S.hp -= 1;
     if (S.hp <= 0) { fail(kind === 'blast' ? 'You went up with it.' : kind === 'hit' ? 'It came down on you.' : 'You burned.', 'Give it more room.'); return; }
   }
-  toast(kind === 'blast' ? 'Blown clear' : kind === 'hit' ? 'Knocked flying' : 'Burned');
 }
 
 // ---- vehicles go up: once one's wrecked it burns for a moment, then the tank goes
 const fuses = [], loose = [];
 function wreckVehicle(v) {
   if (v.drowned || v.exploded || v.fuse !== undefined) return;
-  if (v === driving) toast('Wrecked. Get out!');
   v.fuse = v === driving ? 3 : .7 + wreckRand() * 1.6; fuses.push(v);
   v.burner = burnAt(v.x, v.y + .7, v.z, v.K.length * .24, Infinity, { veh: v });
   vehDirty = true;
@@ -6784,7 +6762,7 @@ function explodeVehicle(v) {
   if (v.exploded) return;
   v.exploded = true; v.fuse = 0; vehDirty = true;
   const was = v === driving, x = v.x, y = v.y, z = v.z;
-  if (was) { getOut(true); toast('Blown clear'); }
+  if (was) getOut(true);
   blast(x, y + .8, z, 6 + v.K.mass / 500, 4 + v.K.mass / 400, v);
   toss(v, (wreckRand() - .5) * 3, (wreckRand() - .5) * 3, 6 + wreckRand() * 3);
   if (v.burner) v.burner.T = 16 + wreckRand() * 12;
@@ -7246,7 +7224,7 @@ function switchThrown() {
   if (kind && kind !== S.hand) { S.hand = kind; SFX.play('ui.tap'); }
 }
 function pickUpGas(reach) {
-  for (const c of GAS_CANS) if (!c.got && S.gas < GAS_CARRY && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; gasDirty = true; tookFrom(c); S.gas++; SFX.play('can.slosh'); toast(`+1 gas can · ${S.gas}`); }
+  for (const c of GAS_CANS) if (!c.got && S.gas < GAS_CARRY && Math.hypot(c.x - player.pos.x, c.z - player.pos.z) < reach && Math.abs(c.y - player.pos.y) < 2) { c.got = true; gasDirty = true; tookFrom(c); S.gas++; SFX.play('can.slosh'); toast('+1 gas can'); }
 }
 let wreckStep = -1, wreckDrawn = -1;
 function updateWreck(dt, step) {
@@ -7605,7 +7583,7 @@ function tick(dt, draw = true) {
     player.pos.x += (Math.sin(player.yaw) * sp + player.kb.x) * dt; player.pos.z += (Math.cos(player.yaw) * sp + player.kb.y) * dt;
     player.kb.multiplyScalar(Math.exp(-dt * 4));
     if (!S.flags.town) {
-      if (player.pos.x > 12.5) { player.pos.x = 12.5; if (!S.flags.toldSteep) { S.flags.toldSteep = true; toast('Too steep. West bank.'); } }
+      if (player.pos.x > 12.5) player.pos.x = 12.5;
       player.pos.z = clamp(player.pos.z, -40, 40);
     }
     HP.speed = sp; HP.phase += dt * (sp * 3 + 2);
@@ -7616,7 +7594,7 @@ function tick(dt, draw = true) {
     if (groundH(player.pos.x, player.pos.z) > swimY - (S.flags.town ? .2 : .35)) {
       if (S.flags.town) { S.mode = 'town'; HP.kind = 'run'; player.grounded = true; player.pos.y = floorAt(player.pos.x, player.pos.z); townObjective(); }
       else if (player.pos.x < -8) { S.mode = 'land'; HP.kind = 'run'; player.grounded = true; player.pos.y = floorAt(player.pos.x, player.pos.z);
-        objective('Get up to the road.'); SFX.say('bank'); if (!S.removedNoose) { S.removedNoose = true; nooseRing.visible = knot.visible = false; ropeTail.visible = false; toast('He takes off the noose.'); } }
+        objective('Get up to the road.'); SFX.say('bank'); if (!S.removedNoose) { S.removedNoose = true; nooseRing.visible = knot.visible = false; ropeTail.visible = false; } }
       else { player.pos.x -= Math.sin(player.yaw) * sp * dt; player.pos.z -= Math.cos(player.yaw) * sp * dt; }
     }
     if (!S.flags.town) ghost.position.set(-17.5, 1.3 + Math.sin(time * 2) * .12, 7.5);
@@ -7637,7 +7615,6 @@ function tick(dt, draw = true) {
     const heading = aimT > 0 && want > .1 ? Math.atan2(dir.x, dir.z) : player.yaw;
     let nx = player.pos.x + (Math.sin(heading) * sp + player.kb.x) * dt, nz = player.pos.z + (Math.cos(heading) * sp + player.kb.y) * dt;
     player.kb.multiplyScalar(Math.exp(-dt * (time < flungUntil ? .8 : 5)));
-    if (!S.flags.toldEdge && !MAP.inBounds(nx, nz)) { S.flags.toldEdge = true; toast('Nothing that way.'); after(12, () => { S.flags.toldEdge = false; }); }
     if (player.pos.y > DECK_TOP - .4 && Math.abs(nx) < 20.6 && Math.abs(nz) < 40) nz = clamp(nz, -2.25, 2.25);
     const fl = floorAt(nx, nz), stops = M === 'town' ? blockedInTown : blocked;
     if (fl - player.pos.y > .6 || stops(nx, nz, player.pos.y)) {
@@ -7869,7 +7846,7 @@ function tick(dt, draw = true) {
   updateFlies(dt, step);
   if (folkOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
   else if (folkOut) drawSeated(step);
-  if (folkOut) { drawWho(); drawSus(); drawMutters(); }
+  if (folkOut) { drawSus(); drawMutters(); }
   drawToniSays();
   if (S.flags.town) { drawVehicles(step); drawWreck(step); if (trainsOn) drawTrain(); }
   updateParticles(dt, M);
@@ -7929,7 +7906,7 @@ ghost.position.set(-17.5, 1.3, 7.5);
     url: town.get('net'), store: saveStore, parked, TEST, reduceMotion,
     S, HP, player, cam, camera, scene, heroRoot, vehicles: VEHICLES, map: MAP, water: WATER, wakeRoad: WAKE_ROAD, wakeBridge: WAKE_BRIDGE,
     looks: CROWD_LOOKS, crowdParts, zombieLine, TOWN_SCALE, ZOMBIE_HIP, HEAD, SEATED, HERO_SCALE, HERO_HIPS, SWING_POSES, SWING_T, hoods: { stand: heroHood, swim: heroHoodSwim },
-    hillUp, floorAt, onRoad, blocked: blockedInTown, markVehicle, toast, prompt, getOut,
+    hillUp, floorAt, onRoad, blocked: blockedInTown, markVehicle, toast, prompt, getOut, rattle,
     get time() { return time; }, get driving() { return driving; }, get swingT() { return swingT; }, get cardT() { return cardT; },
     vehMoved() { vehDirty = true; },
     trainsOff() { trainsOn = false; },
@@ -7974,7 +7951,7 @@ if (TEST) {
     lures: { LYING, lyingNear, flying, popping, ALARMS, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
     horde, folks, traffic, homes: HOMES, putBack, HOME: { SEE: HOME_SEE, PUT: HOME_PUT }, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, horns: hornLog, blasts: () => blastsBlown, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, kept: putBack.length, roused: horde.active.filter((s) => s.state === ROUSED).length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf,
     // the river's, for the tests: which way it flows and where it brings someone up, and what's drawn of someone soaked: how soaked the graphics card has them, the snakes on sleeves and the ones falling
-    river: { path: RIVER, comeUp, wetOn: (s) => { const i = crowdShown.indexOf(s); return i < 0 ? null : crowdWet.getX(i); }, snakes: () => ({ drawn: crowdSnakes.count, shown: crowdSnakes.visible && crowdGroup.visible, falling: fallen.length, geometry: crowdSnakeGeo.attributes.position.count, calls: [crowdSnakes, crowdSnakeLine].filter((m) => m.count > 0).length }), arm: (s) => (s.who ? s.who.id : s.look) % 2,
+    river: { path: RIVER, comeUp, wetOn: (s) => { const i = crowdShown.indexOf(s); return i < 0 ? null : crowdWet.getX(i); }, moccasins: () => SNAKES.map((s) => ({ x: s.p.x, z: s.p.z, state: s.state, shown: s.head.visible })), snakes: () => ({ drawn: crowdSnakes.count, shown: crowdSnakes.visible && crowdGroup.visible, falling: fallen.length, geometry: crowdSnakeGeo.attributes.position.count, calls: [crowdSnakes, crowdSnakeLine].filter((m) => m.count > 0).length }), arm: (s) => (s.who ? s.who.id : s.look) % 2,
       // where the snake is on the sleeve it hangs from, which doesn't change at all with reduced motion
       relative: (s) => { const i = crowdShown.indexOf(s); if (i < 0 || !(s.snake > 0) || s.snakeAt === undefined) return null; const a = (s.who ? s.who.id : s.look) % 2; return new THREE.Matrix4().fromArray(crowdArms.instanceMatrix.array, (i * 2 + a) * 16).invert().multiply(new THREE.Matrix4().fromArray(crowdSnakes.instanceMatrix.array, s.snakeAt * 16)).toArray(); } },
     downFor: { table: DOWN_FOR, truck: downByTruck }, castHips: (id) => 180 - THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(NPCS[id].rig.hm.quaternion.w)))),

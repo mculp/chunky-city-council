@@ -94,15 +94,15 @@ check(`walking towards the three, ${w1.walked.toFixed(1)} m: the one who keeps a
 check('the one with a grudge is already coming', w1.bold.state === HUNTING || w1.bold.state === ROUSED, w1);
 check('and the one he left alone hasn\'t noticed yet', w1.plain.state === SHAMBLE, w1);
 
-// ---- the panel, and the name over their head
+// ---- nothing written about them: how they are with him is in what they do, and he doesn't know any of their names yet
 await g(() => { const G = __game; clear(); put(timid, 4); stand(0); timid.state = 0; G.step(.4); });
-const tag = await g(() => { const t = document.getElementById('who'), r = t.getBoundingClientRect(); return { hidden: t.hidden, text: t.innerText, x: r.x + r.width / 2, y: r.y + r.height, w: innerWidth, h: innerHeight }; });
-check(`over the head of whoever's nearest it says "${tag.text.replace(/\n/g, ' ')}"`, !tag.hidden && /keeps away/i.test(tag.text) && tag.x > 0 && tag.x < tag.w && tag.y > 0 && tag.y < tag.h, tag);
-await snap('3-name');
+const names = await g(() => [timid.who.name, bold.who.name, plain.who.name]), moods = /keeps away|after you|following you|leaves you be/i;
+const over = await g(() => window.screenText());
+check('nothing over the head of whoever\'s nearest says who they are or how they are with him', !over.some((l) => names.some((n) => l.toLowerCase().includes(n.toLowerCase())) || moods.test(l)), over);
+await snap('3-nothing-over-them');
 await page.tap('#repHead');
 const panel = await g(() => { __game.step(1.1); return document.getElementById('repList').innerText; });
-const names = await g(() => [timid.who.name, bold.who.name, plain.who.name]);
-check('the people panel says how each of them is with him', new RegExp(`${names[0]}\\s*keeps away`, 'i').test(panel) && new RegExp(`${names[1]}\\s*after you`, 'i').test(panel), panel);
+check('the people panel has the people he knows, by name, and nobody from the crowd', /coop/i.test(panel) && !names.some((n) => panel.toLowerCase().includes(n.toLowerCase())) && !moods.test(panel) && !/[■□]/.test(panel), panel);
 await snap('4-panel');
 await page.tap('#repHead');
 

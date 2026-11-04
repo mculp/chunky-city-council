@@ -19,7 +19,7 @@ export function createPeople(data, { store = null } = {}) {
   const blank = () => Object.fromEntries(data.cast.map((c) => [c.id, Object.fromEntries(Object.keys(data.meters).map((m) => [m, 0]))]));
   const bound = (meter, v) => Math.max(data.meters[meter].min, Math.min(data.meters[meter].max, v));
   let meters = blank(), met = new Set(), kept = {};
-  const people = { data, recent: null };
+  const people = { data };
 
   // A save that can't be read counts as no save, and a browser that won't store anything just doesn't remember.
   // One from before someone was renamed is read under the name they have now.
@@ -37,7 +37,7 @@ export function createPeople(data, { store = null } = {}) {
   function save() { try { store.setItem(KEY, JSON.stringify({ meters, flags: kept, met: [...met] })); } catch { /* not stored */ } }
 
   people.hasSave = () => { try { return !!store.getItem(KEY); } catch { return false; } };
-  people.forget = () => { meters = blank(); met = new Set(); kept = {}; people.recent = null; try { store.removeItem(KEY); } catch { /* nothing to remove */ } };
+  people.forget = () => { meters = blank(); met = new Set(); kept = {}; try { store.removeItem(KEY); } catch { /* nothing to remove */ } };
   people.flags = () => ({ ...kept });
   people.get = (id, meter) => meters[id][meter];
   people.snapshot = () => JSON.parse(JSON.stringify(meters));
@@ -50,10 +50,10 @@ export function createPeople(data, { store = null } = {}) {
   people.change = (id, meter, by) => {
     meters[id][meter] = bound(meter, meters[id][meter] + by);
     if (by > 0) for (const t of data.ties) if (t.when === id && t.meter === meter) meters[t.then][meter] = bound(meter, meters[t.then][meter] + by * t.factor);
-    people.recent = id; save();
+    save();
   };
 
-  // ctx is what the game's holding: { flags, items, beans, addBeans(n, why), pantry, fromPantry(why) }
+  // ctx is what the game's holding: { flags, items, beans, addBeans(n), pantry, fromPantry() }
   people.check = (when, ctx) => (when || []).every((text) => {
     const c = parseCondition(text);
     if (c.flag) return !!ctx.flags[c.flag] !== c.not;
@@ -67,8 +67,8 @@ export function createPeople(data, { store = null } = {}) {
       else if (e.unset) ctx.flags[e.unset] = false;
       else if (e.meter) { const [id, meter] = e.meter.split('.'); people.change(id, meter, e.by); }
       else if (e.item) ctx.items[e.item] = (ctx.items[e.item] || 0) + e.by;
-      else if (e.beans) ctx.addBeans(e.beans, e.why);
-      else if (e.pantry) ctx.fromPantry(e.pantry);
+      else if (e.beans) ctx.addBeans(e.beans);
+      else if (e.pantry) ctx.fromPantry();
     }
   };
   // The first line of a node whose conditions hold, with the options that are open right now

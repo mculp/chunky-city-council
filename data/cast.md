@@ -25,7 +25,7 @@ Who these people are, and what they say, is the owner's. The words here came fro
 
 | Meter | Range | Meaning |
 |---|---|---|
-| `trust` | -3 to 3 | How much they'd stick their neck out for you. The panel's pips show this, rounded. |
+| `trust` | -3 to 3 | How much they'd stick their neck out for you. Nothing on the screen shows it: it's in how they talk to him and what they'll do for him. |
 | `fear` | 0 to 3 | How wary of you they are. |
 | `debt` | -12 to 12 | Above 0 you owe them, below 0 they owe you, counted in cans. |
 
@@ -88,8 +88,8 @@ A node is `{ who, lines, opts }`. The first of its `lines` whose `when` all hold
 | `{ "unset": "paid" }` | Clears a flag. |
 | `{ "meter": "coop.trust", "by": 1 }` | Moves a meter. |
 | `{ "item": "bag", "by": 1 }` | Adds or takes away an item. |
-| `{ "beans": 3, "why": "Coop" }` | Adds beans. `why` is shown with them. |
-| `{ "pantry": "Miss Bobby" }` | Adds what the pantry pays and takes it off its shelves. The words are shown with them. |
+| `{ "beans": 3 }` | Adds beans. Only the count is shown, with nothing after it. |
+| `{ "pantry": true }` | Adds what the pantry pays and takes it off its shelves. |
 
 Any effect can have its own `when`, as with the first meeting that only counts once.
 

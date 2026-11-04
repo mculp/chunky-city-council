@@ -166,7 +166,7 @@ const left = [];
 for (let k = 0; k < 4; k++) { await tap(); await g(() => __game.step(.9)); left.push(await g(() => R.flies())); }
 check('four swings and the flies are out', left.join() === '0.75,0.5,0.25,0', left);
 const cooking = await g(() => { __game.step(.3); return { cooking: R.cooking(), shown: R.shown(), toast: document.getElementById('toast').textContent, sound: R.loop() }; });
-check('the fire\'s lit and the deer meat\'s on', cooking.cooking && cooking.shown === 0, cooking);
+check('the fire\'s lit and the deer meat\'s on, and nothing says the flies are out', cooking.cooking && cooking.shown === 0 && !/flies/i.test(cooking.toast), cooking);
 check('and they\'ve gone quiet', cooking.sound < .02, cooking);
 await g(() => { const G = __game; G.place(R.hearth.x - 3, R.hearth.z - 3); G.look(Math.atan2(-3, -3)); G.step(.6); });
 await snap('robby-cooking');
@@ -184,7 +184,7 @@ await g(() => { const G = __game; G.S.hp = 1; walkTo(R.hearth.x - 1.6, R.hearth.
 check('at the skillet the button eats', await word() === 'EAT', await word());
 await tap();
 const fed = await g(() => { const G = __game; G.step(.2); return { hp: G.S.hp, cooking: R.cooking(), ate: G.S.flags.ateDeerMeat, toast: document.getElementById('toast').textContent }; });
-check('and it fills his hearts', fed.hp === 3 && !fed.cooking && fed.ate && /hearts full/.test(fed.toast), fed);
+check('and it fills his hearts, with only what he ate written', fed.hp === 3 && !fed.cooking && fed.ate && fed.toast === 'Deer meat', fed);
 
 // what's solid and what isn't
 const solid = await g(() => { const G = __game; return { robby: G.blocked(R.at.x, R.at.z, 6.15), frame: G.blocked(R.lot.x - 1.25, R.lot.z + 5, 6.15), steps: G.blocked(R.lot.x - 2.9, R.lot.z - .4, 6.15) }; });

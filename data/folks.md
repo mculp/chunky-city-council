@@ -45,7 +45,7 @@ Only what's happened is saved, under `chunky.folks.v1`, the same way as the cast
 | `near` | Seconds they've been within 8 m of him |
 | `fooled` | How many times each kind of thrown thing has made them look |
 | `when`, `seen` | The play clock when something last happened, and when he was last close |
-| `met` | Whether he's been around them long enough to know their name, which takes 1.5 seconds |
+| `met` | Whether he's been around them for 1.5 seconds, which is who has `where` kept. It isn't knowing their name: nothing tells him anyone's name yet, so no name in the crowd is on the screen. |
 | `shun` | Where they were last hurt |
 | `where` | Where they got to, so they're there the next time. Only for someone he's met. |
 
@@ -55,7 +55,7 @@ There was a `gone` here once, for whoever the river had, and the next number cam
 
 ## How they are with him
 
-It all comes down to one of four things, worked out when it's needed. That's what the people panel and the name over their head say.
+It all comes down to one of four things, worked out when it's needed. Nothing on the screen says which: it shows in what they do.
 
 **What's still with them** is `hurt`, plus a fifth for each `there` and `told`, plus three tenths for each `slipped`, halving every 5 to 30 minutes of play depending on `temper`. It never goes below a fifth for someone who's been hit, because they don't forget that.
 

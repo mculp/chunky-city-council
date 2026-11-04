@@ -4,9 +4,8 @@
 // What they're like comes from their number and never changes. What they remember is kept between sessions, and only
 // for the ones with something to remember, so it stays small.
 
+// How they are with him. Nothing on the screen says which: it shows in what they do.
 export const BE = 0, AFTER = 1, AWAY = 2, TAILING = 3;
-// What the people panel and the name over their head say about each
-export const WORDS = ['', 'after you', 'keeps away', 'following you'];
 
 export const HOW = {
   hold: [300, 1500],     // seconds of play for what he's done to halve, from the calmest of them to the worst temper
@@ -124,16 +123,13 @@ export function createFolks(data, { store = null, looks = [] } = {}) {
     if (w.hurt) return bold > HOW.stands[0] ? AFTER : AWAY;
     return bold > HOW.stands[1] ? AFTER : bold < HOW.flees ? AWAY : BE;
   }
-  // Anything that's happened to someone goes through here, so the panel can say when it's changed how they are with him
+  // Anything that's happened to someone goes through here, so that it's saved
   function note(w, what) {
-    const was = moodOf(w);
     what();
     dirty = true;
-    if (w.met && moodOf(w) !== was) folks.recent = w;
   }
 
   const folks = {
-    recent: null,
     person,
     // The next person to come out
     next() { return person(turn++); },
@@ -141,11 +137,10 @@ export function createFolks(data, { store = null, looks = [] } = {}) {
     now: () => clock,
     save,
     hasSave() { try { return !!store.getItem(KEY); } catch { return false; } },
-    forget() { for (const w of everyone.values()) { Object.assign(w, { hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, fooled: {}, when: 0, seen: 0, met: false, shun: null, where: null }); } clock = 0; turn = 0; dirty = false; folks.recent = null; try { store.removeItem(KEY); } catch { /* nothing to remove */ } },
+    forget() { for (const w of everyone.values()) { Object.assign(w, { hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, fooled: {}, when: 0, seen: 0, met: false, shun: null, where: null }); } clock = 0; turn = 0; dirty = false; try { store.removeItem(KEY); } catch { /* nothing to remove */ } },
 
     mood: moodOf,
     shock,
-    word: (w) => (w.calm && moodOf(w) === BE ? 'leaves you be' : WORDS[moodOf(w)]),
     // How far off they can make him out. It averages out at what the crowd's tuning says, and someone with a grudge can tell from further.
     senses: (w, mood) => (.85 + w.temper * .3) * (mood === AFTER ? 1 + Math.min(1.5, shock(w)) : 1),
     roam: (w) => 40 + (1 - w.homebody) ** 2 * 400,
@@ -180,12 +175,11 @@ export function createFolks(data, { store = null, looks = [] } = {}) {
     // Close to him. He gets to know their name, and the nosy ones get curious.
     close(w, dt) {
       w.seen = clock; w.near += dt; dirty = true;
-      if (!w.met && w.near >= HOW.meetAfter) { w.met = true; folks.recent = w; }
+      if (!w.met && w.near >= HOW.meetAfter) w.met = true;
     },
 
-    // Who he's met, the latest first
+    // Who he's met
     met() { const list = []; for (const w of everyone.values()) if (w.met) list.push(w); return list; },
-    latest(n) { return folks.met().sort((a, b) => b.seen - a.seen).slice(0, n); },
   };
   load();
   return folks;

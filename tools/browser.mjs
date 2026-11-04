@@ -48,11 +48,11 @@ export async function serveAndOpen({ touch = false, viewport, query = '?test', r
   await context.route(CDN, fromCache);
   const page = await context.newPage();
   // What's written on the screen right now, a line at a time: whatever anything in the page says other than its dials, which are the HUD (the street, the objective and how far it is, the speed,
-  // hearts, beans and pockets, and the people panel, which says how each of them is with him), the buttons, what the big one would do ("Get in the pickup") and the name tag over whoever's
-  // nearest. Those change all the time as he moves and as the crowd does, and none of them is a reason. The checks that watch one of the crowd stop, turn to him and flare compare it before and after, because nothing on the screen says why.
+  // hearts, beans and pockets, and the people panel, which is the names of the people he knows), the buttons and what the big one would do ("Get in the pickup"). Those change all the time
+  // as he moves, and none of them is a reason. The checks that watch one of the crowd stop, turn to him and flare compare it before and after, because nothing on the screen says why.
   await page.addInitScript(() => {
     window.screenText = () => {
-      const dials = '.hud, #btns, #stick, #prompt, #who, #keyStrip', shown = (e) => { const c = getComputedStyle(e); return c.display !== 'none' && c.visibility !== 'hidden'; };
+      const dials = '.hud, #btns, #stick, #prompt, #keyStrip', shown = (e) => { const c = getComputedStyle(e); return c.display !== 'none' && c.visibility !== 'hidden'; };
       return [...document.body.children].filter((e) => !e.matches(`${dials}, script, style, canvas`) && shown(e)).flatMap((e) => e.innerText.split('\n')).map((l) => l.trim()).filter(Boolean);
     };
   });

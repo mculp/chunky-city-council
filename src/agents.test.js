@@ -2,7 +2,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createFolks, personOf, burntDown, hipsOf, flickering, BE, AFTER, AWAY, TAILING, HOW, WORDS } from './agents.js';
+import { createFolks, personOf, burntDown, hipsOf, flickering, BE, AFTER, AWAY, TAILING, HOW } from './agents.js';
 import { createHorde, SHAMBLE, CURIOUS, HUNTING, SWARM, GRABBING, AVOIDING, TRAILING, STUNNED, ROUSED, TUNING } from './horde.js';
 
 const data = JSON.parse(readFileSync(new URL('../data/folks.json', import.meta.url)));
@@ -137,14 +137,13 @@ describe('who they are', () => {
 describe('how they take it', () => {
   test('someone nothing has happened to is just how they are', () => {
     const F = folks(), w = F.person(3);
-    assert.equal(F.mood(w), BE); assert.equal(F.word(w), '');
+    assert.equal(F.mood(w), BE);
   });
 
   test('hit once, the bold come back at him and the rest keep away', () => {
     const F = folks(), bold = someone(F, (w) => w.nerve > .7), timid = someone(F, (w) => w.nerve < .2);
     F.hurt(bold, 0, 0, 'hit'); F.hurt(timid, 0, 0, 'hit');
     assert.equal(F.mood(bold), AFTER); assert.equal(F.mood(timid), AWAY);
-    assert.equal(F.word(bold), WORDS[AFTER]); assert.equal(F.word(timid), WORDS[AWAY]);
   });
 
   test('hit enough, even the bold keep away', () => {
@@ -212,13 +211,6 @@ describe('how they take it', () => {
     F.tick(HOW.news + 1);
     assert.equal(F.tell(a, third), false);
   });
-
-  test('the panel hears when someone he\'s met changes', () => {
-    const F = folks(), w = someone(F, (x) => x.nerve < .2);
-    F.close(w, 5); assert.equal(F.recent, w); F.recent = null;
-    F.hurt(w, 0, 0, 'hit'); assert.equal(F.recent, w); F.recent = null;
-    F.hurt(w, 0, 0, 'hit'); assert.equal(F.recent, null);
-  });
 });
 
 describe('kept between sessions', () => {
@@ -227,7 +219,7 @@ describe('kept between sessions', () => {
     F.close(w, 5); F.hurt(w, 3, 4, 'truck'); F.fooled(w, 'bottle'); w.body = { x: 11.4, z: 22.6 }; F.tick(30); F.save();
     const again = folks(store), was = again.person(w.id);
     assert.equal(was.name, w.name); assert.equal(was.hurt, 1); assert.equal(was.truck, 1); assert.deepEqual(was.fooled, { bottle: 1 }); assert.deepEqual(was.shun, [3, 4]); assert.deepEqual(was.where, [11, 23]);
-    assert.equal(again.mood(was), AWAY); assert.equal(again.now(), 30); assert.deepEqual(again.latest(5).map((x) => x.id), [w.id]);
+    assert.equal(again.mood(was), AWAY); assert.equal(again.now(), 30); assert.deepEqual(again.met().map((x) => x.id), [w.id]);
   });
 
   test('only who has something to remember takes up any room', () => {

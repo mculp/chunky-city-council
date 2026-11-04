@@ -21,7 +21,7 @@
     "swept": [
       { "set": "swept" },
       { "meter": "bobby.trust", "by": 2 },
-      { "pantry": "Miss Bobby" }
+      { "pantry": true }
     ]
   },
   "dialogue": {
@@ -48,7 +48,7 @@
         {
           "when": ["delivered", "!paid"],
           "say": "Rocky says you didn't peek. Respect. Three cans, like I said.",
-          "do": [{ "set": "paid" }, { "beans": 3, "why": "Coop" }, { "meter": "coop.trust", "by": 1 }, { "meter": "coop.debt", "by": 3 }],
+          "do": [{ "set": "paid" }, { "beans": 3 }, { "meter": "coop.trust", "by": 1 }, { "meter": "coop.debt", "by": 3 }],
           "opts": [{ "say": "Pleasure doing business." }]
         },
         { "when": ["metCoop"], "say": "What you need, river boy?" },
@@ -128,12 +128,12 @@
     },
     "rockyHand": {
       "who": "rocky",
-      "lines": [{ "say": "Good. Two cans for not being nosy. Go get paid.", "do": [{ "item": "bag", "by": -1 }, { "set": "delivered" }, { "meter": "rocky.trust", "by": 1 }, { "beans": 2, "why": "Rocky" }, { "meter": "coop.debt", "by": -3 }] }],
+      "lines": [{ "say": "Good. Two cans for not being nosy. Go get paid.", "do": [{ "item": "bag", "by": -1 }, { "set": "delivered" }, { "meter": "rocky.trust", "by": 1 }, { "beans": 2 }, { "meter": "coop.debt", "by": -3 }] }],
       "opts": [{ "say": "Bet." }]
     },
     "rockyOpen": {
       "who": "rocky",
-      "lines": [{ "say": "...It's beans. It was always beans. Take four, and know Coop ain't gonna love you.", "do": [{ "item": "bag", "by": -1 }, { "set": "opened" }, { "meter": "coop.trust", "by": -2 }, { "meter": "rocky.trust", "by": -1 }, { "beans": 4, "why": "the bag" }, { "meter": "coop.debt", "by": 4 }] }],
+      "lines": [{ "say": "...It's beans. It was always beans. Take four, and know Coop ain't gonna love you.", "do": [{ "item": "bag", "by": -1 }, { "set": "opened" }, { "meter": "coop.trust", "by": -2 }, { "meter": "rocky.trust", "by": -1 }, { "beans": 4 }, { "meter": "coop.debt", "by": 4 }] }],
       "opts": [{ "say": "Worth it." }]
     },
     "bobby": {

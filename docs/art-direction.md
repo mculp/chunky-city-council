@@ -73,8 +73,8 @@ They share one body so that dozens can be on a phone's screen at once: `crowdBod
 - You can tell how someone's taking him by how they move. Someone after him leans in with their arms out, or, if their number's under 90°, stays folded and scuttles: a quick shuffle on their feet with their arms swinging, folded over the way they stand, and never on their hands. Someone keeping away goes quickly with their hands up by their head and leaning forward. Someone following stops upright with their arms down and faces him, glowing the way they do when they've noticed something. `data/folks.md` has who does what.
 - People at home look the same as anyone else, and you can tell them by where they are and how they stay put. Someone driving has their lights on and sits at the wheel in the look they'd have on foot. The kids on four-wheelers are about two-thirds the size and hardly gone at all.
 - Close to him, someone who's gone quiet mutters over their head now and then: one line, small, in italic Plex Mono, cream at not quite three quarters with an ink shadow, fading in and drifting up a few pixels over three seconds before it fades away. With reduced motion it's there at once and doesn't move before it fades. It's two at once at most.
-- Anything over someone's head goes over their head wherever it is, folded over or not: what they mutter, their name, and how close they are to seeing through him.
-- Once he's been around someone a moment, their name's over their head when they're the nearest, in the same panel as the rest of the HUD, with how they are with him in rust if it's anything but the usual. It's one label, however many there are.
+- Anything over someone's head goes over their head wherever it is, folded over or not: what they mutter and how close they are to seeing through him.
+- Nobody in the crowd has a name on the screen until he knows it, and how anyone is with him is never written. It's in how they move.
 - While he's shambling, how close each of the nearest five is to seeing through him is a small cream bar over their head, red near the end. Anyone off the screen has theirs at its edge on their side, with an arrow. One who's seen through it glows the way anyone does who's noticed something. `data/folks.md` has the rest.
 - Limbs that don't bend, swung from the shoulder and hip on the same 12 fps step as everything else. Most of them limp. When they're after him stood up, their arms come up and they lean in.
 - Before one comes for him, it stops where it is and turns to face him, and what's coming off it flares for a second, past the glow of anyone after him by 0.6 (`ROUSE_FLARE` in `index.html`), with its arms hanging as they are when they're still and nothing else changing. Nothing on the screen says why: no line, no panel and no message. One that has only looked up, because there were already three, doesn't flare. It's brightness and not movement, so reduced motion keeps it. Backing off in that second sends it back to what it was doing and the glow falls with it.
@@ -175,7 +175,8 @@ The game has the reference's clean character, holds, timed bursts, full bottle, 
 
 - Bungee for titles, prompts, names and buttons. IBM Plex Mono for everything else.
 - Keep words sparse outside dialogue. The reference scene shows only its name, by design.
-- Any words that appear must be readable.
+- Any words that appear must be readable, and nothing covers them. On a phone the box of words at the bottom goes up over whichever buttons it would meet.
+- Nothing on the screen says why something happened or how something works, or tells him what he can already see. Sound, light and the way people move do that. Words on the screen are for what people say, what he picks up, the controls and where to go next. What he picks up and the bean count have nothing after them: "+1 gas can", "-1 beans".
 
 ## Motion
 

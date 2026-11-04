@@ -88,7 +88,7 @@ export function together(G) {
   panel.querySelector('#joinGo').addEventListener('click', join);
   back.addEventListener('click', () => {
     panel.hidden = true;
-    if (started) { alone = true; link?.close(); G.toast('Playing alone'); return; }
+    if (started) { alone = true; link?.close(); return; }
     link?.close(); document.getElementById('title').hidden = false; G.leave();
   });
   function show(why = '') {
@@ -213,9 +213,9 @@ export function together(G) {
     for (const w of shownList) if (w.ride === c.v + 1) v.leftBy = { w, t: w.t };
     G.markVehicle(v, true); G.vehMoved();
   }
-  // Someone else was in it first: out he gets
+  // Someone else was in it first: out he gets, and its handle rattles. He can see who's sitting in it.
   function bump(m) {
-    if (G.driving && G.vehicles.indexOf(G.driving) + 1 === m.ride) { G.getOut(true); G.toast('Someone else is in that'); }
+    if (G.driving && G.vehicles.indexOf(G.driving) + 1 === m.ride) { const v = G.driving; G.getOut(true); G.rattle(v); }
   }
   const driven = new Set();
   function drive(list, step) {
