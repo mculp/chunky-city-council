@@ -38,7 +38,7 @@ const NEVER = new Set(['check', 'deploy', 'sound:make', 'sound:level', 'frames',
 // run as well as the plain script, when its tool takes the flag
 const VARIANTS = { smoke: '--touch', sound: '--old' };
 // for --changed: modules whose check isn't named after them, and names too common in index.html to mean a check
-const ALIASES = { vehicles: ['drive'], damage: ['wreck'], roads: ['walk'], mapview: ['net', 'keys', 'water'] };
+const ALIASES = { vehicles: ['drive'], damage: ['wreck'], roads: ['walk'], mapview: ['net', 'keys', 'water'], fever: ['deaths', 'trains', 'horde'] };
 const COMMON = new Set(['play', 'test', 'town', 'water']);
 
 // where it runs: here, or a copy of a commit with this worktree's installs and raw downloads linked in
