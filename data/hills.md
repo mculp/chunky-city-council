@@ -56,6 +56,10 @@ The fog stops the ground at about 200 m, so the file's coarse heights are drawn 
 
 All of this is off until he wakes at the edge of town. `uHills` is a flat texture until then and the skyline's hidden, so the first chapter's frames are exactly what they were, right out to the horizon, where a far hill would otherwise show over the flat land by a pixel or two. The first scene's square is still kept flat in the data, because he can go back there.
 
+## Trying them taller
+
+The owner's choosing between the hills as they really are and taller ones, so there's a switch under the sound button once the hills are on. A tap flips it between REAL HILLS and HILLS ×2, where he stands. `uHillScale` multiplies every height that's drawn, along with the skyline's and the ones the code works out for whatever's drawn over the land. The world underneath stays as flat as ever, and so does everything that's levelled in the file, so a pond stays level at twice the height. It's on real hills each time the game starts, and it comes out once the owner has chosen.
+
 ## Schema
 
 | Field | What it is |
