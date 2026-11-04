@@ -12,9 +12,9 @@ Who they are in `data/talk.json` comes from the bible's section 7 and the world 
 - **Only instead of a line they've said before, that does nothing.** The first time, it's always the written line, and so is any line that changes something, like Coop paying him or Rocky meeting him. So the story's lines are the written ones, and only a line he's heard already, like "What you need, river boy?", is said in new words.
 - **Asked as he comes near.** When he comes within 9 m of one of them, having been 12 m away, what they'd say is asked then, so it's there when he talks to them. If it isn't there yet, the box waits for it with Later. to press, for 3 seconds at most.
 - **His answers.** The written answers that lead somewhere always stay, like "I need beans." and "Can I get some beans?". Their three for him fill up the rest, to three in all, and Later. is always last. Coop before the bag run has three of his own written ones, so there's no room for new ones until it's done.
-- **Answering them.** His answer is asked about, one ask for each thing said. If nothing new comes back in time, they say a line from `spare` they haven't said lately, or the written line.
+- **Answering them.** His answer is asked about, one ask for each thing said. What's asked has the visit so far in it a turn each, his walking up or what he said and then what they said, because some models won't answer anything else. If nothing new comes back in time, they say a line from `spare` they haven't said lately, or the written line.
 - **Typing.** On a laptop there's a box under the buttons. Any key but an answer's number starts him typing, and Enter says it. A phone has the buttons and nothing else.
-- **How they feel.** A line can move how much they trust him or are scared of him by a point. More than a point either way in one visit doesn't count. Nothing else a line does is kept. Nothing changes hands, and they're told not to offer to.
+- **How they feel.** A line can move how much they trust him or are scared of him by a point, and each of those moves once a visit at most, whichever way. Nothing else a line does is kept. Nothing changes hands, and they're told not to offer to.
 
 ## When there's nothing to ask
 
@@ -31,19 +31,21 @@ The checker in `src/talk.js` reads what comes back before anything's shown. A li
 - Nothing from outside Chunky: no computers or the internet, no presidents, and nobody saying "zombie". That's `outside`.
 - Never how anyone quit: `never`.
 - Nobody real, by name: `real`.
-- No address, phone number or web address: `addresses`. An address is a number and a name with capitals, so "Take 80 to Church St" is fine.
+- No address, phone number or web address: `addresses`. An address is a number and a name with capitals, or a number of three figures or more and a street in any case, so "Take 80 to Church St" is fine.
 - No songs: `lyrics`.
-- Nothing past PG-13: `blocked`. Those words are kept as what `tools/talk-words.mjs` makes of them, so that they aren't written out anywhere in the game. The checker takes a word's ending off before it looks, so the list only needs the word itself.
+- Nothing past PG-13: `blocked`. Those words are kept as what `tools/talk-words.mjs` makes of them, so that they aren't written out anywhere in the game. The checker takes a word's ending off before it looks, so the list only needs the word itself. A word with stars for some of its letters counts as one, and so does one spelled with figures.
 - Nothing that sounds like someone really not okay, the same way as what he types.
 - Not something they've said to him, or one of their written lines, or near enough: three words in four the same.
 
-His answers are each 12 words at most and pass the same, and Later. is the game's own. What they keep about him is 16 words at most and passes the same, or it's dropped. A mood that isn't one of `moods` is plain. The game doesn't use the mood yet.
+His answers are each 12 words at most and pass the same, as they came and tidied, and Later. is the game's own. What they keep about him is 16 words at most and passes the same, or it's dropped. A mood that isn't one of `moods` is plain. The game doesn't use the mood yet.
 
 ## The 988 Lifeline
 
 What he types is read against `care.when` before anything's sent. If it sounds like he's really not okay, nothing is sent to anyone. Whoever he's talking to steps out of the game and says so, with `care.say`, and the 988 Suicide & Crisis Lifeline is there: call or text 988 on a phone, the chat on 988lifeline.org on either, and 911 if he's in danger. The only button is Back to the game.
 
 The model's told to answer `{"care": true}` when he sounds that way, and the same comes up then, for what he typed only. So it comes up when the model hears what the game didn't, and when the model misses what the game heard.
+
+`care.when` leans towards bringing it up. "I don't want to be here" brings it up whatever he meant by it, and "I'm not okay with that" doesn't, since that's haggling.
 
 The words are the Lead's, written to be plain and kind, and the Creative Director and the owner can change them here.
 
@@ -58,6 +60,8 @@ It's kept in `localStorage` under `chunky.talk.v1`, for each of them:
 With each ask goes the last 10 of what they've said, their notes about him and how many times he's been by, along with what's going on: his beans, what he's carrying, what's happened (`happened`) and the crowd being out (`tonight`). If it's over the server's 6000 letters, what they've said goes first, the oldest first, then their notes, then the start of the visit.
 
 Each note says who it's about so that once the shared town keeps them, they can tell one of him what another did. That isn't built: for now it's all on this phone.
+
+Forget everyone, on the title, wipes it with everything else, and keeps only what the phone calls itself.
 
 ## The model
 

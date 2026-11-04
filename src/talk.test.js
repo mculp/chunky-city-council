@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { LIMITS, checkReply, inDistress, changesNothing, messagesFor, talkUrl, createTalk, whyNot, wordHash, formsOf, sameLine } from './talk.js';
+import { LIMITS, checkReply, inDistress, changesNothing, messagesFor, heardAs, talkUrl, createTalk, whyNot, wordHash, formsOf, sameLine } from './talk.js';
 import { createPeople } from './people.js';
 import { TALK_URL, PHONE_KEY } from './net.js';
 
@@ -55,7 +55,11 @@ test('the checker lets none of the bad replies through: an unknown effect, 60 wo
   for (const line of ['Come by 412 Church St and holler.', 'Mail it to PO Box 12, river boy.', 'Bring it to 4521 Hwy 80 by morning.', 'Zip is 39323, baby.', 'Call 601-555-0142 if you see her.', 'Look it up at www.chunky.ms tonight.']) {
     assert.equal(check(say(line)).bad, 'addresses', line);
   }
-  for (const line of ['Take 80 to Church St and hang a left.', 'Two cans, by the way.', 'Highway 80 runs both ways.']) assert.equal(check(say(line)).bad, undefined, line);
+  // in any case, and a phone number run together
+  for (const line of ['Come by 412 church st and holler.', 'Come by 412 CHURCH ST and holler.', 'Bring it to 4521 hwy 80 by morning.', 'Call 6015550142 if you see her.', 'Look it up at WWW.CHUNKY.MS tonight.', 'Write to chunky.COM, baby.']) {
+    assert.equal(check(say(line)).bad, 'addresses', line);
+  }
+  for (const line of ['Take 80 to Church St and hang a left.', 'Two cans, by the way.', 'Highway 80 runs both ways.', 'I got 100 cans on Church St, son.']) assert.equal(check(say(line)).bad, undefined, line);
 });
 
 test('nothing from outside Chunky, nothing about how anyone quit, nobody real, no songs and nothing past PG-13', () => {
@@ -76,6 +80,11 @@ test('nothing from outside Chunky, nothing about how anyone quit, nobody real, n
   assert.equal(bad(`What the ${'f'}${'uck'}, river boy.`), 'pg13');
   assert.equal(bad(`That's ${'sh'}${'itty'} beans.`), 'pg13');
   assert.equal(bad('Pass the cumin and the spices, river boy.'), undefined);
+  // with a curly apostrophe, with stars for some of its letters, and spelled with figures, but not a number on its own or someone doing something
+  assert.equal(bad('I’m an AI, sugar.', 'bobby'), 'outside');
+  assert.equal(bad('What the f***, river boy.'), 'pg13');
+  for (const line of ['Well bl0rp.', 'Bl**p off.']) assert.equal(whyNot(line, data), 'pg13', line);
+  assert.equal(whyNot('That is 455 cans, and *leans on the counter* that is all.', { ...DATA, blocked: [wordHash('ass')] }), '');
   assert.ok(formsOf('bitches').has('bitch') && formsOf('shitty').has('shit') && !formsOf('spices').has('spic'));
 });
 
@@ -95,15 +104,18 @@ test('what comes back is tidied and checked a piece at a time, and only the line
   assert.equal(check('{"say": "Evening 🙂 river boy."}').say, 'Evening river boy.');
   assert.equal(check('{"say": ""}').bad, 'nothing said');
   assert.deepEqual(check('{"care": true}'), { care: true });
-  const r = check(reply({ say: 'Evening.', mood: 'furious', remember: 'He lives at 412 Church St.', replies: ['Later.', 'Sure.', 'sure', 'This answer is far too long to fit on any button anybody would want to press', 'Robby says hey.', 'Fine.', 'Okay.', 'One more.'] }));
+  const r = check(reply({ say: 'Evening.', mood: 'furious', remember: 'He lives at 412 Church St.', replies: ['Later.', 'Sure.', 'sure', 'This answer is far too long to fit on any button anybody would want to press', 'Robby says hey.', '♪ Happy birthday to you ♪', 'Fine.', 'Okay.', 'One more.'] }));
   assert.equal(r.mood, 'plain');
   assert.equal(r.remember, '');
+  assert.equal(check(reply({ say: 'Evening.', remember: 'He said he wants to die.' })).remember, '', 'nor anything kept that sounds like that');
   assert.deepEqual(r.replies, ['Sure.', 'Fine.', 'Okay.']);
 });
 
 test('what he types that sounds like he is really not okay is caught on its own, and the game\'s own talk isn\'t', () => {
-  for (const t of ['I want to kill myself', 'honestly i\'m not okay', 'i wanna die', 'I don’t want to be alive', 'nobody would miss me', 'I can\'t do this anymore', 'thinking about hurting myself', 'Im not ok', 'better off dead', 'kms', 'I hate my life']) assert.ok(inDistress(t, DATA), t);
-  for (const t of ['I quit', 'he quit back in the spring', 'kill the lights', 'this game is killing me', "I'm going to die out here", 'I can\'t go on that bridge', 'jump the fence', 'end of the road', "I'm fine", 'ok', 'how do I kill them'] ) assert.ok(!inDistress(t, DATA), t);
+  for (const t of ['I want to kill myself', 'honestly i\'m not okay', 'i wanna die', 'I don’t want to be alive', 'nobody would miss me', 'I can\'t do this anymore', 'thinking about hurting myself', 'Im not ok', 'better off dead', 'kms', 'I hate my life',
+    "I'm gonna hang myself", 'I want to shoot myself', 'i dont wanna live', "i don't wanna be here", 'i wanna end it', 'I wish I was never born', 'kill my self', "my life isn't worth living", 'I’m not okay.']) assert.ok(inDistress(t, DATA), t);
+  for (const t of ['I quit', 'he quit back in the spring', 'kill the lights', 'this game is killing me', "I'm going to die out here", 'I can\'t go on that bridge', 'jump the fence', 'end of the road', "I'm fine", 'ok', 'how do I kill them',
+    "I'm not okay with that", "I'm not ok with three cans", "I don't want to die out here", "let's end it here", 'I cut myself on the fence', "that truck's not worth it"]) assert.ok(!inDistress(t, DATA), t);
 });
 
 test('only a written line that would change nothing can be said in new words instead', () => {
@@ -129,6 +141,10 @@ test('one ask is everything about them and him, under the server\'s limit, howev
   const turns = [{ role: 'user', content: 'He says: "Hey."' }, { role: 'assistant', content: '{"say":"Hey yourself."}' }];
   const more = messagesFor({ data: DATA, who: 'coop', mind, turns, heard: 'How is business?', me: 'me' });
   assert.deepEqual(more.slice(1), [...turns, { role: 'user', content: 'He says: "How is business?"' }]);
+  // his walking up goes in the visit's talk the same way, so it's always his, then theirs, then his
+  const walked = [{ role: 'user', content: heardAs(DATA, null) }, { role: 'assistant', content: '{"say":"Evening."}' }];
+  assert.deepEqual(messagesFor({ data: DATA, who: 'coop', mind, turns: walked, heard: 'Hey.', me: 'me' }).map((m) => m.role), ['system', 'user', 'assistant', 'user']);
+  assert.equal(heardAs(DATA, 'Hey.'), 'He says: "Hey."');
   const full = { visits: 40, notes: Array.from({ length: 12 }, (_, i) => ({ about: 'me', text: `Note ${i} ${'x'.repeat(120)}`, at: i })), said: Array.from({ length: 24 }, (_, i) => `Line ${i} ${'y'.repeat(190)}`) };
   const big = messagesFor({ data: DATA, who: 'bobby', mind: full, turns: Array.from({ length: 8 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'z'.repeat(150) })), heard: 'q'.repeat(LIMITS.typed), me: 'me' });
   assert.ok(big.reduce((n, m) => n + m.content.length, 0) <= LIMITS.ask);
@@ -188,6 +204,15 @@ test('when the server can\'t answer they go back to their written lines for a wh
   assert.equal(calls, 6);
 });
 
+test('two asks at once: the longer of the waits they are told of is the one that counts', async () => {
+  let clock = 0, n = 0;
+  const answers = [{ quiet: 'cap' }, { quiet: 'fast' }];
+  const talk = createTalk({ data: DATA, fetch: async () => ({ json: async () => answers[n++] }), now: () => clock });
+  talk.on('http://localhost:1/talk');
+  await Promise.all([talk.ask('coop', {}), talk.ask('bobby', {})]);
+  clock += 16e3; assert.equal(talk.ready(), false, 'still the hour for the month\'s money');
+});
+
 test('what they remember of him, and what they have said, is kept between sessions, the newest of it', () => {
   const kept = store();
   let talk = createTalk({ data: DATA, store: kept, fetch: async () => ({}) });
@@ -201,6 +226,9 @@ test('what they remember of him, and what they have said, is kept between sessio
   assert.equal(m.notes.length, LIMITS.notes); assert.equal(m.notes[0].text, 'Note 3.');
   assert.equal(m.notes[0].about, talk.me(), 'each note says which of him it is about');
   assert.equal(m.visits, 2);
+  // which is what Forget everyone wipes, and why it's there to press
+  assert.equal(talk.hasSave(), true);
   talk.forget();
+  assert.equal(talk.hasSave(), false);
   assert.deepEqual(createTalk({ data: DATA, store: kept, fetch: async () => ({}) }).mind('coop'), { notes: [], said: [], visits: 0 });
 });

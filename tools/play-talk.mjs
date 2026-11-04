@@ -112,7 +112,8 @@ r = await g(() => { G.talk.said('coop', 'Rocky says you didn\'t peek. Respect. T
 const paid = await talkTap('coop');
 check('Coop paying him is the written line, with the beans, and nothing asked', paid.say === "Rocky says you didn't peek. Respect. Three cans, like I said." && (await g(() => G.S.beans)) === 3 && (await g(() => asked.length)) === r, paid);
 await tapOpt('Pleasure doing business.');
-// and the 988 Lifeline's panel on a phone, which a phone can only get to from what the model sends, so it's put up here the way the form would
+// and the 988 Lifeline's panel on a phone. A phone has nothing to type in, so nothing he says on one brings it up yet: it's put up here the way the
+// box on a laptop does, to see it's right on a phone when it shows, with a call and a text as well as the chat
 await g(() => { G.S.flags.delivered = false; G.S.flags.paid = false; });
 await talkTap('rocky'); await tapOpt('Later.');
 r = await talkTap('rocky');
@@ -146,7 +147,13 @@ script.push(JSON.stringify({ say: 'Slow as molasses. Folks pay in beans or they 
 r = await typeTo("How's business tonight?");
 trust = await g(() => G.people.get('coop', 'trust'));
 check('a key that isn\'t an answer\'s number starts him typing, and Enter says it', r.typed === "How's business tonight?" && r.heard === "How's business tonight?" && r.say.startsWith('Slow as molasses'), r);
-check('what he typed went with the ask, and his feelings only move a point a visit', heard.at(-1).messages.at(-1).content === 'He says: "How\'s business tonight?"' && trust === 1, { last: heard.at(-1).messages.at(-1), trust });
+check('what he typed went with the ask, after his walking up and Coop\'s answer, and his feelings only move once a visit', heard.at(-1).messages.at(-1).content === 'He says: "How\'s business tonight?"' && heard.at(-1).messages.map((m) => m.role).join(' ') === 'system user assistant user' && trust === 1, { roles: heard.at(-1).messages.map((m) => m.role), trust });
+// a capital typed with Shift: let go of while he's typing, it isn't left held down when he's done
+script.push(JSON.stringify({ say: 'Jerky, when there is any. There ain\'t.', mood: 'plain', do: [], remember: '', replies: ['Figures.'] }));
+await page.keyboard.down('Shift'); await page.keyboard.press('KeyW'); await page.keyboard.up('Shift');
+r = await typeTo('hat sells best?');
+const held = await g(() => G.held());
+check('Shift, let go of while he types, isn\'t left held', r.heard === 'What sells best?' && r.say.startsWith('Jerky') && !held.length, { heard: r.heard, held });
 await snap('4-typing-to-coop');
 const asks = heard.length;
 r = await typeTo("honestly i'm not okay");
@@ -187,5 +194,11 @@ r = await talkKey('coop');
 const sent = heard.at(-1)?.messages[0].content ?? '';
 check('after a reload he still remembers, and it goes with what\'s asked', r.say === 'Back again, river boy. Moon looks like a dime.' && sent.includes('- Keeps coming round after dark.') && sent.includes('- Slow as molasses') && /been by to talk to you \d+ times before/.test(sent), sent.slice(-1200));
 await pressOpt('Later.');
+// and Forget everyone forgets it all, keeping only what the phone calls itself
+await page.reload({ waitUntil: 'load' }); await g(() => new Promise((ok) => { const t = setInterval(() => { if (window.__game) { clearInterval(t); ok(); } }, 50); }));
+r = await g(() => ({ button: !document.getElementById('forget').hidden, kept: !!localStorage.getItem('chunky.talk.v1') }));
+await page.click('#forget');
+const after = await g(() => ({ kept: !!localStorage.getItem('chunky.talk.v1'), phone: !!localStorage.getItem('chunky.talk.phone'), mind: __game.talk.mind('coop') }));
+check('Forget everyone forgets what they remember of him and what they\'ve said', r.button && r.kept && !after.kept && after.phone && !after.mind.said.length && !after.mind.notes.length && !after.mind.visits, { r, after });
 await shut();
 process.exit(failed ? 1 : 0);

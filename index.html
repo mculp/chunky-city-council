@@ -273,7 +273,7 @@ import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/
 import { FROGS, BEST, TONI, createToni, sayFrog, forgetToni } from './src/toni.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
 import { createPantry, PANTRY } from './src/pantry.js';
-import { createTalk, talkUrl, inDistress, changesNothing, LIMITS as TALK_LIMITS } from './src/talk.js';
+import { createTalk, talkUrl, inDistress, changesNothing, heardAs, LIMITS as TALK_LIMITS } from './src/talk.js';
 import { makeLight, stepLight, lightAt } from './src/light.js';
 
 const $ = (id) => document.getElementById(id);
@@ -5773,15 +5773,15 @@ function ownWords(node) {
     if (got.reply?.say) { took(who, got.reply); showOwn(people.line(who, played), visit.last); } else sayWritten(node);
   });
 }
-// What they've said goes into what they remember, and anything it does to how they feel about him, a point each way at most a visit
+// What they've said goes into what they remember, after what he said or his walking up, so the talk goes his, theirs, his, and anything
+// it does to how they feel about him: each of trust and fear moves once a visit at most, by a point
 function took(who, r, heard = null) {
-  if (heard) convo.turns.push({ role: 'user', content: `He says: "${heard}"` });
-  convo.turns.push({ role: 'assistant', content: JSON.stringify({ say: r.say }) });
+  convo.turns.push({ role: 'user', content: heardAs(talk.data, heard) }, { role: 'assistant', content: JSON.stringify({ say: r.say }) });
   talk.said(who, r.say);
   if (r.remember) talk.note(who, r.remember);
   for (const e of r.do) {
-    const m = e.meter.split('.')[1], was = convo.moved[m] ?? 0;
-    if (Math.abs(was + e.by) <= 1) { convo.moved[m] = was + e.by; people.apply([e], played); }
+    const m = e.meter.split('.')[1];
+    if (!convo.moved[m]) { convo.moved[m] = e.by; people.apply([e], played); }
   }
   convo.last = { say: r.say, replies: r.replies };
 }
@@ -5840,8 +5840,9 @@ function closeDialog() {
   convo = null;
   if (S.mode === 'dialog') S.mode = 'town'; townObjective();
 }
-// on a laptop, typing to them: Enter says it, and nothing typed gets to the game's own keys
-for (const kind of ['keydown', 'keyup']) $('dTyped').addEventListener(kind, (e) => { e.stopPropagation(); if (kind === 'keydown' && e.key === 'Escape') $('dTyped').blur(); });
+// on a laptop, typing to them: Enter says it, and nothing typed gets to the game's own keys. Letting go of a key still does, so one that
+// was down when the typing started, like Shift for a capital, isn't left held.
+$('dTyped').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') $('dTyped').blur(); });
 $('dType').addEventListener('submit', (e) => { e.preventDefault(); const t = $('dTyped').value.replace(/\s+/g, ' ').trim().slice(0, TALK_LIMITS.typed); if (t && convo && S.mode === 'dialog') answer(t, true); });
 const street = (id) => MAP.roadById.get(id).name;
 const standing = (npc) => ({ x: npc.root.position.x, z: npc.root.position.z });
@@ -8020,8 +8021,8 @@ function loop() { if (paused) return; if (!mapOpen) tick(Math.min(clock.getDelta
 const clickedIn = (e) => { if (e.isTrusted && e.detail > 0) takeMouse(); };
 $('start').addEventListener('click', (e) => { $('title').hidden = true; startHang(); clickedIn(e); });
 $('free').addEventListener('click', (e) => { startFree(); clickedIn(e); });
-$('forget').hidden = !people.hasSave() && !folks.hasSave() && !toni.mind.seen.length;
-$('forget').addEventListener('click', () => { people.forget(); folks.forget(); pantry.forget(); toni.forget(); S.items.gerald = 0; showPantry(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
+$('forget').hidden = !people.hasSave() && !folks.hasSave() && !toni.mind.seen.length && !talk.hasSave();
+$('forget').addEventListener('click', () => { people.forget(); folks.forget(); pantry.forget(); toni.forget(); talk.forget(); S.items.gerald = 0; showPantry(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
 // first frame: him hanging behind the title
 heroRoot.position.copy(ANCHOR); poseHero(0); drawPlanks();
 for (const s of SNAKES) s.update(.016); deckSnake.update(.016);
@@ -8179,6 +8180,8 @@ if (TEST) {
     look(yaw, pitch) { cam.yaw = yaw; if (pitch !== undefined) cam.pitch = pitch; cam.snap = true; lastLook = time; },
     key(k, down = true) { k = k.toLowerCase(); if (down) { if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; if (k === 'f') input.sEdge = true; if (k === 'q') input.cEdge = true; if (k === 'r') input.nEdge = true; if (k === 'c') input.hEdge = true; } keys.add(k); } else keys.delete(k); },
     stick(x, y) { touchStick.set(x, y); },
+    // the keys the game thinks are down
+    held: () => [...keys],
     choose(i) { $('dOpts').children[i].click(); return this.state(); },
     // their own words: where the talk server is, what each of them remembers, what's been asked as he came near, this visit, and typing to them
     talk: {

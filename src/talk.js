@@ -70,10 +70,16 @@ function rulesOf(data) {
 }
 // Why a line can't be shown, or '' if it can: it knows the world outside Chunky, says how anyone quit, names someone real, has an
 // address, a phone number or a song in it, or isn't PG-13
+// A word with stars for some of its letters, like f***, is what it stands for, and so is one spelled with figures, like sh1t
+const MASKED = /(^|[^*\p{L}])\p{L}{1,4}\*+\p{L}{0,4}(?![\p{L}*])/u, FIGURES = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 7: 't', '@': 'a', $: 's' };
 export function whyNot(text, data) {
-  const r = rulesOf(data);
-  for (const why of ['outside', 'never', 'real', 'addresses', 'lyrics']) if (r[why].some((re) => re.test(text))) return why;
-  for (const w of plain(text).split(' ')) for (const f of formsOf(w.replace(/[^a-z]/g, ''))) if (r.blocked.has(wordHash(f))) return 'pg13';
+  const r = rulesOf(data), t = String(text).replace(/[’‘]/g, "'");
+  for (const why of ['outside', 'never', 'real', 'addresses', 'lyrics']) if (r[why].some((re) => re.test(t))) return why;
+  if (MASKED.test(t)) return 'pg13';
+  for (const w of t.split(/\s+/)) {
+    const read = /\p{L}/u.test(w) ? [w, w.replace(/[0-9@$]/g, (c) => FIGURES[c] ?? c)] : [w];
+    for (const v of read) for (const p of plain(v).split(' ')) for (const f of formsOf(p.replace(/[^a-z]/g, ''))) if (r.blocked.has(wordHash(f))) return 'pg13';
+  }
   return '';
 }
 
@@ -116,12 +122,12 @@ export function checkReply(text, { data, who, said = [] }) {
   const replies = [];
   for (const a of Array.isArray(got.replies) ? got.replies : []) {
     const t = typeof a === 'string' ? tidy(a) : '';
-    if (!t || wordsIn(t) > LIMITS.answerWords || t.length > 80 || /^later\b/i.test(t) || whyNot(t, data) || inDistress(t, data) || replies.some((r) => sameLine(r, t))) continue;
+    if (!t || wordsIn(t) > LIMITS.answerWords || t.length > 80 || /^later\b/i.test(t) || whyNot(a, data) || whyNot(t, data) || inDistress(t, data) || replies.some((r) => sameLine(r, t))) continue;
     replies.push(t);
     if (replies.length === LIMITS.answers) break;
   }
   let remember = typeof got.remember === 'string' ? tidy(got.remember) : '';
-  if (remember && (wordsIn(remember) > LIMITS.noteWords || whyNot(remember, data))) remember = '';
+  if (remember && (wordsIn(remember) > LIMITS.noteWords || whyNot(got.remember, data) || whyNot(remember, data) || inDistress(remember, data))) remember = '';
   return { say, mood: data.moods.includes(got.mood) ? got.mood : 'plain', do: effects, remember, replies, thrown };
 }
 
@@ -132,6 +138,9 @@ export const inDistress = (text, data) => { const t = String(text).replace(/[’
 // Whether a written line's effects would change nothing now: each one's conditions don't hold, or it sets a flag that's already set or
 // unsets one that isn't. Only a line like that can be said in new words instead, so the story's lines are always the written ones.
 export const changesNothing = (effects, { check, flags }) => (effects ?? []).every((e) => !check(e.when) || (e.set ? !!flags[e.set] : e.unset ? !flags[e.unset] : false));
+
+// What he's just said, as it's put to them, or that he's walked up. This visit's talk so far goes in the same way, his and theirs in turn.
+export const heardAs = (data, heard) => (heard ? `He says: "${heard}"` : data.opener);
 
 const listed = (items) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
 // Everything that goes with one line: who they are, the world, what's going on, what they remember of him and what they've said to him,
@@ -158,7 +167,7 @@ export function messagesFor({ data, who, here = {}, mind = blankMind(), turns = 
       '',
       data.rules.join('\n'),
     ];
-    return [{ role: 'system', content: system.join('\n') }, ...talk, { role: 'user', content: heard ? `He says: "${heard}"` : data.opener }];
+    return [{ role: 'system', content: system.join('\n') }, ...talk, { role: 'user', content: heardAs(data, heard) }];
   };
   let messages = build();
   const size = () => messages.reduce((n, m) => n + m.content.length, 0);
@@ -184,7 +193,8 @@ export function createTalk({ data, store = null, fetch = globalThis.fetch, now =
   const KEY = `chunky.talk.v${data.version}`, PHONE = 'chunky.talk.phone';
   let url = null, restUntil = 0, minds = {}, phone = null, asking = 0, waiting = [];
   const mind = (who) => (minds[who] ??= blankMind());
-  const rest = (why) => { restUntil = now() + (REST[why] ?? REST.off) * 1000; };
+  // the longest wait it's been told of, so a quick answer to one ask doesn't cut short what another was told
+  const rest = (why) => { restUntil = Math.max(restUntil, now() + (REST[why] ?? REST.off) * 1000); };
 
   // what a phone calls itself, for the server's limit on how often one phone can ask, made the first time and kept
   function phoneKey() {
@@ -223,6 +233,7 @@ export function createTalk({ data, store = null, fetch = globalThis.fetch, now =
     said(who, text) { const m = mind(who); if (!m.said.includes(text)) { m.said.push(text); keep(m.said, LIMITS.said); save(); } },
     note(who, text, about = talk.me()) { const m = mind(who); m.notes.push({ about, text, at: now() }); keep(m.notes, LIMITS.notes); save(); },
     forget() { minds = {}; try { store.removeItem(KEY); } catch { /* nothing to remove */ } },
+    hasSave() { try { return !!store?.getItem(KEY); } catch { return false; } },
     // whatever's still being asked, for a test to wait on
     settled: () => (asking ? new Promise((r) => waiting.push(r)) : Promise.resolve()),
     // What they'd say: { reply } that's been through the checker, { bad } with why it didn't pass, or { quiet } with why nothing came
