@@ -79,7 +79,7 @@ if (args.includes('--changed')) {
     return word(w).test(sources.get(tool));
   };
   const add = (c, reason) => { if (!why.has(c.name)) why.set(c.name, reason); };
-  for (const c of checks) if (c.name === 'test' || c.name === 'smoke') add(c, 'always');
+  for (const c of checks) if (c.name === 'test' || script(c) === 'smoke') add(c, 'always');
   for (const f of files) {
     if (f === 'tools/browser.mjs') for (const c of checks) add(c, f);
     if (f === 'package.json') {
