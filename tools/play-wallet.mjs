@@ -1,6 +1,6 @@
 // Wearing your own rektguy online (CHUNKY-170), in real Chrome against a town on this machine, with real taps and clicks, wallets made
-// up for it and a stand-in for the chain, so nothing real is asked or signed. On a phone, the title card has Connect a wallet under
-// Play, which shows four letters and the wallet apps that open the game's own page in their browser. That page, in the wallet app's
+// up for it and a stand-in for the chain, so nothing real is asked or signed. A town that doesn't say it can pair a wallet isn't asked
+// and doesn't offer it. On a phone, the title card has Connect a wallet under Play, which shows four letters and the wallet apps that open the game's own page in their browser. That page, in the wallet app's
 // browser, shows the same four letters, takes them off its address, and asks the wallet for its address and one signature, on words
 // that say it costs nothing and moves nothing, and nothing else. Back on the phone, the looks have their two rektguys' pictures over
 // the town's, neither worn yet, with nothing said; they pick one and come in wearing it, and someone else in town sees it by its handle
@@ -109,9 +109,24 @@ async function signs(page, asked, letters, who, { tap = true } = {}) {
 }
 const pageIn = (pairing) => new URL(pairing.apps.find(([name]) => name === 'Trust Wallet')[1]).searchParams.get('url');
 
+let without = null;
 try {
+  // ---------------- a town that doesn't say it can pair a wallet, as the one on Cloudflare before it could, isn't asked and doesn't
+  // offer it, so the game can go up before the town that pairs
+  without = await startServer({ port: 0, quiet: true });
+  const old = await serveAndOpen({ touch: true, query: `?test&net=ws://localhost:${without.port}` });
+  old.touch = true; opened.push(old);
+  let asks = 0;
+  await old.page.route(`http://localhost:${without.port}/wallet/**`, (r) => { asks++; return r.fulfill({ status: 404, body: 'Chunky, Mississippi.' }); });
+  await old.page.reload({ waitUntil: 'load' });
+  await old.page.waitForFunction(() => window.__game?.resume); await on(old, () => __game.resume());
+  await until(() => on(old, () => !!window.__net), 20000); await on(old, () => __net.here());
+  const offered = await on(old, () => ({ wallet: !document.getElementById('connectWallet')?.hidden, here: document.getElementById('here')?.textContent }));
+  check(`a town that doesn't say it can pair a wallet isn't asked, ${asks} times, and its title card, "${offered.here}", doesn't offer it`, asks === 0 && !offered.wallet && offered.here === 'Nobody in town right now', offered);
+
   // ---------------- on a phone: Connect a wallet under Play, four letters, and the wallet apps
   const a = await open();
+  await on(a, () => __net.here());
   const card = await on(a, () => { const play = document.getElementById('together'), w = document.getElementById('connectWallet'); return { play: play?.textContent, wallet: w && !w.hidden ? w.textContent : null, under: !!w && play?.compareDocumentPosition(w) === Node.DOCUMENT_POSITION_FOLLOWING && w.previousElementSibling?.id === 'here' }; });
   check(`the title card has "${card.wallet}" under "${card.play}" and how many are in town`, card.play === 'Play' && card.wallet === 'Connect a wallet' && card.under, card);
   await snap(a.page, '00-title-card');
@@ -207,13 +222,13 @@ try {
   const laptops = await until(async () => { const v = await looks(l); return v?.yours && v; }, 12000);
   check('and the game\'s looks have their one, worn, in the tab it was left in', JSON.stringify(laptops?.pressed) === '[true]', laptops);
 
-  for (const [name, p] of [['the phone', a], ['the other', b], ['backing out', c], ['the owner\'s', o], ['the laptop', l]]) check(`no console errors on ${name}: ${p.errors.join(' / ') || 'none'}`, !p.errors.length, p.errors);
+  for (const [name, p] of [['the town that can\'t pair', old], ['the phone', a], ['the other', b], ['backing out', c], ['the owner\'s', o], ['the laptop', l]]) check(`no console errors on ${name}: ${p.errors.join(' / ') || 'none'}`, !p.errors.length, p.errors);
   for (const [name, w] of [['the wallet app\'s page', app], ['the one with none', none], ['the owner\'s', owners]]) check(`no console errors on ${name}: ${w.errors.join(' / ') || 'none'}`, !w.errors.length, w.errors);
 } catch (e) {
   check(`it played through: ${e.message}`, false, e.stack);
 } finally {
   for (const p of opened) await p.close();
-  await server.close();
+  await server.close(); await without?.close();
 }
 console.log(failed ? `\n${failed} failed` : '\nwearing your own rektguy: all good');
 process.exit(failed ? 1 : 0);

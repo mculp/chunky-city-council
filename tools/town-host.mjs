@@ -76,7 +76,7 @@ try {
   const empty = await hereOf(url);
   assert.equal(empty.status, 200); assert.equal(empty.headers.get('access-control-allow-origin'), 'https://online.chunky.ms');
   assert.equal(empty.headers.get('cache-control'), 'no-store');
-  assert.deepEqual(await empty.json(), { here: 0 });
+  assert.deepEqual(await empty.json(), { here: 0, wallets: true });
   const a = phone(url, { key: 'a'.repeat(32) }), b = phone(url, { key: 'b'.repeat(32), name: 'Dee', origin: 'https://online.chunky.ms' });
   await until(() => a.id && b.id, 'both to be let in');
   a.say(5, 6); b.say(-3, 4);
@@ -85,8 +85,8 @@ try {
   const rate = b.snaps.length - before;
   assert.ok(rate >= 15 && rate <= 25, `${rate} snapshots in a second`);
   console.log(`two phones are let in, one on a page at online.chunky.ms, and each sees the other where they said, ${rate} times a second`);
-  assert.deepEqual(await (await hereOf(url)).json(), { here: 2 });
-  console.log('the title card is told how many are in town: nobody, then the two of them');
+  assert.deepEqual(await (await hereOf(url)).json(), { here: 2, wallets: true });
+  console.log('the title card is told how many are in town, nobody and then the two of them, and that the town can pair a wallet');
 
   a.ws.send(say({ t: 'keep', beans: 4, items: { bottle: 1 }, gas: 0 }));
   a.ws.send(say({ t: 'mind', who: 'coop', said: 'Hey.' })); a.ws.send(say({ t: 'mind', who: 'coop', visit: true }));

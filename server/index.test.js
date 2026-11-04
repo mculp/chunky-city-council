@@ -263,6 +263,11 @@ test('it says how many are in town right now at /here, for the title card, count
   } finally { await s.close(); }
 });
 
+test('a town that can pair a wallet says so at /here, so the title card only offers it then', async () => {
+  const s = await startServer({ port: 0, quiet: true, chain: createChain({ rpc: ['http://chain.stand-in/'], fetch: chainStandIn({ owners: {} }).fetch }) });
+  try { assert.deepEqual(await (await here(s.port)).json(), { here: 0, wallets: true }); } finally { await s.close(); }
+});
+
 // ---------------- wearing your own rektguy (CHUNKY-170), with a stand-in for the chain and a wallet made up for the test
 const PAGE = 'http://localhost:8000', PNG = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4);
 function standInChain(owners) {

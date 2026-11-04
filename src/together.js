@@ -210,14 +210,19 @@ export function together(G) {
   // ---------------- the title card: Play, how many are in town right now under it, and a way to change their look for anyone who's
   // been before, since Play takes them straight in (CHUNKY-169)
   const hereAt = hereUrl(url);
-  let hereLine = null, lookLink = null;
+  let hereLine = null, lookLink = null, walletLink = null;
   async function here() {
     if (!hereLine || !hereAt || started || going) return;
-    let n = null;
-    try { const r = await fetch(hereAt, { cache: 'no-store' }); if (r.ok) n = (await r.json()).here; } catch { /* nobody to ask */ }
+    let n = null, wallets = false;
+    try { const r = await fetch(hereAt, { cache: 'no-store' }); if (r.ok) ({ here: n, wallets } = await r.json()); } catch { /* nobody to ask */ }
     if (started || going) return;
     hereLine.textContent = !Number.isInteger(n) ? '' : n ? `${n} in town right now` : 'Nobody in town right now';
     hereLine.hidden = !hereLine.textContent;
+    // Connect a wallet once the town says it can pair one, which a town from before it could doesn't, and what's theirs is asked then
+    if (wallets === true && walletLink.hidden) {
+      walletLink.hidden = false;
+      wallet.mine().then((m) => { if (Array.isArray(m.rekt) && !pairingCode) { mine = m; pickedRekt = m.wearing; showYours(); } });
+    }
   }
 
   // ---------------- let in: out front of the gas station, the first time and every time
@@ -560,17 +565,16 @@ export function together(G) {
       }
       if (big) lastMap = { v, dpr, g };
     },
-    // The title card, given its Play: how many are in town under it, asked again every so often while it's up, Connect a wallet,
-    // and Change your look for anyone who's been before. What their wallet holds is asked as it comes up, for the looks.
+    // The title card, given its Play: how many are in town under it, asked again every so often while it's up, Connect a wallet
+    // once the town's said it can pair one, and Change your look for anyone who's been before.
     title(play) {
       hereLine = document.createElement('p'); hereLine.id = 'here'; hereLine.hidden = true; hereLine.setAttribute('aria-live', 'polite');
-      const walletLink = document.createElement('button'); walletLink.className = 'forget'; walletLink.id = 'connectWallet'; walletLink.textContent = 'Connect a wallet';
+      walletLink = document.createElement('button'); walletLink.className = 'forget'; walletLink.id = 'connectWallet'; walletLink.textContent = 'Connect a wallet'; walletLink.hidden = true;
       walletLink.addEventListener('click', connectWallet);
       lookLink = document.createElement('button'); lookLink.className = 'forget'; lookLink.id = 'changeLook'; lookLink.textContent = 'Change your look';
       lookLink.hidden = !store.get(KEPT.name);
       lookLink.addEventListener('click', () => show(''));
       play.after(hereLine, walletLink, lookLink);
-      wallet.mine().then((m) => { if (Array.isArray(m.rekt) && !pairingCode) { mine = m; pickedRekt = m.wearing; showYours(); } });
       here();
       const asking = setInterval(() => { if (started) clearInterval(asking); else if (!document.hidden && !document.getElementById('title').hidden) here(); }, HERE_EVERY);
     },

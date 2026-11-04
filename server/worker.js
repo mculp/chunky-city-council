@@ -146,8 +146,9 @@ export default {
       const origin = request.headers.get('origin');
       if (origin && !pagesOf(env).includes(origin)) return new Response('Chunky only talks to Chunky.', { status: 403 });
       const town = townOf(env);
-      // how many are in town right now, which the title card asks before anyone's said who they are
-      if (pathname === '/town/here') return Response.json({ here: await town.here() }, { headers: { 'Cache-Control': 'no-store', ...(origin && { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' }) } });
+      // how many are in town right now, which the title card asks before anyone's said who they are, and that it can pair a wallet,
+      // so the title card only offers it then and the game can go up before the town that pairs
+      if (pathname === '/town/here') return Response.json({ here: await town.here(), wallets: true }, { headers: { 'Cache-Control': 'no-store', ...(origin && { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' }) } });
       if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('This is the town, over a WebSocket.', { status: 426 });
       return town.fetch(request);
     }

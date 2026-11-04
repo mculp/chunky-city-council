@@ -76,7 +76,7 @@ export async function startServer({ port = NET_PORT, rate = NET_RATE, max, keeps
   const http = createServer(async (req, res) => {
     const { pathname } = new URL(req.url, 'http://here');
     try {
-      if (pathname === '/here') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify({ here: host.here })); return; }
+      if (pathname === '/here') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify({ here: host.here, ...(chain && { wallets: true }) })); return; }
       if (pathname.startsWith('/wallet/') || pathname.startsWith('/rektguy/')) { await answer(res, await wallet(asked(req))); return; }
       if (!words || pathname !== '/talk') { res.writeHead(426, { 'Content-Type': 'text/plain' }); res.end('This is the town, over a WebSocket.'); return; }
       await answer(res, await words(asked(req)));
