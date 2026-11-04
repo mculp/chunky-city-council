@@ -124,14 +124,14 @@ check('the water stands a little under the deck, and the pool has a floor well u
 check('he goes in, swims it and climbs out the other side', pool.modes.includes('swim') && pool.mode === 'town' && pool.out === 'out' && pool.off < 1.2, pool);
 await snap('pool');
 
-// ---------------- down the hill to the cabin, onto its deck and in, then along the decks past the swing to the cinema, and on to the studio and in
+// ---------------- from the end of the drive down the hill to the cabin, onto its deck and in, then along the decks past the swing to the cinema, and on to the studio and in
 await g(() => {
-  const G = __game, P = G.player.pos, [x, z] = true2(1050, 621); G.place(x, z); G.sim(.2, .2);
+  const G = __game, P = G.player.pos, [x, z] = G.map.lanes.filter((l) => measured.includes(l.id)).sort((a, b) => b.pts.length - a.pts.length)[0].pts.at(-1); G.place(x, z); G.sim(.2, .2);
   window.stand = () => ({ up: +(P.y - G.groundH(P.x, P.z)).toFixed(2), under: G.surfaceUnder(), deck: G.compound.onDeck(P.x, P.z), hit: G.houseAt(P.x, P.z)?.id ?? null });
 });
 // the rail's along the side of the deck that looks out over the river, so it's up onto the next one along from the cabin, and along to its door
 const downHill = await g(() => ({ ...walkTo([true2(1053, 602), true2(1053, 599), doorsOf(__game.compound.CABIN).out], .5, 40), ...stand() }));
-check('he walks down the hill from the yard to the cabin and steps up onto its deck, which is wood underfoot', downHill.off < .8 && downHill.deck && Math.abs(downHill.up - .3) < .05 && downHill.under === 'wood', downHill);
+check('he walks from the end of the drive down the hill to the cabin and steps up onto its deck, which is wood underfoot', downHill.off < .8 && downHill.deck && Math.abs(downHill.up - .3) < .05 && downHill.under === 'wood', downHill);
 const inCabin = await g(() => ({ ...walkTo([doorsOf(__game.compound.CABIN).in], .4, 8), ...stand() }));
 check('  and in through its door', inCabin.hit === 900019, inCabin);
 const toCinema = await g(() => ({ ...walkTo([doorsOf(__game.compound.CABIN).out, true2(1053, 598.6), true2(1049, 596.4)], .5, 30), ...stand() }));
