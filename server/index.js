@@ -11,11 +11,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createTown } from './town.js';
-import { NET_PORT, NET_RATE, decodeMessage, say } from '../src/net.js';
+import { NET_PORT, NET_RATE, PHONE_KEY, decodeMessage, say } from '../src/net.js';
 
-const SLOW = 16384;              // bytes still waiting to go to a phone before it's skipped for a tick
-const MOST = 2048;               // the most a phone can say at once: a hello, or what he's carrying, is well under it
-const KEY = /^[\w-]{16,128}$/;   // who a phone is: made on the phone and kept there, and only its hash is ever kept here
+const SLOW = 16384;   // bytes still waiting to go to a phone before it's skipped for a tick
+const MOST = 2048;    // the most a phone can say at once: a hello, or what he's carrying, is well under it
 const sha = (s) => createHash('sha256').update(s).digest();
 
 export async function startServer({ port = NET_PORT, rate = NET_RATE, max, silence = 5000, helloWithin = 5000, save = null, saveEvery = 5000, heroHash = '', quiet = false } = {}) {
@@ -57,7 +56,8 @@ export async function startServer({ port = NET_PORT, rate = NET_RATE, max, silen
     }
   }
   function hello(ws, m) {
-    const r = town.join({ keyHash: typeof m.key === 'string' && KEY.test(m.key) ? sha(m.key).toString('hex') : '', name: m.name, look: m.look, hero: isHero(m.hero), build: m.build });
+    // the key's made on the phone and kept there, and only its hash is ever kept here
+    const r = town.join({ keyHash: typeof m.key === 'string' && PHONE_KEY.test(m.key) ? sha(m.key).toString('hex') : '',name: m.name, look: m.look, hero: isHero(m.hero), build: m.build });
     if (!r.id) { deliver(r.out ?? []); ws.send(say(r.no)); ws.close(); return; }
     // Anything everyone's told before his welcome happened before he was here, and he'll find it in the welcome itself
     const at = r.out.findIndex((o) => o.to === r.id && o.msg.t === 'welcome');

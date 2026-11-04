@@ -9,6 +9,8 @@
 export const NET_RATE = 20, NET_MAX = 25, POSE_BYTES = 18;
 // where a town on this machine listens, for index.html?net
 export const NET_PORT = 8787;
+// who a phone is: a key it makes the first time it's needed and keeps, for the town and for the characters' words
+export const PHONE_KEY = /^[\w-]{16,128}$/;
 // how someone is, besides where: on their feet (walking, running, standing), swimming, or knocked down
 export const HOW = { foot: 0, swim: 1, down: 2 };
 const SNAPSHOT = 2, HEAD = 2, ENTRY = POSE_BYTES + 2, TAU = Math.PI * 2;
