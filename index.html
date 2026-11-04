@@ -5491,6 +5491,8 @@ function nextBeans() {
   return (far.length ? far : left).sort((a, b) => away(a) - away(b))[0];
 }
 function townObjective() {
+  // in a town that's shared the chapters are the hero's, and everyone else is only shown the road into town
+  if (net && !net.hero) { objective(S.flags.arrived ? null : `Follow ${street('griffis_fountain_rd')} into town`, standing(NPCS.coop)); return; }
   if (S.flags.ended) { objective('Chunky is yours. For now.'); return; }
   if (!S.flags.arrived) { objective(`Follow ${street('griffis_fountain_rd')} into town`, standing(NPCS.coop)); return; }
   const count = `Stock up on beans (${S.beans}/12)`;

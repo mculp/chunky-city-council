@@ -85,6 +85,8 @@ try {
   for (const [name, w] of [['A', bank[0]], ['B', bank[1]]]) check(`${name} comes to on the riverbank, ${w.fromBridge.toFixed(0)} m from where the road crosses the river, and on their feet on dry ground`, w.fromBridge < 45 && w.dry > .05 && !w.onRoad && !w.blocked, w);
   check(`and not on top of each other: ${away(bank[0], bank[1]).toFixed(1)} m apart`, away(bank[0], bank[1]) > 1, bank);
   check('nobody has the hoodie or the tape, not even on their own screen', !bank[0].hero && !bank[1].hero, bank);
+  const told = await Promise.all(pages.map((p) => on(p, () => { const o = document.getElementById('obj'); return o.hidden ? '' : o.textContent; })));
+  check(`each is told the road into town: ${told.map((t) => `"${t}"`).join(' / ')}`, told.every((t) => /^Follow Griffis Fountain Rd into town$/.test(t)), told);
   await snap(a, '02-a-comes-to');
 
   // ---------------- each sees the other: who they are and what they look like
@@ -113,6 +115,9 @@ try {
   const still = (await on(b, () => __net.tags())).find((t) => t.id === A.id);
   check('and it stays put to the pixel while A does', still && Math.abs(still.x - tagA.x) < .5 && Math.abs(still.y - tagA.y) < .5, { tagA, still });
   await snap(b, '03-b-sees-a');
+  // and that's all they're given: the chapters are the hero's
+  const inTown = await Promise.all(pages.map((p) => on(p, () => { const o = document.getElementById('obj'); return { arrived: __game.S.flags.arrived, says: o.hidden ? '' : o.textContent }; })));
+  check(`once they're in town they're given nothing more: ${inTown.map((t) => `"${t.says}"`).join(' / ')}`, inTown.every((t) => t.arrived && t.says === ''), inTown);
 
   // ---------------- walking and running, with real keys and a real thumb
   async function seenStop(watcher, who, end) {
@@ -340,6 +345,10 @@ try {
     check(`he's an orange dot on A's map, like his own arrow: ${dot ? dot.rgb.join(',') : 'nothing'}`, dot && Math.abs(dot.rgb[0] - 0xec) < 30 && Math.abs(dot.rgb[1] - 0x80) < 30 && Math.abs(dot.rgb[2] - 0x3a) < 30, dot);
     await a.page.keyboard.press('Escape');
     await until(() => on(a, () => !__game.mapState().open));
+    // and by the gas station, where A and B were given nothing more, the chapters are his
+    await onRoad(c, spot.x + 3, await on(c, (x) => __game.map.zAt('us_80', x), spot.x + 3));
+    const his = await until(() => on(c, () => { const o = document.getElementById('obj'); return __game.S.flags.arrived && !o.hidden ? o.textContent : null; }), 4000);
+    check(`and the chapters are his: "${his}"`, /^Stock up on beans/.test(his ?? ''), his);
 
     const d = await serveAndOpen({ viewport: { width: 390, height: 844 }, query: `${query}#hero=${HERO}` });
     pages.push(d);

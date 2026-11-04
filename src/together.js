@@ -417,6 +417,8 @@ export function together(G) {
   }
   let shownList = [];
   const net = {
+    // whether this phone is the hero's, which the town says as it lets him in
+    get hero() { return you.hero; },
     // after the world's placed, each frame that's drawn
     frame(dt, step) {
       if (!started) return;
