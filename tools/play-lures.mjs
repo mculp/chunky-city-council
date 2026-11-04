@@ -158,7 +158,7 @@ const lot = await g(() => {
   G.S.items.bottle = 2; G.S.hand = 'bottle';
   const free = (x, z) => !G.blocked(x, z, G.floorAt(x, z) + .5) && G.floorAt(x, z) > G.water.level(x, z) + .3;
   const open = (a, b, h) => { for (let f = .08; f < .95; f += .08) if (G.blocked(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, G.floorAt(a[0], a[1]) + h)) return false; return true; };
-  const car = [truck.x, truck.z], angleAt = (m, p) => { const u = [car[0] - m[0], car[1] - m[1]], v = [p[0] - m[0], p[1] - m[1]]; return Math.acos((u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v))); };
+  const car = [truck.x, truck.z], angleAt = (m, p) => { const u = [car[0] - m[0], car[1] - m[1]], v = [p[0] - m[0], p[1] - m[1]]; return Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v))))); };
   // him 16 m from the truck with a clear throw at it, and twelve burnt-down ones 16 to 40 m from it, a long way from him and at the widest angle to him from the truck that fits, so that
   // coming for him and coming for the car are two different ways to walk
   let best = null;
@@ -210,7 +210,7 @@ const alarm = await g(() => {
     // what's new on the screen once the first of them has stopped and turned to him
     if (!added && stood.size) added = screenText().filter((l) => !before.includes(l));
   }
-  const noted = G.roused.log.map((l) => l.kind), whyBox = !!document.getElementById('why'), deg = (u, v) => Math.round(Math.acos((u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v))) * 180 / Math.PI);
+  const noted = G.roused.log.map((l) => l.kind), whyBox = !!document.getElementById('why'), deg = (u, v) => Math.round(Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v))))) * 180 / Math.PI);
   const head = [...began.values()].filter((b) => b.p1).map((b) => { const m = [b.p1[0] - b.p0[0], b.p1[1] - b.p0[1]]; return { moved: +Math.hypot(...m).toFixed(1), toHim: deg(m, [him[0] - b.p0[0], him[1] - b.p0[1]]), toCar: deg(m, [truck.x - b.p0[0], truck.z - b.p0[1]]) }; });
   // it's noise for its first 5 seconds and no more, but he hears it for all of it, fainter the further off he is, and its lights go on for all of it
   G.sim(1, T); const heard = { noisy: H.noises.some((e) => e.kind === 'alarm'), lit: G.lures.ALARMS.length };
