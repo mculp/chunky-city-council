@@ -9,12 +9,17 @@ test('a keyboard is only ever told about keys it has', () => {
   for (const mouse of [false, true]) for (const mode of MODES) for (const [key] of keysFor(mode, { act: 'Talk to Coop', map: true, mouse, thrown: { name: 'bottle', word: 'BOTTLE', n: 2, more: true } })) assert.ok(REAL_KEYS.has(key), `${mode}: ${key}`);
 });
 
-test('in town he can shamble along with them, and stop, and only on foot', () => {
-  assert.ok(keysFor('town').some(([k, what]) => k === 'C' && what === 'Shamble'));
-  assert.ok(keysFor('town', { shambling: true }).some(([k, what]) => k === 'C' && what === 'Stop shambling'));
-  for (const mode of ['land', 'bridge', 'swim', 'drive', 'grabbed']) assert.ok(!keysFor(mode).some(([k]) => k === 'C'), mode);
-  assert.equal(buttonsFor('town').shamble, true);
-  for (const mode of ['land', 'swim', 'drive', 'grabbed']) assert.ok(!buttonsFor(mode).shamble, mode);
+test('in town he can shamble along with them once they\'re out, and stop, and only on foot', () => {
+  assert.ok(keysFor('town', { crowd: true }).some(([k, what]) => k === 'C' && what === 'Shamble'));
+  assert.ok(keysFor('town', { crowd: true, shambling: true }).some(([k, what]) => k === 'C' && what === 'Stop shambling'));
+  for (const mode of ['land', 'bridge', 'swim', 'drive', 'grabbed']) assert.ok(!keysFor(mode, { crowd: true }).some(([k]) => k === 'C'), mode);
+  assert.equal(buttonsFor('town', { crowd: true }).shamble, true);
+  for (const mode of ['land', 'swim', 'drive', 'grabbed']) assert.ok(!buttonsFor(mode, { crowd: true }).shamble, mode);
+});
+
+test('there\'s nobody to shamble along with before the crowd\'s out, in Chapter 1 or in a town that\'s shared', () => {
+  assert.ok(!keysFor('town').some(([k]) => k === 'C'));
+  assert.equal(buttonsFor('town').shamble, false);
 });
 
 test('a prompt never asks a keyboard for a button', () => {

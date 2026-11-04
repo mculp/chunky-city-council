@@ -205,7 +205,7 @@ Things that are only a number on them, and nowhere else: `under`, `swept`, `wet`
 
 ## Shambling with them
 
-He can pass for one of them: SHAMBLE on a phone, C on a laptop. It holds him to their pace, 1.3 m/s however far the stick's pushed. While it holds, nobody who isn't already after him notices him by sound, smell or touch. It's for the ones who've burnt down, since anyone who's gone quiet isn't looking at him anyway. The numbers are with the crowd's in `src/horde.js`.
+He can pass for one of them: SHAMBLE on a phone, C on a laptop, once the crowd's out. Before that there's nobody to pass for one of, in Chapter 1 or in a town that's shared, so neither shows. It holds him to their pace, 1.3 m/s however far the stick's pushed. While it holds, nobody who isn't already after him notices him by sound, smell or touch. It's for the ones who've burnt down, since anyone who's gone quiet isn't looking at him anyway. The numbers are with the crowd's in `src/horde.js`.
 
 - **Looking twice.** Anyone within 5 m comes to see through it. It's faster the closer he is, at night, the nosier they are, and the more beans he's carrying, since they can smell those. Right up against one with nothing on him it takes about 3 to 8 seconds, and a third of that with twelve cans. It wears off once he's out of reach. When one sees through it, that one comes for him, and the act holds for everyone else.
 - **What gives him away.** Running, a swing, or stepping into a light gives him away to everyone within 14 m at once. They know where he is for 5 seconds, so standing still and quiet doesn't lose them.

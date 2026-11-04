@@ -5,23 +5,23 @@ const ON_FOOT = new Set(['land', 'bridge', 'town']);
 // For the strip on a keyboard: what to press, and what it does. Moments with one thing to do have it in a prompt instead, and the strip stays out of the way.
 // thrown is what's in his hand, if there's anything: { name, word, n, more }, and more says there's something else to switch to.
 // mouse says the mouse has been taken, so it's what looks, swings and throws. Until it has, a click is how to take it, and the strip says so.
-// shambling says he's passing for one of them.
-export function keysFor(mode, { act = null, map = false, thrown = null, mouse = false, shambling = false } = {}) {
+// shambling says he's passing for one of them, and crowd that they're out, which until they are leaves nobody to pass for one of.
+export function keysFor(mode, { act = null, map = false, thrown = null, mouse = false, shambling = false, crowd = false } = {}) {
   const also = map ? [['M', 'Map']] : [], look = mouse ? ['MOUSE', 'Look'] : ['CLICK', 'Look with the mouse'];
   if (mode === 'swim') return [['WASD', 'Swim'], ['SPACE', 'Swim faster'], ...also, look];
   if (mode === 'drive') return [['W', 'Gas'], ['S', 'Brake, reverse'], ['A D', 'Steer'], ['SPACE', 'Handbrake'], ['E', 'Get out'], ...also, look];
-  if (ON_FOOT.has(mode)) return [['WASD', 'Move'], ['SHIFT', 'Run'], ['SPACE', 'Jump'], ...(act ? [['E', act]] : []), ...(mode === 'town' ? [[mouse ? 'CLICK' : 'F', 'Swing'], ['C', shambling ? 'Stop shambling' : 'Shamble']] : []), ...(mode === 'town' && thrown ? [[mouse ? 'RIGHT CLICK' : 'Q', `Throw ${thrown.name} (${thrown.n})`], ...(thrown.more ? [[mouse ? 'WHEEL' : 'R', 'Switch']] : [])] : []), ...also, look];
+  if (ON_FOOT.has(mode)) return [['WASD', 'Move'], ['SHIFT', 'Run'], ['SPACE', 'Jump'], ...(act ? [['E', act]] : []), ...(mode === 'town' ? [[mouse ? 'CLICK' : 'F', 'Swing'], ...(crowd ? [['C', shambling ? 'Stop shambling' : 'Shamble']] : [])] : []), ...(mode === 'town' && thrown ? [[mouse ? 'RIGHT CLICK' : 'Q', `Throw ${thrown.name} (${thrown.n})`], ...(thrown.more ? [[mouse ? 'WHEEL' : 'R', 'Switch']] : [])] : []), ...also, look];
   return [];
 }
 
 // For a phone: what each button says. A button with nothing to do isn't there.
-export function buttonsFor(mode, { act = null, thrown = null } = {}) {
+export function buttonsFor(mode, { act = null, thrown = null, crowd = false } = {}) {
   if (mode === 'hang') return { a: 'CUT', b: null, run: false };
   if (mode === 'sweep') return { a: 'SWEEP', b: null, run: false };
   if (mode === 'grabbed') return { a: 'FREE', b: null, run: false };
   if (mode === 'swim') return { a: null, b: 'SWIM FAST', run: false };
   if (mode === 'drive') return { a: 'GET OUT', b: 'BRAKE', run: false };
-  if (ON_FOOT.has(mode)) return { a: act ? (act.startsWith('Get in') ? 'GET IN' : act.startsWith('Eat') ? 'EAT' : act.startsWith('Bar') ? 'BAR' : act.startsWith('Unbar') ? 'UNBAR' : act.startsWith('Play') ? 'PLAY' : act.startsWith('Bump') ? 'BUMP' : act.startsWith('Take') ? 'TAKE' : act.startsWith('Look') ? 'LOOK' : act.startsWith('Read') ? 'READ' : act === 'Back' ? 'BACK' : 'TALK') : mode === 'town' ? 'SWING' : null, b: 'JUMP', run: true, c: mode === 'town' && thrown ? `${thrown.word} ${thrown.n}` : null, swap: mode === 'town' && !!thrown?.more, shamble: mode === 'town' };
+  if (ON_FOOT.has(mode)) return { a: act ? (act.startsWith('Get in') ? 'GET IN' : act.startsWith('Eat') ? 'EAT' : act.startsWith('Bar') ? 'BAR' : act.startsWith('Unbar') ? 'UNBAR' : act.startsWith('Play') ? 'PLAY' : act.startsWith('Bump') ? 'BUMP' : act.startsWith('Take') ? 'TAKE' : act.startsWith('Look') ? 'LOOK' : act.startsWith('Read') ? 'READ' : act === 'Back' ? 'BACK' : 'TALK') : mode === 'town' ? 'SWING' : null, b: 'JUMP', run: true, c: mode === 'town' && thrown ? `${thrown.word} ${thrown.n}` : null, swap: mode === 'town' && !!thrown?.more, shamble: mode === 'town' && crowd };
   return { a: null, b: null, run: false };
 }
 

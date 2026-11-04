@@ -5374,11 +5374,11 @@ function setButton(id, label, sizes) {
   el.innerHTML = label.replace(' ', '<br>'); el.style.fontSize = `${sizes[label.includes(' ') ? 2 : label.length < 4 ? 0 : label.length < 5 ? 1 : 2]}px`; el.setAttribute('aria-label', label);
 }
 function updateControls() {
-  const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, thrown = thrownNow(), held = mouseHeld(), now = `${S.mode}|${act}|${map}|${thrown?.word}|${thrown?.n}|${thrown?.more}|${held}|${shambling}`;
+  const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, thrown = thrownNow(), held = mouseHeld(), now = `${S.mode}|${act}|${map}|${thrown?.word}|${thrown?.n}|${thrown?.more}|${held}|${shambling}|${crowdOut}`;
   if (hudCache.controls === now) return; hudCache.controls = now;
   $('stam').classList.toggle('veh', S.mode === 'drive');
-  if (touchUI) { const { a, b, run, c, swap, shamble } = buttonsFor(S.mode, { act, thrown }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); setHidden('bC', !c); setHidden('bN', !swap); setHidden('bH', !shamble); $('bH').classList.toggle('held', shambling); $('bH').setAttribute('aria-pressed', shambling); if (c) { $('bC').innerHTML = c.replace(' ', '<br>'); $('bC').style.fontSize = thrown.word.length > 6 ? '10.5px' : '13px'; $('bC').setAttribute('aria-label', `Throw ${thrown.name}`); } return; }
-  const list = keysFor(S.mode, { act, map, thrown, mouse: held, shambling });
+  if (touchUI) { const { a, b, run, c, swap, shamble } = buttonsFor(S.mode, { act, thrown, crowd: crowdOut }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); setHidden('bC', !c); setHidden('bN', !swap); setHidden('bH', !shamble); $('bH').classList.toggle('held', shambling); $('bH').setAttribute('aria-pressed', shambling); if (c) { $('bC').innerHTML = c.replace(' ', '<br>'); $('bC').style.fontSize = thrown.word.length > 6 ? '10.5px' : '13px'; $('bC').setAttribute('aria-label', `Throw ${thrown.name}`); } return; }
+  const list = keysFor(S.mode, { act, map, thrown, mouse: held, shambling, crowd: crowdOut });
   setHidden('keyStrip', !list.length); $('keyStrip').innerHTML = list.map(([key, what]) => `<span class="ks"><span class="kc">${key}</span>${what}</span>`).join('');
 }
 function hudVitals() {
@@ -5792,7 +5792,9 @@ function fillHomes(dt) {
 const feel = { x: 0, z: 0, y: 0, noise: 0, light: 0, beans: 0, night: 1, hidden: false, canGrab: false, driving: false, acting: false };
 // How much of a light's pull is close enough that he's seen in it
 const SHAMBLE_LIT = .3;
+// only once the crowd's out, which in Chapter 1 it isn't yet and in a town that's shared it never is, as SHAMBLE and C only show then
 function toggleShamble() {
+  if (!crowdOut && !shambling) return;
   shambling = !shambling;
   if (shambling && !S.flags.toldShamble) { S.flags.toldShamble = true; toast('Shambling. They take you for one of them, until you run, fight or step into a light.'); }
 }
