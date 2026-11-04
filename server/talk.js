@@ -11,7 +11,7 @@
 // Every answer's a 200, so that nothing on a phone's console looks as if it went wrong, unless the page is on another site.
 import { PHONE_KEY } from '../src/net.js';
 
-export const TALK_URL = 'https://openrouter.ai/api/v1/chat/completions';
+export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const TALK = { body: 8192, messages: 24, chars: 6000, wait: 2500, tokens: 200 };
 // The cheap models it'll use, and what OpenRouter charged a million tokens in and out on 2026-11-03, for working out what a line
 // cost when OpenRouter doesn't say. The first is the one used, until trying them side by side on Coop and Miss Bobby picks one, and
@@ -96,7 +96,7 @@ async function askModel({ fetch, url, key, model, messages, wait, clock }) {
 // for pages that are somewhere different each time, like a test's on this machine), the two limits (each is told a key and says
 // whether it may go on) and the bill (a month's spent, and adding to it, which says the new total). It remembers what the month's
 // spent for up to a minute, so most lines don't wait on the bill, and each line's cost goes on the bill after the phone has its answer.
-export function createTalk({ fetch, key, cap = 20, origins = [], url = TALK_URL, wait = TALK.wait, clock = Date.now, phoneLimit, placeLimit, bill }) {
+export function createTalk({ fetch, key, cap = 20, origins = [], url = OPENROUTER_URL, wait = TALK.wait, clock = Date.now, phoneLimit, placeLimit, bill }) {
   // a cap that isn't a sum of money is no money at all, never no limit
   if (!(typeof cap === 'number' && Number.isFinite(cap) && cap >= 0)) cap = 0;
   const answers = typeof origins === 'function' ? origins : (o) => origins.includes(o);

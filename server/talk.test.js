@@ -1,7 +1,7 @@
 // The characters' words (CHUNKY-107): what a phone may ask, what goes on to OpenRouter, and when it all goes quiet
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTalk, MODEL, MODELS, TALK, TALK_URL, monthOf } from './talk.js';
+import { createTalk, MODEL, MODELS, TALK, OPENROUTER_URL, monthOf } from './talk.js';
 
 const PHONE = 'a-phone-of-their-own-1234';
 const SAID = [{ role: 'system', content: 'You are Coop.' }, { role: 'user', content: 'Hey, Coop.' }];
@@ -54,7 +54,7 @@ test('what goes to OpenRouter is the owner\'s key, a model off the list, the mes
   const { go, up } = talk();
   await go(ask(body({ messages: SAID.map((m) => ({ ...m, name: 'dropped' })), extra: 'dropped' })));
   const [{ url, init, body: sent }] = up.calls;
-  assert.equal(url, TALK_URL);
+  assert.equal(url, OPENROUTER_URL);
   assert.equal(init.headers.Authorization, 'Bearer sk-test');
   assert.deepEqual(Object.keys(init.headers).sort(), ['Authorization', 'Content-Type'], 'nothing that would list the game on OpenRouter');
   assert.equal(sent.model, MODEL);

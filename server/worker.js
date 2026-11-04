@@ -7,7 +7,7 @@
 // The owner's OpenRouter key is the Worker's secret OPENROUTER_KEY, and only the owner puts it in. CAP_USD is the month's cap.
 // CHUNKY_HERO is the sha256, in hex, of the secret in the hero's link, and it's a secret too.
 import { DurableObject } from 'cloudflare:workers';
-import { createTalk, TALK_URL } from './talk.js';
+import { createTalk, OPENROUTER_URL } from './talk.js';
 import { createTown } from './town.js';
 import { createHost, MOST } from './host.js';
 import { NET_RATE } from '../src/net.js';
@@ -114,7 +114,7 @@ export default {
     if (pathname === '/talk') {
       const bill = () => env.BILL.get(env.BILL.idFromName('chunky'));
       talk ??= createTalk({
-        fetch: (...a) => fetch(...a), key: env.OPENROUTER_KEY, url: env.OPENROUTER_URL || TALK_URL,
+        fetch: (...a) => fetch(...a), key: env.OPENROUTER_KEY, url: env.OPENROUTER_URL || OPENROUTER_URL,
         cap: env.CAP_USD === undefined ? 20 : Number(env.CAP_USD), origins: pagesOf(env),
         phoneLimit: async (key) => (await env.PHONE.limit({ key })).success,
         placeLimit: async (key) => (await env.PLACE.limit({ key })).success,

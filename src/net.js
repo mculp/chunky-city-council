@@ -9,6 +9,8 @@
 export const NET_RATE = 20, NET_MAX = 25, POSE_BYTES = 18;
 // where a town on this machine listens, for index.html?net
 export const NET_PORT = 8787;
+// where the characters' words are asked for: the talk server on Cloudflare, server/worker.js
+export const TALK_URL = 'https://chunky.chunkymetro.workers.dev/talk';
 // who a phone is: a key it makes the first time it's needed and keeps, for the town and for the characters' words
 export const PHONE_KEY = /^[\w-]{16,128}$/;
 // how someone is, besides where: on their feet (walking, running, standing), swimming, or knocked down
