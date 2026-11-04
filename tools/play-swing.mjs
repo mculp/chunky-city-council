@@ -1,5 +1,5 @@
-// First, one of them walking straight at him with the sound on: with his hood in the way, all that warns him is its glow flaring and one groan as its hands go up,
-// and the glow's back once it has hold of him. Then swings at one of them walking straight at him, the way the ticket says to try it: standing still, ten times on
+// First, one of them walking straight at him with the sound on: with his hood in the way, its outline's drawn through him, and its glow flares and it groans once as its
+// hands go up, and the glow's back once it has hold of him. Then swings at one of them walking straight at him, the way the ticket says to try it: standing still, ten times on
 // a phone-sized page with real taps and ten times on a laptop with real clicks, from straight ahead and from off to one side, stood up and folded over and scuttling, tapped as
 // soon as they're in reach and as late as while they're reaching for him. Each time the swing has to land before they get hold of him, and without one they do. Then
 // how long one stays down, lying there and getting up slowly, with him stood over it the whole time, and the picture holding and tearing when a swing lands, which
@@ -7,10 +7,13 @@
 //
 // Then the skillet (CHUNKY-171), on the phone with real taps. A tap turns him to whoever's in reach whichever way he's facing, the nearest, and one coming for him before
 // one that isn't. It lands every time from 0.4 to 2.8 m off, in front, beside and behind, stood still and reaching for him, with nobody else going down, and with a ray from
-// the camera getting to its head and to its chest past him as the pan lands, both on the screen. It goes over away from him, along the line from him through it, and lands
-// 1.5 to 3 m off, or short of another of them, a parked pickup or a house's wall right behind it. One coming for him stops at arm's length. A ring of cast iron goes over the
-// thud, and the one it lands on jolts back as the picture holds. Two coming at him at once, one either side, go down in two taps, the second swinging back the other way.
-// With reduced motion the camera stays where it was from him.
+// the camera getting to its head and to its chest past him as the pan lands, or its outline drawn through him, both on the screen. It goes over away from him, along the line
+// from him through it, and lands 1.5 to 3 m off, or short of another of them, a parked pickup or a house's wall right behind it. One coming for him stops at arm's length. A
+// ring of cast iron goes over the thud, and the one it lands on jolts back as the picture holds. Two coming at him at once, one either side, go down in two taps, the second
+// swinging back the other way. With reduced motion the camera stays where it was from him.
+//
+// Anyone of them within 4 m that he's in front of has their outline drawn through him: reaching for him, as the pan lands and lying there, and with reduced motion too. That
+// it's drawn is told by what it changes on the screen, the same moment drawn with it and without, and one 6 m off has nothing drawn through him, nor does anything else.
 //
 // Chrome won't give a headless page the mouse, so the laptop stands in for that with what the page would be told, as npm run keys does.
 //
@@ -59,6 +62,13 @@ const helpers = () => {
   // the time, counted from whenever it's set back to nothing
   window.since = 0;
   window.go = (secs, draw = true) => { const n = Math.max(1, Math.round(secs / T)); if (draw) G.step(n * T, T); else G.sim(n * T, T); since += n * T; };
+  // Whether one of them's drawn through him, and what that changes on the screen: the same moment drawn with the outlines through him and without, and how many pixels differ
+  window.outlined = (s) => {
+    const c = G.renderer.domElement, pix = (off) => { G.skillet.frame(off); const cv = Object.assign(document.createElement('canvas'), { width: c.width, height: c.height }), x = cv.getContext('2d'); x.drawImage(c, 0, 0); return x.getImageData(0, 0, c.width, c.height).data; };
+    const a = pix(false), b = pix(true); G.skillet.frame(false);
+    let px = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 30) px++;
+    return { through: G.skillet.through().includes(s), px };
+  };
 };
 
 // ten of them coming at him: turned this far from the way he faces, tapped at this distance or this long into their reaching for him, and which kind.
@@ -105,9 +115,10 @@ const reach = await g(() => {
     if (s.reaching > 0) { r.hands ??= +t.toFixed(2); r.flare.push(G.glow(s)); } else r.before = G.glow(s);
     if (r.groaned === null && Snd.lastHeard('groan.reach')) r.groaned = +t.toFixed(2);
   }
-  return { ...r, peak: Math.max(0, ...r.flare), reaching: +(s.reaching ?? 0).toFixed(2), groans: Snd.state().heard.filter((n) => n === 'groan.reach').length, grab: !!H.grab };
+  return { ...r, peak: Math.max(0, ...r.flare), reaching: +(s.reaching ?? 0).toFixed(2), groans: Snd.state().heard.filter((n) => n === 'groan.reach').length, grab: !!H.grab, d: +dist(s).toFixed(2), outline: outlined(s) };
 });
 await snap('0-reaching-for-him');
+check(`with his hood in the way of it ${reach.d} m off, its outline's drawn through him as its hands go up (${reach.outline.px} pixels of it)`, reach.outline.through && reach.outline.px > 300, reach.outline);
 const held = await g(() => { const s = kinds.up; for (let t = 0; t < 2 && !H.grab; t += T) G.step(T, T); G.step(.3, T); return { glow: G.glow(s), grab: !!H.grab, groans: Snd.state().heard.filter((n) => n === 'groan.reach').length }; });
 console.log(`     coming at him its glow is ${reach.before}, and with its hands going up ${reach.flare.map((v) => v.toFixed(2)).join(', ')}, then ${held.glow} once it has hold of him`);
 check('its glow flares past full as its hands go up, and keeps climbing the longer it reaches', reach.hands !== null && reach.before !== null && reach.before <= 1 && reach.peak > 1.5 && reach.flare.every((v, i) => i === 0 || v >= reach.flare[i - 1]) && !reach.grab, reach);
@@ -144,9 +155,10 @@ const lying = await g(() => {
   // stood right over it, beside it, and seen from off to one side so he isn't in the way
   const w = Math.atan2(s.x - P().x, s.z - P().z) + Math.PI / 2; G.place(s.x - Math.sin(w) * .8, s.z - Math.cos(w) * .8);
   G.player.yaw = Math.atan2(s.x - P().x, s.z - P().z); G.look(G.player.yaw + Math.PI + .7, .35); go(2.5);
-  return { since: +since.toFixed(2), down: +H.down(s).toFixed(2), lie: s.lie, kneel: s.kneel, grab: !!H.grab, state: s.state };
+  return { since: +since.toFixed(2), down: +H.down(s).toFixed(2), lie: s.lie, kneel: s.kneel, grab: !!H.grab, state: s.state, outline: outlined(s) };
 });
 check(`${lying.since} s on, it's lying flat on its back, with ${lying.down} s left`, lying.lie > .99 && lying.kneel === 0 && lying.state === 5 && Math.abs(lying.since + lying.down - 10) < .1, lying);
+check(`and where he's in front of it lying there, its outline's drawn through him (${lying.outline.px} pixels of it)`, lying.outline.through && lying.outline.px > 300, lying.outline);
 await snap('2-lying-there');
 const kneeling = await g(() => { const s = kinds.up; go(H.down(s) - 1.2); return { since: +since.toFixed(2), down: +H.down(s).toFixed(2), lie: +s.lie.toFixed(2), kneel: +s.kneel.toFixed(2), lean: +s.lean.toFixed(2), grab: !!H.grab, state: s.state }; });
 check(`at ${kneeling.since} s it's getting up, on its knees and folded over first`, kneeling.kneel > .95 && kneeling.lie < .05 && kneeling.lean > 1 && kneeling.state === 5, kneeling);
@@ -189,8 +201,8 @@ const skillet = () => {
   };
   // a vehicle parked somewhere else the way a check parks one, by getting in, moving it and getting out, so that it stops whatever it should
   window.repark = (v, x, z, yaw) => { G.getIn(v); Object.assign(v, { x, z, y: G.floorAt(x, z), yaw, f: 0, s: 0, steer: 0, grounded: true }); G.getOut(true); };
-  // what of someone can be seen as they're drawn: whether a ray from the camera gets to their head and to their chest without running into him, and whether
-  // each is on the screen. What's in his hands doesn't count, and nor does anything of his that isn't drawn, which is anything put away with what it's in.
+  // what of someone can be seen as they're drawn: whether a ray from the camera gets to their head and to their chest without running into him, or they're drawn
+  // through him, and whether each is on the screen. What's in his hands doesn't count, and nor does anything of his that isn't drawn, which is anything put away with what it's in.
   const under = (o, t) => { for (let p = o; p; p = p.parent) if (p === t) return true; return false; };
   const shown = (o) => { for (let p = o; p && p !== G.hero.body; p = p.parent) if (!p.visible) return false; return true; };
   window.sees = (s) => {
@@ -202,7 +214,8 @@ const skillet = () => {
       const ndc = v.clone().project(G.camera);
       out[k] = { clear: !ray.intersectObjects(his, false).length, on: Math.abs(ndc.x) < 1 && Math.abs(ndc.y) < 1 && ndc.z < 1 };
     }
-    return { head: out.headAt.clear && out.headAt.on, chest: out.chestAt.clear && out.chestAt.on, raw: out };
+    const through = G.skillet.through().includes(s);
+    return { head: (out.headAt.clear || through) && out.headAt.on, chest: (out.chestAt.clear || through) && out.chestAt.on, past: out.headAt.clear && out.chestAt.clear, through, raw: out };
   };
   // From a tap on, a step at a time with it drawn: whether it went down or got hold of him first, what could be seen of it the step before the pan landed on it, which way
   // he was facing then, where he was, where it stood and where it ended up, and whether anyone else went down. Where it's drawn as it goes over is the line from where it stood
@@ -266,7 +279,8 @@ const show = (list) => list.slice(0, 16).map((r) => `${r.kind} ${r.a.toFixed(1)}
 console.log(`     ${all.length} swings: ${landed.length} landed, ${seen.length} with its head and chest in sight as the pan got there, ${away.length} going over away from him 1.5 to 3 m, ${nobodyElse.length} with nobody else down`);
 check(`it lands every time, stood still from 0.4 to 2.8 m off or reaching for him, in front, beside and behind (${landed.length} of ${all.length})`, landed.length === all.length, show(all.filter((r) => !r.down || r.grab)));
 check(`and nobody he didn't turn to goes down (${nobodyElse.length} of ${all.length})`, nobodyElse.length === all.length, show(all.filter((r) => r.others.some(Boolean))));
-check(`you see who you hit: a ray from the camera gets to its head and its chest as the pan lands, and both are on the screen (${seen.length} of ${all.length})`, seen.length === all.length, show(all.filter((r) => !(r.seen?.head && r.seen?.chest))));
+const past = seen.filter((r) => r.seen.past).length, through = seen.filter((r) => !r.seen.past).length;
+check(`you see who you hit: as the pan lands its head and chest are on the screen, with nothing of him in the way of them (${past}) or its outline drawn through him (${through}), ${seen.length} of ${all.length}`, seen.length === all.length, show(all.filter((r) => !(r.seen?.head && r.seen?.chest))));
 check(`it goes over away from him, along the line from him through it, and lands 1.5 to 3 m off (${away.length} of ${landed.length})`, away.length === landed.length, show(landed.filter((r) => !(r.away && r.off < .35 && r.far >= 1.5 && r.far <= 3))));
 
 // ---- through nothing: with another of them, a car or a wall right behind it, it doesn't go through, and with no room it drops where it stood
@@ -325,21 +339,26 @@ else {
 // one reaching for him stops at arm's length, and never comes inside him
 const arm = await g(() => { const [s] = only(1); put(s, 0, 4, true); let near = Infinity; for (let t = 0; t < 4 && !H.grab; t += T) { G.sim(T, T); near = Math.min(near, dist(s)); } return { near: +near.toFixed(2), grab: !!H.grab }; });
 check(`one coming for him stops at arm's length, ${arm.near} m from him at the nearest, and gets hold of him from there`, arm.near >= .65 && arm.grab, arm);
+// nobody further off than 4 m is drawn through him, and with nobody nearer than that, nothing is: one stood straight ahead of him 6 m off, with everyone else a long way off
+const afar = await g(() => { const [s] = only(1); put(s, 0, 6); go(.2); put(s, 0, 6); go(.2); return { d: +dist(s).toFixed(1), ...outlined(s) }; });
+check(`one ${afar.d} m off isn't drawn through him, and nothing else is (${afar.px} pixels)`, !afar.through && afar.px === 0, afar);
 
 // ---- what it feels like: a ring of cast iron over the thud, the picture holding and tearing, and the one it lands on jolting before it drops
-const feel = await g(() => { const [s] = only(1); put(s, 0, 1.3); G.sim(T, T); drawn(s); window.stop = heard(); window.trial = [s]; return true; });
+// stood there long enough to be drawn as it stands, wherever it was before
+const feel = await g(() => { const [s] = only(1); put(s, 0, 1.3); go(.3); put(s, 0, 1.3); go(.1); window.stop = heard(); window.trial = [s]; return true; });
 await tap();
-// It's drawn twelve times a second, so it's the last drawing before the pan lands against the first after.
+// It's drawn twelve times a second, so it's the first drawing after the pan lands, held with the picture, against where it stood when it was hit. How it stood before then
+// isn't how it's drawn hit, so that's not what it's measured from.
 const felt = await g(() => {
   const s = trial[0]; let t = 0, was = G.stance(s)?.at;
   for (; t < 1 && !(s.flat > 0); t += T) { was = G.stance(s)?.at ?? was; G.step(T, T); }
   let now = G.stance(s)?.at;
   for (let k = 0; k < 4 && now && was && now[0] === was[0] && now[2] === was[2]; k++) { G.step(T, T); now = G.stance(s)?.at; }
-  const asked = stop(), jolt = now && was ? (now[0] - was[0]) * s.hitX + (now[2] - was[2]) * s.hitZ : 0;
+  const asked = stop(), jolt = now ? (now[0] - s.fromX) * s.hitX + (now[2] - s.fromZ) * s.hitZ : 0;
   return { down: s.flat > 0, thud: asked.includes('hit.flesh'), ring: asked.includes('hit.metal'), torn: document.body.classList.contains('burst'), jolt: +jolt.toFixed(3), held: s.flatFor - s.flat };
 });
 check('a ring of cast iron goes over the thud when it lands on someone, and the picture holds and tears', felt.down && felt.thud && felt.ring && felt.torn, felt);
-check(`and the one it lands on jolts back ${felt.jolt} m before it drops`, felt.jolt > .05, felt);
+check(`and the one it lands on jolts back ${felt.jolt} m from where it stood before it drops`, felt.jolt > .1, felt);
 
 // ---- tap, tap: two coming at him at once, one on each side, go down in two taps, the second swinging back the other way
 await g(() => { const [a, b] = only(2); put(a, 1.3, 1.6, true); put(b, -1.3, 1.6, true); window.trial = [a, b]; G.sim(T, T); });
@@ -409,9 +428,10 @@ const calmFlare = await g(() => {
   clear(); const s = kinds.up; send(s, 0);
   let peak = 0;
   for (let t = 0; t < 5 && !H.grab && !(s.reaching > H.T.windUp * .9); t += T) { G.step(T, T); peak = Math.max(peak, G.glow(s) ?? 0); }
-  return +peak.toFixed(2);
+  return { peak: +peak.toFixed(2), outline: outlined(s) };
 });
-check(`with reduced motion its glow still flares as its hands go up, to ${calmFlare}`, calmFlare > 1.5, calmFlare);
+check(`with reduced motion its glow still flares as its hands go up, to ${calmFlare.peak}`, calmFlare.peak > 1.5, calmFlare);
+check(`and its outline's drawn through him, with the camera where it was (${calmFlare.outline.px} pixels of it)`, calmFlare.outline.through && calmFlare.outline.px > 300, calmFlare.outline);
 await snap('6-reduced-motion-reaching-for-him');
 check('no console errors with reduced motion', errors.length === 0, errors.slice(0, 5));
 await still.close();
