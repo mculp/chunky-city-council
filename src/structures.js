@@ -442,10 +442,11 @@ export function writeStructure(sheet, s, base = 0) {
     const r = s.sqm > 300 ? .16 : .08, post = shade(s.trimColor ? trim : wall, .9);
     sheet.solid([[x - r, base, z - r], [x + r, base, z - r], [x + r, base, z + r], [x - r, base, z + r], [x - r, top, z - r], [x + r, top, z - r], [x + r, top, z + r], [x - r, top, z + r]], { ...base0, kind: 'post', color: post, pattern: PATTERN.PAINT, noBottom: true });
   }
-  // a porch on posts over the door, and a carport on the wall beside it
+  // a porch on posts over the door, and a carport on the wall beside it. A roof down one wall runs down from under the eave, or on a house of more than one floor
+  // from over the first, under the second's windows.
   for (const [f, kind] of [[porchOf(s), 'porch'], [carportOf(s), 'carport'], [leanOf(s), 'porch']]) {
     if (!f) continue;
-    const under = E - EAVES * pitch - .02, top = f.lean ? under - f.deep * (s.lean.slope ?? .13) : base + Math.min(H, 2.6), high = f.lean ? under : base + Math.min(H, 2.6) + .28, c = shade(roof, .95), post = f.lean && s.lean.post ? srgb(s.lean.post) : f.lean && s.trimColor ? trim : shade(wall, .9);
+    const under = (s.floors ?? 1) > 1 ? base + 3 : E - EAVES * pitch - .02, top = f.lean ? under - f.deep * (s.lean.slope ?? .13) : base + Math.min(H, 2.6), high = f.lean ? under : base + Math.min(H, 2.6) + .28, c = shade(roof, .95), post = f.lean && s.lean.post ? srgb(s.lean.post) : f.lean && s.trimColor ? trim : shade(wall, .9);
     const corner = (t, d, y) => [f.ax + f.ex * t + f.nx * d, y, f.az + f.ez * t + f.nz * d];
     const n = Math.max(1, Math.ceil(f.wide / ROOF_SECTION));
     for (let i = 0; i < n; i++) {

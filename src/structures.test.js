@@ -105,6 +105,17 @@ for (const roof of ['gable', 'hip', 'flat', 'shed']) {
   });
 }
 
+// how high a piece goes, from its lowest corner to its highest
+const span = (a, p) => { let lo = Infinity, hi = -Infinity; for (let i = p.first; i < p.first + p.count; i++) { lo = Math.min(lo, a.position[i * 3 + 1]); hi = Math.max(hi, a.position[i * 3 + 1]); } return [lo, hi]; };
+test('a house of two floors has a row of windows on each under its eaves, and a roof down its side stays a floor high', () => {
+  const s = house(box, { floors: 2, glass: ['north', 'east', 'south', 'west'], lean: { edge: 2, deep: 2.8, t0: 0, t1: 12 } }), a = written(s);
+  const windows = a.pieces.filter((p) => p.kind === 'window').map((p) => span(a, p)), rows = [...new Set(windows.map(([lo]) => lo.toFixed(2)))].map(Number).sort((x, y) => x - y);
+  const lean = Math.max(...a.pieces.filter((p) => p.kind === 'porch').map((p) => span(a, p)[1])), firstTop = Math.max(...windows.filter(([lo]) => lo < rows[1]).map(([, hi]) => hi));
+  assert.equal(rows.length, 2, `windows start at ${rows}`);
+  assert.ok(Math.max(...windows.map(([, hi]) => hi)) < 6 + eavesOf(s), 'the top row is under the eaves');
+  assert.ok(lean > firstTop && lean < rows[1], `the roof down its side meets the wall at ${lean}, between the first floor's windows, up to ${firstTop}, and the second's, from ${rows[1]}`);
+});
+
 test('the roof is marked with its building, and nothing else is', () => {
   const a = written(house(box)), marks = new Set();
   for (let i = 2; i < a.mat.length; i += 3) marks.add(a.mat[i]);

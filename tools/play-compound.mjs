@@ -56,6 +56,18 @@ const n99 = built.ninetyNine[0];
 check('ETB2k4\'s green \'99 is up the hill from the cabin, where it was left, looking down at it', built.ninetyNine.length === 1 && n99.d < .5 && n99.paint === '2f5d48' && n99.turn < .3 && n99.above > 1, built.ninetyNine);
 check('the room has drums, a guitar, a bass and a keyboard', built.jam.join() === 'drums,guitar,bass,keyboard', built.jam);
 
+// ---------------- the big house with the pool on two floors, as the game writes it: a row of windows on each, all under the eaves, and the porch and the carport and the roof
+// down its south side a floor high, under the second floor's windows
+const big = await g(async () => {
+  const G = __game, { Sheet, writeStructure, eavesOf } = await import('./src/structures.js'), s = G.structures.find((b) => b.id === 75099630), sheet = new Sheet();
+  writeStructure(sheet, s, 0);
+  const a = sheet.arrays(), span = (p) => { let lo = Infinity, hi = -Infinity; for (let i = p.first; i < p.first + p.count; i++) { lo = Math.min(lo, a.position[i * 3 + 1]); hi = Math.max(hi, a.position[i * 3 + 1]); } return [lo, hi]; };
+  const windows = a.pieces.filter((p) => p.kind === 'window').map(span), rows = [...new Set(windows.map(([lo]) => +lo.toFixed(1)))].sort((x, y) => x - y);
+  const porches = a.pieces.filter((p) => p.kind === 'porch' || p.kind === 'carport').map(span);
+  return { floors: s.floors, eaves: eavesOf(s), rows, windows: windows.length, top: +Math.max(...windows.map(([, hi]) => hi)).toFixed(2), porches: porches.length, porch: +Math.max(...porches.map(([, hi]) => hi)).toFixed(2) };
+});
+check(`the big house is on two floors, with a row of windows on each under its ${big.eaves} m eaves, and its porches a floor high`, big.floors === 2 && big.rows.length === 2 && big.top < big.eaves && big.porches > 0 && big.porch < big.rows[1], big);
+
 // ---------------- up the drive from the road, on foot
 const drive = await g(() => {
   const G = __game, P = G.player.pos, lane = G.map.lanes.filter((l) => measured.includes(l.id)).sort((a, b) => b.length - a.length)[0];
@@ -66,6 +78,7 @@ const drive = await g(() => {
 });
 check(`he walks the ${Math.round(drive.long)} m up the drive with nothing in the way`, drive.r.off < 1.2, drive);
 check('it is gravel from end to end', drive.off === 0, drive.off);
+await g(() => __game.step(.1));
 await snap('yard');
 
 // ---------------- no woods where it's been cleared

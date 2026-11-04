@@ -86,7 +86,7 @@ Positions are true metres from town center. `MAP.fromTrue` takes them to the wor
 | `lit` | boolean | Optional. Someone's got a light on inside. |
 | `trimColor`, `doorColor` | string | Optional. Hex. |
 | `condition` | string | Optional. `worn` has more kudzu and boarded windows, `ruin` has walls and roof missing, and `sound` has nothing fallen in or boarded up. |
-| `lean` | object | Optional. `{ edge, deep, t0, t1 }` and optionally `slope` and `post`: a roof on posts down that ring edge, from `t0` to `t1` metres along it. |
+| `lean` | object | Optional. `{ edge, deep, t0, t1 }` and optionally `slope` and `post`: a roof on posts down that ring edge, from `t0` to `t1` metres along it. It runs down from under the eave, or on a house of more than one floor from over the first, under the second's windows. |
 | `eaves`, `pitch`, `cross`, `gableColor`, `band`, `vent` | | Optional. See the notes below. |
 | `seen` | boolean | Optional. Someone has looked at this one. Without it, how it looks is what's usual for its use and size, chosen by its id. |
 | `what` | string | Optional. A few plain words, when it isn't an ordinary house. |
