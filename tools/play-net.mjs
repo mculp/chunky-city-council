@@ -592,6 +592,67 @@ try {
     await onRoad(a, spot.x, spot.z); await sleep(300); A = await me(a);
   }
 
+  // ---------------- a trip from a mushroom ring (CHUNKY-176), as anyone else sees it: they sit down in it, and once they're down they
+  // go in a ghost's dither, a block at a time, and their name with them. Nothing of them goes between the rings, on the screen or the
+  // map. At the other ring they're there sitting, come back the same way, and get up. B eats in the ring at the gas station and picks
+  // the nearest other one, with A standing by the first; then B eats there and comes back, with A still waiting.
+  {
+    const R = await on(b, () => __game.rings.list());
+    const home = R.reduce((best, r, i) => (away(r, spot) < away(R[best], spot) ? i : best), 0);
+    const there = R.reduce((best, r, i) => (i !== home && (best < 0 || away(r, R[home]) < away(R[best], R[home])) ? i : best), -1);
+    // A 5 m off and to one side, looking at it, so that A's own back isn't between their camera and B
+    await on(a, (r) => { const G = __game; G.place(r.x + 4, r.z + 3); G.look(Math.atan2(4, 3) + .2, .25); }, R[home]);
+    // B eats in ring i and taps ring j on the map, while A keeps what it draws of B every frame: where B is and how, and B's body and name
+    const trip = async (i, j, shot) => {
+      // and A sees B standing in it before anything's kept, since getting there from a few metres off is a walk on A's screen
+      await on(b, (r) => __game.place(r.x, r.z), R[i]);
+      await until(() => on(a, ([id, r]) => { const w = __net.link.others().find((o) => o.id === id); return !!w && Math.hypot(w.x - r.x, w.z - r.z) < 1.5; }, [B.id, R[i]]), 4000);
+      const ready = await until(() => on(b, () => document.getElementById('bA').textContent === 'EAT'), 4000);
+      const watching = on(a, async ([id, ms]) => {
+        const out = [], t0 = performance.now();
+        while (performance.now() - t0 < ms) {
+          await new Promise((r) => requestAnimationFrame(r));
+          const w = __net.link.others().find((o) => o.id === id), s = __net.drawn().bodies.find((o) => o.id === id);
+          out.push({ t: performance.now() - t0, x: w?.x, z: w?.z, how: w?.how, drawn: !!s, sit: s?.sit ?? 0, gone: s?.gone ?? 0, tag: __net.tags().some((o) => o.id === id) });
+        }
+        return out;
+      }, [B.id, 6500]);
+      await b.page.tap('#bA');
+      await until(() => on(b, () => __game.mapState().open), 3000);
+      const [x, y] = (await on(b, () => __game.rings.spots()))[j];
+      await b.page.touchscreen.tap(x, y);
+      // and on B's own screen, at the height of it, B's sat as they sit there and not gone: there it's the world that bends
+      const own = await until(() => on(b, () => { const t = __game.rings.trip(), s = __net.drawn().bodies[0]; return t?.down > .9 ? { down: t.down, sit: s.sit ?? 0, gone: s.gone ?? 0 } : null; }), 3000);
+      if (shot) { await sleep(shot.at); await snap(a, shot.name); }
+      return { ready, own, frames: await watching };
+    };
+    const near = (f, r) => f.x !== undefined && Math.hypot(f.x - r.x, f.z - r.z) < 4;
+    const between = (F) => F.filter((f) => f.x !== undefined && !near(f, R[home]) && !near(f, R[there])).length;
+    // and where any that were between were, for the failure
+    const whereBetween = (F) => F.filter((f) => f.x !== undefined && !near(f, R[home]) && !near(f, R[there])).slice(0, 4).map((f) => ({ t: Math.round(f.t), fromHome: +away(f, R[home]).toFixed(1), fromThere: +away(f, R[there]).toFixed(1), how: f.how, drawn: f.drawn }));
+    const secs = (f) => (f ? `${(f.t / 1000).toFixed(2)} s` : 'never');
+
+    const go = await trip(home, there, { at: 300, name: '08-b-going-from-a-ring' }), F = go.frames, atHome = F.filter((f) => near(f, R[home]));
+    const sat = atHome.find((f) => f.drawn && f.sit > .95), first = atHome.find((f) => f.drawn && f.gone > .02), last = atHome.findLast((f) => f.drawn), arrived = F.find((f) => near(f, R[there]));
+    check(`B eats in the ring at the gas station: EAT ${go.ready ? 'comes up' : 'never comes up'}`, !!go.ready, go.ready);
+    check(`and on B's own screen they sit there, ${go.own ? go.own.sit.toFixed(2) : '?'}, and don't go, ${go.own?.gone ?? '?'}`, go.own && go.own.sit > .85 && go.own.gone === 0, go.own);
+    check(`on A's screen B sits down in the ring, at ${secs(sat)}, before going, from ${secs(first)}`, !!sat && !!first && sat.t <= first.t, { sat, first });
+    check(`and goes in the dither over ${first && last ? ((last.t - first.t) / 1000).toFixed(2) : '?'} s, all gone before B's at the other ring at ${secs(arrived)}`,
+      !!first && !!last && !!arrived && last.t < arrived.t && last.t - first.t > 350 && last.t - first.t < 1100 && atHome.filter((f) => f.drawn && f.gone > .02 && f.gone < .98).length >= 3, { first, last, arrived });
+    check('and B\'s name over them goes once they\'re more gone than not', atHome.some((f) => f.drawn && !f.gone && f.tag) && !F.some((f) => f.tag && (!f.drawn || f.gone > .5)), atHome.filter((f) => f.tag).length);
+    check(`and nothing of B is ever between the rings on A's screen or map: ${between(F)} of ${F.length} frames`, !between(F) && !!arrived, whereBetween(F));
+
+    const come = await trip(there, home, { at: 1950, name: '09-b-coming-back-to-a-ring' }), C = come.frames, back = C.filter((f) => near(f, R[home]));
+    const shown = back.find((f) => f.drawn), whole = back.find((f) => f.drawn && !f.gone), up = back.find((f) => f.drawn && f.how !== 3 && !f.sit);
+    check(`B shows at the ring by A sat and all but gone, ${shown ? `${shown.sit.toFixed(2)} and ${shown.gone.toFixed(2)}` : 'never'}`, !!shown && shown.sit > .95 && shown.gone > .8, shown);
+    check(`and comes back in the dither while sat, all there at ${secs(whole)}`, !!whole && back.filter((f) => f.drawn && f.gone > .02 && f.gone < .98).every((f) => f.sit > .95) && whole.t - shown.t > 350 && whole.t - shown.t < 1100, { shown, whole });
+    check(`and gets up once the trip's over, stood at ${secs(up)}`, !!up && up.t > whole.t, up);
+    check(`and nothing of B is between the rings this way either: ${between(C)} of ${C.length} frames`, !between(C), whereBetween(C));
+    B = await me(b);
+    // and A back out on US 80, where there's room beside them for the hero
+    await onRoad(a, spot.x, spot.z); await sleep(300); A = await me(a);
+  }
+
   // ---------------- the hero's link: everyone sees the hero, and only one phone at a time is him
   const c = await serveAndOpen({ viewport: { width: 390, height: 844 }, query: `${query}#hero=${HERO}` });
   pages.push(c);

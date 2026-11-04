@@ -17,9 +17,14 @@ import { walletUrl, walletOf, pageFor, openIn, WAIT_EVERY, PAIR_FOR } from './wa
 import { checkName, NAME_MOST } from './names.js';
 import { inVehicle, settle, KINDS } from './vehicles.js';
 import { toScreen, drawLabel, nameBeside, COLORS as MAPC } from './mapview.js';
+import { TRIP } from './rings.js';
 
 const MOST = 25;                  // everyone the town holds, you included
 const SEE = 160, NAMED = 40;      // drawn this far from the camera, and named this far from you
+// Someone else's trip from a mushroom ring, on your screen (CHUNKY-176): they sit, as long as they take to on their own; once they're
+// down they go, in a ghost's dither, over this long; at the other ring they're there sitting and come back over as long; and then
+// they get up over this long. A pose more than this far from their last is the jump between the rings.
+const TRIP_GO = .6, TRIP_UP = .6, TRIP_JUMP = 10;
 const HERE_EVERY = 10000;         // how often the title card asks how many are in town, in ms
 const SWING_FOR = .5, WAVE_FOR = 1.6;
 // A swing as the townsfolk do it, a drawing at a time on the twelve: the arm up over the shoulder and down through what's in front,
@@ -341,20 +346,50 @@ export function together(G) {
     }
   }
 
+  // ---------------- going in a ghost's dither, on a trip from a mushroom ring: a ghost's holes, but as many as how far gone they are,
+  // from none of them to all, so they go a block at a time and come back the same way, the same blocks on everyone. With reduced motion
+  // the blocks hold still, as a ghost's do. Everyone's bodies go by how far gone each one is (iGone), and the hero's rig by one number
+  // for all of him (heroGone). Each material is made over once, from the one it was, with everything that makes it what it is kept.
+  const heroGone = { value: 0 }, madeOver = new Map();
+  const holes = (gone) => `if(${gone}>0.&&fract(sin(dot(floor(gl_FragCoord.xy/(2.*uGonePx))+${G.reduceMotion ? '0.' : 'uGoneStep'}*3.,vec2(91.7,47.3)))*24634.6345)<${gone}) discard;`;
+  function madeToGo(m, one = false) {
+    const key = `${m.uuid}${one}`; if (madeOver.has(key)) return madeOver.get(key);
+    const c = m.clone(), gone = one ? 'uGone' : 'vGone', own = { uGoneStep: G.uStep, uGonePx: G.uPxScale, ...(one && { uGone: heroGone }) };
+    const vert = one ? '' : 'attribute float iGone; varying float vGone;\n', frag = `uniform float uGoneStep, uGonePx;${one ? ' uniform float uGone;' : ' varying float vGone;'}\n`;
+    if (m.isShaderMaterial) {
+      // a line, or the hero's tape: its own shader as it was, and its own uniforms rather than copies, so they still change with the game's
+      c.uniforms = { ...m.uniforms, ...own };
+      c.vertexShader = vert + m.vertexShader.replace('void main(){', `void main(){${one ? '' : ' vGone=iGone;'}`);
+      c.fragmentShader = frag + m.fragmentShader.replace('void main(){', `void main(){ ${holes(gone)}`);
+    } else {
+      // the cloth: copying a toon material starts its defines over, so they're put back, and it's made what it was before it's made this
+      const before = m.onBeforeCompile;
+      c.defines = { ...m.defines };
+      c.onBeforeCompile = (sh, r) => {
+        before.call(m, sh, r); Object.assign(sh.uniforms, own);
+        if (!one) sh.vertexShader = vert + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvGone=iGone;');
+        sh.fragmentShader = frag + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `${holes(gone)}\n#include <clipping_planes_fragment>`);
+      };
+      c.customProgramCacheKey = () => `going${one ? 1 : 0}${before.toString()}`;
+    }
+    madeOver.set(key, c); return c;
+  }
+
   // ---------------- everybody's bodies: the crowd's, in meshes of their own, standing up and not glowing
   const group = new THREE.Group(); G.scene.add(group);
   const [crowdBodies, bodyLines, crowdArms, armLines, crowdLegs, legLines] = G.crowdParts;
   const attr = (n, size) => new THREE.InstancedBufferAttribute(new Float32Array(n * size), size).setUsage(THREE.DynamicDrawUsage);
   const z1 = attr(MOST, 4), z2 = attr(MOST * 2, 4), wet1 = attr(MOST, 1), wet2 = attr(MOST * 2, 1), heads = attr(MOST, 1), line1 = attr(MOST, 3), line2 = attr(MOST * 2, 3);
-  const geoOf = (src, z, wet, head) => { const g = src.geometry.clone(); g.setAttribute('iZ', z); g.setAttribute('iWet', wet); if (head) g.setAttribute('iHead', head); return g; };
+  const gone1 = attr(MOST, 1), gone2 = attr(MOST * 2, 1);
+  const geoOf = (src, z, wet, gone, head) => { const g = src.geometry.clone(); g.setAttribute('iZ', z); g.setAttribute('iWet', wet); g.setAttribute('iGone', gone); if (head) g.setAttribute('iHead', head); return g; };
   const mesh = (geo, mat, n, share, tint) => {
     const m = new THREE.InstancedMesh(geo, mat, n); m.frustumCulled = false; m.count = 0;
     if (share) m.instanceMatrix = share.instanceMatrix; else m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     if (tint) m.instanceColor = tint;
     group.add(m); return m;
   };
-  const bodies = mesh(geoOf(crowdBodies, z1, wet1, heads), crowdBodies.material, MOST), arms = mesh(geoOf(crowdArms, z2, wet2), crowdArms.material, MOST * 2), legs = mesh(geoOf(crowdLegs, z2, wet2), crowdLegs.material, MOST * 2);
-  const meshes = [bodies, mesh(bodies.geometry, bodyLines.material, MOST, bodies, line1), arms, mesh(arms.geometry, armLines.material, MOST * 2, arms, line2), legs, mesh(legs.geometry, legLines.material, MOST * 2, legs, line2)];
+  const bodies = mesh(geoOf(crowdBodies, z1, wet1, gone1, heads), madeToGo(crowdBodies.material), MOST), arms = mesh(geoOf(crowdArms, z2, wet2, gone2), madeToGo(crowdArms.material), MOST * 2), legs = mesh(geoOf(crowdLegs, z2, wet2, gone2), madeToGo(crowdLegs.material), MOST * 2);
+  const meshes = [bodies, mesh(bodies.geometry, madeToGo(bodyLines.material), MOST, bodies, line1), arms, mesh(arms.geometry, madeToGo(armLines.material), MOST * 2, arms, line2), legs, mesh(legs.geometry, madeToGo(legLines.material), MOST * 2, legs, line2)];
   // nobody's far gone or after anyone, so their lines are all the same chalk
   { const c = G.zombieLine(0, 0); for (let i = 0; i < MOST * 2; i++) { if (i < MOST) c.toArray(line1.array, i * 3); c.toArray(line2.array, i * 3); } }
   const _b = new THREE.Matrix4(), _u = new THREE.Matrix4(), _l = new THREE.Matrix4(), _m = new THREE.Matrix4(), _vb = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler(), _ve = new THREE.Euler(0, 0, 0, 'YXZ'), _h = new THREE.Vector3();
@@ -381,20 +416,21 @@ export function together(G) {
   // Someone in slot i: where their feet are and which way they face, how they're going, what they're in, and their latest swing and wave
   function pose(i, p, step) {
     const seat = p.seat, size = seat ? seated(seat).size : G.TOWN_SCALE, HIP = G.ZOMBIE_HIP, ph = heldPhase(p.id, p.phase, step), lie = p.down ?? 0;
-    const swim = p.how === HOW.swim && !seat, moving = p.speed > .25 && !seat && !lie, run = Math.min(1, Math.max(0, (p.speed - 4.4) / 3.6));
+    const swim = p.how === HOW.swim && !seat, sit = seat || swim ? 0 : p.sit ?? 0, moving = p.speed > .25 && !seat && !lie && !sit, run = Math.min(1, Math.max(0, (p.speed - 4.4) / 3.6));
     const stride = moving && !swim ? Math.min(1, p.speed / 4.4) * (.36 + .26 * run) : 0;
     let { x, y, z, yaw } = p;
     // sat where you'd sit, with their hips on the seat
     if (seat) { _p.set(seat.K.seat[0], seated(seat).hip - HIP * size, seat.K.seat[2]).applyMatrix4(bodyOf(seat)); ({ x, y, z } = _p); yaw = seat.yaw; }
-    const lean = seat ? .16 : swim ? 1.05 : .04 + .04 * Math.min(1, p.speed / 4.4) + .14 * run;
-    // feet on the ground, lying down, or in the water up to the chin
-    const up = seat ? 0 : swim ? -1.05 : 1.43 * size * (1 - lie) + .28 * lie + (moving ? Math.abs(Math.sin(ph)) * .03 : 0);
+    // sat on the ground in a ring, leaning over their legs, which is as low as the hero sits there
+    const lean = (seat ? .16 : swim ? 1.05 : .04 + .04 * Math.min(1, p.speed / 4.4) + .14 * run) * (1 - sit) + .2 * sit;
+    // feet on the ground, lying down, in the water up to the chin, or sat with their hips just off the ground
+    const up = seat ? 0 : swim ? -1.05 : (1.43 * size * (1 - lie) + .28 * lie + (moving ? Math.abs(Math.sin(ph)) * .03 : 0)) * (1 - sit) + (.12 - HIP * size) * sit;
     _b.compose(_p.set(x, y + up, z), _q.setFromAxisAngle(UP, yaw), _s.setScalar(size));
     if (lie) _b.multiply(_l.makeRotationX(-1.45 * lie));
     _l.makeRotationFromEuler(_e.set(lean, 0, moving ? Math.sin(ph) * .03 : 0));
     const e = _l.elements; _l.setPosition(-HIP * e[4], HIP - HIP * e[5], -HIP * e[6]);
     _u.multiplyMatrices(_b, _l).toArray(bodies.instanceMatrix.array, i * 16);
-    heads.setX(i, (seat ? G.HEAD.seated : swim ? -.5 : .04) - G.HEAD.pitch);
+    heads.setX(i, (seat ? G.HEAD.seated : swim ? -.5 : .04 + (G.HEAD.seated - .04) * sit) - G.HEAD.pitch);
     const swing = !seat && !swim && p.swingAge >= 0 && p.swingAge < SWING_FOR ? SWING_ARM[Math.min(SWING_ARM.length - 1, Math.floor(p.swingAge * 12))] : null;
     const wave = !seat && p.waveAge >= 0 && p.waveAge < WAVE_FOR ? 2.55 + (G.reduceMotion ? 0 : Math.sin(Math.floor(p.waveAge * 12) * 1.9) * .28) : null;
     for (let a = 0; a < 2; a++) {
@@ -405,26 +441,47 @@ export function together(G) {
       else if (p.air) { reach = -lean - .5; out = .5; }
       if (swing !== null) reach = (a ? swing : swing * .85) - lean;
       if (wave !== null && a === 1) { reach = -lean; out = wave; }
+      // and on the ground, their hands go toward their knees
+      if (sit) { reach += (-.85 - reach) * sit; out += (-.12 - out) * sit; }
       _l.makeRotationFromEuler(_e.set(reach, 0, side * out)).setPosition(side * .205, .06, 0);
       _m.multiplyMatrices(_u, _l).toArray(arms.instanceMatrix.array, (i * 2 + a) * 16);
-      const legSw = Math.sin(ph + (a ? Math.PI : 0)), legA = seat ? seated(seat).legs : swim ? -.3 + Math.sin(ph * 2 + a * Math.PI) * .3 : p.air ? -.55 : -legSw * stride;
+      const legSw = Math.sin(ph + (a ? Math.PI : 0)), legA = seat ? seated(seat).legs : swim ? -.3 + Math.sin(ph * 2 + a * Math.PI) * .3 : p.air ? -.55 : -legSw * stride * (1 - sit) - 1.45 * sit;
       _l.makeRotationFromEuler(_e.set(legA, 0, side * (seat ? .1 : .03))).setPosition(side * .1, HIP, 0);
       _m.multiplyMatrices(swim ? _u : _b, _l).toArray(legs.instanceMatrix.array, (i * 2 + a) * 16);
     }
-    const look = p.look % looks.length;
-    z1.setXYZW(i, look, 0, 0, 0); wet1.setX(i, swim ? 1 : 0);
-    for (let a = 0; a < 2; a++) { z2.setXYZW(i * 2 + a, look, 0, 0, 0); wet2.setX(i * 2 + a, swim ? 1 : 0); }
-    slots[i] = { id: p.id, x, z, feet: seat ? y - (seated(seat).hip - HIP * size) : y, yaw, seated: !!seat, speed: p.speed, swings: p.swings ?? swings, waves: p.waves ?? waves };
+    const look = p.look % looks.length, gone = p.gone ?? 0;
+    z1.setXYZW(i, look, 0, 0, 0); wet1.setX(i, swim ? 1 : 0); gone1.setX(i, gone);
+    for (let a = 0; a < 2; a++) { z2.setXYZW(i * 2 + a, look, 0, 0, 0); wet2.setX(i * 2 + a, swim ? 1 : 0); gone2.setX(i * 2 + a, gone); }
+    slots[i] = { id: p.id, x, z, feet: seat ? y - (seated(seat).hip - HIP * size) : y, yaw, seated: !!seat, speed: p.speed, swings: p.swings ?? swings, waves: p.waves ?? waves, sit, gone };
   }
-  const written = () => { for (const m of meshes) m.instanceMatrix.needsUpdate = true; for (const a of [z1, z2, wet1, wet2, heads]) a.needsUpdate = true; };
+  const written = () => { for (const m of meshes) m.instanceMatrix.needsUpdate = true; for (const a of [z1, z2, wet1, wet2, heads, gone1, gone2]) a.needsUpdate = true; };
+
+  // How far through a trip from one mushroom ring to another someone is on this screen, from their poses alone: on a trip they sit,
+  // and once they're down they go. A pose at another ring is the jump, and then they're there, sitting, and come back. Off the trip,
+  // they get up. Anyone first seen on a trip has just got where they are, as far as anyone can tell.
+  const toward = (v, to, by) => (v < to ? Math.min(to, v + by) : Math.max(to, v - by));
+  function tripOf(w, m, dt) {
+    const was = m.was, on = w.how === HOW.trip; m.was = { x: w.x, z: w.z };
+    if (on && !m.trip) m.trip = was ? { sit: 0, gone: 0, there: false } : { sit: 1, gone: 1, there: true };
+    const T = m.trip; if (!T) return;
+    if (on && was && Math.hypot(w.x - was.x, w.z - was.z) > TRIP_JUMP) { T.there = true; T.sit = 1; T.gone = 1; }
+    T.sit = toward(T.sit, on ? 1 : 0, dt / (on ? TRIP.sit : TRIP_UP));
+    T.gone = toward(T.gone, on && !T.there && T.sit >= 1 ? 1 : 0, dt / TRIP_GO);
+    if (!on && !T.sit && !T.gone) m.trip = null;
+  }
 
   // ---------------- the hero, when the owner's in town on someone else's screen: his own rig, posed the way he poses
-  let twin = null, twinStep = -1;
+  let twin = null, twinStep = -1, heroSit = 0;
   function drawHero(w, step) {
-    const far = !w || Math.hypot(w.x - G.camera.position.x, w.z - G.camera.position.z) > SEE;
+    const T = w?.at?.trip, sit = T?.sit ?? 0; heroSit = sit; heroGone.value = T?.gone ?? 0;
+    const far = !w || Math.hypot(w.x - G.camera.position.x, w.z - G.camera.position.z) > SEE || heroGone.value >= 1;
     if (twin) twin.root.visible = !far;
     if (far) return;
-    if (!twin) { const rig = G.heroTwin(), root = new THREE.Group(); root.add(rig.body); G.scene.add(root); twin = { rig, root }; }
+    if (!twin) {
+      const rig = G.heroTwin(), root = new THREE.Group(); root.add(rig.body); G.scene.add(root); twin = { rig, root };
+      // all of him goes at once on a trip from a ring, his tape and his lines too, or there'd be a face left over the ring
+      rig.body.traverse((o) => { if (o.isMesh) o.material = madeToGo(o.material, true); });
+    }
     const R = twin.rig, seat = w.ride ? G.vehicles[w.ride - 1] : null, run = Math.min(1, Math.max(0, (w.speed - 4.4) / 3.6));
     if (seat) {
       _p.set(seat.K.seat[0], seat.K.seat[1], seat.K.seat[2]).applyMatrix4(bodyOf(seat));
@@ -434,11 +491,12 @@ export function together(G) {
       twin.root.position.set(w.x, w.y, w.z); twin.root.rotation.set(0, w.yaw, 0, 'XYZ'); R.body.scale.setScalar(G.HERO_SCALE);
       if (w.how === HOW.swim) { R.body.position.set(0, .2, 0); R.body.rotation.set(.95, 0, Math.sin(w.phase) * .08); }
       else if (w.how === HOW.down) { R.body.position.set(0, .3, 0); R.body.rotation.set(1.46, 0, .16); }
+      else if (sit) { R.body.position.set(0, G.HERO_HIPS + (G.SIT_HIPS - G.HERO_HIPS) * sit, 0); R.body.rotation.set(.18 * sit, 0, 0); }
       else { R.body.position.set(0, G.HERO_HIPS + Math.abs(Math.sin(w.phase)) * .05 * Math.min(1, w.speed / 4), 0); R.body.rotation.set(.1 * Math.min(1, w.speed / 4) + .22 * run, 0, 0); }
     }
     if (step === twinStep) return;
     twinStep = step;
-    const V = (x, y, z) => new THREE.Vector3(x, y, z), ph = w.phase, k = seat ? 'drive' : w.how === HOW.swim ? 'swim' : w.how === HOW.down ? 'down' : 'run', tq = step / 12;
+    const V = (x, y, z) => new THREE.Vector3(x, y, z), ph = w.phase, k = seat ? 'drive' : w.how === HOW.swim ? 'swim' : w.how === HOW.down ? 'down' : sit ? 'sit' : 'run', tq = step / 12;
     const hood = k === 'swim' ? G.hoods.swim : G.hoods.stand; if (R.hm.geometry !== hood.geo) R.setHood(hood);
     if (k === 'swim') {
       for (let i = 0; i < 2; i++) { const s = i ? 1 : -1, a = ph + (i ? 0 : Math.PI); R.arm(i, V(s * .2, -.05 + .14 * Math.sin(a), .42 + .16 * Math.cos(a)), V(s * .7, -.3, -.2)); R.leg(i, V(s * .14, -1.3, -.12 + .12 * Math.sin(ph * 2 + i * Math.PI)), V(s * .1, -1, .6), .3); }
@@ -447,6 +505,9 @@ export function together(G) {
       for (let i = 0; i < 2; i++) { const s = i ? 1 : -1; R.arm(i, V(s * K.hands[0], K.hands[1], K.hands[2]), V(s * .8, -.5, -.1), V(0, 1, 0)); R.leg(i, V(s * K.feet[0], K.feet[1], K.feet[2]), V(s * .14, .1, 1), -.2); }
     } else if (k === 'down') {
       for (let i = 0; i < 2; i++) { const s = i ? 1 : -1; R.arm(i, V(s * .5, .18, .58), V(s * .7, -.35, -.25)); R.leg(i, V(s * .14, -1.36, i ? -.1 : .06), V(s * .1, -1, .8)); }
+    } else if (k === 'sit') {
+      // sat in a ring with his knees up and his hands on them, as he sits there on his own screen
+      for (let i = 0; i < 2; i++) { const s = i ? 1 : -1; R.arm(i, V(s * (.36 - .14 * sit), -.6 + .3 * sit, .05 + .4 * sit), V(s * .7, -.35, -.25)); R.leg(i, V(s * (.13 + .06 * sit), -1.36 + .76 * sit, .72 * sit), V(s * (.1 + .08 * sit), -1 + 1.6 * sit, .8), .3 * sit); }
     } else {
       const a = Math.min(1, w.speed / 4.2) + .5 * run;
       for (let i = 0; i < 2; i++) {
@@ -468,14 +529,15 @@ export function together(G) {
   const tags = Array.from({ length: MOST }, () => { const e = document.createElement('div'); e.className = 'nettag'; e.hidden = true; tagBox.appendChild(e); return { e, id: 0, text: '', x: 0, y: 0 }; });
   // just over the top of someone's head, on the screen
   function headOf(w, v) {
-    const seat = w.ride ? G.vehicles[w.ride - 1] : null, x = seat ? seat.x : w.x, z = seat ? seat.z : w.z;
-    const over = seat ? seat.y + seated(seat).hip + (w.hero ? 1.45 : 1.25) : w.y + (w.how === HOW.swim ? .75 : w.how === HOW.down ? .7 : w.hero ? 2.4 : 2.02);
+    const seat = w.ride ? G.vehicles[w.ride - 1] : null, x = seat ? seat.x : w.x, z = seat ? seat.z : w.z, sit = w.at?.trip?.sit ?? 0;
+    const over = seat ? seat.y + seated(seat).hip + (w.hero ? 1.45 : 1.25) : w.y + (w.how === HOW.swim ? .75 : w.how === HOW.down ? .7 : (w.hero ? 2.4 : 2.02) - .9 * sit);
     return v.set(x, over + G.hillUp(x, z), z).project(G.camera);
   }
   function nameTags(list) {
     const P = G.player.pos; let n = 0;
     for (const w of list) {
-      if (!w.name || Math.hypot(w.x - P.x, w.z - P.z) > NAMED) continue;
+      // and once they're more gone than not on a trip from a ring, their name goes with them
+      if (!w.name || Math.hypot(w.x - P.x, w.z - P.z) > NAMED || (w.at?.trip?.gone ?? 0) > .5) continue;
       headOf(w, _h); if (_h.z >= 1 || Math.abs(_h.x) > 1.05 || Math.abs(_h.y) > 1.05) continue;
       const t = tags[n++], x = Math.round((_h.x * .5 + .5) * innerWidth), y = Math.round((-_h.y * .5 + .5) * innerHeight);
       t.id = w.id;
@@ -524,14 +586,16 @@ export function together(G) {
       let n = 0, hero = null;
       if (!you.hero) {
         const d = G.driving, P = G.player.pos;
-        pose(n++, { id: 0, x: P.x, y: P.y, z: P.z, yaw: G.player.yaw, speed: HP.speed, phase: HP.phase, look: you.look, seat: d, how: HP.kind === 'swim' ? HOW.swim : HOW.foot, down: HP.kind === 'down' ? HP.down : HP.kind === 'roll' ? 1 : 0, air: HP.kind === 'air', swingAge: G.time - swungAt, waveAge: G.time - wavedAt }, step);
+        // on their own trip from a ring they sit as they sit there, and don't go: on their own screen it's the world that bends
+        pose(n++, { id: 0, x: P.x, y: P.y, z: P.z, yaw: G.player.yaw, speed: HP.speed, phase: HP.phase, look: you.look, seat: d, how: HP.kind === 'swim' ? HOW.swim : HOW.foot, down: HP.kind === 'down' ? HP.down : HP.kind === 'roll' ? 1 : 0, sit: HP.kind === 'sit' ? HP.sit : 0, air: HP.kind === 'air', swingAge: G.time - swungAt, waveAge: G.time - wavedAt }, step);
         slots[0].id = you.id;
       }
       for (const w of list) {
-        const m = marked(w);
+        const m = marked(w); tripOf(w, m, dt);
         if (w.hero) { hero = w; continue; }
-        if (n >= MOST || Math.hypot(w.x - cx, w.z - cz) > SEE) continue;
-        pose(n++, { ...w, seat: w.ride ? G.vehicles[w.ride - 1] : null, down: w.how === HOW.down ? 1 : 0, swingAge: G.time - m.swung, waveAge: G.time - m.waved }, step);
+        // anyone all the way gone isn't drawn at all
+        if (n >= MOST || Math.hypot(w.x - cx, w.z - cz) > SEE || (m.trip?.gone ?? 0) >= 1) continue;
+        pose(n++, { ...w, seat: w.ride ? G.vehicles[w.ride - 1] : null, down: w.how === HOW.down ? 1 : 0, sit: m.trip?.sit ?? 0, gone: m.trip?.gone ?? 0, swingAge: G.time - m.swung, waveAge: G.time - m.waved }, step);
       }
       slots.length = n;
       for (const m of meshes) m.count = n * (m.instanceMatrix.count / MOST);
@@ -608,7 +672,7 @@ export function together(G) {
             const B = at(bodies, i), yAxis = new THREE.Vector3().setFromMatrixColumn(B, 1).normalize(), armAt = (a) => deg(new THREE.Vector3().setFromMatrixColumn(at(arms, i * 2 + a), 1).normalize().negate().angleTo(down));
             return { ...s, look: z1.getX(i), far: z1.getY(i), hot: z1.getZ(i), up: deg(yAxis.angleTo(UP)), arms: [armAt(0), armAt(1)] };
           }),
-          hero: twin ? { visible: twin.root.visible, x: twin.root.position.x, y: twin.root.position.y, z: twin.root.position.z } : null,
+          hero: twin ? { visible: twin.root.visible, x: twin.root.position.x, y: twin.root.position.y, z: twin.root.position.z, sit: heroSit, gone: heroGone.value } : null,
         };
       },
       tags: () => tags.filter((t) => !t.e.hidden).map((t) => { const r = t.e.getBoundingClientRect(); return { id: t.id, text: t.e.textContent, x: r.left + r.width / 2, y: r.bottom }; }),

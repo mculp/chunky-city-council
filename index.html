@@ -9059,7 +9059,9 @@ const SHARED = location.hostname === 'online.chunky.ms' || new URLSearchParams(l
     S, HP, player, cam, camera, scene, heroRoot, vehicles: VEHICLES, map: MAP, water: WATER,
     // where everyone starts in a town that's shared: out front of the gas station between the pumps and the road, where Coop can see them
     start: (() => { const [x, z] = gasAt(53, 12.5); return { x, z, look: { x: NPCS.coop.spot.x, z: NPCS.coop.spot.z } }; })(),
-    looks: CROWD_LOOKS, crowdParts, zombieLine, TOWN_SCALE, ZOMBIE_HIP, HEAD, SEATED, HERO_SCALE, HERO_HIPS, SWING_POSES, SWING_T, hoods: { stand: heroHood, swim: heroHoodSwim },
+    looks: CROWD_LOOKS, crowdParts, zombieLine, TOWN_SCALE, ZOMBIE_HIP, HEAD, SEATED, HERO_SCALE, HERO_HIPS, SIT_HIPS, SWING_POSES, SWING_T, hoods: { stand: heroHood, swim: heroHoodSwim },
+    // the twelve frames' step and the pixels' size, for anyone going in a ghost's dither on a trip from a ring
+    uStep: G.uStep, uPxScale: G.uPxScale,
     hillUp, floorAt, onRoad, blocked: blockedInTown, markVehicle, toast, prompt, getOut, rattle,
     get time() { return time; }, get driving() { return driving; }, get swingT() { return swingT; },
     vehMoved() { vehDirty = true; },
