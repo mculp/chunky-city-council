@@ -175,6 +175,37 @@ test('it counts what it sent and heard for each of them', async () => {
   } finally { await s.close(); }
 });
 
+// the characters' words, asked as the game asks the talk server
+const ask = (port, { origin = 'http://localhost:4321', body } = {}) => fetch(`http://localhost:${port}/talk`, {
+  method: 'POST', headers: { 'Content-Type': 'text/plain', Origin: origin },
+  body: body ?? JSON.stringify({ phone: 'p'.repeat(32), messages: [{ role: 'system', content: 'You are Coop.' }, { role: 'user', content: 'Hey.' }] }),
+});
+
+test('with --talk, it answers the characters\' words by the talk server\'s rules, with one line that costs nothing', async () => {
+  const s = await startServer({ port: 0, quiet: true, talk: { line: '{"say":"Well, look who it is."}' } });
+  try {
+    const res = await ask(s.port), got = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('access-control-allow-origin'), 'http://localhost:4321');
+    assert.equal(got.reply, '{"say":"Well, look who it is."}'); assert.equal(got.cost, 0); assert.ok(got.model);
+    assert.deepEqual(await (await ask(s.port, { body: '{"phone":"nope"}' })).json(), { quiet: 'bad' }, 'an ask that breaks the rules is turned down as it would be');
+    assert.equal((await ask(s.port, { origin: 'https://somewhere.else' })).status, 403, 'a page that isn\'t on this machine is turned away');
+  } finally { await s.close(); }
+});
+
+test('it can be asked to be quiet, the way the talk server is when the month\'s money is spent', async () => {
+  const s = await startServer({ port: 0, quiet: true, talk: { quiet: 'cap' } });
+  try { assert.deepEqual(await (await ask(s.port)).json(), { quiet: 'cap' }); } finally { await s.close(); }
+});
+
+test('without --talk there\'s no /talk, and the town still works', async () => {
+  const s = await startServer({ port: 0, quiet: true });
+  try {
+    assert.notEqual((await ask(s.port)).status, 200);
+    const a = client(s.port); await a.in(); a.ws.close();
+  } finally { await s.close(); }
+});
+
 test('closing it closes everyone and lets the port go', async () => {
   const s = await startServer({ port: 0, quiet: true }), port = s.port;
   const a = client(port); await a.in();

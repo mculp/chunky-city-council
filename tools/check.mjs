@@ -93,7 +93,7 @@ if (args.includes('--changed')) {
       if (toolOf(c) === f) add(c, f);
       if ((f.startsWith('audio/') || /sound/.test(f)) && c.name.startsWith('sound')) add(c, f);
       if (/^server\/(talk|worker|wrangler)\b/.test(f) && c.name === 'talk:host') add(c, f);
-      if ((/^server\/(town|index)\b/.test(f) || f === 'src/names.js') && c.name === 'net') add(c, f);
+      if ((/^server\/(town|index|host)\b/.test(f) || f === 'src/names.js') && c.name === 'net') add(c, f);
     }
   }
   const stems = new Set(files.filter((f) => /^(src|data)\//.test(f)).map((f) => f.split('/').pop().replace(/(\.test)?\.[^.]+$/, '')));

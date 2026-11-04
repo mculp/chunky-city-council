@@ -92,20 +92,21 @@ async function askModel({ fetch, url, key, model, messages, wait, clock }) {
   } finally { clearTimeout(timer); }
 }
 
-// The talk server, given how to ask OpenRouter, the owner's key, the month's cap in dollars, the pages it answers, the two limits
-// (each is told a key and says whether it may go on) and the bill (a month's spent, and adding to it, which says the new total).
-// It remembers what the month's spent for up to a minute, so most lines don't wait on the bill, and each line's cost goes on the bill
-// after the phone has its answer.
+// The talk server, given how to ask OpenRouter, the owner's key, the month's cap in dollars, the pages it answers (a list, or a rule
+// for pages that are somewhere different each time, like a test's on this machine), the two limits (each is told a key and says
+// whether it may go on) and the bill (a month's spent, and adding to it, which says the new total). It remembers what the month's
+// spent for up to a minute, so most lines don't wait on the bill, and each line's cost goes on the bill after the phone has its answer.
 export function createTalk({ fetch, key, cap = 5, origins = [], url = TALK_URL, wait = TALK.wait, clock = Date.now, phoneLimit, placeLimit, bill }) {
   // a cap that isn't a sum of money is no money at all, never no limit
   if (!(typeof cap === 'number' && Number.isFinite(cap) && cap >= 0)) cap = 0;
+  const answers = typeof origins === 'function' ? origins : (o) => origins.includes(o);
   let known = { month: '', spent: 0, at: -Infinity };
   const answer = (body, origin) => new Response(JSON.stringify(body), {
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...(origin && { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' }) },
   });
   return async function talk(request, waitUntil = () => {}) {
     const origin = request.headers.get('origin');
-    if (origin && !origins.includes(origin)) return new Response('Chunky only talks to Chunky.', { status: 403 });
+    if (origin && !answers(origin)) return new Response('Chunky only talks to Chunky.', { status: 403 });
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': origin ?? '*', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400', Vary: 'Origin' } });
     }

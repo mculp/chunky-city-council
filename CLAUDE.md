@@ -49,7 +49,7 @@ python3 -m http.server
 
 Then open http://localhost:8000.
 
-`npm run net:server` runs the town everyone shares on this machine, at ws://localhost:8787, and keeps it in `data/raw/town.json`. What goes over the wire is in `src/net.js`, and the town itself is `server/town.js`.
+`npm run net:server` runs the town everyone shares on this machine, at ws://localhost:8787, and keeps it in `data/raw/town.json`. What goes over the wire is in `src/net.js`, the town itself is `server/town.js`, and `server/host.js` is the town behind any socket, which is how the same town goes on Cloudflare. `npm run net:server -- --talk` also answers the characters' words at http://localhost:8787/talk, by the talk server's own rules but with one canned line and nothing spent, for pages on this machine, and `startServer({ talk: { line, quiet } })` does the same in a test.
 
 `index.html?net` puts Play with others under Start, for that town, and `?net=ws://…` for one somewhere else. Without it there's no button and nothing of playing together is loaded, and `npm run frames` checks that the opening's the same to the byte. The phone's side of it is `src/together.js`, and `docs/multiplayer.md` says how it fits together. The owner is the hero on a link of their own: the address with `#hero=` and a secret, for a town started with `CHUNKY_HERO` set to that secret's sha256 in hex. Their phone keeps it for that town and no other, as every phone does the key it plays as there, and it comes off the address as soon as it's read.
 
