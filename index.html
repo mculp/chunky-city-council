@@ -251,7 +251,7 @@ import { loadHills } from './src/hills.js';
 import { loadSound } from './src/sound.js';
 import { randomFrom } from './src/soundbank.js';
 import { createPeople } from './src/people.js';
-import { drawPerson, drawRadiation, drawAura, degreeOf, farOf, PARTS, AURA_CELLS } from './src/looks.js';
+import { drawPerson, drawRadiation, drawAura, degreeOf, farOf, PARTS, AURA_CELLS, BODY } from './src/looks.js';
 import { createHorde, SHAMBLE, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED, AVOIDING, TRAILING, ROUSED } from './src/horde.js';
 import { createRiver, surfacing } from './src/river.js';
 import { createFolks, burntDown, hipsOf, flickering, AFTER, HOW } from './src/agents.js';
@@ -265,10 +265,10 @@ import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVe
 import { vehicleGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
 import { makeLine, createTrains } from './src/trains.js';
 import { trainGeometries, TRAIN_LAMPS, gateArm } from './src/trainmodels.js';
-import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, feedBin, stockTank, frog } from './src/things.js';
+import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, feedBin, stockTank, frog, frogThroat, frogLids } from './src/things.js';
 import { CEMETERY, layGraves, graveSolid } from './src/graves.js';
 import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/volley.js';
-import { FROGS, BEST, TONI, createToni, sayFrog, forgetToni } from './src/toni.js';
+import { FROGS, BEST, TONI, createToni, frogLine, askLine, forgetToni } from './src/toni.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
 import { createPantry, PANTRY } from './src/pantry.js';
 import { createTalk, talkUrl, inDistress, changesNothing, heardAs, LIMITS as TALK_LIMITS } from './src/talk.js';
@@ -3974,7 +3974,21 @@ const ZOMBIE_SHAPE = {
     [0.24, .075, .08, .055, 2], [0.29, .108, .112, .062, 2], [0.35, .124, .128, .062, 2], [0.41, .125, .13, .06, 2], [0.475, .117, .122, .058, 2], [0.53, .088, .092, .056, 2], [0.56, .052, .055, .055, 2], [0.572, .02, .021, .055, 2], [0.575, .004, .004, .055, 2]
   ]
 };
-function buildHoodie(pitch, yaw, roll, SUB, M, { rings: C, open, openY, pivot, bend, fit = false }) {
+// A smooth way through some heights, given in order as [from, to]: each `from` goes to its `to`, everything between goes between, and nothing turns back
+// (Fritsch–Butland). It's how a shape built to src/looks.js's BODY, so that what's drawn on it lands where it should, is stood at someone's own proportions.
+function heights(pairs) {
+  const x = pairs.map((p) => p[0]), y = pairs.map((p) => p[1]), n = x.length, d = x.slice(1).map((_, i) => (y[i + 1] - y[i]) / (x[i + 1] - x[i]));
+  const m = x.map((_, i) => (i === 0 ? d[0] : i === n - 1 ? d[n - 2] : d[i - 1] * d[i] <= 0 ? 0 : 2 / (1 / d[i - 1] + 1 / d[i])));
+  return (t) => {
+    if (t <= x[0]) return y[0] + (t - x[0]) * m[0];
+    if (t >= x[n - 1]) return y[n - 1] + (t - x[n - 1]) * m[n - 1];
+    let i = 0; while (t > x[i + 1]) i++;
+    const h = x[i + 1] - x[i], s = (t - x[i]) / h, s2 = s * s, s3 = s2 * s;
+    return (2 * s3 - 3 * s2 + 1) * y[i] + (s3 - 2 * s2 + s) * h * m[i] + (3 * s2 - 2 * s3) * y[i + 1] + (s3 - s2) * h * m[i + 1];
+  };
+}
+// `warp`, when a shape has one, says how high each of its rings really is from the height it has on the sheet
+function buildHoodie(pitch, yaw, roll, SUB, M, { rings: C, open, openY, pivot, bend, fit = false, warp = (y) => y }) {
   const rings = [];
   for (let i = 0; i < C.length - 1; i++) {
     const p0 = C[Math.max(i - 1, 0)], p1 = C[i], p2 = C[i + 1], p3 = C[Math.min(i + 2, C.length - 1)];
@@ -3991,7 +4005,7 @@ function buildHoodie(pitch, yaw, roll, SUB, M, { rings: C, open, openY, pivot, b
       const th = j / M * Math.PI * 2, c = Math.cos(th), s = Math.sin(th);
       const x = a * Math.sign(c) * Math.pow(Math.abs(c), 2 / n), z = cz + b * Math.sign(s) * Math.pow(Math.abs(s), 2 / n);
       bendW.push(w);
-      v.set(x, y, z).sub(PV).applyQuaternion(q).add(PV); pos.push(v.x, v.y, v.z);
+      v.set(x, warp(y), z).sub(PV).applyQuaternion(q).add(PV); pos.push(v.x, v.y, v.z);
       if (fit) uv.push(j / M, (y - C[0][0]) / (C[C.length - 1][0] - C[0][0])); else uv.push(j / M * 3, y * 1.5);
       let tp = th - Math.PI / 2; if (tp > Math.PI) tp -= Math.PI * 2;
       surf.push(tp, y);
@@ -3999,7 +4013,7 @@ function buildHoodie(pitch, yaw, roll, SUB, M, { rings: C, open, openY, pivot, b
       face.push(s >= 0 ? x : Math.sign(c) * 9, s >= 0 ? y : 9);
     }
   }
-  const bc = pos.length / 3; pos.push(0, rings[0][0] + .012, rings[0][3]); uv.push(0, 0); surf.push(0, -1); face.push(9, 9); bendW.push(0);
+  const bc = pos.length / 3; pos.push(0, warp(rings[0][0]) + .012, rings[0][3]); uv.push(0, 0); surf.push(0, -1); face.push(9, 9); bendW.push(0);
   const idx = [], fidx = [], fe = (i) => (Math.abs(face[i * 2]) < open(face[i * 2 + 1]) + .06 ? 0 : 9);
   for (let r = 0; r < R - 1; r++) for (let j = 0; j < M; j++) {
     const a = r * (M + 1) + j, b = (r + 1) * (M + 1) + j, c = a + 1, d = b + 1;
@@ -4023,7 +4037,7 @@ function buildHoodie(pitch, yaw, roll, SUB, M, { rings: C, open, openY, pivot, b
     const A = rings[i], B = rings[i + 1], f = clamp((y - A[0]) / (B[0] - A[0]), 0, 1), [, a, b, cz, n] = A.map((u, j) => u + (B[j] - u) * f), w = sstep(bend[0], bend[1], y);
     e.set(pitch * w, yaw * w, roll * w, 'YXZ'); q.setFromEuler(e);
     const c = Math.min(1, Math.pow(Math.abs(x) / a, n / 2)), z = cz + b * Math.pow(Math.sqrt(1 - c * c), 2 / n);
-    rim.push(new THREE.Vector3(x, y, z).sub(PV).applyQuaternion(q).add(PV));
+    rim.push(new THREE.Vector3(x, warp(y), z).sub(PV).applyQuaternion(q).add(PV));
   }
   e.set(pitch, yaw, roll, 'YXZ');
   const tilt = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromEuler(e));
@@ -4192,8 +4206,8 @@ function orientGroup(g, axisY, awayZ) {
   const Y = axisY.clone().normalize(), Z = awayZ.clone().addScaledVector(Y, -awayZ.dot(Y)); if (Z.lengthSq() < 1e-6) Z.set(0, 0, 1); Z.normalize();
   const X = new THREE.Vector3().crossVectors(Y, Z); g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
 }
-// one rig used by the hero and the townsfolk
-function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, lineK = 1, rimmed = false, shoulder, out = 0, reach, thick = 1, legSize = 1, eyelets, chest, cord = 1, wave = 0, strip = false, hip = [.12, -.7], shin = .34, shoe = '#efe9de' }) {
+// one rig used by the hero and the townsfolk. `over` runs the sleeves on past the wrists, over the backs of the hands, for a coat that's too big.
+function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, lineK = 1, rimmed = false, shoulder, out = 0, reach, thick = 1, legSize = 1, eyelets, chest, cord = 1, wave = 0, strip = false, hip = [.12, -.7], shin = .34, shoe = '#efe9de', over = 0 }) {
   const body = new THREE.Group(), line = (m, px) => outline(m, ol, px * lineK, 1);
   const hm = new THREE.Mesh(hood.geo, hoodM); line(hm, 4); body.add(hm);
   const fm = faceM ? new THREE.Mesh(hood.faceGeo, faceM) : null; if (fm) { fm.renderOrder = 2; body.add(fm); }
@@ -4234,7 +4248,7 @@ function makeRig({ hood, hoodM, sleeveM, pantsM, handM, faceM, ol, lineK = 1, ri
     const S = rig.S[i], E = new THREE.Vector3(); ik(S, wrist, reach[0], reach[1], pole, E);
     const fdir = wrist.clone().sub(E).normalize();
     const S0 = S.clone().add(new THREE.Vector3(i ? -.09 : .09, 0, 0));
-    const pts = new THREE.CatmullRomCurve3([S0, S, E, wrist], false, 'centripetal').getSpacedPoints(14);
+    const pts = new THREE.CatmullRomCurve3([S0, S, E, over ? wrist.clone().addScaledVector(fdir, over) : wrist], false, 'centripetal').getSpacedPoints(14);
     arms[i].sleeve.update(pts, pts.map((_, k) => thick * (.108 - .03 * k / 14 + .008 * Math.exp(-(((k / 14 - .55) / .12) ** 2)))));
     arms[i].cuff.position.copy(wrist).addScaledVector(fdir, .005); arms[i].cuff.quaternion.setFromUnitVectors(UP, fdir);
     const grip = wrist.clone().addScaledVector(fdir, .08 * thick); arms[i].fist.position.copy(grip);
@@ -4421,9 +4435,11 @@ function poseHero(tq) {
     tool.position.copy(g); tool.quaternion.setFromEuler(new THREE.Euler(turn, 0, 0));
   } else if (throwT > 0 && k === 'run') R.arm(1, V3(.3, .28, .42), V3(.8, -.1, -.2));
   else if (bumpT > 0 && k === 'run') { R.arm(1, V3(.08, -.2, .46), V3(.7, -.3, -.25)); R.arm(0, V3(-.08, -.2, .46), V3(-.7, -.3, -.25)); }
-  // Gerald, in the hand he doesn't throw with, the way Toni holds them, whatever the rest of him's doing
+  // Gerald, in the hand he doesn't throw with, sat on top of it the way he sits on Toni's, whatever the rest of him's doing. It's held out by his side,
+  // where the camera behind him can see him, and flat under him: closed round him, his fingers were a dark ring with a green spot in it, which read as a can.
   heroGerald.visible = !!S.items.gerald && (k === 'run' || k === 'air');
-  if (heroGerald.visible) heroGerald.position.copy(R.arm(0, V3(-.2, -.3, .38), V3(-.7, -.35, -.25), V3(0, 1, 0))).add(V3(0, .05, .02));
+  const thick = HERO_BUILD.thick; R.arms[0].fist.scale.set(thick, thick * (heroGerald.visible ? GERALD_HOLD.flat : 1), thick);
+  if (heroGerald.visible) heroGerald.position.copy(R.arm(0, GERALD_HOLD.at, GERALD_HOLD.hint, UP)).y += GERALD_HOLD.sit;
   R.strings(tq, k === 'hang' ? HP.lag : Math.sin(ph) * .1 * Math.min(1, HP.speed / 4.2));
 }
 
@@ -5453,11 +5469,34 @@ function fromPantry() { const n = pantryOwes(); pantry.sweep(today(), n); showPa
 showPantry();
 
 // ================================================================ Toni, at the burned house on Gallatin St
-// Ten years old and an astral projection (CHUNKY-135). What she does is src/toni.js and what she says is data/toni.json. She's the townsfolk's build at a child's
-// size, stood up straight like Robby, in her look from data/looks.json and drawn as a projection (astralMat). Nothing stops on her, the crowd never sees her and a
-// swing goes through her, since she's in none of what any of that looks at. The frog in her hand is solid, and drawn the way things are.
+// Ten years old and an astral projection (CHUNKY-135), and a big-boned ten-year-old you can talk to (CHUNKY-166). What she does is src/toni.js and what she says is
+// data/toni.json. She has a build of her own, stood up straight like Robby, in her look from data/looks.json and drawn as a projection (astralMat). Nothing stops on
+// her, the crowd never sees her and a swing goes through her, since she's in none of what any of that looks at. The frog in her hands is solid, and drawn the way things are.
 const TONI_WORDS = await (await fetch('data/toni.json')).json();
-const TONI_HOUSE = STRUCTURES.find((s) => s.id === 75037508), TONI_KID = .74, TONI_SCALE = TOWN_SCALE * TONI_KID;
+// Her rig's at this scale, which makes what's built into it a child's size, her hands and her boots before they're a size too big. How tall she is where is TONI_BUILD,
+// in metres up from the ground, and toniUp says where that is in her rig.
+const TONI_HOUSE = STRUCTURES.find((s) => s.id === 75037508), TONI_KID = .74, TONI_SCALE = TOWN_SCALE * TONI_KID, TONI_BASE = TOWN_HIPS * TONI_KID;
+const TONI_BUILD = { crown: 1.36, chin: 1.07, neck: 1.04, shoulders: .98, waist: .75, hips: .54, hem: .33, boots: 1.25 };
+const toniUp = (m) => (m - TONI_BASE) / TONI_SCALE, TONI_ANKLE = toniUp(0) + (.068 - .01) * TONI_BUILD.boots;
+// Her shape, built to BODY's heights so that her face and her coat land where they should on it, and stood at her own by `warp`. A ten-year-old's proportions and not
+// a grown-up's: about 4.7 heads tall, where the grown-ups here are 5.5, with a round head about 70% as wide as her shoulders, where theirs are 54%, and short legs.
+// Big-boned: broad through the shoulders and hips, with a solid middle. The coat's too big for her: boxy, and down to her knees. Widths are in metres on her.
+const TONI_SHAPE = (() => {
+  const B = TONI_BUILD, m = (y, a, b, cz, n) => [y, a / TONI_SCALE, b / TONI_SCALE, cz / TONI_SCALE, n];
+  return {
+    pivot: [0, 0, 0], bend: [.22, .3], fit: true, openY: [0, 1], open: () => 0,
+    warp: heights([[-.62, toniUp(B.hem)], [-.24, toniUp(B.waist)], [.04, toniUp(B.shoulders)], [.14, toniUp(B.neck)], [.235, toniUp(B.chin)], [.575, toniUp(B.crown)]]),
+    rings: [
+      m(-.62, .19, .15, 0, 2.4), m(-.5, .186, .146, 0, 2.4), m(-.36, .182, .142, .004, 2.3), m(-.24, .174, .137, .008, 2.3), m(-.15, .172, .14, .012, 2.3), m(-.04, .172, .132, .01, 2.4),
+      // her shoulders, square, and the collar up round her neck
+      m(.04, .166, .118, .006, 2.6), m(.09, .14, .1, .008, 2.3), m(.125, .1, .088, .012, 2.1), m(.155, .072, .07, .016, 2),
+      // her head, round, with full cheeks, and widest at her temples
+      m(.2, .08, .08, .02, 2), m(.235, .089, .09, .022, 2), m(.285, .106, .108, .02, 2), m(.335, .112, .116, .016, 2), m(.375, .115, .12, .012, 2), m(.42, .117, .123, .008, 2),
+      m(.47, .112, .118, .005, 2), m(.515, .096, .102, .003, 2), m(.55, .068, .073, .002, 2), m(.568, .035, .038, .001, 2), m(.575, .004, .004, .001, 2),
+    ],
+  };
+})();
+const toniShape = buildHoodie(0, 0, 0, 3, 32, TONI_SHAPE);
 const TONI_HOME = { x: TONI_HOUSE.wx, z: TONI_HOUSE.wz };
 // Gallatin St in front of it: where along the road the house is, which side it's on, and the ditch past the shoulder on that side, with a gap where its drive crosses
 const TONI_ROAD = (() => {
@@ -5524,54 +5563,88 @@ const toni = createToni({ home: TONI_HOME, spots: TONI_SPOTS, storage: saveStore
   g.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
   scene.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .95, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })));
 }
-// A frog, drawn as things are, one geometry each, but lit by itself as much as by the night, or it's a dark lump in her hand
-const frogLit = (m) => { m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * .9;'); }; m.customProgramCacheKey = () => 'frog'; return m; };
-const frogMat = frogLit(thingMat.clone());
-function frogMesh(i, mat = frogMat) {
+// A frog, drawn as things are, one geometry each. One in her hands has no light of its own: besides the night, all that lights it is a little pale light from her, the way
+// anything solid held up against her would catch it, which comes and goes with her rows (shimmerLit). Anywhere else, like Gerald in his hand, it's lit by the night alone.
+const SHIMMER = { uAt: { value: new THREE.Vector3() }, uK: { value: 0 }, uColor: { value: new THREE.Color('#dbe7ff') } };
+function shimmerLit(m) {
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uShimmerAt = SHIMMER.uAt; sh.uniforms.uShimmerK = SHIMMER.uK; sh.uniforms.uShimmerColor = SHIMMER.uColor;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uShimmerAt, uShimmerColor; uniform float uShimmerK;')
+      // from where she is, which is in the world, so it's right whichever camera's drawing it, wrapped a little round it the way a light that size would, and
+      // falling off with how far it is from her
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        { vec3 L=(viewMatrix*vec4(uShimmerAt,1.)).xyz+vViewPosition; float d=length(L), w=max(dot(normal,L/d)*.6+.4,0.); reflectedLight.directDiffuse+=diffuseColor.rgb*uShimmerColor*uShimmerK*w*w/(1.+d*d*10.); }`);
+  };
+  m.customProgramCacheKey = () => 'shimmer';
+  return m;
+}
+const frogMat = thingMat.clone(), heldMat = shimmerLit(thingMat.clone());
+// One that's alive has its throat and its lids as well, to breathe and blink with
+function frogMesh(i, mat = frogMat, alive = false) {
   const f = FROGS[i], geo = mergeGeometries(frog(f.kind, f.size)), g = new THREE.Group();
-  g.add(new THREE.Mesh(geo, mat), new THREE.Mesh(smoothed(geo), thingLine)); return g;
+  g.add(new THREE.Mesh(geo, mat), new THREE.Mesh(smoothed(geo), thingLine));
+  if (alive) {
+    const t = frogThroat(f.kind, f.size), throat = new THREE.Mesh(mergeGeometries(t.parts), mat), lids = new THREE.Mesh(mergeGeometries(frogLids(f.kind, f.size)), mat);
+    throat.position.set(...t.at); lids.visible = false; g.add(throat, lids); g.userData = { throat, lids };
+  }
+  return g;
 }
 // Grandma turns green when nobody's looking, as gray treefrogs really do. She's gray while Toni's showing her to someone.
-const GRANDMA = FROGS.findIndex((f) => f.name === 'Grandma'), grandmaMat = frogLit(thingMat.clone());
+const GRANDMA = FROGS.findIndex((f) => f.name === 'Grandma'), grandmaMat = shimmerLit(thingMat.clone());
 const GRANDMA_GREEN = new THREE.Color('#9ccf73'), WHITE = new THREE.Color(1, 1, 1);
 const toniBody = (() => {
   const look = LOOKS.cast.toni, sheet = canvasFor(1024, 1024, (g) => drawPerson(g, 0, 0, 1024, 1024, look), false), wear = (part) => zombieMat(sheet, part, { far: 0 });
   const handM = new THREE.MeshToonMaterial({ color: look.skin, emissive: look.skin, emissiveIntensity: .3, gradientMap: toonGrad });
-  // the coat's too big for her: a body a little wider than she is
-  const rig = makeRig({ hood: townBody, hoodM: wear('body'), sleeveM: wear('arm'), pantsM: wear('leg'), handM, ol: look.line, lineK: .85, strip: true, shoulder: [.205, .06], reach: [.39, .39], thick: .66, legSize: .8, hip: [.1, ZOMBIE_HIP], shin: .41, shoe: look.shoes });
-  rig.setHood(townBody); rig.hm.scale.set(1.1, 1, 1.12);
-  const root = new THREE.Group(); root.add(rig.body); rig.body.scale.setScalar(TONI_SCALE); rig.body.position.y = TOWN_HIPS * TONI_KID; scene.add(root);
+  // Thick arms and legs, short ones, and the sleeves down over her wrists. Her shoulders are a third of a metre across, and her hips not far off it.
+  const B = TONI_BUILD, rig = makeRig({ hood: toniShape, hoodM: wear('body'), sleeveM: wear('arm'), pantsM: wear('leg'), handM, ol: look.line, lineK: .85, strip: true,
+    shoulder: [.125 / TONI_SCALE, toniUp(B.shoulders)], reach: [.34, .3], thick: .85, legSize: 1.05, hip: [.085 / TONI_SCALE, toniUp(B.hips)], shin: .37, shoe: look.shoes, over: .07 });
+  rig.setHood(toniShape);
+  // and her boots a size too big
+  for (const s of rig.shoes) s.scale.setScalar(B.boots);
+  const root = new THREE.Group(); root.add(rig.body); rig.body.scale.setScalar(TONI_SCALE); rig.body.position.y = TONI_BASE; scene.add(root);
+  // Her hands cupped together, palms up, the way a kid holds out a frog to show you: two shallow cups side by side, which the frog sits in, with her sleeves down
+  // to their sides. Seen into from above, so both sides of them are drawn.
+  const cupM = handM.clone(); cupM.side = THREE.DoubleSide;
+  const cup = new THREE.Group(), cupGeo = new THREE.SphereGeometry(1, 14, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+  for (const s of [-1, 1]) { const c = new THREE.Mesh(cupGeo, cupM); c.scale.set(.05 / TONI_SCALE, .03 / TONI_SCALE, .066 / TONI_SCALE); c.position.x = s * .034 / TONI_SCALE; c.rotation.z = s * .18; cup.add(c); }
+  rig.body.add(cup);
   makeAstral(rig.body);
-  // the frogs in her hand, at their own size whatever size she is, one showing at a time
+  // the frogs in her hands, at their own size whatever size she is, one showing at a time
   const held = new THREE.Group(); held.scale.setScalar(1 / TONI_SCALE); rig.body.add(held);
-  const frogs = FROGS.map((_, i) => { const m = frogMesh(i, i === GRANDMA ? grandmaMat : frogMat); m.visible = false; held.add(m); return m; });
-  return { rig, root, held, frogs, step: -1, ph: 0 };
+  const frogs = FROGS.map((_, i) => { const m = frogMesh(i, i === GRANDMA ? grandmaMat : heldMat, true); m.visible = false; held.add(m); return m; });
+  return { rig, root, held, cup, frogs, step: -1, ph: 0 };
 })();
-// How she stands for what she's doing, on the twelve frames like everyone else. She's stood up straight, and only bends from the hips to reach into the grass,
-// which takes her shoulders down with her.
-const TONI_S0 = toniBody.rig.S.map((s) => s.clone()), TONI_PIVOT = new THREE.Vector3(0, ZOMBIE_HIP, 0), _toniBend = new THREE.Quaternion();
+// How she stands for what she's doing, on the twelve frames like everyone else. She's stood up straight, and squats down in the grass to catch one, leaning in a
+// little from the hips, which in a coat that long takes its hem to the ground.
+const TONI_S0 = toniBody.rig.S.map((s) => s.clone()), TONI_PIVOT = new THREE.Vector3(0, toniUp(TONI_BUILD.hips), 0), _toniBend = new THREE.Quaternion();
+// where her cupped hands are, in her rig: carried in front of her, held up at her chest to whoever she's showing, and right out to give it
+const TONI_CUP = { carry: [0, toniUp(.8), .2 / TONI_SCALE], show: [0, toniUp(.9), .27 / TONI_SCALE], give: [0, toniUp(.95), .36 / TONI_SCALE] };
 function poseToni(T, ph) {
   const R = toniBody.rig, V3 = (x, y, z) => new THREE.Vector3(x, y, z), d = T.doing, walking = d === 'walk' || d === 'go';
   const down = d === 'crouch' ? .5 : 0, a = walking ? (d === 'go' ? 1 : .6) : 0;
-  _toniBend.setFromAxisAngle(V3(1, 0, 0), down ? .9 : 0);
+  _toniBend.setFromAxisAngle(V3(1, 0, 0), down ? .35 : 0);
   R.hm.position.copy(TONI_PIVOT).negate().applyQuaternion(_toniBend).add(TONI_PIVOT); R.hm.quaternion.copy(_toniBend);
   R.S.forEach((s, i) => s.copy(TONI_S0[i]).sub(TONI_PIVOT).applyQuaternion(_toniBend).add(TONI_PIVOT));
-  R.body.position.y = TOWN_HIPS * TONI_KID - down * TONI_SCALE + (walking ? Math.abs(Math.sin(ph)) * .02 : 0);
+  R.body.position.y = TONI_BASE - down * TONI_SCALE + (walking ? Math.abs(Math.sin(ph)) * .02 : 0);
+  // short steps, in a coat that comes down to her knees
   for (let i = 0; i < 2; i++) {
     const s = i ? 1 : -1, p = ph + (i ? Math.PI : 0);
-    if (down) R.leg(i, V3(s * .13, -1.36 + down, .28), V3(s * .16, -.7, 1));
-    else { const lift = Math.max(0, Math.cos(p)) * .14 * a; R.leg(i, V3(s * .11, -1.36 + lift, Math.sin(p) * .3 * a), V3(s * .1, -1, .8), lift * 2); }
+    if (down) R.leg(i, V3(s * .17, TONI_ANKLE + down, .3), V3(s * .4, -.7, 1));
+    else { const lift = Math.max(0, Math.cos(p)) * .1 * a; R.leg(i, V3(s * .11, TONI_ANKLE + lift, Math.sin(p) * .18 * a), V3(s * .1, -1, .8), lift * 2); }
   }
-  // The frog's in one hand: down in the grass catching one, held up to whoever she's showing, right out at arm's length to give it, and carefully in front
-  // of her the rest of the time. The other hand's cupped under it so it can't jump, except walking, when it swings.
-  const [L, Rs] = R.S, showing = d === 'ask' || d === 'show', giving = d === 'give';
-  const hand = down ? V3(.1, -.86, .6) : giving ? V3(.04, -.2, .6) : showing ? V3(.06, -.12, .44) : V3(.12, -.42, .3);
-  const grip = R.arm(1, hand, Rs.clone().add(V3(.5, -.36, -.3)), V3(0, 1, 0));
-  if (walking) R.arm(0, L.clone().add(V3(-.045, -.72, .09 - Math.sin(ph) * .2 * a)), L.clone().add(V3(-.495, -.36, -.3)));
-  else R.arm(0, hand.clone().add(V3(-.1, -.07, -.02)), L.clone().add(V3(-.3, -.5, -.15)), V3(0, 1, 0));
-  toniBody.held.position.copy(grip).add(V3(0, .05, .02));
+  // The frog's in her hands, cupped together in front of her, except while she's down in the grass catching one, and once she's given him Gerald, when they hang
+  // empty at her sides
+  const cupping = !down && d !== 'given';
+  for (const A of R.arms) A.fist.visible = !cupping;
+  toniBody.cup.visible = cupping;
+  if (cupping) {
+    const c = V3(...(d === 'give' ? TONI_CUP.give : d === 'ask' || d === 'show' ? TONI_CUP.show : TONI_CUP.carry));
+    toniBody.cup.position.copy(c); toniBody.held.position.copy(c).add(V3(0, -.012, 0));
+    for (let i = 0; i < 2; i++) { const s = i ? 1 : -1; R.arm(i, c.clone().add(V3(s * .085, .005, -.07)), R.S[i].clone().add(V3(s * .4, -.5, -.1)), V3(0, 0, 1)); }
+  } else if (down) for (let i = 0; i < 2; i++) { const s = i ? 1 : -1; R.arm(i, V3(s * .1, TONI_ANKLE + down + .14, .55), R.S[i].clone().add(V3(s * .4, -.3, -.3)), V3(0, 1, 0)); }
+  else for (let i = 0; i < 2; i++) { const s = i ? 1 : -1; R.arm(i, R.S[i].clone().add(V3(s * .04, -.58, .08)), R.S[i].clone().add(V3(s * .45, -.3, -.3))); }
 }
-// What she says, over her head: a line at a time, each up long enough to read
+// What she says to the gone quiet, over her head: a line at a time, each up long enough to read. What she says to him is in the words box (toniSpoke).
 const toniSays = document.getElementById('toniSays'), _toniAt = new THREE.Vector3(), toniLines = [];
 let toniLine = null;
 const readFor = (text) => 1.4 + text.split(/\s+/).length * .3;
@@ -5579,6 +5652,9 @@ function toniSay(...lines) { for (const text of lines) toniLines.push(text); }
 // Gerald, once she's given him to him: in his hand the way she holds them, until he lets him go in a ditch. While he's got him his hand's full, so there's no
 // swinging, which takes both hands. He has him in the hand he doesn't throw with.
 const heroGerald = frogMesh(BEST); heroGerald.visible = false; heroGerald.scale.setScalar(1 / HERO_SCALE); hero.body.add(heroGerald);
+// How: his wrist out by his side at his chest, his hand flattened to this much of its height under him, and Gerald's feet this far over the middle of it,
+// which is on top of it
+const GERALD_HOLD = { at: new THREE.Vector3(-.44, -.06, .26), hint: new THREE.Vector3(-.8, -.4, -.3), flat: .4, sit: .04 };
 heroGerald.traverse((o) => { o.layers.enable(1); if (o.material?.userData.outline) o.layers.enable(2); });
 const freeGerald = frogMesh(BEST); freeGerald.visible = false; scene.add(freeGerald);
 let geraldGoing = null;
@@ -5613,23 +5689,42 @@ function frogWord(s) {
   if (!seen.length || Math.hypot(s.x - TONI_HOME.x, s.z - TONI_HOME.z) > 220 || hash2(s.who.id, Math.floor(time / 40)) > .35) return null;
   return TONI_WORDS.word.replace('{frog}', seen[Math.floor(hash2(s.who.id, 9) * seen.length)]);
 }
-// Whether she's showing him one now, and the shoulder the camera looks at her over while she does (the camera's in tick). She's short and close up, so it's
-// further round to the side than for talking to anyone grown (TALK), lower, and looking more at her, or he'd hide her.
-const toniShowing = () => S.mode === 'town' && toni.T.who === 'him' && (toni.T.doing === 'ask' || toni.T.doing === 'show' || toni.T.doing === 'give');
-let toniTalk = { side: 1, k: 1, dir: 1 };
+// Talking to her, the camera goes over his shoulder the way it does for the cast (TALK), but she's short and close up, so it's further round to the side, lower
+// and looking more at her, or he'd hide her. It only ever looks over his.
 const TONI_TALK = { back: 1.9, out: 2.6, up: 2.1, look: 1.1, along: .5 };
+// Talking to her (CHUNKY-166): her words in the words box and his answers on its buttons, the same as with the cast, with a number key for each on a laptop.
+// She asks when she comes up to him, which is once every time he comes by, or whenever he asks her (TALK), and everything else she says is what she says back.
+let toniTalking = false;
+function toniSpoke(said) {
+  if (!said) { closeDialog(); return; }
+  const T = toni.T, W = TONI_WORDS, A = W.answers;
+  if (!toniTalking) {
+    toniTalking = true; convo = null;
+    S.talkTo = toniBody; cam.yaw = Math.atan2(player.pos.x - T.x, player.pos.z - T.z); S.talk = shoulderFor(T, [1], TONI_TALK);
+    S.mode = 'dialog'; HP.speed = 0; $('dialog').hidden = false; prompt(null);
+    $('dWho').textContent = 'Toni'; $('dHeard').hidden = true; $('dCare').hidden = true; waiting(false); showType(false);
+  }
+  SFX.play('ui.tap');
+  const ask = askLine(W, T.frog, T.asks), later = { say: A.later, act: () => toniSpoke(toni.later()) };
+  $('dSay').textContent = said === 'ask' ? W.ask : said === 'frog' ? frogLine(W, T.frog) : said === 'answer' ? askLine(W, T.frog, T.asks - 1).say : W.give;
+  if (said === 'ask') setOpts([{ say: A.yes, act: () => toniSpoke(toni.yes()) }, later]);
+  // holding Gerald out, all he can do is take him, which he does by being there
+  else if (said === 'give') setOpts([{ say: A.later, act: () => { toni.later(); closeDialog(); } }]);
+  else setOpts([{ say: A.another, act: () => toniSpoke(toni.another()) }, ...(ask ? [{ say: ask.ask, act: () => toniSpoke(toni.question()) }] : []), later]);
+}
 // Everyone she might go up to: him on foot, and the gone quiet about, who don't react
 const _toniQuiet = [];
 function stepToni(dt) {
   const T = toni.T, M = S.mode, P = player.pos, near = Math.hypot(T.x - camera.position.x, T.z - camera.position.z) < 120;
   _toniQuiet.length = 0;
   if (folkOut) for (const s of horde.active) if (s.quiet && !s.thrown && !(s.flat > 0) && s.under === undefined && Math.abs(s.x - TONI_HOME.x) < 40 && Math.abs(s.z - TONI_HOME.z) < 40) _toniQuiet.push({ id: s.who.id, x: s.x, z: s.z });
-  const said = toni.update(dt, { him: M === 'town' ? P : null, quiet: _toniQuiet });
-  if (said === 'ask') { toniLines.length = 0; toniLine = null; toniSay(TONI_WORDS.ask); if (T.who === 'him') toniTalk = shoulderFor(T, [1], TONI_TALK); }
-  else if (said === 'frog') { toniLines.length = 0; toniLine = null; toniSay(...sayFrog(TONI_WORDS, T.frog, T.turn - 1)); }
+  const said = toni.update(dt, { him: M === 'town' || toniTalking ? P : null, quiet: _toniQuiet });
+  if (said === 'ask' && T.who === 'him') toniSpoke('ask');
+  else if (said === 'ask') { toniLines.length = 0; toniLine = null; toniSay(TONI_WORDS.ask); }
   else if (said === 'quiet' && Math.hypot(P.x - T.x, P.z - T.z) < 25) toniSay(TONI_WORDS.quiet);
-  else if (said === 'give') { toniLines.length = 0; toniLine = null; toniSay(TONI_WORDS.give); }
   else if (said === 'gave') S.items.gerald = 1;
+  // she's gone back to her frogs, so there's nobody to talk to
+  if (toniTalking && !toni.talking()) closeDialog();
   // a line at a time, each up long enough to read
   if (toniLine && time - toniLine.at > readFor(toniLine.text)) toniLine = null;
   if (!toniLine && toniLines.length) toniLine = { text: toniLines.shift(), at: time };
@@ -5643,7 +5738,18 @@ function stepToni(dt) {
   if (walking) toniBody.ph += dt * (T.doing === 'go' ? 9 : 5.5);
   const step = Math.floor(time * 12);
   if (step !== toniBody.step) { toniBody.step = step; poseToni(T, toniBody.ph); }
-  toniBody.frogs.forEach((f, i) => { f.visible = i === T.frog && T.doing !== 'gave'; });
+  toniBody.frogs.forEach((f, i) => { f.visible = i === T.frog && T.doing !== 'given' && T.doing !== 'crouch'; });
+  // The one in her hands is alive: its throat swells and goes down as it breathes, and now and then it blinks, or shifts round in her hands. On the twelve, from
+  // the hash so it's the same every time, and with reduced motion it sits still.
+  const live = toniBody.frogs[T.frog].userData, k = step / 12;
+  live.throat.scale.setScalar(1);
+  live.lids.visible = false;
+  if (!reduceMotion && toniBody.frogs[T.frog].visible) {
+    const b = .5 + .5 * Math.sin(k * Math.PI * 2 * 1.3), blink = Math.floor(k / 2.9), turn = Math.floor(k / 6.5);
+    live.throat.scale.set(1 + .2 * b, 1 + .75 * b, 1 + .3 * b);
+    live.lids.visible = hash(blink, T.frog, 1661) > .35 && k - blink * 2.9 < .17;
+    toniBody.frogs[T.frog].rotation.y = (hash(turn, T.frog, 1662) - .5) * .7;
+  }
   // Grandma greens up while nobody's looking at her, and goes back gray when she's shown
   const looked = T.doing === 'ask' || T.doing === 'show';
   grandmaMat.color.lerp(looked ? WHITE : GRANDMA_GREEN, Math.min(1, dt * (looked ? 2 : .25)));
@@ -5651,7 +5757,7 @@ function stepToni(dt) {
 function drawToniSays() {
   const T = toni.T, show = toniLine && S.mode === 'town' && toniBody.root.visible;
   if (!show) { toniSays.hidden = true; return; }
-  _toniAt.set(T.x, toniBody.root.position.y + hillUp(T.x, T.z) + 2.05 * TONI_KID * TOWN_SCALE + .1, T.z).project(camera);
+  _toniAt.set(T.x, toniBody.root.position.y + hillUp(T.x, T.z) + TONI_BUILD.crown + .14, T.z).project(camera);
   if (_toniAt.z >= 1) { toniSays.hidden = true; return; }
   if (toniSays.textContent !== toniLine.text) toniSays.textContent = toniLine.text;
   const age = time - toniLine.at, fade = Math.min(1, reduceMotion ? 1 : age / .25, (readFor(toniLine.text) - age) / .4);
@@ -5659,10 +5765,19 @@ function drawToniSays() {
   const w = toniSays.offsetWidth, x = Math.min(Math.max((_toniAt.x * .5 + .5) * innerWidth, w / 2 + 6), innerWidth - w / 2 - 6);
   toniSays.style.transform = `translate(${x.toFixed(1)}px,${((-_toniAt.y * .5 + .5) * innerHeight).toFixed(1)}px) translate(-50%,-100%)`;
 }
+// The light from her on the frog in her hands: from her chest, in view space, coming and going a little on the twelve, or steady with reduced motion
+const _shimmerFrom = new THREE.Vector3(0, toniUp(1.12), .06 / TONI_SCALE);
+function lightToniFrog() {
+  if (!toniBody.root.visible) return;
+  const body = toniBody.rig.body; body.updateWorldMatrix(true, false);
+  body.localToWorld(SHIMMER.uAt.value.copy(_shimmerFrom));
+  // strong enough that it's most of what lights the frog anywhere dark, and still less than the night where there's a light near
+  SHIMMER.uK.value = 5 * (reduceMotion ? 1 : .85 + .15 * hash(Math.floor(time * 12), 7, 1663));
+}
 // what dialogue reads and changes
 const played = { flags: S.flags, items: S.items, get beans() { return S.beans; }, addBeans, get pantry() { return pantryOwes(); }, fromPantry };
 const player = { pos: new THREE.Vector3(), vy: 0, yaw: Math.PI, grounded: true, inv: 0, stamina: 1, running: false, winded: false, ran: false, runK: 0, boostT: 0, kb: new THREE.Vector2(), fallV: new THREE.Vector3(), lastSafe: new THREE.Vector3() };
-const cam = { yaw: -.6, pitch: .28, shake: 0, snap: false, talk: 0, toni: 0 };
+const cam = { yaw: -.6, pitch: .28, shake: 0, snap: false, talk: 0 };
 // over his shoulder when he's talking: how far back, how far out, how high, how high it looks, and how far along towards them
 const TALK = { back: 3, out: 1.7, up: 2.45, look: 1.5, along: .27 }, _talk = new THREE.Vector3();
 let toastT = 0, cardT = 0;
@@ -5955,6 +6070,7 @@ function openDialog(id) {
   // after Chapter 1 her steps want sweeping again each day
   if (S.flags.ended) S.flags.swept = pantry.sweptOn(today());
   const node = people.line(id, played), who = node.whoId;
+  if (toniTalking) { toniTalking = false; toni.later(); }
   if (S.mode !== 'dialog' || convo?.who !== who) { convo = { who, turns: [], moved: {}, last: null, care: false }; comeBack.delete(who); }
   const own = id === who && !convo.care && (!!convo.last || wouldSayNew(who, node));
   people.meet(who); people.apply(node.do, played); SFX.play('ui.tap');
@@ -6064,6 +6180,8 @@ function closeDialog() {
   // a visit's counted once it's over, so that what's asked while it's going on says how many came before it
   if (convo && talk.talks(convo.who)) talk.visited(convo.who);
   convo = null;
+  // and talking to Toni, she's done unless she's giving him Gerald
+  if (toniTalking) { toniTalking = false; toni.later(); }
   if (S.mode === 'dialog') S.mode = 'town'; townObjective();
 }
 // on a laptop, typing to them: Enter says it, and nothing typed gets to the game's own keys. Letting go of a key still does, so one that
@@ -8021,6 +8139,8 @@ function tick(dt, draw = true) {
       // Once he's asked, the button by Robby is for the flies: he's said all he's going to, and it's the only button a phone has
       const lot = Math.hypot(ROBBY.x - player.pos.x, ROBBY.z - player.pos.z), fliesToDo = S.flags.robbySaid && fliesLeft > 0;
       for (const [id, n] of Object.entries(NPCS)) { if (id === 'robby' && fliesToDo) continue; const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z); if (d < nd) { nd = d; near = id; } }
+      // and Toni, wherever she's got to, unless she's already talking to him
+      if (toniBody.root.visible && !toni.talking() && Math.hypot(toni.T.x - player.pos.x, toni.T.z - player.pos.z) < nd) near = 'toni';
       // whoever'd say something new is asked what as he comes near, so that it's there when he talks to them
       for (const who of talk.data.who) {
         const n = NPCS[who], d = n ? Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z) : Infinity;
@@ -8037,11 +8157,11 @@ function tick(dt, draw = true) {
       const bell = !near && !ride && !meat && !door && !jam && !ball && !crt && bellInReach();
       // with Gerald in his hand, the cast are who to show him to, and any ditch is where to let him go
       const showTo = near && S.items.gerald && GERALD_SEEN[near] && !S.flags[GERALD_SEEN[near]], ditch = !!S.items.gerald && inDitch(player.pos.x, player.pos.z);
-      S.act = near ? `${showTo ? 'Show Gerald to' : 'Talk to'} ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : bell ? 'Ring the bell' : gear && S.flags.sixInARow ? 'Take the bat' : ditch ? 'Let Gerald go' : null;
+      S.act = near ? `${showTo ? 'Show Gerald to' : 'Talk to'} ${near === 'toni' ? 'Toni' : NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : bell ? 'Ring the bell' : gear && S.flags.sixInARow ? 'Take the bat' : ditch ? 'Let Gerald go' : null;
       if (!stone) stoneRead = false;
       if (!plate) railMarkerRead = false;
       if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (railMarkerRead && S.act === 'Read the marker') prompt(`<span class="words">${RAIL_MARKER.words}</span>`); else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH && !S.items.gerald) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
-      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) stoneRead = true; else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else if (ditch) letGeraldGo(); else swing(); }
+      if (input.aEdge) { if (near === 'toni') toniSpoke(toni.talk(player.pos)); else if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) stoneRead = true; else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else if (ditch) letGeraldGo(); else swing(); }
       if (input.sEdge) swing();
       if (input.hEdge) toggleShamble();
       if (input.cEdge) throwOne();
@@ -8171,15 +8291,7 @@ function tick(dt, draw = true) {
     if (cam.talk > 0 && S.talkTo) {
       const H = heroRoot.position, N = S.talkTo.root.position;
       if (M === 'dialog') player.yaw += angDiff(player.yaw, Math.atan2(N.x - H.x, N.z - H.z)) * Math.min(1, dt * 7);
-      overShoulder(N, S.talk, sstep(0, 1, cam.talk));
-    }
-    // Toni showing him one, with him stood still and not looking about: he turns to her and the camera goes over his shoulder the same way, since that's the only
-    // way to see her, right in front of him. Moving or looking about has it back.
-    cam.toni = clamp(cam.toni + (toniShowing() && !moving && time - lastLook > 1.2 ? dt : -dt) * 2.5, 0, 1);
-    if (cam.toni > 0 && !(cam.talk > 0)) {
-      const H = heroRoot.position, N = toniBody.root.position;
-      if (!moving) player.yaw += angDiff(player.yaw, Math.atan2(N.x - H.x, N.z - H.z)) * Math.min(1, dt * 7);
-      overShoulder(N, toniTalk, sstep(0, 1, cam.toni), TONI_TALK);
+      overShoulder(N, S.talk, sstep(0, 1, cam.talk), S.talkTo === toniBody ? TONI_TALK : TALK);
     }
     // right up to the glass, and him out of the way while it's there
     if (crtLook && M !== 'town') crtLook = false;
@@ -8227,7 +8339,7 @@ function tick(dt, draw = true) {
   if (folkOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
   else if (folkOut) drawSeated(step);
   if (folkOut) { drawSus(); drawMutters(); }
-  drawToniSays();
+  drawToniSays(); lightToniFrog();
   if (S.flags.town) { drawVehicles(step); drawWreck(step); if (trainsOn) drawTrain(); }
   updateParticles(dt, M);
   if (bottle.visible) levelLiquid();
@@ -8351,7 +8463,41 @@ if (TEST) {
       // her rows' own step, for a test to move them and nothing else
       rows(step) { ASTRAL.uStep.value = step; },
       gerald: () => ({ held: !!S.items.gerald, drawn: heroGerald.visible, free: freeGerald.visible, at: heroGerald.getWorldPosition(new THREE.Vector3()).toArray() }),
-      road: { ...TONI_ROAD }, inDitch, night() { toni.night(); }, grandma: () => grandmaMat.color.toArray(), FROGS, T: toni.T,
+      // Gerald in his hand and the frogs in hers, to see how much of them shows from the camera
+      meshes: { gerald: heroGerald, hers: toniBody.frogs },
+      road: { ...TONI_ROAD }, inDitch, night() { toni.night(); }, grandma: () => grandmaMat.color.toArray(), FROGS, T: toni.T, talking: () => toni.talking(),
+      // How she's built, measured on her mesh, and Coop and Miss Bobby the same way, stood up straight: how tall, their heads from chin to crown and across, their
+      // shoulders across and how high their hips are, in metres. The chin and the shoulders are the rings of the sheet's BODY.chin and the top of the shoulders.
+      build() {
+        const vAt = (y) => (y - BODY.from) / (BODY.to - BODY.from), measure = (hm, scale, hips, M = 32) => {
+          // each ring's height on the sheet, how high its front is, and how wide it is
+          const P = hm.geometry.attributes.position, UV = hm.geometry.attributes.uv, rings = [];
+          for (let r = 0; (r + 1) * (M + 1) <= P.count; r++) { let w = 0; for (let j = 0; j <= M; j++) w = Math.max(w, Math.abs(P.getX(r * (M + 1) + j))); const f = r * (M + 1) + M / 4; rings.push({ v: UV.getY(f), y: P.getY(f), w }); }
+          const at = (v, k) => { const i = rings.findIndex((q) => q.v >= v), a = rings[i - 1], b = rings[i]; return a[k] + (b[k] - a[k]) * (v - a.v) / (b.v - a.v); };
+          const crown = Math.max(...rings.map((q) => q.y)), chin = at(vAt(BODY.chin), 'y'), headW = Math.max(...rings.filter((q) => q.v >= vAt(BODY.chin)).map((q) => q.w));
+          const r = { tall: (crown + TOWN_HIPS / TOWN_SCALE) * scale, head: (crown - chin) * scale, headW: 2 * headW * scale, shoulders: 2 * at(vAt(.04), 'w') * scale, hips: (hips + TOWN_HIPS / TOWN_SCALE) * scale };
+          return Object.fromEntries(Object.entries({ ...r, heads: r.tall / r.head, across: r.headW / r.shoulders, legs: r.hips / r.tall }).map(([k, x]) => [k, +x.toFixed(3)]));
+        };
+        return { toni: measure(toniBody.rig.hm, TONI_SCALE, toniBody.rig.H[0].y), coop: measure(NPCS.coop.rig.hm, TOWN_SCALE, ZOMBIE_HIP), bobby: measure(NPCS.bobby.rig.hm, TOWN_SCALE, ZOMBIE_HIP) };
+      },
+      // The frog in her hands: which it is, whether her hands are cupped round it with her fists away, how far it is from the middle of her cupped hands and how
+      // high off the ground, and what's alive about it: how tall its throat is, whether it's blinking and how it's turned. And how it's lit: by her, with no light of its own.
+      frog() {
+        const f = toniBody.frogs[toni.T.frog], at = f.getWorldPosition(new THREE.Vector3()), cup = toniBody.cup.getWorldPosition(new THREE.Vector3()), U = f.userData;
+        return { shown: f.visible ? toni.T.frog : -1, cupped: toniBody.cup.visible, fists: toniBody.rig.arms.some((A) => A.fist.visible), off: +Math.hypot(at.x - cup.x, at.z - cup.z).toFixed(3), high: +(at.y - toniBody.root.position.y).toFixed(3),
+          throat: +U.throat.scale.y.toFixed(3), blink: U.lids.visible, turn: +f.rotation.y.toFixed(3), lit: heldMat.customProgramCacheKey(), glow: heldMat.emissive.getHex() };
+      },
+      mesh: () => toniBody.frogs[toni.T.frog],
+      // her light on it, to look at it with and without
+      shimmer(k) { if (k !== undefined) SHIMMER.uK.value = k; return SHIMMER.uK.value; },
+      // Coop and Miss Bobby stood either side of her for a picture, facing the way she is, until it's called again with nothing
+      lineUp(on = true) {
+        for (const [who, side] of [['coop', 1], ['bobby', -1]]) {
+          const n = NPCS[who], R = toniBody.root; n.home ??= { p: n.root.position.clone(), yaw: n.root.rotation.y };
+          if (on) { n.root.position.set(R.position.x + Math.cos(R.rotation.y) * side * .95, R.position.y, R.position.z - Math.sin(R.rotation.y) * side * .95); n.root.rotation.y = R.rotation.y; n.root.visible = true; }
+          else { n.root.position.copy(n.home.p); n.root.rotation.y = n.home.yaw; delete n.home; }
+        }
+      },
       // whether all of her's drawn as a projection, and the frogs in her hand aren't
       astral() {
         const isAstral = (m) => (m.userData?.outline ? !!m.defines?.ASTRAL : m.customProgramCacheKey?.().startsWith('astral'));

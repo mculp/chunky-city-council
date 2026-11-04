@@ -2,8 +2,9 @@
 // tests load it too. How she looks is in index.html, what she says is in data/toni.json, and data/toni.md has the rest.
 //
 // She's an astral projection: nothing can hurt her, the crowd pays her no mind and a swing goes through her. She catches frogs in the ditch and the tall grass
-// round the house all night, and whenever anyone comes by she goes up to them with one in her hand and shows it to them. She shows him one he hasn't seen every
-// time he comes by, and remembers which, until he's seen all twelve and she puts Gerald in his hand. The gone quiet don't react, and she doesn't mind.
+// round the house all night, and whenever anyone comes by she goes up to them with one in her hands and shows it to them. He can talk to her (CHUNKY-166): she
+// asks if he wants to see a frog, and shows him one he hasn't seen for as long as he keeps asking for another, and remembers which, until he's seen all twelve
+// and she puts Gerald in his hand. The gone quiet don't react, and she doesn't mind.
 
 // The creative director's twelve, Gerald first, since he's the first she shows anyone. `size` is nose to back end in metres, about half again a real one's,
 // because they're seen from behind him on a phone, and in the same proportion to each other as they really are.
@@ -30,8 +31,9 @@ export const TONI = {
   hunt: 1.1, keen: 2.6, // m/s about the yard, and going up to someone
   crouch: [2, 4.5],    // how long she's down in the grass catching one
   between: [1, 3],     // how long she stands with it before she goes on to the next spot
-  ask: 1.8,            // how long "Wanna see a frog?" is up before she says who it is
-  show: 9,             // how long she holds it up after that, which is long enough to read what she says about it and what she says after
+  ask: 1.8,            // how long she asks one of the gone quiet before she shows them, and how long she holds Gerald out before he's his
+  show: 9,             // how long she holds one up to one of the gone quiet. Him, she shows for as long as he's talking to her.
+  given: 3,            // how long she watches him with Gerald before she goes back to her frogs
   leave: 7,            // he's walked off if he's this far away while she's showing him
   quiet: 3,            // and the same for one of the gone quiet, who doesn't wait for it
   height: 1.36,        // she's ten
@@ -63,21 +65,27 @@ export function nextFrog(mind, turn = 0) {
   return rest[turn % rest.length];
 }
 
-// What she says showing one, from data/toni.json: its own line, then one of the lines that go with any of them, in turn, and the ones about "him" only for a boy
-export function sayFrog(words, i, turn = 0) {
-  const name = FROGS[i].name, he = words.he.includes(name), after = words.after.filter((a) => he || !a.he);
-  return [words.frogs[name], after[turn % after.length].say];
+// What she says showing one, from data/toni.json: its own line
+export const frogLine = (words, i) => words.frogs[FROGS[i].name];
+// The k-th thing he can ask her about the frog in her hands, and what she says to it, with "her" for a girl where the words have it
+export function askLine(words, i, k) {
+  const a = words.asks[k];
+  return a && (words.he.includes(FROGS[i].name) || !a.her ? { ask: a.ask, say: a.say } : { ...a.her });
 }
 
 // `home` is the middle of the house, `spots` where she looks for frogs in the ditch and the grass, as [x, z] pairs, and `rand` gives 0 to 1.
+//
+// Talking to him goes: 'ask', "Wanna see a frog?", until he says "Yeah." (yes) or "Later." (later). Then 'show', one he hasn't seen in her hands, until he
+// asks for another (another), asks her something about it (question) or says "Later.". Once he's seen all twelve and hasn't had Gerald, the next thing he
+// asks for, or "Later.", has her holding Gerald out ('give'), and if he's still there when she's done, Gerald's his ('given').
 export function createToni({ home, spots, storage = null, rand = Math.random }) {
   const mind = loadToni(storage);
-  const T = { x: spots[0][0], z: spots[0][1], yaw: 0, doing: 'walk', frog: nextFrog(mind), to: null, left: 0, who: null, said: null, turn: 0 };
+  const T = { x: spots[0][0], z: spots[0][1], yaw: 0, doing: 'walk', frog: nextFrog(mind), to: null, left: 0, who: null, said: null, turn: 0, asks: 0 };
   let visit = false, wasFar = true, shownQuiet = new Set();
   const goTo = ([x, z]) => { T.to = { x, z }; T.doing = 'walk'; };
   const nextSpot = () => goTo(spots[Math.floor(rand() * spots.length)]);
   nextSpot();
-  const say = (line) => { T.said = line; };
+  const say = (line) => (T.said = line);
   // He's seen it once she's said who it is, and that's when she remembers it
   function shown(i) {
     const name = FROGS[i].name;
@@ -92,19 +100,30 @@ export function createToni({ home, spots, storage = null, rand = Math.random }) 
     T.x += (target.x - T.x) * k; T.z += (target.z - T.z) * k;
     return k >= 1;
   }
+  const face = (p) => { T.yaw = Math.atan2(p.x - T.x, p.z - T.z); };
   // a spot `stand` in front of someone, on her side of them
   const before = (p) => { const d = Math.max(.01, dist(T, p)); return { x: p.x + (T.x - p.x) / d * TONI.stand, z: p.z + (T.z - p.z) / d * TONI.stand }; };
+  // talking to him from further off than that, she comes up to him as she talks
+  const closer = (p, dt) => { if (dist(T, p) > TONI.stand + .3) stepTo(before(p), TONI.keen, dt); face(p); };
   const back = () => { T.who = null; T.doing = 'stand'; T.left = between(TONI.between, rand()); };
+  const allSeen = () => FROGS.every((f) => mind.seen.includes(f.name));
+  // the next one he hasn't seen, or whichever one's turn it is, or once he's seen all twelve and hasn't had him, Gerald for keeps
+  function showNext() {
+    if (!mind.gave && allSeen()) { T.doing = 'give'; T.left = TONI.ask; T.frog = BEST; return say('give'); }
+    T.frog = nextFrog(mind, T.turn); T.doing = 'show'; shown(T.frog);
+    return say('frog');
+  }
+  const talking = () => T.who === 'him' && (T.doing === 'ask' || T.doing === 'show' || T.doing === 'give' || T.doing === 'given');
 
   return {
     T, mind, FROGS,
     // Everyone she might go up to: `him` on foot ({ x, z } or null when he's driving or not about) and the gone quiet nearby, `quiet` ([{ id, x, z }]).
-    // It says what happened this time, if anything: 'ask' as she gets to someone, 'frog' as she says which one it is, 'quiet' when it's one of the gone quiet
-    // she's shown, 'give' as she holds Gerald out to him and 'gave' as he takes it.
+    // It says what happened this time, if anything: 'ask' as she gets to someone, 'quiet' when it's one of the gone quiet she's shown, and 'gave' as
+    // Gerald goes into his hand. What she says to what he says comes back from what he said, below.
     update(dt, { him = null, quiet = [] } = {}) {
       T.said = null;
       const H = home, near = him && dist(him, H) < TONI.notice;
-      // coming back after being well away is another time he's come by, and another frog
+      // coming back after being well away is another time he's come by, and she comes up to him again
       if (!him || dist(him, H) > TONI.away) wasFar = true;
       else if (wasFar && near) { wasFar = false; visit = true; }
       if (T.doing === 'walk' || T.doing === 'crouch' || T.doing === 'stand') {
@@ -122,32 +141,54 @@ export function createToni({ home, spots, storage = null, rand = Math.random }) 
         case 'stand': if ((T.left -= dt) <= 0) nextSpot(); break;
         case 'go':
           if (!whom || dist(whom, H) > TONI.notice + 6) { back(); break; }
-          if (stepTo(before(whom), TONI.keen, dt)) { T.doing = 'ask'; T.left = TONI.ask; T.yaw = Math.atan2(whom.x - T.x, whom.z - T.z); say('ask'); }
-          break;
-        case 'ask':
-          if (!whom || dist(whom, T) > (T.who === 'him' ? TONI.leave : TONI.quiet + TONI.stand)) { back(); break; }
-          T.yaw = Math.atan2(whom.x - T.x, whom.z - T.z);
-          if ((T.left -= dt) <= 0) {
-            T.doing = 'show'; T.left = TONI.show;
-            if (T.who === 'him') { visit = false; say('frog'); shown(T.frog); } else say('quiet');
+          if (stepTo(before(whom), TONI.keen, dt)) {
+            face(whom); T.doing = 'ask'; say('ask');
+            if (T.who === 'him') { visit = false; T.asks = 0; } else T.left = TONI.ask;
           }
           break;
-        case 'show':
-          if (whom) T.yaw = Math.atan2(whom.x - T.x, whom.z - T.z);
-          if ((T.left -= dt) <= 0 || !whom || dist(whom, T) > TONI.leave) {
-            // all twelve, and he hasn't had Gerald: he has now
-            if (T.who === 'him' && whom && !mind.gave && FROGS.every((f) => mind.seen.includes(f.name))) { T.doing = 'give'; T.left = TONI.ask; T.frog = BEST; say('give'); }
-            else back();
-          }
+        // him, she waits on, for as long as he's there to talk to
+        case 'ask': case 'show':
+          if (T.who === 'him') { if (!whom || dist(whom, T) > TONI.leave) back(); else closer(whom, dt); break; }
+          // one of the gone quiet doesn't answer, so she shows them anyway
+          if (!whom || dist(whom, T) > (T.doing === 'ask' ? TONI.quiet + TONI.stand : TONI.leave)) { back(); break; }
+          face(whom);
+          if ((T.left -= dt) > 0) break;
+          if (T.doing === 'ask') { T.doing = 'show'; T.left = TONI.show; say('quiet'); } else back();
           break;
         // he has to still be there to take it, or she keeps it for next time
         case 'give':
           if (!whom || dist(whom, T) > TONI.leave) { back(); break; }
-          if ((T.left -= dt) <= 0) { mind.gave = true; mind.holding = true; saveToni(storage, mind); T.frog = nextFrog(mind, T.turn); say('gave'); back(); }
+          face(whom);
+          if ((T.left -= dt) <= 0) { mind.gave = true; mind.holding = true; saveToni(storage, mind); T.frog = nextFrog(mind, T.turn); T.doing = 'given'; T.left = TONI.given; say('gave'); }
+          break;
+        case 'given':
+          if (whom) face(whom);
+          if ((T.left -= dt) <= 0 || !whom || dist(whom, T) > TONI.leave) back();
           break;
       }
       return T.said;
     },
+    // What he says to her, each of which returns what she says back: 'ask', 'frog', 'answer' or 'give', or null when she's done talking.
+    // TALK: she leaves off what she's doing, turns to him and asks
+    talk(him) {
+      if (talking()) return null;
+      visit = false; T.who = 'him'; T.doing = 'ask'; T.asks = 0; face(him);
+      return say('ask');
+    },
+    // "Yeah."
+    yes: () => (T.doing === 'ask' && T.who === 'him' ? showNext() : null),
+    // "Got another one?"
+    another: () => (T.doing === 'show' && T.who === 'him' ? showNext() : null),
+    // the one more thing to ask, which is the next of her other lines, one at a time, each of them once every time he talks to her
+    question() { if (T.doing !== 'show' || T.who !== 'him') return null; T.asks++; return say('answer'); },
+    // "Later.": she goes back to her frogs, unless that was the twelfth and he hasn't had Gerald, who she gives him first
+    later() {
+      if (T.who !== 'him') return null;
+      if (T.doing === 'show' && !mind.gave && allSeen()) return showNext();
+      if (T.doing === 'ask' || T.doing === 'show' || T.doing === 'given') back();
+      return null;
+    },
+    talking,
     // a new night: the gone quiet are worth showing again
     night() { shownQuiet = new Set(); },
     gaveIt: () => mind.gave,

@@ -158,18 +158,21 @@ function drawHead(p) {
     for (let i = 0; i < 14; i++) { const u = .1 + r() * .3, at = BODY.hairline - (Math.abs(u - .25) > .13 ? .07 : .012); g.globalAlpha = .4 + r() * .4; g.beginPath(); g.moveTo(U(p, u), V(p, at)); g.lineTo(U(p, u + (r() - .5) * .02), V(p, at - .006 - r() * .02)); g.stroke(); }
     g.globalAlpha = 1;
   }
-  // somebody it hasn't touched: eyes with whites to them, brows, and a mouth shut
+  // somebody it hasn't touched, and a child: big eyes with whites to them and a light in each, brows, full cheeks with some colour in them, a button nose
+  // and a mouth shut
   if (kid) {
     for (const s of [-1, 1]) {
       const cx = side(s * .046), cy = V(p, BODY.eyes);
-      g.fillStyle = '#efe8dc'; g.beginPath(); g.ellipse(cx, cy, 7.5 * k, 4.6 * k, 0, 0, TAU); g.fill();
-      g.fillStyle = '#2a1c14'; g.beginPath(); g.arc(cx + s * .6 * k, cy + .4 * k, 3.6 * k, 0, TAU); g.fill();
-      g.strokeStyle = 'rgba(40,24,16,.85)'; g.lineWidth = 2 * k; g.beginPath(); g.moveTo(cx - 8 * k, V(p, BODY.brow) + 1 * k); g.quadraticCurveTo(cx, V(p, BODY.brow) - 2.5 * k, cx + 8 * k, V(p, BODY.brow) + 1 * k); g.stroke();
+      g.fillStyle = 'rgba(210,112,100,.3)'; g.beginPath(); g.ellipse(side(s * .074), V(p, BODY.nose - .014), 13 * k, 8 * k, 0, 0, TAU); g.fill();
+      g.fillStyle = '#efe8dc'; g.beginPath(); g.ellipse(cx, cy, 10 * k, 7.5 * k, 0, 0, TAU); g.fill();
+      g.fillStyle = '#2a1c14'; g.beginPath(); g.arc(cx + s * .6 * k, cy + .6 * k, 5.4 * k, 0, TAU); g.fill();
+      g.fillStyle = '#fbf6ec'; g.beginPath(); g.arc(cx + s * .6 * k - 1.8 * k, cy - 1.4 * k, 1.5 * k, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(40,24,16,.85)'; g.lineWidth = 2 * k; g.beginPath(); g.moveTo(cx - 9 * k, V(p, BODY.brow) + 1 * k); g.quadraticCurveTo(cx, V(p, BODY.brow) - 3 * k, cx + 9 * k, V(p, BODY.brow) + 1 * k); g.stroke();
     }
     g.fillStyle = 'rgba(60,30,24,.45)';
-    g.beginPath(); g.moveTo(side(0), V(p, BODY.nose + .012)); g.lineTo(side(.01), V(p, BODY.nose - .004)); g.lineTo(side(-.01), V(p, BODY.nose - .004)); g.closePath(); g.fill();
+    g.beginPath(); g.ellipse(side(0), V(p, BODY.nose), 3.4 * k, 2.4 * k, 0, 0, TAU); g.fill();
     const my = V(p, BODY.mouth); g.strokeStyle = 'rgba(70,26,26,.85)'; g.lineWidth = 2 * k;
-    g.beginPath(); g.moveTo(U(p, .25) - 8 * k, my); g.quadraticCurveTo(U(p, .25), my + 2.5 * k, U(p, .25) + 8 * k, my - .5 * k); g.stroke();
+    g.beginPath(); g.moveTo(U(p, .25) - 7 * k, my); g.quadraticCurveTo(U(p, .25), my + 3 * k, U(p, .25) + 7 * k, my - .5 * k); g.stroke();
     return;
   }
   // the sockets, sunk in, and the whites that are left round what's lit
@@ -191,9 +194,10 @@ function drawHead(p) {
 
 function drawArm(p) {
   const { g, k, look, y, h } = p, t = look.top ?? { kind: 'none' };
-  const to = { none: 0, tee: .68, dress: .72, overalls: .68, camo: .12, flannel: .12, coveralls: .1, coat: .03 }[t.kind] ?? 0;
+  // how much of the arm's bare at the end of the sleeve, if there is one. A coat's too big, so its sleeves come down past the wrists.
+  const to = { tee: .68, dress: .72, overalls: .68, camo: .12, flannel: .12, coveralls: .1, coat: 0 }[t.kind] ?? null;
   g.fillStyle = look.skin; g.fillRect(p.x, y, p.w, h);
-  if (to) {
+  if (to !== null) {
     g.fillStyle = (t.sleeve ?? t.colors?.[0]); g.fillRect(p.x, y, p.w, h * (1 - to));
     g.fillStyle = 'rgba(8,6,10,.55)'; g.fillRect(p.x, y + h * (1 - to) - 2 * k, p.w, 3 * k);
     if (t.kind === 'flannel') { g.globalAlpha = .5; g.fillStyle = t.colors[1]; for (let i = 0; i < 3; i++) g.fillRect(p.x + (i + .1) * p.w / 3, y, p.w / 9, h * (1 - to)); for (let at = y; at < y + h * (1 - to); at += 26 * k) g.fillRect(p.x, at, p.w, 7 * k); g.globalAlpha = 1; }

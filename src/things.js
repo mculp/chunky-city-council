@@ -230,6 +230,16 @@ export function frog(kind = 'bullfrog', size = .08) {
   if (K.glands) parts.push(...both((s) => blob(s * .18 * wide, .39, .16, .06, .04, .1, K.glands, 6)));
   return parts.map((g) => g.scale(size, size, size));
 }
+// What moves on a live one sat in somebody's hands, at the same size as frog() and each with its own place on it: its throat, under its chin, which swells and goes
+// down as it breathes and is built round its own middle so that it swells in place, and its lids, which come down over its eyes when it blinks.
+export function frogThroat(kind = 'bullfrog', size = .08) {
+  const K = FROG_KINDS[kind] ?? FROG_KINDS.bullfrog, wide = K.stout ? 1.22 : 1, nose = K.nose ?? 1;
+  return { parts: [blob(0, 0, 0, .17 * wide, .065, .12, K.belly, 8).scale(size, size, size)], at: [0, .165 * size, (.31 + .06 * nose) * size] };
+}
+export function frogLids(kind = 'bullfrog', size = .08) {
+  const K = FROG_KINDS[kind] ?? FROG_KINDS.bullfrog, wide = K.stout ? 1.22 : 1;
+  return both((s) => blob(s * .15 * wide, .435, .315, .085, .085, .085, K.head ?? K.body, 6)).map((g) => g.scale(size, size, size));
+}
 
 // A low red cap for the top of a post
 export function cap(color = '#a82a2a') {

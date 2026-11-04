@@ -1,5 +1,6 @@
 {
   "ask": "Wanna see a frog?",
+  "answers": { "yes": "Yeah.", "another": "Got another one?", "later": "Later." },
   "frogs": {
     "Gerald": "This is Gerald. He's a bullfrog. He doesn't know that yet.",
     "Tuba": "This is Tuba. He's the loudest thing on Gallatin, and he knows it.",
@@ -15,10 +16,10 @@
     "Dumpling": "This is Dumpling. He's a toad. Don't tell him."
   },
   "he": ["Gerald", "Tuba", "Button", "Marbles", "Jellybean", "Banjo", "Dumpling"],
-  "after": [
-    { "say": "You can pet him with one finger. One.", "he": true },
-    { "say": "Kiss him if you want. Nothing happens. I checked.", "he": true },
-    { "say": "I'm not really here. The frogs are, though." }
+  "asks": [
+    { "ask": "Can I pet him?", "say": "You can pet him with one finger. One.", "her": { "ask": "Can I pet her?", "say": "You can pet her with one finger. One." } },
+    { "ask": "Is he a prince?", "say": "Kiss him if you want. Nothing happens. I checked.", "her": { "ask": "Is she a princess?", "say": "Kiss her if you want. Nothing happens. I checked." } },
+    { "ask": "Are you really here?", "say": "I'm not really here. The frogs are, though." }
   ],
   "quiet": "He liked it. He just doesn't show it.",
   "give": "Take Gerald. He knows now.",
