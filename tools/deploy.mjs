@@ -7,13 +7,16 @@
 //
 // Only what the game loads goes up: index.html, src/, data/ and audio/, without the tests or the notes beside them. It's a list
 // of what goes rather than of what stays, so that something new in the repo, like the notes about real people in docs/, can't
-// end up on the web by being forgotten. It goes to the game's own Vercel project as its live version, with this Mac's Vercel
-// sign-in. The portfolio that used to be at chunky.ms is in the other project, untouched.
+// end up on the web by being forgotten. A favicon.ico goes up beside them, which Chrome asks a real site for whatever icon its
+// page names: tools/favicon.mjs makes it from index.html's own tab icon, there and then, so it's always the icon that's going up.
+// It goes to the game's own Vercel project as its live version, with this Mac's Vercel sign-in. The portfolio that used to be at
+// chunky.ms is in the other project, untouched.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { favicon, iconOf } from './favicon.mjs';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const SITE = 'https://chunky.ms/', VERCEL = 'vercel@65.9.0', TEAM = 'team_ivvZR0r1i3i28k7gFppIlkzc', PROJECT = 'prj_v0aTWXr5ofi5Yzt0os3Lz04c9ntS';
@@ -37,6 +40,9 @@ const files = [];
     else files.push([r, statSync(path).size]);
   }
 })(dir, '');
+const icon = iconOf(readFileSync(join(dir, 'index.html'), 'utf8'));
+if (icon) { const made = await favicon(icon); writeFileSync(join(dir, 'favicon.ico'), made); files.push(['favicon.ico', made.length]); }
+else console.log('no favicon.ico: index.html\'s icon isn\'t an SVG written into the page');
 const bytes = files.reduce((n, [, size]) => n + size, 0);
 console.log(`${what}: ${files.length} files, ${(bytes / 1048576).toFixed(1)} MB`);
 if (process.argv.includes('--dry')) { for (const [f] of files) console.log(`  ${f}`); rmSync(dir, { recursive: true, force: true }); process.exit(0); }
