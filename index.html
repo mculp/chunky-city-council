@@ -614,15 +614,19 @@ const ASTRAL = { uStep: { value: 0 } };
 const ASTRAL_STEP = (step) => (reduceMotion ? '0.' : step);
 const astralRows = (px, step) => `{ float aM=mod(floor(gl_FragCoord.y/(2.*${px}))-${ASTRAL_STEP(step)},5.); if(aM<.5||(aM>1.5&&aM<2.5)) discard; }`;
 const astralWaver = (v, step) => `${v}.x+=sin(${v}.y*41.+${ASTRAL_STEP(step)}*1.9)*.007;`;
-function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = false, astral = false, headTip = false } = {}) {
-  const key = [color, px, chalk, tinted, cut, ghost, astral, headTip].join('|');
+// A line drawn through him (CHUNKY-171) only goes where he's in front of it and not over who it's round, which is what drawing the scene leaves in the stencil:
+// 1 where he's what you see, and 3 where the crowd would be but something's in front of them (HIS_MARK and CROWD_MARK)
+const THROUGH_LINE = { depthFunc: THREE.GreaterDepth, depthWrite: false, stencilWrite: true, stencilFunc: THREE.EqualStencilFunc, stencilRef: 1, stencilFuncMask: 3, stencilWriteMask: 0 };
+// `parts` is a body and its limbs put together, each instance drawing only its own part (iPart against aPart), with its own width of line (aPx)
+function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = false, astral = false, headTip = false, through = false, parts = false } = {}) {
+  const key = [color, px, chalk, tinted, cut, ghost, astral, headTip, through, parts].join('|');
   if (outlineMats.has(key)) return outlineMats.get(key);
   const uniforms = Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
     uColor: { value: new THREE.Color(color) }, uPx: { value: px }, uChalk: { value: chalk }, uStep: G.uStep, uRes: G.uRes, uPxScale: G.uPxScale, uMask: G.uMask, uSee: G.uSee, uSeeY: G.uSeeY, uHideRoof: G.uHideRoof, uAstralStep: ASTRAL.uStep
   });
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, fog: true, uniforms, userData: { outline: true },
-    defines: { ...(tinted && { TINTED: 1 }), ...(cut && { CUT: 1 }), ...(ghost && { GHOST: 1 }), ...(astral && { ASTRAL: 1 }), ...(headTip && { HEADTIP: 1 }) },
+    defines: { ...(tinted && { TINTED: 1 }), ...(cut && { CUT: 1 }), ...(ghost && { GHOST: 1 }), ...(astral && { ASTRAL: 1 }), ...(headTip && { HEADTIP: 1 }), ...(parts && { PARTS: 1 }) },
     vertexShader: `#include <hill_pars>
       uniform float uPx, uStep, uChalk, uPxScale, uAstralStep; uniform vec2 uRes;
       #ifdef TINTED
@@ -634,6 +638,9 @@ function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = fal
       #ifdef HEADTIP
       attribute float iHead, aBend;
       ${HEAD_TIP}
+      #endif
+      #ifdef PARTS
+      attribute float aPart, aPx, iPart;
       #endif
       #include <fog_pars_vertex>
       float hn(vec3 p){ return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453); }
@@ -665,8 +672,15 @@ function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = fal
         #ifdef TINTED
           vTint=instanceColor; boil*=clamp(9./clip.w,.4,1.);   // a long way off the line thins, or it's all you'd see of them
         #endif
-        clip.xy+=nc*uPx*uPxScale*boil*2./uRes*clip.w;
+        float px=uPx;
+        #ifdef PARTS
+          px=aPx;
+        #endif
+        clip.xy+=nc*px*uPxScale*boil*2./uRes*clip.w;
         gl_Position=clip;
+        #ifdef PARTS
+          if(abs(aPart-iPart)>.5) gl_Position=vec4(0.,0.,2.,1.);
+        #endif
         #ifdef CUT
           vSeeY=position.y; if(abs(aMat.z-uHideRoof.x)<.5||abs(aMat.z-uHideRoof.y)<.5) gl_Position=vec4(0.,0.,2.,1.);
         #endif
@@ -701,6 +715,7 @@ function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = fal
         #include <fog_fragment>
       }`
   });
+  if (through) Object.assign(m, THROUGH_LINE);
   outlineMats.set(key, m); return m;
 }
 function outline(mesh, color = INK, px = 1.6, chalk = 0, style) {
@@ -4349,6 +4364,18 @@ const broom = new THREE.Group(); hero.body.add(broom); broom.visible = false;
 
 // he stays clean during glitches: layer 1 is his shape for the mask pass, layer 2 his outlines, which draw themselves
 heroRoot.traverse(o => { o.layers.enable(1); if (o.material && o.material.userData.outline) o.layers.enable(2); });
+// and where he's what you see, his shape leaves 1 in the stencil, for the crowd drawn through him (CHUNKY-171). It's put on what he's drawn with only while it's him being drawn,
+// since some of that's shared with things that aren't him.
+const HIS_MARK = { stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc, stencilRef: 1, stencilWriteMask: 1, stencilZPass: THREE.ReplaceStencilOp };
+function marksHim(root) {
+  root.traverse((o) => {
+    if (!o.isMesh || o.material.userData?.outline || o.material.transparent) return;
+    const was = {};
+    o.onBeforeRender = (r, s, c, g, m) => { for (const k in HIS_MARK) { was[k] = m[k]; m[k] = HIS_MARK[k]; } };
+    o.onAfterRender = (r, s, c, g, m) => { Object.assign(m, was); };
+  });
+}
+marksHim(heroRoot);
 
 // pose the hero; limbs are redrawn 12 times a second (on twos), the body moves every frame
 const HP = { kind: 'hang', phase: 0, speed: 0, cut: 0, lag: 0, t: 0 };
@@ -4742,6 +4769,41 @@ const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
     }`
 }), CROWD_SHOWN);
 const crowdParts = [crowdBodies, crowdLines(crowdBodies, 2.8, crowdLine, { headTip: true }), crowdArms, crowdLines(crowdArms, 2.2, crowdLimbLine), crowdLegs, crowdLines(crowdLegs, 2, crowdLimbLine), crowdAura];
+// ---- the ones near him, through him (CHUNKY-171). The camera's behind him, so anyone of the crowd close in front of him is behind him on the screen: coming at him, reaching
+// for him, being hit and lying there. Anyone of them within THROUGH_NEAR of him has their outline drawn through him, in their own line, before a swing, during it and after it, with
+// reduced motion or without. Nobody further off and nothing else gets one. It's the one draw call more, and only with someone that near, so the crowd stays in eight:
+// drawing the scene leaves in the stencil where he's what you see (HIS_MARK) and where they'd be but something's in front of them (CROWD_MARK), and their outline's then
+// drawn after the scene (throughScene) where he's in front of it and not over them, which leaves the ring round them.
+// Their line, a shade down from what it is where they can be seen, so that it reads as behind him and never blooms over him the way the brightest of their lines would
+const THROUGH_NEAR = 4, THROUGH_INK = '#e0e0e0', throughScene = new THREE.Scene(); throughScene.fog = scene.fog;
+// Theirs: 0 wherever they're drawn, which takes him out where one's in front of him, and 3 wherever they'd be drawn but something's in front of them. They're drawn after
+// everything else that isn't see-through, so that he's there by then.
+const CROWD_MARK = { stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc, stencilRef: 3, stencilWriteMask: 3, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ZeroStencilOp };
+for (const m of [crowdBodies, crowdArms, crowdLegs]) { Object.assign(m.material, CROWD_MARK); m.renderOrder = 1; }
+// Their outlines, a body and four limbs to each of them, as instances of the three put together, each drawing only its own part, in one draw call
+const throughLine = (() => {
+  const geo = mergeGeometries([[crowdBody.geo, 2.8], [crowdArmGeo, 2.2], [crowdLegGeo, 2]].map(([g, px], k) => {
+    const n = g.attributes.position.count, each = (v) => new THREE.Float32BufferAttribute(new Float32Array(n).fill(v), 1), o = new THREE.BufferGeometry();
+    o.setAttribute('position', g.attributes.position); o.setAttribute('normal', g.attributes.normal); o.setAttribute('aBend', g.attributes.aBend ?? each(0)); o.setAttribute('aPart', each(k)); o.setAttribute('aPx', each(px));
+    o.setIndex(g.index); return o;
+  }));
+  geo.setAttribute('iPart', crowdAttr(CROWD_SHOWN * 5)); geo.setAttribute('iHead', crowdAttr(CROWD_SHOWN * 5));
+  const m = new THREE.InstancedMesh(geo, outlineMat(THROUGH_INK, 2.8, 1, { tinted: true, through: true, headTip: true, parts: true }), CROWD_SHOWN * 5);
+  m.instanceColor = crowdAttr(CROWD_SHOWN * 5, 3); m.frustumCulled = false; m.count = 0; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); throughScene.add(m); return m;
+})();
+// Which of crowdShown are near enough, and their parts copied over from how everyone's drawn
+let throughWho = [];
+function drawThrough() {
+  const P = player.pos, m = throughLine, to = m.instanceMatrix.array, { iPart, iHead } = m.geometry.attributes, tint = m.instanceColor; throughWho = [];
+  if (S.mode === 'town' && crowdGroup.visible) crowdShown.forEach((s, i) => { if (!s.seated && Math.hypot(s.x - P.x, s.z - P.z) < THROUGH_NEAR) throughWho.push(i); });
+  let n = 0;
+  const put = (of, j, part, line, head) => { to.set(of.instanceMatrix.array.subarray(j * 16, j * 16 + 16), n * 16); iPart.setX(n, part); iHead.setX(n, head); tint.setXYZ(n, line.getX(j), line.getY(j), line.getZ(j)); n++; };
+  for (const i of throughWho) {
+    put(crowdBodies, i, 0, crowdLine, crowdHead.getX(i));
+    for (const j of [2 * i, 2 * i + 1]) { put(crowdArms, j, 1, crowdLimbLine, 0); put(crowdLegs, j, 2, crowdLimbLine, 0); }
+  }
+  m.count = n; m.instanceMatrix.needsUpdate = iPart.needsUpdate = iHead.needsUpdate = tint.needsUpdate = true;
+}
 const _cc = new THREE.Color(), _cb = new THREE.Matrix4(), _cu = new THREE.Matrix4(), _cl = new THREE.Matrix4(), _cm = new THREE.Matrix4(), _cp = new THREE.Vector3(), _cn = new THREE.Vector3(), _cq = new THREE.Quaternion(), _cs = new THREE.Vector3(), _ce = new THREE.Euler();
 const GAIT = [3.6, 4.6, 9, 11, 16, 0, 10, 4.6];   // how quickly their limbs go, by state
 // How far over someone stands is their number, the angle at the hips in src/agents.js: 180° is stood up straight and 0° is folded right over. It's drawn at 90° plus half of it
@@ -4848,7 +4910,7 @@ function drawCrowd(step) {
   for (const m of crowdParts) m.count = crowdShown.length * (m.instanceMatrix.count / CROWD_SHOWN);
   drawFallen();
   crowdSnakes.count = crowdSnakeLine.count = snakeN; crowdSnakes.visible = crowdSnakeLine.visible = snakeN > 0; crowdSnakes.instanceMatrix.needsUpdate = true;
-  crowdWritten();
+  crowdWritten(); drawThrough();
 }
 // Whoever's driving goes with the vehicle, which moves every frame
 function drawSeated(step) { if (!crowdSeated) return; for (let i = 0; i < crowdSeated; i++) poseCrowd(crowdShown[i], i, step); crowdWritten(); }
@@ -5304,9 +5366,19 @@ function updateParticles(dt, M) {
 }
 
 // ================================================================ post: bloom, then a GIF pass (dither, tears, datamosh holds) that leaves him clean
-const composer = new EffectComposer(renderer);
+// its buffers have a stencil, for the crowd drawn through him
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, stencilBuffer: true }));
 composer.renderToScreen = false;
 composer.addPass(new RenderPass(scene, camera));
+// The outlines of the ones near him, through him (throughScene), drawn into what the scene's just been drawn into, with what that left in the stencil
+let throughOff = false;
+composer.addPass({
+  enabled: true, needsSwap: false, clear: false, renderToScreen: false, setSize() {}, dispose() {},
+  render(r, write, read) {
+    if (throughOff || !throughWho.length || S.mode !== 'town' || !heroRoot.visible) return;
+    const was = r.autoClear; r.autoClear = false; r.setRenderTarget(read); r.render(throughScene, camera); r.autoClear = was;
+  },
+});
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), .5, .45, .92); composer.addPass(bloom);
 composer.addPass(new OutputPass());
 const bufSize = new THREE.Vector2(); renderer.getDrawingBufferSize(bufSize);
@@ -5699,7 +5771,7 @@ const heroGerald = frogMesh(BEST); heroGerald.visible = false; heroGerald.scale.
 // How: his wrist out by his side at his chest, his hand flattened to this much of its height under him, and Gerald's feet this far over the middle of it,
 // which is on top of it
 const GERALD_HOLD = { at: new THREE.Vector3(-.44, -.06, .26), hint: new THREE.Vector3(-.8, -.4, -.3), flat: .4, sit: .04 };
-heroGerald.traverse((o) => { o.layers.enable(1); if (o.material?.userData.outline) o.layers.enable(2); });
+heroGerald.traverse((o) => { o.layers.enable(1); if (o.material?.userData.outline) o.layers.enable(2); }); marksHim(heroGerald);
 const freeGerald = frogMesh(BEST); freeGerald.visible = false; scene.add(freeGerald);
 let geraldGoing = null;
 S.items.gerald = toni.holding() ? 1 : 0;
@@ -8788,7 +8860,7 @@ if (location.hash === '#signs') openSignBoard();
 if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, farm: FARM, dock: DOCK, onDock, sound: SFX, singers, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, church: { house: CHURCH_HOUSE, at: CF.at, door: () => wallsOf(CHURCH_HOUSE, Y0).doors[0], steeple: churchSteeple, steeplePos: STEEPLE, steepleShown: () => churchSteepleOn.visible, us80: US80_CHURCH, us80Shown: () => us80Steeple.visible, roundWindow, rope: ROPE, bellInReach, ring: ringBell, ringing: () => bellLeft > 0, strokes: () => bellStrokes, BELL, pantry, PANTRY, today, owes: pantryOwes, shown: () => pantryCans.count, shelf: PANTRY_SHELF }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
-    mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, skillet: { tools: [hammer, batTool], side: () => swingSide, who: () => swingWho }, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
+    mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, skillet: { tools: [hammer, batTool], side: () => swingSide, who: () => swingWho, through: () => throughWho.map((i) => crowdShown[i]), frame(off) { throughOff = !!off; renderFrame(0); throughOff = false; } }, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
     // flung by what he's driving: the shoes that came off and how many are drawn, which way and how far each one's glow is drawn streaking, and the cast, where they are and whether anything can hit them
     fling: { shoes: () => shoeList.map((o) => ({ x: o.x, y: o.y, z: o.z, down: o.down, roll: o.roll })), drawnShoes: () => shoes.count, streak: (s) => { const i = crowdShown.indexOf(s), a = crowdAura.instanceMatrix.array; return i < 0 ? null : [a[i * 16 + 8], a[i * 16 + 9], a[i * 16 + 10]]; },
       cast: () => Object.entries(NPCS).filter(([, n]) => n.box).map(([id, n]) => ({ id, x: n.root.position.x, y: n.root.position.y, z: n.root.position.z, spot: [n.spot.x, n.spot.z], jumping: !!n.jump, solid: n.box[4] > -Infinity })), JUMP, loose },
