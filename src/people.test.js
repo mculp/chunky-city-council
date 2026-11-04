@@ -61,6 +61,9 @@ describe('the cast file', () => {
     for (const c of data.cast) walk(c.id);
     assert.deepEqual(Object.keys(data.dialogue).filter((id) => !seen.has(id)), []);
   });
+
+  // The owner, playing: "Miss Bobby just shows up as Bobby on the people list"
+  test('Miss Bobby is Miss Bobby in the people list too', () => assert.equal(data.cast.find((c) => c.id === 'bobby').short, 'Miss Bobby'));
 });
 
 describe('meters', () => {

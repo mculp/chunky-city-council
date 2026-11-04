@@ -10,7 +10,7 @@
   "cast": [
     { "id": "coop", "name": "Coop", "short": "Coop", "known": true },
     { "id": "rocky", "name": "Rocky", "short": "Rocky", "known": true },
-    { "id": "bobby", "name": "Miss Bobby", "short": "Bobby", "known": true },
+    { "id": "bobby", "name": "Miss Bobby", "short": "Miss Bobby", "known": true },
     { "id": "robby", "name": "Robby", "short": "Robby" }
   ],
   "ties": [
