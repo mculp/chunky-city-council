@@ -66,7 +66,7 @@ const hypot = Math.hypot, TRY = [0, .8, 1.6, 2.4, 3.1];
 function turn(from, to, k) { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return from + d * k; }
 
 // world: { blocked(x, z, y), water(x, z), floorAt(x, z), wander(s) -> [x, z], rand(), comeFrom(p) -> [x, z] or nothing, folks: src/agents.js's, or nothing and they're nobody,
-//          quiet(s) whether someone just come out has gone quiet, or nothing and nobody has }
+//          quiet(s) whether someone just come out has gone quiet, or nothing and nobody has, reaching(s) as one of them starts to reach for him, once for each time }
 // on: { grab(grab), free(), overrun(), spotted(s) when one of them sees through his act }
 export function createHorde(world, tuning = {}, on = {}) {
   const T = { ...TUNING, ...tuning }, all = [], active = [], noises = [], lights = [], zones = [], F = world.folks;
@@ -413,10 +413,11 @@ export function createHorde(world, tuning = {}, on = {}) {
     if (owed && (comeIn -= dt) <= 0) { const at = world.comeFrom?.(p); if (at) { h.add(at[0], at[1]); owed--; } comeIn = T.comeIn; }
     if (h.grab) { h.grab.x = p.x; h.grab.z = p.z; holdOn(dt, p); return; }
     // Close enough, they reach for him, and it takes them a moment to get hold. Whoever's been at it longest gets there first.
+    // The world hears of each of them once, as the hands go up, so that it can warn him without needing the body, which his hood hides coming straight at him.
     const can = mercy <= 0 && p.canGrab;
     let first = null;
     for (const s of active) {
-      if (can && (s.state === HUNTING || s.state === SWARM) && hypot(s.x - p.x, s.z - p.z) < T.grabReach) { s.reaching = (s.reaching ?? 0) + dt; if (s.reaching >= T.windUp && (!first || s.reaching > first.reaching)) first = s; }
+      if (can && (s.state === HUNTING || s.state === SWARM) && hypot(s.x - p.x, s.z - p.z) < T.grabReach) { const was = s.reaching ?? 0; s.reaching = was + dt; if (!was && s.reaching > 0) world.reaching?.(s); if (s.reaching >= T.windUp && (!first || s.reaching > first.reaching)) first = s; }
       else if (s.reaching) s.reaching = 0;
     }
     if (!first) return;

@@ -93,6 +93,20 @@ test('there are limits on one sound and on them all, and a phone has lower ones'
   assert.equal(n, 12); assert.equal(p.state().voices, 12);
 });
 
+test('a sound with a rate plays that much higher and shorter, on top of any rate the game asks for, and nothing else changes', () => {
+  const d = data(); Object.assign(d.cues['step.road'], { rate: 1.4, spread: 0 }); d.cues['ui.tap'].spread = 0;
+  const w = fakeWorld(), s = createSound(d, { win: w.win }); w.touch();
+  const rateOf = () => w.made.sources.at(-1).playbackRate.value, later = () => { w.made.ctx.currentTime += 1; };
+  assert.ok(s.play('step.road')); assert.equal(rateOf(), 1.4, 'its own');
+  later(); assert.ok(s.play('step.road', { rate: 1.5 })); assert.ok(Math.abs(rateOf() - 2.1) < 1e-9, `${rateOf()} with the game's on top`);
+  assert.ok(s.play('ui.tap')); assert.equal(rateOf(), 1, 'and a sound without one is as it was');
+});
+
+test('the groan as their hands go up is the hunting groan\'s takes played higher and shorter', () => {
+  const { cues } = JSON.parse(readFileSync(new URL('../data/sound-new.json', import.meta.url), 'utf8'));
+  assert.deepEqual(cues['groan.reach'].file, cues['groan.hunt'].file); assert.ok(cues['groan.reach'].rate > 1);
+});
+
 test('every sound the game asks for is on a sheet, and every one there can be made', () => {
   const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8'), made = JSON.parse(readFileSync(new URL('../data/sound-new.json', import.meta.url), 'utf8'));
   // A new sound only goes on the new sheet, since nothing writes over the old one. The game can't ask for it on the old sheet and be told off, so it has to be a loop, or go by way of playNew.
