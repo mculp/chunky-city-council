@@ -81,6 +81,29 @@ check('it is gravel from end to end', drive.off === 0, drive.off);
 await g(() => __game.step(.1));
 await snap('yard');
 
+// ---------------- the taxidermy sign at the road by the drive, facing the road. What's carved on it is only checked for what it isn't: there's a name, the word, and no number.
+// Then he walks into it and it stops him, and a truck driven into it from the road knocks it down.
+const sign = await g(() => {
+  const G = __game, S = G.compound.sign, P = G.player.pos, T = 1 / 30, mouth = G.map.lanes.filter((l) => measured.includes(l.id)).sort((a, b) => b.length - a.length)[0].pts[0];
+  const ends = [-1.2, 1.2].map((u) => [S.x + S.nz * u, S.z - S.nx * u]), front = (d) => [S.x + S.nx * d, S.z + S.nz * d];
+  const out = { mouth: +Math.hypot(S.x - mouth[0], S.z - mouth[1]).toFixed(1), off: ends.every(([x, z]) => !G.onRoad(x, z)), faces: G.onRoad(...front(7)) && !G.onRoad(...front(-7)), named: S.words.length === 2 && S.words[0].length > 2, word: S.words[1] === 'TAXIDERMY', number: S.words.some((w) => /\d/.test(w)), lit: S.board.material.emissiveIntensity > 0 };
+  G.place(...front(3)); G.sim(.1, .1); walkTo([front(-1)], .3, 3); out.stopped = +((P.x - S.x) * S.nx + (P.z - S.z) * S.nz).toFixed(2);
+  G.place(...front(5)); G.player.yaw = Math.atan2(-S.nx, -S.nz); G.look(Math.atan2(S.nx, S.nz), .05); G.step(1, T);
+  return out;
+});
+await snap('sign');
+check(`the taxidermy sign stands by the road ${sign.mouth} m from the mouth of the drive, off the road and the drive, facing the road, and lit a little`, sign.mouth < 12 && sign.off && sign.faces && sign.lit, sign);
+check('  carved with a name and TAXIDERMY, and no number', sign.named && sign.word && !sign.number, { named: sign.named, word: sign.word, number: sign.number });
+check(`  walking into it stops him ${sign.stopped} m short of it`, sign.stopped > .1 && sign.stopped < 1, sign.stopped);
+const knocked = await g(() => {
+  const G = __game, S = G.compound.sign, T = 1 / 30, v = G.vehicles.find((o) => o.kind === 'pickup' && !o.wrecked), [x, z] = [S.x + S.nx * 14, S.z + S.nz * 14];
+  G.getIn(v); v.x = x; v.z = z; v.y = G.floorAt(x, z); v.yaw = Math.atan2(-S.nx, -S.nz); v.f = v.s = 0; G.sim(T, T);
+  let t = 0; for (; t < 5 && !S.prop.down; t += T) { G.stick(0, 1); G.sim(T, T); }
+  G.stick(0, 0); for (let k = 0; k < 30; k++) G.sim(T, T); G.getOut(true); G.sim(.2, .2);
+  return { down: S.prop.down, t: +t.toFixed(1) };
+});
+check(`  and a truck driven into it from the road knocks it down (${knocked.t} s)`, knocked.down, knocked);
+
 // ---------------- no woods where it's been cleared
 const clear = await g(() => {
   const G = __game, trees = G.wreck.trees, C = G.compound, D = C.DECK, L = C.LAWN, spots = { deck: D.at(7.7, 4.6), lawn: L.at(5, 5.9), cinema: C.CINEMA.at(3, 3), cabin: true2(1058.6, 598.8), studio: true2(1045.9, 600.4) }, out = {};

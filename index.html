@@ -3463,6 +3463,69 @@ const STUDIO = 900020, CABIN = 900019;
   { const [x, z] = atTrue(979.3, 675.5); thing(out, 'digger', excavator(), x, z, -2.41, 6, { solid: [2.2, 2.2, 2], chip: '#d6a321' }); }
   flushBuckets(70);
 }
+// ---- the taxidermy sign at the road. The owner asked for it by name, so it's the one thing here that says whose it is, as it's carved on the listing's photo from
+// February 2018: two tall timber posts and a crossbar, a plain oval plaque hanging from the bar, and under that a board of weathered grey-green planks in a timber frame,
+// with the family's name in an arc over a buck and a doe and TAXIDERMY on a ribbon. The real one has the phone number on its last plank, and here that plank's bare. It's
+// 1.4 times life, as the other signs are, so it reads from the road, and it stands back off Pine Forest Rd south of the drive, facing the road.
+const TAXIDERMY_SIGN = (() => {
+  const words = ['MURPHEY', 'TAXIDERMY'], [x, z] = atTrue(860.4, 741.6), nx = -.962, nz = .273, ex = nz, ez = -nx, yaw = Math.atan2(nx, nz), q = new THREE.Quaternion().setFromAxisAngle(UP, yaw);
+  const at = (u, w) => [x + ex * u + nx * w, z + ez * u + nz * w], foot = Math.min(groundH(x, z), Y0), here = nearHere(860, 742, 160);
+  const wood = '#a8743f', cut = '#33251a', serif = 'Georgia, "Times New Roman", serif';
+  const face = textTex([], 1024, 800, '#76836f', wood, `700 104px ${serif}`, { after: (g) => {
+    // seven planks, each its own grey-green, weathered along the grain, with dark gaps between them
+    for (let i = 0; i < 7; i++) {
+      const y0 = i * 800 / 7, k = hash(i, 3, 171);
+      g.fillStyle = `hsl(${88 + k * 24}, ${5 + k * 5}%, ${36 + k * 8}%)`; g.fillRect(0, y0, 1024, 800 / 7);
+      for (let j = 0; j < 40; j++) { const a = hash(i, j, 172), b = hash(j, i, 173); g.fillStyle = `rgba(${a < .5 ? '232,230,212' : '36,40,32'},${.03 + b * .05})`; g.fillRect(hash(i * 40 + j, 1, 174) * 1024 - 100, y0 + 5 + a * 100, 60 + b * 260, 2 + b * 3); }
+      g.fillStyle = '#283026'; g.fillRect(0, y0, 1024, 5);
+    }
+    // what's carved shows the bare wood, with the shadow of the cut along its top and left
+    const carve = (draw) => { g.save(); g.translate(-3, -3); g.fillStyle = g.strokeStyle = cut; draw(); g.restore(); g.fillStyle = g.strokeStyle = wood; draw(); };
+    g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    const name = [...words[0]];
+    carve(() => name.forEach((ch, i) => { const a = -Math.PI / 2 + (i / (name.length - 1) - .5) * 1.15; g.save(); g.translate(512 + Math.cos(a) * 560, 690 + Math.sin(a) * 560); g.rotate(a + Math.PI / 2); g.fillText(ch, 0, 0); g.restore(); }));
+    // a buck side on, facing left, and a doe at his shoulder, smaller and without antlers
+    const deer = (cx, cy, s, antlers) => {
+      g.beginPath(); g.ellipse(cx, cy, 80 * s, 38 * s, 0, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.moveTo(cx - 62 * s, cy - 20 * s); g.lineTo(cx - 96 * s, cy - 78 * s); g.lineTo(cx - 76 * s, cy - 86 * s); g.lineTo(cx - 36 * s, cy - 20 * s); g.fill();
+      g.beginPath(); g.ellipse(cx - 98 * s, cy - 84 * s, 25 * s, 13 * s, -.3, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.moveTo(cx - 84 * s, cy - 94 * s); g.lineTo(cx - 66 * s, cy - 114 * s); g.lineTo(cx - 74 * s, cy - 90 * s); g.fill();
+      g.lineCap = 'round'; g.lineWidth = 11 * s;
+      for (const [lx, dx] of [[-56, -8], [-40, 4], [44, -6], [62, 8]]) { g.beginPath(); g.moveTo(cx + lx * s, cy + 18 * s); g.lineTo(cx + (lx + dx) * s, cy + 92 * s); g.stroke(); }
+      g.beginPath(); g.moveTo(cx + 76 * s, cy - 14 * s); g.lineTo(cx + 94 * s, cy - 28 * s); g.stroke();
+      if (antlers) for (const side of [0, 12]) {
+        const [ax, ay, bx, by, px, py] = [cx - 92 * s + side * s, cy - 96 * s, cx - 58 * s + side * s, cy - 140 * s, cx - 80 * s + side * s, cy - 186 * s], on = (t) => [(1 - t) ** 2 * ax + 2 * t * (1 - t) * bx + t * t * px, (1 - t) ** 2 * ay + 2 * t * (1 - t) * by + t * t * py];
+        g.lineWidth = 7 * s; g.beginPath(); g.moveTo(ax, ay); g.quadraticCurveTo(bx, by, px, py); g.stroke();
+        for (const t of [.3, .55, .8]) { const [tx, ty] = on(t); g.beginPath(); g.moveTo(tx, ty); g.lineTo(tx - 18 * s, ty - 26 * s); g.stroke(); }
+      }
+    };
+    carve(() => { deer(612, 468, 1.25, true); deer(382, 500, .98, false); });
+    // the ribbon, a gentle smile with a swallowtail at each end, and the word along it
+    const P0 = [232, 638], C = [512, 718], P1 = [792, 638], on = (t) => [0, 1].map((k) => (1 - t) ** 2 * P0[k] + 2 * t * (1 - t) * C[k] + t * t * P1[k]);
+    g.beginPath(); g.moveTo(232, 600); g.quadraticCurveTo(512, 680, 792, 600); g.lineTo(852, 588); g.lineTo(826, 638); g.lineTo(852, 688); g.lineTo(792, 676); g.quadraticCurveTo(512, 756, 232, 676); g.lineTo(172, 688); g.lineTo(198, 638); g.lineTo(172, 588); g.closePath();
+    g.fillStyle = '#c39462'; g.fill(); g.lineWidth = 5; g.strokeStyle = cut; g.stroke();
+    g.font = `700 64px ${serif}`; g.textBaseline = 'middle'; g.fillStyle = cut;
+    const word = [...words[1]];
+    word.forEach((ch, i) => { const t = .08 + .84 * i / (word.length - 1), [px, py] = on(t), dx = 2 * (1 - t) * (C[0] - P0[0]) + 2 * t * (P1[0] - C[0]), dy = 2 * (1 - t) * (C[1] - P0[1]) + 2 * t * (P1[1] - C[1]); g.save(); g.translate(px, py); g.rotate(Math.atan2(dy, dx)); g.fillText(ch, 0, 0); g.restore(); });
+  } });
+  // its face is lit a little, so it reads from the road at dusk. It and the plaque come down with the rest.
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(2.13, 1.67), new THREE.MeshStandardMaterial({ map: face, emissiveMap: face, emissive: '#ffffff', emissiveIntensity: .35, roughness: 1 }));
+  { const [fx, fz] = at(0, .045); board.position.set(fx, Y0 + 2.695, fz); board.rotation.y = yaw; here.add(board); }
+  const plaque = outline(new THREE.Mesh(new THREE.CylinderGeometry(.5, .5, .07, 28).rotateX(Math.PI / 2).scale(1.33, .78, 1), new THREE.MeshStandardMaterial({ color: '#9a5c38', roughness: .8 })), INK, 1.1);
+  { const [px, pz] = at(0, 0); plaque.position.set(px, Y0 + 4.14, pz); plaque.rotation.y = yaw; here.add(plaque); }
+  const timber = new THREE.MeshStandardMaterial({ color: '#8a6a46', roughness: 1 }), planks = new THREE.MeshStandardMaterial({ color: '#6f7b68', roughness: 1 });
+  const prop = breakable('sign', 3, () => {
+    for (const u of [-1.18, 1.18]) { const [px, pz] = at(u, 0); addBox(timber, px, (foot + Y0 + 4.9) / 2, pz, .21, Y0 + 4.9 - foot, .21, 1.1, q); }
+    { const [cx, cz] = at(0, 0); addBox(timber, cx, Y0 + 4.8, cz, 3.08, .2, .2, 1.1, q); }
+    for (const u of [-.42, .42]) { const [hx, hz] = at(u, 0); addBox(poleMat, hx, Y0 + 4.615, hz, .03, .17, .03, 0, q); }
+    { const [bx, bz] = at(0, 0); addBox(planks, bx, Y0 + 2.695, bz, 2.27, 1.81, .06, 1, q); }
+    for (const [u, y, su, sy] of [[0, 3.585, 2.35, .11], [0, 1.805, 2.35, .11], [-1.12, 2.695, .11, 1.89], [1.12, 2.695, .11, 1.89]]) { const [fx, fz] = at(u, .03); addBox(timber, fx, Y0 + y, fz, su, sy, .12, 1, q); }
+    const [ax, az] = at(-1.18, 0), [bx, bz] = at(1.18, 0), w = [ax, az, bx, bz, Y0 + 3.64, .12]; PROP_WALLS.push(w); PROP.walls.push(w);
+    PROP.objs.push(board, plaque);
+  }, { rigid: true, chip: '#6f7b68', foot: [x, z] });
+  flushBuckets(160);
+  return { x, z, nx, nz, prop, board, plaque, words };
+})();
 // ================================================================ the yard off True Light Rd
 // Its buildings are in data/structures.json and its pool's in data/water.json. This is what's round them: the oval of concrete, the trampoline, the yard light, the net and the gear in the little shed. Where everything but the net goes was measured on the aerial, in true metres.
 clearing(-1545, -828, -1494, -745, 5, true); clearing(-1568, -790, -1530, -750, 5, true); clearing(-1558, -812, -1535, -785, 4, true); clearing(-1560, -745, -1494, -690, 6, true); clearing(-1590, -690, -1494, -640, 6, true);
@@ -8885,7 +8948,7 @@ if (TEST) {
     THREE, hills: { at: HILLS.at, slope: HILLS.slope, follow: HILLS.follow, terraces: HILLS.terraces, tracks: HILLS.tracks, here: () => HILL.uHillHere.value, uniforms: HILL, flat: hillsFlat, skyline },
     stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, STONE_CLIP, WORDS_SLAB, GRAVE_TURN, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead },
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },
-    compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, screen: () => screenMesh, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach },
+    compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, screen: () => screenMesh, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach, sign: TAXIDERMY_SIGN },
     lures: { LYING, lyingNear, flying, popping, ALARMS, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
     horde, folks, traffic, homes: HOMES, putBack, HOME: { SEE: HOME_SEE, PUT: HOME_PUT }, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, horns: hornLog, blasts: () => blastsBlown, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, kept: putBack.length, roused: horde.active.filter((s) => s.state === ROUSED).length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf,
     // the river's, for the tests: which way it flows and where it brings someone up, and what's drawn of someone soaked: how soaked the graphics card has them, the snakes on sleeves and the ones falling
