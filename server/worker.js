@@ -26,7 +26,7 @@ export default {
       const bill = () => env.BILL.get(env.BILL.idFromName('chunky'));
       talk ??= createTalk({
         fetch: (...a) => fetch(...a), key: env.OPENROUTER_KEY, url: env.OPENROUTER_URL || TALK_URL,
-        cap: env.CAP_USD === undefined ? 5 : Number(env.CAP_USD), origins: (env.ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean),
+        cap: env.CAP_USD === undefined ? 20 : Number(env.CAP_USD), origins: (env.ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean),
         phoneLimit: async (key) => (await env.PHONE.limit({ key })).success,
         placeLimit: async (key) => (await env.PLACE.limit({ key })).success,
         bill: { spent: (month) => bill().spent(month), add: (month, cost) => bill().add(month, cost) },

@@ -96,7 +96,7 @@ async function askModel({ fetch, url, key, model, messages, wait, clock }) {
 // for pages that are somewhere different each time, like a test's on this machine), the two limits (each is told a key and says
 // whether it may go on) and the bill (a month's spent, and adding to it, which says the new total). It remembers what the month's
 // spent for up to a minute, so most lines don't wait on the bill, and each line's cost goes on the bill after the phone has its answer.
-export function createTalk({ fetch, key, cap = 5, origins = [], url = TALK_URL, wait = TALK.wait, clock = Date.now, phoneLimit, placeLimit, bill }) {
+export function createTalk({ fetch, key, cap = 20, origins = [], url = TALK_URL, wait = TALK.wait, clock = Date.now, phoneLimit, placeLimit, bill }) {
   // a cap that isn't a sum of money is no money at all, never no limit
   if (!(typeof cap === 'number' && Number.isFinite(cap) && cap >= 0)) cap = 0;
   const answers = typeof origins === 'function' ? origins : (o) => origins.includes(o);

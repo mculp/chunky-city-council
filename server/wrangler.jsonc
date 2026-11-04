@@ -14,7 +14,8 @@
     { "name": "PLACE", "namespace_id": "1072", "simple": { "limit": 30, "period": 60 } }
   ],
   "vars": {
-    "CAP_USD": "5",
+    // the month's cap in dollars, which the owner chose: $20
+    "CAP_USD": "20",
     "ORIGINS": "https://chunky.ms,https://www.chunky.ms,https://chunky-survival.vercel.app,http://localhost:8000,http://127.0.0.1:8000"
   },
   "observability": { "enabled": true }
