@@ -10,6 +10,7 @@
 //   (horde and map are in nearly every tool, so they'd pick everything)
 // - the sound checks, for anything under audio/ or with sound in its name
 // - talk:host, for the talk server's own files in server/
+// - talk, for server/talk.js and server/index.js, whose talk server on this machine it plays against
 // - town:host, for the town's own files in server/ and the Worker that hosts it
 // - net, for the town's own files in server/ and the name check in src/names.js
 // - for index.html, the checks named in its changed lines, but for names it uses everywhere, and the sound checks,
@@ -94,6 +95,7 @@ if (args.includes('--changed')) {
       if (toolOf(c) === f) add(c, f);
       if ((f.startsWith('audio/') || /sound/.test(f)) && c.name.startsWith('sound')) add(c, f);
       if ((/^server\/(talk|worker|wrangler)\b/.test(f) || f === 'tools/wrangler-dev.mjs') && c.name === 'talk:host') add(c, f);
+      if (/^server\/(talk|index)\b/.test(f) && c.name === 'talk') add(c, f);
       if ((/^server\/(town|host|worker|wrangler)\b/.test(f) || f === 'tools/wrangler-dev.mjs') && c.name === 'town:host') add(c, f);
       if ((/^server\/(town|index|host)\b/.test(f) || f === 'src/names.js') && c.name === 'net') add(c, f);
     }
