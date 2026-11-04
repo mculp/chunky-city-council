@@ -102,6 +102,18 @@ body.talking #mini,body.talking #miniName{visibility:hidden}
 #dialog .opts{display:flex;flex-direction:column;gap:8px}
 #dialog .opts button{text-align:left;background:rgba(255,255,255,.05);border:1px solid var(--line);padding:11px 12px;font-size:14px;line-height:1.35}
 #dialog .opts button:hover,#dialog .opts button:focus-visible{border-color:var(--rust);background:rgba(236,128,58,.12)}
+#dialog .heard{font-size:13px;line-height:1.4;color:var(--dusk);font-style:italic}
+#dialog .heard::before{content:'— '}
+#dialog .say.waiting::after{content:'…';display:inline-block;animation:thinking 1.2s ease-in-out infinite}
+@keyframes thinking{50%{opacity:.25}}
+@media (prefers-reduced-motion: reduce){#dialog .say.waiting::after{animation:none}}
+#dialog .care{border:1px solid var(--rust);background:rgba(236,128,58,.08);padding:10px 12px;display:flex;flex-direction:column;gap:8px;font-size:14px;line-height:1.45;-webkit-user-select:text;user-select:text}
+#dialog .care-name{font-family:var(--f-display);font-size:15px;color:var(--cream)}
+#dialog .care-links{display:flex;flex-wrap:wrap;gap:8px}
+#dialog .care-links a{font-family:var(--f-display);font-size:14px;letter-spacing:.03em;color:var(--ink);background:var(--cream);border:3px solid var(--ink);box-shadow:0 3px 0 var(--ink);padding:9px 14px;text-decoration:none}
+#dialog #dType input{width:100%;box-sizing:border-box;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--cream);font:inherit;font-size:14px;padding:10px 12px;-webkit-user-select:text;user-select:text}
+#dialog #dType input:focus{outline:none;border-color:var(--rust)}
+#dialog [hidden]{display:none!important}
 .ctl{position:fixed;z-index:5;bottom:calc(env(safe-area-inset-bottom, 0px) + 22px);display:none}
 #stick{left:calc(max(16px, env(safe-area-inset-left, 0px)) + 6px);width:132px;height:132px;border-radius:50%;border:2px solid rgba(241,230,207,.35);background:rgba(10,7,14,.35);touch-action:none}
 #knob{position:absolute;left:50%;top:50%;width:58px;height:58px;margin:-29px 0 0 -29px;border-radius:50%;background:rgba(241,230,207,.88);box-shadow:0 0 0 3px var(--ink);pointer-events:none}
@@ -196,7 +208,10 @@ body.talking #mute,body.talking #levels,body.talking #levelsBox{visibility:hidde
   <div class="map-head"><h2>Chunky,<br><span>Mississippi</span></h2><div class="obj" id="mapObj" hidden></div></div>
   <div class="map-btns"><button id="mapIn" aria-label="Closer">+</button><button id="mapOut" aria-label="Further out">−</button><button id="mapMe" aria-label="Back to where you are">ME</button><button id="mapX" aria-label="Close the map">BACK</button></div>
 </div>
-<div id="dialog" hidden><div class="box"><div class="who" id="dWho"></div><div class="say" id="dSay"></div><div class="opts" id="dOpts"></div></div></div>
+<div id="dialog" hidden><div class="box"><div class="who" id="dWho"></div><div class="heard" id="dHeard" hidden></div><div class="say" id="dSay"></div>
+  <div class="care" id="dCare" hidden><div class="care-name" id="dCareName"></div><div id="dCareHow"></div><div class="care-links"><a id="dCall" href="tel:988"></a><a id="dSms" href="sms:988"></a><a id="dChat" target="_blank" rel="noopener"></a></div><div id="dCareDanger"></div></div>
+  <div class="opts" id="dOpts"></div>
+  <form id="dType" hidden autocomplete="off"><input id="dTyped" maxlength="160" placeholder="Or say something" aria-label="Say something" enterkeyhint="send" spellcheck="false"></form></div></div>
 <div class="panel" id="title">
   <div class="pbox">
     <h1>Chunky <span>2026</span></h1>
@@ -258,6 +273,7 @@ import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/
 import { FROGS, BEST, TONI, createToni, sayFrog, forgetToni } from './src/toni.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
 import { createPantry, PANTRY } from './src/pantry.js';
+import { createTalk, talkUrl, inDistress, changesNothing, LIMITS as TALK_LIMITS } from './src/talk.js';
 import { makeLight, stepLight, lightAt } from './src/light.js';
 
 const $ = (id) => document.getElementById(id);
@@ -5217,6 +5233,8 @@ const input = { x: 0, y: 0, a: false, b: false, run: false, aEdge: false, bEdge:
 let shambling = false;
 const keys = new Set();
 addEventListener('keydown', (e) => {
+  // talking on a laptop, any key but an answer's number starts him typing to them
+  if (S.mode === 'dialog' && !$('dType').hidden && e.key.length === 1 && !/^[1-4]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) { $('dTyped').focus(); e.stopImmediatePropagation(); return; }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   const k = e.key.toLowerCase(); if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; if (k === 'f') input.sEdge = true; if (k === 'q') input.cEdge = true; if (k === 'r') input.nEdge = true; if (k === 'c') input.hEdge = true; }
   keys.add(k);
@@ -5323,6 +5341,9 @@ const S = { mode: 'title', hp: 3, beans: 0, gas: 0, hand: null, items: {}, flags
 let saveStore = null; try { saveStore = localStorage; mouse.speed = clamp(+saveStore.getItem('chunky.mouseSpeed') || 1, MOUSE.slowest, MOUSE.fastest); } catch { /* not saved */ }
 const people = createPeople(await (await fetch('data/cast.json')).json(), { store: saveStore });
 Object.assign(S.flags, people.flags());
+// Their own words (CHUNKY-107): src/talk.js and data/talk.json. The game's own pages ask the talk server, and ?test asks nothing until a test says where.
+const talk = createTalk({ data: await (await fetch('data/talk.json')).json(), store: saveStore, fetch: (...a) => window.fetch(...a) });
+if (!TEST) talk.on(talkUrl(talk.data, location));
 // The church's pantry: what's on its shelves comes and goes with the church signs' days. data/cast.md says how.
 const pantry = createPantry({ store: saveStore }), today = () => (signNow === null ? dayOf() : dayOf(new Date(signNow)));
 // What she'd give him for the steps. Until Chapter 1's done she always has his three, or he couldn't get to twelve.
@@ -5675,26 +5696,128 @@ $('retry').addEventListener('click', () => {
   else if (S.flags.bridgeStarted) startBridge(); else startSwim(true);
 });
 
-// ---------------- dialogue: the words and what they do are in data/cast.json
+// ---------------- dialogue: the words and what they do are in data/cast.json, and their own words, when there are any, come through src/talk.js
 const ACTIONS = { sweep: () => startSweep() };
+// This visit, while he's talking to someone: who, what's been said in their own words, what that's done to how they feel about him, what
+// they said last, to come back to, and whether they've stepped out of the game for him
+let convo = null;
+// What someone who'd say something new would say when he walks up, asked as he comes near, so that it's there when he talks to them. It's
+// asked once each time he comes near, so after talking to them he has to have been away first.
+const early = new Map(), AWAY = 12, NEAR = 9;
+const comeBack = new Set(talk.data.who);
+const onPlayed = (when) => people.check(when, played);
+// Whether someone would say something new: they talk, the server's there, and all they'd say is a written line they've said to him
+// before, that changes nothing. The story's lines are always the written ones.
+const wouldSayNew = (who, line = people.line(who, played)) => talk.ready() && talk.talks(who) && talk.mind(who).said.includes(line.say) && changesNothing(line.do, { check: onPlayed, flags: S.flags });
+// What's going on, for whoever he's talking to: his beans, what he's carrying, what's happened, and whether the crowd's out
+function talkHere() {
+  const H = talk.data.happened, carrying = [];
+  if (S.gas) carrying.push(S.gas === 1 ? 'a gas can' : `${S.gas} gas cans`);
+  for (const [k, name] of Object.entries(LOOT_NAMES)) if (S.items[k] > 0) carrying.push(`${S.items[k]} ${name.toLowerCase()}`);
+  if (S.flags.bat) carrying.push('a bat with tape on the grip');
+  const happened = [...Object.keys(H.flags).filter((f) => S.flags[f]).map((f) => H.flags[f]), ...Object.keys(H.items).filter((k) => S.items[k] > 0).map((k) => H.items[k])];
+  return { beans: S.beans, carrying, happened, tonight: crowdOut ? talk.data.tonight : '' };
+}
+{
+  const c = talk.data.care;
+  $('dCareName').textContent = c.lifeline; $('dCareHow').textContent = c.how; $('dCareDanger').textContent = c.danger;
+  $('dCall').textContent = c.call; $('dSms').textContent = c.text; $('dChat').textContent = c.chat; $('dChat').href = c.chatUrl;
+  // a phone can call and text from here, and a laptop has the chat
+  $('dCall').hidden = $('dSms').hidden = !touchUI;
+}
 function openDialog(id) {
   // after Chapter 1 her steps want sweeping again each day
   if (S.flags.ended) S.flags.swept = pantry.sweptOn(today());
-  const node = people.line(id, played); people.meet(node.whoId); people.apply(node.do, played); SFX.play('ui.tap');
-  if (S.mode !== 'dialog') faceWhoever(NPCS[node.whoId]);
+  const node = people.line(id, played), who = node.whoId;
+  if (S.mode !== 'dialog' || convo?.who !== who) { convo = { who, turns: [], moved: {}, last: null, care: false }; comeBack.delete(who); }
+  const own = id === who && !convo.care && (!!convo.last || wouldSayNew(who, node));
+  people.meet(who); people.apply(node.do, played); SFX.play('ui.tap');
+  if (S.mode !== 'dialog') faceWhoever(NPCS[who]);
   S.mode = 'dialog'; HP.speed = 0; $('dialog').hidden = false; prompt(null);
-  $('dWho').textContent = node.who; $('dSay').textContent = node.say;
+  $('dWho').textContent = node.who; $('dHeard').hidden = true; $('dCare').hidden = true;
+  if (own) ownWords(node); else sayWritten(node);
+}
+// The written line, and the written answers to it, as they've always been
+function sayWritten(node) {
+  waiting(false); showType(false);
+  $('dSay').textContent = node.say;
+  if (talk.talks(node.whoId)) talk.said(node.whoId, node.say);
+  setOpts(node.opts.map((opt) => ({ say: opt.say, act: () => { if (opt.do) { closeDialog(); ACTIONS[opt.do](); } else if (opt.to) openDialog(opt.to); else closeDialog(); } })));
+}
+function setOpts(list) {
   const box = $('dOpts'); box.innerHTML = '';
-  node.opts.forEach((opt, i) => {
-    const b = document.createElement('button'); b.textContent = (touchUI ? '' : (i + 1) + '. ') + opt.say;
-    b.addEventListener('click', () => {
-      if (opt.do) { closeDialog(); ACTIONS[opt.do](); }
-      else if (opt.to) openDialog(opt.to); else closeDialog();
-    });
+  list.forEach((o, i) => {
+    const b = document.createElement('button'); b.textContent = (touchUI ? '' : (i + 1) + '. ') + o.say;
+    b.addEventListener('click', o.act);
     box.appendChild(b);
   });
   hudVitals();
-  setTimeout(() => { const f = box.querySelector('button'); if (f && !touchUI) f.focus(); }, 30);
+  setTimeout(() => { const f = box.querySelector('button'); if (f && !touchUI && document.activeElement !== $('dTyped')) f.focus(); }, 30);
+}
+// While they think: nothing in the box yet, and only Later. to press
+function waiting(on) {
+  $('dSay').classList.toggle('waiting', on);
+  if (on) { $('dSay').textContent = ''; showType(false); setOpts([{ say: 'Later.', act: closeDialog }]); }
+}
+// On a laptop he can type instead, while they're talking in their own words
+function showType(on) { $('dType').hidden = !on; if (on) $('dTyped').value = ''; }
+// What they say when he walks up: what was asked as he came near, or what's asked now, and their written line if nothing new comes in time.
+// Coming back to them from something they told him, it's what they said last.
+function ownWords(node) {
+  const who = node.whoId, visit = convo;
+  if (visit.last) { showOwn(node, visit.last); return; }
+  waiting(true);
+  const pre = early.get(who); early.delete(who);
+  (pre && time - pre.at < 90 ? pre.answer : talk.ask(who, { here: talkHere() })).then((got) => {
+    if (convo !== visit || S.mode !== 'dialog') return;
+    if (got.reply?.say) { took(who, got.reply); showOwn(people.line(who, played), visit.last); } else sayWritten(node);
+  });
+}
+// What they've said goes into what they remember, and anything it does to how they feel about him, a point each way at most a visit
+function took(who, r, heard = null) {
+  if (heard) convo.turns.push({ role: 'user', content: `He says: "${heard}"` });
+  convo.turns.push({ role: 'assistant', content: JSON.stringify({ say: r.say }) });
+  talk.said(who, r.say);
+  if (r.remember) talk.note(who, r.remember);
+  for (const e of r.do) {
+    const m = e.meter.split('.')[1], was = convo.moved[m] ?? 0;
+    if (Math.abs(was + e.by) <= 1) { convo.moved[m] = was + e.by; people.apply([e], played); }
+  }
+  convo.last = { say: r.say, replies: r.replies };
+}
+// Their own words, and his answers: the written ones that lead somewhere, which always stay, then theirs, up to three in all, then Later.
+function showOwn(node, last) {
+  waiting(false);
+  $('dSay').textContent = last.say;
+  const routes = node.opts.filter((o) => o.to || o.do).slice(0, TALK_LIMITS.answers);
+  setOpts([
+    ...routes.map((opt) => ({ say: opt.say, act: () => { if (opt.do) { closeDialog(); ACTIONS[opt.do](); } else openDialog(opt.to); } })),
+    ...last.replies.slice(0, TALK_LIMITS.answers - routes.length).map((t) => ({ say: t, act: () => answer(t) })),
+    { say: 'Later.', act: closeDialog },
+  ]);
+  showType(!touchUI && talk.ready());
+}
+// What he says back, on a button or typed. Anything typed that sounds like he's really not okay is answered by the game itself, before
+// anything's sent, and anything else is asked about, with something they'd say any time if nothing new comes in time.
+function answer(text, typed = false) {
+  const visit = convo, who = visit.who;
+  if (typed && inDistress(text, talk.data)) { stepOut(); return; }
+  $('dHeard').textContent = text; $('dHeard').hidden = false;
+  waiting(true);
+  talk.ask(who, { here: talkHere(), turns: visit.turns, heard: text }).then((got) => {
+    if (convo !== visit || S.mode !== 'dialog') return;
+    if (got.reply?.care && typed) { stepOut(); return; }
+    if (got.reply?.say) { took(who, got.reply, text); showOwn(people.line(who, played), visit.last); return; }
+    const mind = talk.mind(who), spare = talk.data.people[who].spare.find((l) => !mind.said.includes(l)) ?? people.line(who, played).say;
+    took(who, { say: spare, do: [], remember: '', replies: [] }, text);
+    showOwn(people.line(who, played), visit.last);
+  });
+}
+// He sounded like he's really not okay: they step out of the game and say so, the 988 Lifeline's there, and nothing more is asked of anyone
+function stepOut() {
+  convo.care = true; waiting(false); showType(false);
+  $('dHeard').hidden = true; $('dSay').textContent = talk.data.care.say; $('dCare').hidden = false;
+  setOpts([{ say: talk.data.care.back, act: closeDialog }]);
 }
 // He turns to them, and the camera goes over whichever shoulder has room. With his back to a wall, it goes over theirs and looks at him.
 function faceWhoever(n) {
@@ -5710,7 +5833,16 @@ function shoulderFor(N, dirs = [1, -1], shape = TALK) {
   for (const k of [1, .8, .62, .45]) for (const dir of dirs) for (const side of [1, -1]) if (clear(dir > 0 ? P : N, dir, side, k)) return { side, k, dir };
   return { side: 1, k: .45, dir: 1 };
 }
-function closeDialog() { $('dialog').hidden = true; if (S.mode === 'dialog') S.mode = 'town'; townObjective(); }
+function closeDialog() {
+  $('dialog').hidden = true; $('dCare').hidden = true; waiting(false); showType(false);
+  // a visit's counted once it's over, so that what's asked while it's going on says how many came before it
+  if (convo && talk.talks(convo.who)) talk.visited(convo.who);
+  convo = null;
+  if (S.mode === 'dialog') S.mode = 'town'; townObjective();
+}
+// on a laptop, typing to them: Enter says it, and nothing typed gets to the game's own keys
+for (const kind of ['keydown', 'keyup']) $('dTyped').addEventListener(kind, (e) => { e.stopPropagation(); if (kind === 'keydown' && e.key === 'Escape') $('dTyped').blur(); });
+$('dType').addEventListener('submit', (e) => { e.preventDefault(); const t = $('dTyped').value.replace(/\s+/g, ' ').trim().slice(0, TALK_LIMITS.typed); if (t && convo && S.mode === 'dialog') answer(t, true); });
 const street = (id) => MAP.roadById.get(id).name;
 const standing = (npc) => ({ x: npc.root.position.x, z: npc.root.position.z });
 // Where the next beans are: whoever or whatever's nearest. Someone you're standing next to has already had their say.
@@ -7654,6 +7786,12 @@ function tick(dt, draw = true) {
       // Once he's asked, the button by Robby is for the flies: he's said all he's going to, and it's the only button a phone has
       const lot = Math.hypot(ROBBY.x - player.pos.x, ROBBY.z - player.pos.z), fliesToDo = S.flags.robbySaid && fliesLeft > 0;
       for (const [id, n] of Object.entries(NPCS)) { if (id === 'robby' && fliesToDo) continue; const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z); if (d < nd) { nd = d; near = id; } }
+      // whoever'd say something new is asked what as he comes near, so that it's there when he talks to them
+      for (const who of talk.data.who) {
+        const n = NPCS[who], d = n ? Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z) : Infinity;
+        if (d > AWAY) comeBack.add(who);
+        else if (d < NEAR && comeBack.has(who) && wouldSayNew(who)) { comeBack.delete(who); early.set(who, { at: time, answer: talk.ask(who, { here: talkHere() }) }); }
+      }
       const ride = near ? null : vehicleInReach();
       const meat = !near && !ride && skillet.visible && Math.hypot(HEARTH.x - player.pos.x, HEARTH.z - player.pos.z) < 2.2;
       const door = !near && !ride && !meat && atGasDoor();
@@ -8022,7 +8160,7 @@ if (TEST) {
     // the same as step without drawing, for walking long distances
     sim(seconds = 1 / 60, dt = 1 / 60) { paused = true; for (let i = 0, n = Math.max(1, Math.round(seconds / dt)); i < n; i++) tick(dt, false); return this.state(); },
     state() {
-      return { mode: S.mode, time, hp: S.hp, beans: S.beans, people: people.snapshot(), items: { ...S.items }, flags: { ...S.flags }, kind: HP.kind, cut: HP.cut, pos: player.pos.toArray(), yaw: player.yaw, stamina: player.stamina, grounded: player.grounded, hero: heroRoot.position.toArray(), cam: camera.position.toArray(), burst: burstOn, uBurst: G.uBurst.value, obj: $('obj').textContent, toast: $('toast').classList.contains('show') ? $('toast').textContent : '', card: $('card').classList.contains('show') ? $('cardH').textContent : '', prompt: $('prompt').hidden ? '' : $('prompt').textContent, drive: driving ? { kind: driving.kind, x: driving.x, y: driving.y, z: driving.z, yaw: driving.yaw, f: driving.f, s: driving.s, speed: speedOf(driving), hp: driving.hp, wrecked: driving.wrecked, drowned: driving.drowned, grounded: driving.grounded } : null, dialog: $('dialog').hidden ? null : { who: $('dWho').textContent, say: $('dSay').textContent, opts: [...$('dOpts').children].map(b => b.textContent) } };
+      return { mode: S.mode, time, hp: S.hp, beans: S.beans, people: people.snapshot(), items: { ...S.items }, flags: { ...S.flags }, kind: HP.kind, cut: HP.cut, pos: player.pos.toArray(), yaw: player.yaw, stamina: player.stamina, grounded: player.grounded, hero: heroRoot.position.toArray(), cam: camera.position.toArray(), burst: burstOn, uBurst: G.uBurst.value, obj: $('obj').textContent, toast: $('toast').classList.contains('show') ? $('toast').textContent : '', card: $('card').classList.contains('show') ? $('cardH').textContent : '', prompt: $('prompt').hidden ? '' : $('prompt').textContent, drive: driving ? { kind: driving.kind, x: driving.x, y: driving.y, z: driving.z, yaw: driving.yaw, f: driving.f, s: driving.s, speed: speedOf(driving), hp: driving.hp, wrecked: driving.wrecked, drowned: driving.drowned, grounded: driving.grounded } : null, dialog: $('dialog').hidden ? null : { who: $('dWho').textContent, say: $('dSay').textContent, opts: [...$('dOpts').children].map(b => b.textContent), heard: $('dHeard').hidden ? '' : $('dHeard').textContent, care: !$('dCare').hidden, typing: !$('dType').hidden, waiting: $('dSay').classList.contains('waiting') } };
     },
     // phases by name, set up the way play reaches them
     jump(phase) {
@@ -8042,6 +8180,13 @@ if (TEST) {
     key(k, down = true) { k = k.toLowerCase(); if (down) { if (!keys.has(k)) { if (k === 'e' || k === 'enter') input.aEdge = true; if (k === ' ') input.bEdge = true; if (k === 'f') input.sEdge = true; if (k === 'q') input.cEdge = true; if (k === 'r') input.nEdge = true; if (k === 'c') input.hEdge = true; } keys.add(k); } else keys.delete(k); },
     stick(x, y) { touchStick.set(x, y); },
     choose(i) { $('dOpts').children[i].click(); return this.state(); },
+    // their own words: where the talk server is, what each of them remembers, what's been asked as he came near, this visit, and typing to them
+    talk: {
+      on(url) { talk.on(url); early.clear(); }, ready: () => talk.ready(), mind: (who) => JSON.parse(JSON.stringify(talk.mind(who))), forget() { talk.forget(); early.clear(); }, AWAY,
+      settled: () => talk.settled(), early: () => [...early.keys()], said: (who, line) => talk.said(who, line),
+      visit: () => (convo ? { who: convo.who, turns: convo.turns.length, moved: { ...convo.moved }, care: convo.care } : null),
+      type(text) { $('dTyped').value = text; $('dType').requestSubmit(); return this; }, data: talk.data, LIMITS: TALK_LIMITS,
+    },
     burst(pow = 1, dur = .5, hold = true, fine = true) { triggerBurst(pow, dur, hold, fine); },
     render(dt = 1 / 60) { renderFrame(dt); },
     calls() { const i = renderer.info; i.autoReset = false; i.reset(); tick(1 / 60); const r = { calls: i.render.calls, triangles: i.render.triangles, textures: i.memory.textures, geometries: i.memory.geometries }; i.autoReset = true; return r; }

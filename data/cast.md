@@ -8,6 +8,8 @@ Robby's line is the owner's, word for word, and the whole point of it is that th
 
 Who these people are, and what they say, is the owner's. The words here came from the prototype unchanged, except Coop's directions to the tracks, which the new map made wrong. The meter changes that weren't in the prototype, and the ties, are starting values to tune.
 
+When Coop, Rocky or Miss Bobby would say a line here that they've said to him before, and it does nothing, they can say something new in their own words instead, with this line whenever nothing new comes in time. Every line here is said as it's written the first time, and so is every line that does something. `data/talk.md` has how.
+
 ## Top level
 
 | Field | Type | What it is |
