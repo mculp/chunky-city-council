@@ -113,10 +113,15 @@ if (args.includes('--changed')) {
 }
 let chosen = checks.filter((c) => (!only.size || only.has(c.name) || only.has(c.name.split(' ')[0])) && !skip.has(c.name) && (!why.size || why.has(c.name)));
 // a check whose tool runs Python can't run without the venv; data/roads.md says how to make one
-const needsVenv = (c) => { const tool = pkg.scripts[c.name.split(' ')[0]].match(/tools\/[\w.-]+\.mjs/)?.[0]; return tool && readFileSync(join(dir, tool), 'utf8').includes('.venv'); };
-const noVenv = existsSync(join(dir, '.venv')) ? [] : chosen.filter(needsVenv);
+const sourceOf = (c) => { const tool = pkg.scripts[c.name.split(' ')[0]].match(/tools\/[\w.-]+\.mjs/)?.[0]; return tool ? readFileSync(join(dir, tool), 'utf8') : ''; };
+const noVenv = existsSync(join(dir, '.venv')) ? [] : chosen.filter((c) => sourceOf(c).includes('.venv'));
 chosen = chosen.filter((c) => !noVenv.includes(c));
 if (noVenv.length) console.log(`skipping ${noVenv.map((c) => c.name).join(', ')}: there's no .venv here (data/roads.md says how to make one)`);
+// nor can one that reads TIGER's own downloads, in a worktree that's never fetched them
+const zips = [...new Set(readFileSync(join(dir, 'tools', 'build_roads.py'), 'utf8').match(/tl_\d+_\w+\.zip/g) ?? [])].filter((z) => !existsSync(join(dir, 'data', 'raw', z)));
+const noTiger = zips.length ? chosen.filter((c) => sourceOf(c).includes('tiger_lines.py')) : [];
+chosen = chosen.filter((c) => !noTiger.includes(c));
+if (noTiger.length) console.log(`skipping ${noTiger.map((c) => c.name).join(', ')}: data/raw/ hasn't got TIGER's ${zips[0]}${zips.length > 1 ? ` or ${zips.length - 1} more` : ''} (tools/fetch_tiger.py fetches them)`);
 if (!chosen.length) { console.log('nothing to run'); process.exit(1); }
 if (args.includes('--dry')) {
   for (const c of chosen) console.log(`${c.name}${why.has(c.name) ? `  (${why.get(c.name)})` : ''}`);
