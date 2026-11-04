@@ -6,7 +6,7 @@
     "drive": "What a generated drive is. None of it is surveyed.",
     "reachOut": "A road taken past where the map would have stopped, as far as north in true metres, which is just past the church and the cemetery. box is what footprints to fetch for it, x0, z0, x1, z1 in true metres. Or as far as south or east, by name or by TIGER's id for one with no name, and without a box if what's been fetched already has them.",
     "ownDrive": "Buildings with a drive or a forecourt of their own, already built by hand in index.html or measured below: the owner's house and barn, the gas station, the town hall and the house just north of it, and the compound on Pine Forest Rd.",
-    "measured": "Somebody's real drive that TIGER hasn't got and a generated one would miss, measured off the aerial, in true metres. Each starts from the nearest vertex of a road or a lane, so it's joined up, unless it's measured from a point on a road's centerline, which it then starts from. for is the building it's the drive for, when it's that one's own and nobody else's generated drive should start from it. The last one is the paved drive along the north side of the house just north of the town hall, from Google's satellite and Street View, placed against that house's footprint, which sits about 5 m south of where the satellite has it."
+    "measured": "Somebody's real drive that TIGER hasn't got and a generated one would miss, measured off the aerial, in true metres. Each starts from the nearest vertex of a road or a lane, so it's joined up, unless it's measured from a point on a road's centerline, which it then starts from. for is the building it's the drive for, or the place, when it's that one's own and nobody else's generated drive should start from it. The one before last is the paved drive along the north side of the house just north of the town hall, from Google's satellite and Street View, placed against that house's footprint, which sits about 5 m south of where the satellite has it. The last is the dirt drive into the clearing on the east side of Chestnut St where Robby's house was, off the satellite, from the junction across the road from it to just short of his memorial."
   },
   "classes": {
     "S1200": {
@@ -94,6 +94,7 @@
     {"width": 3.2, "surface": "dirt", "points": [[-267, 1205], [-450, 1207], [-676, 1204]]},
     {"width": 3.2, "surface": "dirt", "points": [[-268, 1329], [-21, 1328], [-10, 1312], [9, 1230], [27, 1140], [39, 1072], [42, 990], [46, 975], [185, 971], [207, 980], [252, 962], [350, 990], [447, 1022], [395, 1100], [342, 1175], [324, 1242], [326, 1298]]},
     {"width": 3.2, "surface": "dirt", "points": [[-273, 984], [-262, 960], [-262, 746], [-205, 720], [-130, 745], [-70, 700], [-20, 640], [40, 610]]},
-    {"width": 4.3, "surface": "asphalt", "for": 76094199, "points": [[-36.105, -87.31], [-55.2, -87.31]]}
+    {"width": 4.3, "surface": "asphalt", "for": 76094199, "points": [[-36.105, -87.31], [-55.2, -87.31]]},
+    {"width": 3.5, "surface": "dirt", "for": "Robby's lot", "points": [[-279.067, 197.593], [-269, 199]]}
   ]
 }

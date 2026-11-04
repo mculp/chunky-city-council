@@ -55,12 +55,23 @@ Asked whether Coop, Rocky and Miss Bobby should stop being zombies and be ordina
 
 > I found out Robby moved to California not Louisiana.
 
-**In the game:** his lot is the first thing on the right coming north off the Griffis Fountain bridge, on the big mown lawn in front of structure 74582285, which is left as it is. What's there is brick piers with the charred joists off them, a chimney, a stove and the front steps going up to nothing, with a memorial out front saying IN MEMORY OF ROBBY / HE DIDN'T DIE / HE MOVED / TO CALIFORNIA. He stands where the front room's floor used to be, as a ghost, in a cloud of flies. Decided around it:
+**In the game:** his lot is the clearing in the woods on the east side of Chestnut St where the owner says it all happened, below, with the dirt drive in from the road. What's there is brick piers with the charred joists off them, a chimney, a stove and the front steps going up to nothing, with a memorial at the top of the drive saying IN MEMORY OF ROBBY / HE DIDN'T DIE / HE MOVED / TO CALIFORNIA. He stands where the front room's floor used to be, as a ghost, in a cloud of flies. Decided around it:
 
-- "The bridge" is read as the Griffis Fountain bridge, because that's where you wake and how you first come into town. If it's the US 80 bridge, the first house on the right heading west is structure 75204065.
+- At first it was on the big mown lawn north of the Griffis Fountain bridge, in front of structure 74582285, read from "the first house on the right after coming off the bridge". Nothing of it's there now, and the lawn's left mown and empty. Coming north off that bridge and on up Chestnut St, it's still on the right.
+- There's a camper in the clearing now, and none of what's parked there is in the game, because the owner chose the memorial. The ruin's the one that was built before anyone had seen the place. On Street View in 2014 what stood there was a single-wide trailer, side-on to the road.
 - He says the line once, ever, and that's saved. After that he says "...", and so does the only reply, because nobody's written anything for the hero to say back.
 - The quest is a guess at "could probably be a quest", and it's small enough to take out. Swinging at the flies before he's asked just scatters them. After he's asked, four swings clear them, a fire lights in the hearth with deer meat on it, and eating it fills your hearts.
 - What he looks like is invented: `pale-ghost` in `data/looks.json`, a pale man in a T-shirt, going in and out like static. He's built like everyone else, but with nothing burning in him, because he didn't die. It's nothing of the hero's.
+
+They sent where it really is, with two pictures from Street View, from 2014 and from 2024, and one of the game's own map. The pictures stay out of the repo, and so does the address on them.
+
+> this is where it should be. the trailer is gone and replaced with a camper after 2014
+
+Told that whether the game had the camper or the burned-down place and the memorial was the builder's call, or theirs:
+
+> move the memorial there
+
+> yes to be clear, the entire memorial, the ghost, the burned down house. it all happened at [the address] so it doesnt make sense for any of it to stay where it is. move it all
 
 ## The church signs
 

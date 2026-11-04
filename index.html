@@ -2498,10 +2498,10 @@ function updateChurchSigns(step) {
   });
 }
 // ================================================================ what's left of Robby's house
-// The owner: "the first house on the right after coming off the bridge". Coming north off the Griffis Fountain bridge that's a big mown lawn by the road, with
-// structure 74582285 standing way back at the end of it. "I think the house burned down", and he didn't die, he moved to California. So on the lawn:
+// Where the owner says it all happened: the clearing in the woods on the east side of Chestnut St at true (-254.5, 200), with a dirt drive in from the road.
+// There's a camper in it now, and the owner chose the memorial. "I think the house burned down", and he didn't die, he moved to California. So in the clearing:
 // brick piers with the charred joists fallen off them, the chimney, and the front steps going up to nothing. He stands where the front room's floor used to be.
-const LOT = (() => { const [x, z] = atTrue(-255, 362); return { x, z }; })(), ROBBY = { x: LOT.x - 2.5, y: Y0 + .62, z: LOT.z + .5 }, HEARTH = { x: LOT.x + 2.9, z: LOT.z - 1 };
+const LOT = (() => { const [x, z] = atTrue(-254.5, 200); return { x, z }; })(), ROBBY = { x: LOT.x - 2.5, y: Y0 + .62, z: LOT.z + .5 }, HEARTH = { x: LOT.x + 2.9, z: LOT.z - 1 };
 const charMat = new THREE.MeshStandardMaterial({ color: '#15110f', roughness: 1 }), concreteMat = new THREE.MeshStandardMaterial({ color: '#615d55', roughness: 1 });
 const burntBrick = (() => {
   const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d'); g.fillStyle = '#2c1c18'; g.fillRect(0, 0, 128, 128);
@@ -2509,7 +2509,10 @@ const burntBrick = (() => {
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return triplanar(t, 1, { roughness: 1 });
 })();
-pad(LOT.x - 17, LOT.x + 30, LOT.z - 16, LOT.z + 16, 6, true);
+// The clearing's mown, from the road to the chimney, and the woods stand 3 m off the ruin, as they do from above. Where his lot was first, the big lawn north of the
+// Griffis Fountain bridge in front of structure 74582285, is still mown, with nothing on it.
+pad(LOT.x - 21.5, LOT.x + 5.5, LOT.z - 7, LOT.z + 7, 3, true);
+{ const [x, z] = atTrue(-255, 362); pad(x - 17, x + 30, z - 16, z + 16, 6, true); }
 around(LOT, () => {
   const leaning = (x, z) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, 0, z));
   // Nobody can stand on a solid, so these are as tall as they need to be for a truck to hit them instead of driving through them, which is taller than they look

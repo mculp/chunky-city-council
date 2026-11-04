@@ -2,7 +2,7 @@
 
 `data/lanes.json` holds the smaller roads that `data/roads.json` leaves out, and a drive to every building that needs one, so that nobody has to go through the woods to get to a house. `tools/build_lanes.py` generates it. `src/map.js` loads it into `MAP.lanes`.
 
-There are 242 lanes, 102.5 km of them, and 994 drives, 40.9 km.
+There are 243 lanes, 102.5 km of them, and 994 drives, 40.9 km.
 
 ## Where it comes from
 
@@ -12,9 +12,11 @@ There are 242 lanes, 102.5 km of them, and 994 drives, 40.9 km.
 | Drives | Generated from where the road and the building are | Ours |
 | Measured drives | Measured on USDA's [NAIP aerial](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer), `measured` in `tools/lane_config.json` | Public domain |
 
-Every vertex of a lane is where TIGER has it, apart from the few that say `measured`. Those are somebody's real drive that TIGER hasn't got and a generated one would miss, like the ones into the compound on Pine Forest Rd and the yard off True Light Rd, measured off NAIP in true metres. They come after TIGER's in the file, in the order they're listed, so adding one at the end of the list doesn't renumber anything. Each starts from the nearest vertex of a road or a lane so that it's joined up, unless it's been measured from a point on a road between two of TIGER's vertices, and then it starts there. One that says which building it's `for` is that building's own, and nobody else's drive starts from it.
+Every vertex of a lane is where TIGER has it, apart from the few that say `measured`. Those are somebody's real drive that TIGER hasn't got and a generated one would miss, like the ones into the compound on Pine Forest Rd and the yard off True Light Rd, measured off NAIP in true metres. They come after TIGER's in the file, in the order they're listed, so adding one at the end of the list doesn't renumber anything. Each starts from the nearest vertex of a road or a lane so that it's joined up, unless it's been measured from a point on a road between two of TIGER's vertices, and then it starts there. One that says which building or place it's `for` is that one's own, and nobody else's drive starts from it.
 
 The paved drive along the north side of the house just north of the town hall, off Commerce St, is the first from Google's satellite and Street View, which are the source of truth. It's concrete on Street View, and drawn as asphalt, which is the nearest there is. That house's footprint, and the town hall's, sit about 5 m south of where the satellite has them, so the drive's placed against the house rather than where the satellite has it, so that it runs past the house's north wall to its front corner as it does in life.
+
+The dirt drive into the clearing on the east side of Chestnut St, where Robby's house was, is off Google's satellite too, from the junction across the road to just short of his memorial. It's `for` his lot, or the building north-east of it would have its drive start at the drive's end and go through the woods.
 
 A road doesn't stop for a stretch just because nothing on that stretch needed it. Where one of TIGER's roads is in the game on both sides of a gap of up to 350 m, the gap comes in too, so that True Light Rd isn't barricaded from itself. Two longer gaps stay out, on Point Wanita Lake Rd and Pauldin Rd.
 

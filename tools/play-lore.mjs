@@ -97,7 +97,7 @@ const felled = await g(() => { const G = __game, a = C.fish.position.toArray(); 
 check('a hammer brings it down, and the fish with it', felled.down && felled.fell > 1, felled);
 await snap('charlie-down');
 
-// ---- Robby's: the first house on the right coming off the bridge, which burned down. He said these words the once.
+// ---- Robby's: the house that burned down, in the clearing off Chestnut St where the owner says it all happened. He said these words the once.
 const LINE = 'hey man, help me get these flies out of here so we can cook some deer meat';
 const tap = async (id = '#bA') => { await page.tap(id); await g(() => __game.step(.05)); };
 const word = () => page.textContent('#bA'), said = () => g(() => __game.state().dialog);
@@ -108,13 +108,22 @@ const setRobby = () => g(() => {
 });
 await setRobby();
 
-// off the bridge and onto the lot on foot, from where he wakes
-const walk = await g(() => { const G = __game, P = G.player.pos, from = [P.x, P.z], [rx, rz] = G.map.fromTrue(-301, 385), a = walkTo(rx, rz, 3), b = walkTo(R.lot.x - 15, R.lot.z, 1.5); return { from, a, b, side: (R.lot.x - rx) > 0 }; });
-check('he can walk from where he wakes to the lot', walk.a.d < 3.5 && walk.b.d < 2 && walk.a.mode === 'town', walk);
+// off the bridge and onto the lot on foot, from where he wakes: north up Griffis Fountain Rd, on up Chestnut St where it carries on, and in up the drive
+const walk = await g(() => {
+  const G = __game, P = G.player.pos, from = [P.x, P.z], legs = [[-300, 407], [-289, 375], [-282, 328], [-280, 281], [-278, 226], [-279, 205]].map(([x, z]) => walkTo(...G.map.fromTrue(x, z), 3));
+  const [cx] = G.map.fromTrue(-279, 205), b = walkTo(R.lot.x - 15, R.lot.z, 1.5);
+  return { from, legs: legs.map((l) => +l.d.toFixed(1)), modes: legs.map((l) => l.mode), b, side: R.lot.x - cx > 0 };
+});
+check('he can walk from where he wakes to the lot', walk.legs.every((d) => d < 3.5) && walk.b.d < 2 && walk.modes.every((m) => m === 'town'), walk);
 check('and it\'s on his right, going into town', walk.side, walk);
 await snap('robby-from-road');
-const home = await g(() => { const G = __game, s = G.structures.find((o) => o.id === 74582285); return { there: G.houseAt(s.wx, s.wz) === s, hurt: G.wreck.damage.has(s), floor: G.floorAt(s.wx, s.wz) }; });
-check('the real home behind it is still standing', home.there && !home.hurt && Math.abs(home.floor - 6.15) < 1, home);
+// and nothing of his is left on the lawn north of the bridge where it was first, in front of somebody's home
+const lawn = await g(() => {
+  const G = __game, [x, z] = G.map.fromTrue(-255, 362), s = G.structures.find((o) => o.id === 74582285), his = new Set(['pier', 'joist', 'chimney', 'steps', 'stove', 'sign']);
+  return { left: G.wreck.props.filter((p) => his.has(p.kind) && Math.hypot(p.cx - x, p.cz - z) < 20).length, there: G.houseAt(s.wx, s.wz) === s, hurt: G.wreck.damage.has(s), floor: G.floorAt(s.wx, s.wz), lawn: G.floorAt(x, z) };
+});
+check('nothing of his is left on the lawn where it was first', lawn.left === 0 && Math.abs(lawn.lawn - 6.15) < .1, lawn);
+check('and the real home behind the lawn is as it was', lawn.there && !lawn.hurt && Math.abs(lawn.floor - 6.15) < 1, lawn);
 
 // the memorial says what the owner said
 await g(() => { const G = __game; walkTo(R.lot.x - 15, R.lot.z, .8); G.look(Math.atan2(G.player.pos.x - R.lot.x, 0)); G.step(.3); });
