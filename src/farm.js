@@ -68,8 +68,10 @@ export function buildFarm(data, map) {
   };
 }
 
+// It keeps what it was built from, in true metres, for where src/aside.js sets the farm aside online
 export async function loadFarm(url, map) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Couldn't load ${url}: ${res.status}`);
-  return buildFarm(await res.json(), map);
+  const data = await res.json();
+  return Object.assign(buildFarm(data, map), { data });
 }

@@ -15,8 +15,11 @@
 //   p  d, which way it went over
 //   t  d, which way it went over, and f: down 1, burnt 2
 //   v  h, its hit points; f: wrecked 1, gone up 2, drowned 4; and where it is, y and yaw as well
-// Hit points and darkness are out of BYTE, and a direction is a turn split into 256.
-export const BYTE = 255, PARTS_MOST = 4096, VEHICLES_MOST = 4096;
+// Hit points and darkness are out of BYTE, and a direction is a turn split into 256. AT_ONCE is the most the town takes from a phone in
+// one message.
+import { SAY_MOST } from './net.js';
+
+export const BYTE = 255, PARTS_MOST = 4096, VEHICLES_MOST = 4096, AT_ONCE = 64;
 const EDGE = 40000;
 const KEYS = { b: /^b\d{1,12}$/, p: /^p[a-z_]{1,24}:-?\d{1,7}:-?\d{1,7}(#\d{1,3})?$/, t: /^t-?\d{1,7}:-?\d{1,7}$/, v: /^v\d{1,4}$/ };
 const GONE = 1, CRACKED = 2, BURNING = 4, DOWN = 1, BURNT = 2;
@@ -105,4 +108,41 @@ export function merge(had, w) {
   const list = sortParts([...parts.values()]), kept = { ...had, ...((had.o || w.o) && { o: 1 }), p: encodeParts(list) };
   const told = { ...kept, p: encodeParts(list.map((q) => ({ ...q, burning: burning.has(q.part) && !q.gone }))) };
   return { kept, told, changed: kept.p !== had.p || kept.o !== had.o };
+}
+
+// ---------------- on a phone
+// What src/damage.js's read() says of a building, as wrecks: its parts in bytes, rounded towards more broken, and in pieces of at most
+// `most` parts, since a phone can only say so much at once. The town puts the pieces back together. One as it was built says nothing.
+export function houseWrecks(k, x, z, n, { out, parts }, most = 200) {
+  if (!parts.length && !out) return [];
+  const said = parts.map((q) => ({ part: q.part, gone: q.gone, cracked: q.cracked, burning: q.burning, dir: q.gone ? dirByte(q.dirx, q.dirz) : 0, hp: Math.max(0, Math.floor(q.hp / q.max * BYTE)), shade: Math.max(0, Math.floor(q.shade * BYTE)) }));
+  const list = [];
+  for (let i = 0; i < Math.max(1, said.length); i += most) list.push({ k, x, z, n, ...(out && { o: 1 }), p: encodeParts(said.slice(i, i + most)) });
+  return list;
+}
+// and back, as src/damage.js's take() has it, against the building's own parts (`built`, by part). A part it hasn't got is left.
+export function takenParts(w, built) {
+  const out = [];
+  for (const q of decodeParts(w.p)) {
+    const p = built[q.part];
+    if (!p) continue;
+    const [dirx, dirz] = dirOf(q.dir);
+    out.push({ part: q.part, gone: q.gone, cracked: q.cracked, burning: q.burning, dirx, dirz, hp: q.hp / BYTE * p.max, shade: q.shade / BYTE });
+  }
+  return out;
+}
+// What a phone says, in as few messages as it fits in: none longer than the town hears and none with more than it takes at once, in the
+// order it was said.
+export function batches(list, most = SAY_MOST) {
+  const empty = JSON.stringify({ t: 'wreck', w: [] }).length, out = [];
+  let now = [], size = empty;
+  for (const w of list) {
+    const n = JSON.stringify(w).length;
+    // never, since a building's said in pieces, and one that long would have him let go of
+    if (empty + n > most) continue;
+    if (now.length && (size + 1 + n > most || now.length >= AT_ONCE)) { out.push(now); now = []; size = empty; }
+    size += (now.length ? 1 : 0) + n; now.push(w);
+  }
+  if (now.length) out.push(now);
+  return out;
 }

@@ -17,7 +17,7 @@
 // and after two days once nobody's within 60 m, since everyone comes in by the pumps. Nothing's kept at the places `aside` says.
 import { NET_MAX, POSE_BYTES, encodeSnapshot, decodePose } from '../src/net.js';
 import { checkName } from '../src/names.js';
-import { tidy, merge, lasting, partsIn, kindOf } from '../src/wrecks.js';
+import { tidy, merge, lasting, partsIn, kindOf, AT_ONCE } from '../src/wrecks.js';
 
 const EDGE = 40000;   // metres from Stuckey's Bridge, well past anything on the map
 const KINDS_MOST = 32, EACH_MOST = 999, KEY = /^[0-9a-f]{64}$/, ITEM = /^[a-z][a-z0-9_]{0,23}$/i;
@@ -27,7 +27,7 @@ const HANDLE = /^[\w-]{16,64}$/;
 // value. The game parks at most one vehicle by each building, which is far fewer than that.
 const KEEPS = 1000, VEHICLES_MOST = 4096;
 // How long what's broken stays broken, and who's near enough that it waits. Past as much as it keeps, whatever broke first heals first.
-const DAY = 864e5, NEAR = 200, BUSY_NEAR = 60, WRECKS_MOST = 2000, WRECK_PARTS_MOST = 30000, WRECKS_AT_ONCE = 64;
+const DAY = 864e5, NEAR = 200, BUSY_NEAR = 60, WRECKS_MOST = 2000, WRECK_PARTS_MOST = 30000;
 const SAY = {
   key: 'Something went wrong. Reload the page to play.',
   full: 'Chunky\'s full right now. Trying again in a bit.',
@@ -248,7 +248,7 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
       if (!p || !Array.isArray(list)) return [];
       p.heard = clock();
       const now = wall();
-      for (const said of list.slice(0, WRECKS_AT_ONCE)) {
+      for (const said of list.slice(0, AT_ONCE)) {
         const w = tidy(said);
         if (!w || aside?.world(w.x, w.z)) continue;
         const had = wrecks.get(w.k), r = merge(had?.w ?? null, w);

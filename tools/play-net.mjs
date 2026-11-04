@@ -9,8 +9,10 @@
 // the map; a truck nudges someone aside and a swing goes through them, and nobody's hurt. A try that ends is the fever, with the other
 // seeing them lying where they went down, and they come to by the pumps. One goes into the river and comes back with Change your look,
 // out front of the gas station in a new look and with what they had, and the time after that Play takes them straight in, with Coop
-// remembering them, and how he and Miss Bobby feel about them, from what the town kept. Then the hero's link, who starts there too with no chapters and is known to the cast:
-// everyone sees the hero, and only one phone at a time is him. Fails on anything out of place or a console error.
+// remembering them, and how he and Miss Bobby feel about them, from what the town kept. What one breaks, the other sees come down as it
+// did, with a blast doing its damage once, and nothing breaks at a place that's set aside (CHUNKY-152). Then the hero's link, who starts
+// there too with no chapters, is known to the cast and finds what was broken already down: everyone sees the hero, and only one phone at
+// a time is him. A day later, with everyone away, what was broken is back for everyone. Fails on anything out of place or a console error.
 //
 //   npm i && npm run net -- [--shots dir]
 import { createHash } from 'node:crypto';
@@ -32,7 +34,9 @@ const on = (p, fn, arg) => p.page.evaluate(fn, arg);
 const away = (p, q) => Math.hypot(p.x - q.x, p.z - q.z);
 
 const HERO = 'a-secret-only-the-owner-has-1386', LOOKS = 8;
-const server = await startServer({ port: 0, quiet: true, heroHash: createHash('sha256').update(HERO).digest('hex') });
+// the town's time of day, for what's broken, which the check moves on to tomorrow
+const DAY = 864e5, clock = { at: Date.now() };
+const server = await startServer({ port: 0, quiet: true, heroHash: createHash('sha256').update(HERO).digest('hex'), wall: () => clock.at });
 const query = `?test&net=ws://localhost:${server.port}`;
 // One on a keyboard at a phone's size, and one that's a phone, with touch
 const a = await serveAndOpen({ viewport: { width: 390, height: 844 }, query }), b = await serveAndOpen({ touch: true, query });
@@ -140,6 +144,30 @@ function startsAtTheGasStation(name, w) {
   check(`facing him, to ${w.facing.toFixed(3)} radians, with the camera behind them`, w.facing < .05 && w.behind < .05, w);
   check(`on their feet on dry ground, ${w.dry.toFixed(2)} m above any water, and inside nothing`, w.kind === 'run' && Math.abs(w.feet) < .1 && w.dry > .05 && !w.blocked, w);
 }
+
+// What a phone has of what A broke at `site` (CHUNKY-152), and every frame for so long from now: whether the prop's ever falling rather
+// than just down, every angle the tree's at, and how many fires there are at the vehicle
+const watchBroken = (p, site, ms) => on(p, ([s, ms]) => {
+  const W = __game.wreck, prop = W.props[s.prop], tree = W.trees(s.tree.x, s.tree.z, .3).find((t) => Math.abs(t.x - s.tree.x) < .06 && Math.abs(t.z - s.tree.z) < .06);
+  const seen = window.__broke = { fell: false, leans: [], fires: 0, done: false }, end = performance.now() + ms;
+  (function look() {
+    if (W.falling.some((f) => f.prop === prop && f.t < f.T)) seen.fell = true;
+    if (tree?.lean && !seen.leans.includes(+tree.lean.toFixed(3))) seen.leans.push(+tree.lean.toFixed(3));
+    seen.fires = Math.max(seen.fires, W.burners.filter((q) => !q.dead && Math.hypot(q.x - s.x, q.z - s.z) < 6).length);
+    if (performance.now() < end) requestAnimationFrame(look); else seen.done = true;
+  })();
+}, [site, ms]);
+const brokenNow = (p, site) => on(p, (s) => {
+  // whether anything's happened to the house, and its wall only asked after if something has, since asking makes it a state
+  const G = __game, W = G.wreck, house = G.structures[s.house], held = W.damage.has(house), v = G.vehicles[s.v], r = W.damage.read(house), prop = W.props[s.prop];
+  // a tree that's down isn't among the ones standing near it
+  const treeDown = !W.trees(s.tree.x, s.tree.z, .3).some((t) => Math.abs(t.x - s.tree.x) < .06 && Math.abs(t.z - s.tree.z) < .06);
+  return {
+    wall: held && !!W.damage.state(house).parts[s.wall].gone, stops: house.stops.get(s.stop)?.[4] ?? null, prop: prop.down, propStops: [...prop.solids, ...prop.walls].every((c) => c[4] > -1e8), treeDown,
+    up: !!v.exploded, wrecked: !!v.wrecked, home: Math.hypot(v.x - v.home.x, v.z - v.home.z), whole: v.hp === v.K.hp, held,
+    hp: Object.fromEntries(r.parts.map((q) => [q.part, q.hp / q.max])), gone: r.parts.filter((q) => q.gone).length,
+  };
+}, site);
 
 try {
   for (const p of pages) await on(p, () => __game.resume());
@@ -649,9 +677,67 @@ try {
     check(`and gets up once the trip's over, stood at ${secs(up)}`, !!up && up.t > whole.t, up);
     check(`and nothing of B is between the rings this way either: ${between(C)} of ${C.length} frames`, !between(C), whereBetween(C));
     B = await me(b);
-    // and A back out on US 80, where there's room beside them for the hero
-    await onRoad(a, spot.x, spot.z); await sleep(300); A = await me(a);
   }
+
+  // ---------------- what's broken is the same for everyone (CHUNKY-152). A, well away from the gas station, knocks a wall in,
+  // a prop over and a tree down and sets a parked vehicle going, with B there: B sees each come down as it did, and the blast once, with
+  // nothing hit twice. Whoever comes in later finds it all where it lies, and a day on, with nobody near, it's back up for everyone.
+  // Nothing at a place that's set aside breaks at all.
+  // somewhere well away from the gas station, so it heals once they're all back there: a parked vehicle with a house's wall in reach of
+  // its blast, something standing and a tree a little further off, and two places to stand by it, dry and inside nothing
+  const site = await on(a, async () => {
+    const G = __game, W = G.wreck, { createAside } = await import('./src/aside.js'), aside = createAside(G.farm.data).world, gas = G.station.house;
+    const standing = (v, r0, r1) => { for (let r = r0; r <= r1; r += 2) for (let k = 0; k < 16; k++) { const x = v.x + Math.cos(k * .3927) * r, z = v.z + Math.sin(k * .3927) * r, y = G.floorAt(x, z); if (y > G.water.level(x, z) + .1 && !G.blocked(x, z, y)) return { x, z }; } return null; };
+    for (let i = 0; i < G.vehicles.length; i++) {
+      const v = G.vehicles[i];
+      if (Math.hypot(v.x - gas.wx, v.z - gas.wz) < 320 || aside(v.x, v.z) || v.wrecked) continue;
+      const house = [...W.housesNear(v.x, v.z, 12)].find((s) => !aside(s.wx, s.wz) && W.damage.state(s).parts.some((p) => p.kind === 'wall' && Math.hypot(p.x - v.x, p.z - v.z) < 7));
+      const prop = W.props.findIndex((p) => p.cx !== undefined && !p.down && p.kind !== 'bar' && Math.hypot(p.cx - v.x, p.cz - v.z) > 12 && Math.hypot(p.cx - v.x, p.cz - v.z) < 70 && !aside(p.cx, p.cz));
+      const tree = W.trees(v.x, v.z, 70).find((t) => Math.hypot(t.x - v.x, t.z - v.z) > 12 && !aside(t.x, t.z));
+      const at = [standing(v, 12, 20), standing(v, 22, 34)];
+      if (!house || prop < 0 || !tree || !at[0] || !at[1]) continue;
+      const wall = W.damage.state(house).parts.filter((p) => p.kind === 'wall').sort((p, q) => Math.hypot(p.x - v.x, p.z - v.z) - Math.hypot(q.x - v.x, q.z - v.z))[0];
+      return { v: i, x: v.x, z: v.z, at, house: house.index, wall: wall.part, stop: wall.stop, prop, kind: W.props[prop].kind, tree: { x: tree.x, z: tree.z } };
+    }
+    return null;
+  });
+  check(`there's somewhere with a house, a parked vehicle, something standing and a tree to break${site ? `: a ${site.kind} and a tree` : ''}`, !!site, site);
+  if (site) {
+    await onRoad(a, site.at[0].x, site.at[0].z); await onRoad(b, site.at[1].x, site.at[1].z);
+    await sleep(800);
+    await watchBroken(b, site, 4000);
+    await on(a, (s) => {
+      const G = __game, W = G.wreck, house = G.structures[s.house];
+      W.damage.hit(house, W.damage.state(house).parts[s.wall], 99, 1, 0);
+      W.breakProp(W.props[s.prop], 0, 1);
+      W.fellTree(W.trees(s.tree.x, s.tree.z, .3).find((t) => Math.abs(t.x - s.tree.x) < .06 && Math.abs(t.z - s.tree.z) < .06), 1, 0);
+      W.explodeVehicle(G.vehicles[s.v]);
+    }, site);
+    await until(() => on(b, () => window.__broke.done), 6000);
+    const seenB = await on(b, () => window.__broke);
+    const [onA, onB] = [await brokenNow(a, site), await brokenNow(b, site)];
+    check(`B sees the wall A knocked in, the ${site.kind} A knocked over, the tree A felled and the vehicle A set going all down: ${JSON.stringify({ wall: onB.wall, prop: onB.prop, tree: onB.treeDown, up: onB.up })}`, onB.wall && onB.prop && onB.treeDown && onB.up && onB.wrecked, onB);
+    check(`each coming down in front of B as it did: the ${site.kind} falling and the tree going over through ${seenB.leans.length} angles`, seenB.fell && seenB.leans.length > 2, seenB);
+    check(`and the vehicle going up there, with ${seenB.fires} fire${seenB.fires === 1 ? '' : 's'} where it went`, seenB.fires > 0, seenB);
+    const worse = Object.entries(onB.hp).filter(([k, h]) => h < (onA.hp[k] ?? 1) - .05);
+    check(`with what the blast did to the house only done once: ${onA.gone} parts down on A and ${onB.gone} on B, and none of B's worse off than A's`, !worse.length && onB.gone <= onA.gone + 1, { worse, a: onA.gone, b: onB.gone });
+    await snap(b, '10-b-sees-what-a-broke');
+
+    // and nothing at a place that's set aside, which here's the yard off True Light Rd, breaks for anyone
+    const kept = await on(a, async () => {
+      const G = __game, W = G.wreck, house = G.structures.find((s) => s.x > -1600 && s.x < -1490 && s.z > -830 && s.z < -745), wall = W.damage.state(house).parts.find((p) => p.kind === 'wall');
+      G.place(house.wx + 12, house.wz + 12); await new Promise((r) => setTimeout(r, 300));
+      const hit = W.strike(wall.x, wall.y, wall.z, 1.2, 99, 1, 0);
+      W.damage.hit(house, wall, 99, 1, 0); W.blast(wall.x, wall.y, wall.z, 8, 9);
+      return { house: house.index, hit, touched: W.damage.read(house).parts.length };
+    });
+    check(`nothing's broken at a place that's set aside, by a swing, a blow or a blast: ${kept.touched} parts touched`, !kept.hit && !kept.touched, kept);
+    await sleep(800);
+    check('and nothing from there comes to B', !(await on(b, (i) => __game.wreck.damage.has(__game.structures[i]), kept.house)), kept);
+    // and A back out on US 80, where there's room beside them for the hero, who comes in late and finds it all where it lies
+    await onRoad(b, B.x, B.z);
+  }
+  await onRoad(a, spot.x, spot.z); await sleep(300); A = await me(a); B = await me(b);
 
   // ---------------- the hero's link: everyone sees the hero, and only one phone at a time is him
   const c = await serveAndOpen({ viewport: { width: 390, height: 844 }, query: `${query}#hero=${HERO}` });
@@ -662,10 +748,18 @@ try {
     await on(c, () => __game.resume());
     await c.page.click('#together'); await c.page.click('#joinName'); await c.page.keyboard.type('River');
     await record(c);
+    if (site) await watchBroken(c, site, 3000);
     await c.page.click('#joinGo');
     const Cin = await cameIn(c);
     startsAtTheGasStation('The hero', Cin);
     check(`and his objective box never says a thing either, since a town that's shared has no chapters: ${Cin.said.map((t) => `"${t}"`).join(' / ') || 'nothing'}`, !Cin.said.length, Cin);
+    // and what A broke while he wasn't there is all down, just where it lies: nothing falls and nothing goes up as he comes in
+    if (site) {
+      await until(() => on(c, () => window.__broke.done), 4000);
+      const [onC, seenC] = [await brokenNow(c, site), await on(c, () => window.__broke)];
+      check(`coming in late, the hero finds the wall, the ${site.kind}, the tree and the vehicle A broke all down`, onC.wall && onC.prop && onC.treeDown && onC.up, onC);
+      check(`where they lie, with nothing falling, the tree already over (${seenC.leans.join(', ') || 'a stump'}) and no fire`, !seenC.fell && seenC.leans.every((l) => l > 1.4) && !seenC.fires, seenC);
+    }
     const C = await me(c);
     check('the owner\'s phone is the hero, in his hoodie, on his own screen', C.hero, C);
     await onRoad(c, A.x + 4, A.z);
@@ -754,7 +848,25 @@ try {
       check(`a link to another town doesn't take the hero's secret there: "${there?.name}" is ${there?.hero ? 'the hero' : 'a townsperson'} in it`, there && !there.hero, there);
       const keys = await on(c, () => Object.keys(localStorage).filter((k) => k.startsWith('chunky.net.key')).map((k) => localStorage.getItem(k)));
       check(`and the phone is someone else there, with a key of its own: ${keys.length} kept`, keys.length === 2 && keys[0] !== keys[1], keys.length);
-    } finally { await elsewhere.close(); }
+    } finally {
+      // let go of the other town before it's put away, so nothing's left trying to reach it
+      await on(c, () => window.__net?.link?.close()).catch(() => {});
+      await elsewhere.close();
+    }
+
+    // ---------------- a day after A broke it all, with A, B and the hero by the gas station, well away, it's back for everyone: the
+    // house as it was built and stopping them again, the prop standing, the tree up and the vehicle back where it was parked, whole
+    if (site) {
+      for (const p of [a, b, d]) await onRoad(p, spot.x + (p === d ? 6 : p === b ? -6 : 0), await on(p, (x) => __game.map.zAt('us_80', x), spot.x));
+      await sleep(1500);
+      clock.at += DAY + 60000;
+      const healed = await until(async () => (await Promise.all([a, b, d].map((p) => brokenNow(p, site)))).every((w) => !w.held && !w.prop && !w.treeDown && !w.up), 15000);
+      for (const [name, p] of [['A', a], ['B', b], ['the hero', d]]) {
+        const w = await brokenNow(p, site);
+        check(`a day later it's all back for ${name}: the house as it was built and the wall stopping them again (${w.stops?.toFixed(1)}), the ${site.kind} standing, the tree up, and the vehicle where it was parked ${w.home.toFixed(2)} m off, whole`,
+          !!healed && !w.held && !w.wall && w.stops > -1e8 && !w.prop && w.propStops && !w.treeDown && !w.up && !w.wrecked && w.home < .05 && w.whole, w);
+      }
+    }
   }
 
   // ---------------- what it costs

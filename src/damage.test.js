@@ -236,3 +236,88 @@ test('every piece that stops him knows which collider it is', () => {
   const s = house({ porch: 'front', carport: true }), { parts } = partsOf(s), named = new Set(parts.map((p) => p.stop));
   for (const w of collidersOf(s)) assert.ok(named.has(w[6]), `collider ${w[6]}`);
 });
+
+// ---------------- in a town everyone shares (CHUNKY-152): what's happened to a building goes from one phone to another
+const both = (more) => {
+  const s = house({ porch: 'front', shutters: true, ...more }), fell = [];
+  const here = createDamage(), there = createDamage({ on: { fall: (b, p) => fell.push({ part: p.part, quiet: p.quiet }) } });
+  return { s, here, there, fell };
+};
+const standingParts = (d, s) => d.state(s).parts.filter((p) => !p.gone).map((p) => p.part);
+
+test('what\'s happened to a building is read as the parts that aren\'t as they were built, and whether it\'s given out', () => {
+  const { s, here } = both(), w = wall(here.state(s));
+  assert.deepEqual(here.read(s), { out: false, parts: [] });
+  here.hit(s, w, 99, 1, 0);
+  const r = here.read(s), mine = r.parts.find((q) => q.part === w.part);
+  assert.equal(mine.gone, true); assert.ok(near(Math.hypot(mine.dirx, mine.dirz), 1));
+  assert.ok(r.parts.some((q) => !q.gone && q.hp < q.max), 'the crack runs into the walls beside it');
+  assert.ok(r.parts.length < here.state(s).parts.length, 'and nothing else is said');
+  for (const q of r.parts) assert.deepEqual(Object.keys(q).sort(), ['burning', 'cracked', 'dirx', 'dirz', 'gone', 'hp', 'max', 'part', 'shade']);
+});
+
+test('another phone takes it as it is, with nothing more coming down after it than came down there', () => {
+  const { s, here, there, fell } = both();
+  for (let i = 0; i < 3; i++) here.hit(s, wall(here.state(s), i), 99, 0, 1);
+  const r = here.read(s);
+  there.take(s, r.parts, { out: r.out });
+  assert.deepEqual(standingParts(there, s), standingParts(here, s));
+  assert.deepEqual(fell.map((f) => f.part).sort((a, b) => a - b), r.parts.filter((q) => q.gone).map((q) => q.part));
+  for (const q of r.parts) {
+    const p = there.state(s).parts[q.part];
+    assert.equal(p.hp, q.hp); assert.equal(p.cracked ?? false, q.cracked);
+    if (q.gone) assert.deepEqual([p.dirx, p.dirz], [q.dirx, q.dirz]);
+  }
+  there.take(s, r.parts);
+  assert.equal(fell.length, r.parts.filter((q) => q.gone).length, 'and taking it again changes nothing');
+});
+
+test('taken from another phone, it\'s laid where it lies unless it\'s happening in front of him, and a fire\'s only lit then', () => {
+  const quiet = both(), live = both(), parts = (b) => { b.here.hit(b.s, wall(b.here.state(b.s)), 99, 1, 0); return b.here.read(b.s).parts; };
+  quiet.there.take(quiet.s, parts(quiet));
+  live.there.take(live.s, parts(live), { live: true });
+  assert.ok(quiet.fell.length && quiet.fell.every((f) => f.quiet === true));
+  assert.ok(live.fell.length && live.fell.every((f) => f.quiet === false));
+  const burning = both(), roof = burning.here.state(burning.s).parts.find((p) => p.kind === 'roof');
+  burning.here.burn(burning.s, roof);
+  const r = burning.here.read(burning.s);
+  assert.ok(r.parts.find((q) => q.part === roof.part).burning);
+  burning.there.take(burning.s, r.parts);
+  assert.equal(burning.there.burning(burning.s), 0, 'not from far off, or coming in');
+  burning.there.take(burning.s, r.parts, { live: true });
+  assert.equal(burning.there.burning(burning.s), 1);
+});
+
+test('what\'s been broken here since it was last asked is told once, and nothing taken from another phone is', () => {
+  const { s, here, there } = both(), w = wall(here.state(s));
+  assert.deepEqual(here.touched(), []);
+  here.hit(s, w, .5, 1, 0);
+  assert.deepEqual(here.touched(), [s]);
+  assert.deepEqual(here.touched(), []);
+  there.take(s, here.read(s).parts, { live: true });
+  assert.deepEqual(there.touched(), []);
+  const roof = here.state(s).parts.find((p) => p.kind === 'roof');
+  here.burn(s, roof); here.touched();
+  here.stepFire(s, 1, () => .5);
+  assert.deepEqual(here.touched(), [s], 'and a fire burning is a change');
+});
+
+test('healed, it\'s as it was built', () => {
+  const { s, here } = both();
+  here.hit(s, wall(here.state(s)), 99, 1, 0);
+  here.forget(s);
+  assert.equal(here.has(s), false);
+  assert.deepEqual(here.read(s), { out: false, parts: [] });
+});
+
+test('a building that\'s spared takes nothing: no swing, no blast and no fire, and nothing\'s taken onto it', () => {
+  const s = house(), d = createDamage({ spared: () => true }), st = d.state(s), w = wall(st);
+  assert.equal(d.nearest(s, w.x, w.y, w.z, 3), null, 'a swing or a bumper finds nothing there to land on, so a truck bumps off it like a wall');
+  assert.equal(d.hit(s, w, 99, 1, 0), false);
+  d.blast(s, w.x, w.y, w.z, 6, 9);
+  assert.equal(d.burn(s, st.parts.find((p) => p.kind === 'roof')), false);
+  assert.equal(d.catchNear(s, w.x, w.y, w.z, 9), false);
+  d.take(s, [{ part: w.part, gone: true, cracked: false, burning: false, dirx: 1, dirz: 0, hp: 0, max: w.max, shade: .5 }], { live: true });
+  assert.deepEqual(d.read(s), { out: false, parts: [] });
+  assert.deepEqual(d.touched(), []);
+});

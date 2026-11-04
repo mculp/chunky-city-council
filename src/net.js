@@ -5,12 +5,13 @@
 // everyone's. Everything else goes now and then as words, a JSON object with its kind in `t`:
 //   from a phone:   hello { key, name, look, hero?, build? }, keep { beans, items, gas },
 //                   mind { who, said } or { who, note, about, at } or { who, visit: true } or { who, trust, fear }, for what the
-//                   cast remember of them and how they feel about them
-//   from the town:  welcome { id, name, look, hero, rekt?, saved, minds, cars }, who { players: [{ id, name, look, hero, rekt? }] },
-//                   car { v, x, y, z, yaw }, bump { ride }, no { why, say }
+//                   cast remember of them and how they feel about them, wreck { w: [...] } for what's broken (src/wrecks.js)
+//   from the town:  welcome { id, name, look, hero, rekt?, saved, minds, cars, wrecks }, who { players: [{ id, name, look, hero, rekt? }] },
+//                   car { v, x, y, z, yaw }, bump { ride }, wreck { w: [...] }, heal { k: [...] }, no { why, say }
 // `rekt` is the handle of a rektguy of their own someone's wearing, which is all anyone's told of it, and there's none for the hero
 // (CHUNKY-170). Its picture is the town's, src/wallet.js says where, and pairing a wallet is beside the town, not on the socket.
-export const NET_RATE = 20, NET_MAX = 25, POSE_BYTES = 18;
+// SAY_MOST is the most a phone can say at once, in characters, and the town lets go of one that says more.
+export const NET_RATE = 20, NET_MAX = 25, POSE_BYTES = 18, SAY_MOST = 2048;
 // where a town on this machine listens, for index.html?net
 export const NET_PORT = 8787;
 // where the characters' words are asked for: the talk server on Cloudflare, server/worker.js
@@ -189,6 +190,8 @@ export function connectNet({ url, WS = globalThis.WebSocket, clock = () => perfo
       else if (m.t === 'who') walkers.who(m.players ?? []);
       else if (m.t === 'car') on.car?.(m);
       else if (m.t === 'bump') on.bump?.(m);
+      else if (m.t === 'wreck') on.wreck?.(m);
+      else if (m.t === 'heal') on.heal?.(m);
       else if (m.t === 'no') refused = m;
     };
     me.onclose = () => {
@@ -225,6 +228,8 @@ export function connectNet({ url, WS = globalThis.WebSocket, clock = () => perfo
     keep(state) { if (sock?.readyState === 1 && id) send(say({ t: 'keep', ...state })); },
     // and what the cast remember of him, a change at a time
     mind(change) { if (sock?.readyState === 1 && id) send(say({ t: 'mind', ...change })); },
+    // and what's broken, as src/wrecks.js says it, a message's worth at a time. Whether it went.
+    wreck(list) { if (sock?.readyState !== 1 || !id) return false; send(say({ t: 'wreck', w: list })); return true; },
     again() { stopped = false; openAt = 0; said = null; },
     // let go of the town, without a word, until again()
     close() { const was = sock; stopped = true; sock = null; id = 0; refused = null; walkers.clear(); sendAt = 0; was?.close(); },

@@ -59,10 +59,16 @@ export function partsOf(s, base = 0) {
   return { s, base, parts, panels, walls, posts };
 }
 
-// on: { fall(s, part), crack(s, part), shatter(s, part) }
-export function createDamage({ base = 0, on = {} } = {}) {
+// on: { fall(s, part), crack(s, part), shatter(s, part) }. spared(s) is a building nothing happens to, which online is any at the places
+// set aside (src/aside.js).
+export function createDamage({ base = 0, on = {}, spared = () => false } = {}) {
   const states = new Map();
   const state = (s) => { let st = states.get(s.index); if (!st) { st = partsOf(s, base); st.delay = 0; st.givenOut = false; st.burning = new Set(); states.set(s.index, st); } return st; };
+  // In a town everyone shares (CHUNKY-152): the buildings that have changed here since that was last asked, by their place in the list.
+  // What's taken from another phone isn't a change here.
+  const changed = new Map();
+  let taking = false;
+  const mark = (s) => { if (!taking) changed.set(s.index, s); };
   const standing = (st) => st.walls.reduce((n, w) => n + (w.gone ? 0 : 1), 0);
 
   // Which way it goes: a wall falls the way it was hit, and left to itself it mostly falls in on the building
@@ -73,7 +79,7 @@ export function createDamage({ base = 0, on = {} } = {}) {
   }
   function fall(st, p, dx, dz, delay) {
     if (p.gone) return;
-    p.gone = true; p.delay = delay; aim(st, p, dx, dz);
+    p.gone = true; p.delay = delay; aim(st, p, dx, dz); mark(st.s);
     const wasBurning = st.burning.delete(p);
     on.fall?.(st.s, p, wasBurning);
     const after = delay + .08;
@@ -103,8 +109,8 @@ export function createDamage({ base = 0, on = {} } = {}) {
     for (const p of st.parts) if (p.kind === 'wall' || p.kind === 'lintel' || p.kind === 'post') fall(st, p, 0, 0, later(p) + .3);
   }
   function hit(st, p, power, dx, dz) {
-    if (p.gone) return false;
-    p.hp -= power;
+    if (p.gone || spared(st.s)) return false;
+    p.hp -= power; mark(st.s);
     if (p.kind === 'window') { if (p.hp <= 0 && !p.cracked) { p.cracked = true; on.shatter?.(st.s, p); } return false; }
     // the glass goes first
     for (const q of p.holds) if (q.kind === 'window' || q.kind === 'shutter') hit(st, q, power, dx, dz);
@@ -120,8 +126,8 @@ export function createDamage({ base = 0, on = {} } = {}) {
     return p.near;
   }
   function ignite(st, p) {
-    if (p.gone || st.burning.has(p) || !burnRate(st.s, p)) return false;
-    st.burning.add(p); p.spreadT = .6; p.charred = 1;
+    if (p.gone || st.burning.has(p) || !burnRate(st.s, p) || spared(st.s)) return false;
+    st.burning.add(p); p.spreadT = .6; p.charred = 1; mark(st.s);
     on.ignite?.(st.s, p);
     return true;
   }
@@ -131,6 +137,7 @@ export function createDamage({ base = 0, on = {} } = {}) {
     burning: (s) => states.get(s.index)?.burning.size ?? 0,
     // A fire close by catches the nearest thing there is to catch
     catchNear(s, x, y, z, r) {
+      if (spared(s)) return false;
       const st = state(s); let best = null, bd = r;
       for (const p of st.parts) {
         if (p.gone || st.burning.has(p) || !burnRate(s, p)) continue;
@@ -142,6 +149,7 @@ export function createDamage({ base = 0, on = {} } = {}) {
     // One step of fire: what's burning loses its hit points, chars, catches what's next to it and in the end comes down
     stepFire(s, dt, rand) {
       const st = states.get(s.index); if (!st || !st.burning.size) return;
+      mark(s);
       for (const p of [...st.burning]) {
         p.hp -= burnRate(s, p) * dt;
         const left = Math.max(0, p.hp / p.max), step = Math.ceil(left * 4) / 4;
@@ -158,6 +166,7 @@ export function createDamage({ base = 0, on = {} } = {}) {
     gone: (s) => { const st = states.get(s.index); return st ? 1 - standing(st) / (st.walls.length || 1) : 0; },
     // The nearest thing a swing could land on, and how far off it is
     nearest(s, x, y, z, reach) {
+      if (spared(s)) return null;
       const st = state(s); let best = null, bd = reach;
       for (const p of st.parts) {
         if (p.gone || !FACING.has(p.kind)) continue;
@@ -171,6 +180,7 @@ export function createDamage({ base = 0, on = {} } = {}) {
     hit: (s, p, power, dx = 0, dz = 0) => hit(state(s), p, power, dx, dz),
     // Everything in reach of (x, y, z) takes `power` at the middle, falling off to nothing at r
     blast(s, x, y, z, r, power) {
+      if (spared(s)) return;
       const st = state(s);
       for (const p of st.parts) {
         if (p.gone) continue;
@@ -178,6 +188,43 @@ export function createDamage({ base = 0, on = {} } = {}) {
         if (e < r) hit(st, p, power * (1 - e / r) * (1 - e / r), p.x - x, p.z - z);
       }
     },
+
+    // ---- in a town everyone shares (CHUNKY-152)
+    // What's happened to it: the parts that aren't as they were built, and whether it's given out
+    read(s) {
+      const st = states.get(s.index), parts = [];
+      if (!st) return { out: false, parts };
+      for (const p of st.parts) {
+        const burning = st.burning.has(p), shade = p.shade ?? 1;
+        if (p.gone || p.cracked || burning || p.hp < p.max || shade < 1) parts.push({ part: p.part, gone: p.gone, cracked: !!p.cracked, burning, dirx: p.dirx, dirz: p.dirz, hp: p.hp, max: p.max, shade });
+      }
+      return { out: st.givenOut, parts };
+    },
+    // What's happened to it on another phone, as read() said it there. Nothing comes down after it, since whatever did there comes
+    // with it, and it's drawn through the same on.fall, on.char and on.shatter as if it had happened here. Unless it's happening in
+    // front of him, live, a part that's come down is laid where it lies, quietly, and a fire isn't lit.
+    take(s, parts, { live = false, out = false } = {}) {
+      if (spared(s)) return;
+      const st = state(s);
+      taking = true;
+      try {
+        if (out) st.givenOut = true;
+        for (const q of parts) {
+          const p = st.parts[q.part];
+          if (!p) continue;
+          if (q.hp < p.hp) p.hp = q.hp;
+          if (q.cracked && !p.cracked) { p.cracked = true; on.shatter?.(s, p); }
+          if (q.shade < (p.shade ?? 1)) on.char?.(s, p, q.shade);
+          if (q.gone && !p.gone) {
+            p.gone = true; p.dirx = q.dirx; p.dirz = q.dirz; p.delay = 0; p.quiet = !live;
+            on.fall?.(s, p, st.burning.delete(p));
+          } else if (live && q.burning) ignite(st, p);
+        }
+      } finally { taking = false; }
+    },
+    // healed: as it was built, once the page has written it again
+    forget(s) { states.delete(s.index); changed.delete(s.index); },
+    touched() { const out = [...changed.values()]; changed.clear(); return out; },
   };
   return d;
 }

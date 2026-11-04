@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { keyOf, kindOf, dirByte, dirOf, encodeParts, decodeParts, tidy, merge, lasting, partsIn, BYTE } from './wrecks.js';
+import { keyOf, kindOf, dirByte, dirOf, encodeParts, decodeParts, tidy, merge, lasting, partsIn, houseWrecks, takenParts, batches, BYTE, AT_ONCE } from './wrecks.js';
 
 const part = (over) => ({ part: 0, gone: false, cracked: false, burning: false, dir: 0, hp: BYTE, shade: BYTE, ...over });
 const building = (parts, over) => ({ k: 'b7301', x: 10, z: -20, n: 40, p: encodeParts(parts), ...over });
@@ -100,4 +100,52 @@ test('a vehicle only ever loses hit points and never comes back from being wreck
 test('how many building parts a wreck holds, for how much the town keeps', () => {
   assert.equal(partsIn(tidy(building([part({ part: 1, gone: true }), part({ part: 2, cracked: true })]))), 2);
   assert.equal(partsIn(tidy({ k: 'pfence:10:20', x: 1, z: 2, d: 9 })), 0);
+});
+
+// ---------------- on a phone: what src/damage.js reads of a building, said in bytes and taken back
+// A part as src/damage.js's read() has it, with its hit points out of its own most
+const read = (over) => ({ part: 0, gone: false, cracked: false, burning: false, dirx: 1, dirz: 0, hp: 10, max: 10, shade: 1, ...over });
+
+test('a building\'s parts are said as bytes, and only the ones that aren\'t as they were built, rounded towards more broken', () => {
+  const [w] = houseWrecks('b7301', 10.04, -20, 40, { out: false, parts: [read({ part: 3, gone: true, hp: -2, dirx: 0, dirz: -1 }), read({ part: 5, hp: 9.99 }), read({ part: 6, shade: .999 }), read({ part: 7, cracked: true })] });
+  assert.deepEqual({ ...w, p: undefined }, { k: 'b7301', x: 10.04, z: -20, n: 40, p: undefined });
+  assert.deepEqual(decodeParts(w.p), [
+    part({ part: 3, gone: true, dir: dirByte(0, -1), hp: 0 }),
+    part({ part: 5, hp: BYTE - 1 }),
+    part({ part: 6, shade: BYTE - 1 }),
+    part({ part: 7, cracked: true }),
+  ]);
+  assert.ok(tidy(w), 'and the town takes it as it is');
+  assert.deepEqual(houseWrecks('b7301', 0, 0, 40, { out: false, parts: [] }), [], 'one that\'s as it was built says nothing');
+  assert.equal(houseWrecks('b7301', 0, 0, 40, { out: true, parts: [] })[0].o, 1, 'but one that\'s given out says so');
+});
+
+test('a building with more parts broken than fit in what a phone can say at once goes in pieces, which the town puts back together', () => {
+  const parts = Array.from({ length: 1000 }, (_, i) => read({ part: i, gone: i % 2 === 0, hp: i % 2 ? 4 : 0, dirx: 0, dirz: 1 }));
+  const pieces = houseWrecks('b7301', 1, 2, 1200, { out: true, parts });
+  assert.ok(pieces.length > 1);
+  let kept = null;
+  for (const w of pieces) { assert.ok(tidy(w)); assert.equal(w.o, 1); kept = merge(kept, tidy(w)).kept; }
+  assert.equal(partsIn(kept), 1000);
+  for (const b of batches(pieces)) assert.ok(JSON.stringify({ t: 'wreck', w: b }).length <= 2048);
+});
+
+test('another phone takes a building\'s bytes back as src/damage.js reads them, against its own parts, and leaves anything it hasn\'t got', () => {
+  const built = Array.from({ length: 8 }, (_, i) => ({ part: i, max: i + 1 }));
+  const [w] = houseWrecks('b7301', 0, 0, 8, { out: false, parts: [read({ part: 2, gone: true, dirx: 0, dirz: 1, hp: 0, max: 3 }), read({ part: 6, hp: 3.5, max: 7, shade: .5, cracked: true })] });
+  const got = takenParts(w, built);
+  assert.equal(got.length, 2);
+  assert.deepEqual({ ...got[0], dirx: undefined, dirz: undefined }, { part: 2, gone: true, cracked: false, burning: false, dirx: undefined, dirz: undefined, hp: 0, shade: 1 });
+  assert.ok(Math.abs(got[0].dirx) < .03 && Math.abs(got[0].dirz - 1) < .001);
+  assert.equal(got[1].part, 6); assert.ok(Math.abs(got[1].hp - 3.5) < 7 / BYTE); assert.ok(Math.abs(got[1].shade - .5) < 1 / BYTE); assert.equal(got[1].cracked, true);
+  assert.deepEqual(takenParts(w, built.slice(0, 4)).map((q) => q.part), [2], 'and a part it hasn\'t got is left');
+});
+
+test('what a phone says goes in as few messages as it fits in, none over what the town hears and none with more than it takes at once, in the order it was said', () => {
+  const list = Array.from({ length: 200 }, (_, i) => ({ k: `pfence:${i}:0`, x: i, z: 0, d: i % 256 }));
+  const sent = batches(list);
+  assert.deepEqual(sent.flat(), list);
+  for (const b of sent) { assert.ok(JSON.stringify({ t: 'wreck', w: b }).length <= 2048); assert.ok(b.length <= AT_ONCE); }
+  for (let i = 0; i + 1 < sent.length; i++) assert.ok(sent[i].length === AT_ONCE || JSON.stringify({ t: 'wreck', w: [...sent[i], sent[i + 1][0]] }).length > 2048, 'each as full as it goes');
+  assert.deepEqual(batches([]), []);
 });

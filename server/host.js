@@ -7,11 +7,11 @@
 // pose. Keys and the hero's secret are hashed with Web Crypto, which Node and Workers both have, so it's the same here as there.
 // `mindsOf(keyHash)` is what the cast remember of someone, from wherever that's kept, and keeping it is up to whatever's around this.
 // `rektOf(keyHash)` is the rektguy of their own they're wearing, as { id, handle }, from server/wallet.js.
-import { PHONE_KEY, decodeMessage, say } from '../src/net.js';
+import { PHONE_KEY, SAY_MOST, decodeMessage, say } from '../src/net.js';
 import { HERO_TOKEN } from './wallet.js';
 
 const SLOW = 16384;   // bytes still waiting to go to a phone before it's skipped for a beat
-export const MOST = 2048;   // the most a phone can say at once: a hello, or what he's carrying, is well under it
+export const MOST = SAY_MOST;   // the most a phone can say at once: a hello, or what he's carrying, is well under it
 const HEAL_EVERY = 10000;   // how often the town looks for what's due to heal, in ms
 
 const sha = async (s) => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));

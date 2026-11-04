@@ -1073,7 +1073,7 @@ const wrapRope = new THREE.Mesh(new THREE.TorusGeometry(.36, .045, 8, 24), new T
 wrapRope.rotation.y = Math.PI / 2; wrapRope.position.set(0, DY, ZS); scene.add(wrapRope);
 
 // ================================================================ trees (autumn hardwoods + loblolly pines), kept off the roads and the town
-let fillTrees = null, fillGrass = null, treesNear = null, treeBlocks = null, fellTree = null, stepTrees = null, scorchTree = null, treeCrown = null, leafOf = null;
+let fillTrees = null, fillGrass = null, treesNear = null, treeBlocks = null, fellTree = null, stepTrees = null, scorchTree = null, treeCrown = null, leafOf = null, treeHere = null, mendTree = null;
 const swayU = { uTime: { value: 0 } };
 function swayMat(params) {
   const m = new THREE.MeshStandardMaterial(params);
@@ -1280,18 +1280,38 @@ function swayMat(params) {
     }
     return null;
   };
+  // the one standing at (x, z), to 10 cm, down or not, for a town everyone shares (CHUNKY-152)
+  treeHere = (x, z) => {
+    const at = (t) => t && Math.abs(t.x - x) < .06 && Math.abs(t.z - z) < .06;
+    for (let cx = Math.floor(x / CELL) - 1; cx <= Math.floor(x / CELL) + 1; cx++) for (let cz = Math.floor(z / CELL) - 1; cz <= Math.floor(z / CELL) + 1; cz++) {
+      const t = treeAt(cx, cz); if (at(t)) return t;
+      const q = firstCells.get(cellKey(cx, cz))?.find(at); if (q) return q;
+    }
+    return null;
+  };
   treeCrown = (t) => [t.x, t.h + (t.pine ? 6.5 * t.size : 3.2 * t.size + .8 * t.size), t.z];
   leafOf = (t, c) => { if (t.first) (t.pine ? cones : blobs).getColorAt(t.ci, c); else { poolTree(t); c.copy(TC[1]); } return c; };
   const falls = [], _leaf = new THREE.Color();
   fellTree = (t, dx, dz) => {
-    if (t.down) return;
-    t.down = true; SFX.play('tree.fall', { x: t.x, z: t.z });
+    if (t.down || spared(t.x, t.z)) return;
+    t.down = true;
     if (t.burner) { t.burner.T = 0; t.burner = null; }
     const l = Math.hypot(dx, dz), a = t.x * 7 + t.z * 3;
     t.dirx = l ? dx / l : Math.cos(a); t.dirz = l ? dz / l : Math.sin(a);
     const small = isSmall(t);
-    falls.push({ t, e: 0, T: small ? .34 : 1.15, angle: small ? 1.75 : 1.47, small });
+    // taken quietly from another phone, it's lying where it fell
+    if (wreckMode === 'quiet') { if (small) t.stump = true; else t.lean = 1.47; redrawTree(t); return; }
+    SFX.play('tree.fall', { x: t.x, z: t.z });
+    falls.push({ t, e: 0, T: small ? .34 : 1.15, angle: small ? 1.75 : 1.47, small, echo: wreckMode === 'echo' });
     if (folkOut && !small) horde.noise(t.x, t.z, 26, 2);
+    broken('tree', t);
+  };
+  // healed: standing as it grew
+  mendTree = (t) => {
+    if (t.burner) { t.burner.T = 0; t.burner = null; }
+    for (let i = falls.length - 1; i >= 0; i--) if (falls[i].t === t) falls.splice(i, 1);
+    t.down = t.stump = t.burnt = false; t.lean = 0; delete t.hp;
+    redrawTree(t);
   };
   stepTrees = () => {
     for (let i = falls.length - 1; i >= 0; i--) {
@@ -1309,8 +1329,8 @@ function swayMat(params) {
           spray(x, t.h + .5, z, FEW ? 4 : 8, .18, 3, _leaf.r, _leaf.g, _leaf.b);
           dust(x, z, t.dirx, t.dirz, t.size * 5, 1.6);
           if (!reduceMotion && Math.hypot(player.pos.x - x, player.pos.z - z) < 30) cam.shake = Math.max(cam.shake, .2);
-          // and whatever it comes down on knows about it
-          strike(t.x + t.dirx * reach * 1.5, TOWN_Y + 1, t.z + t.dirz * reach * 1.5, 2.2, 2.5, t.dirx, t.dirz);
+          // and whatever it comes down on knows about it, unless it came down on another phone, which says what it hit itself
+          if (!f.echo) strike(t.x + t.dirx * reach * 1.5, TOWN_Y + 1, t.z + t.dirz * reach * 1.5, 2.2, 2.5, t.dirx, t.dirz);
         }
       }
       redrawTree(t);
@@ -1318,7 +1338,8 @@ function swayMat(params) {
   };
   scorchTree = (t) => {
     t.burnt = true; t.hp = .4; leafOf(t, _leaf); redrawTree(t);
-    const [x, y, z] = treeCrown(t); spray(x, y - 1, z, FEW ? 3 : 6, .12, 1.6, .05, .04, .05);
+    if (wreckMode !== 'quiet') { const [x, y, z] = treeCrown(t); spray(x, y - 1, z, FEW ? 3 : 6, .12, 1.6, .05, .04, .05); }
+    broken('tree', t);
   };
 }
 // ================================================================ water (no reflection pass, so it stays light on phones)
@@ -1584,14 +1605,27 @@ function stepFalling() {
       _wa.set(f.dirz, 0, -f.dirx); _wq.setFromAxisAngle(_wa, f.angle * e);
       for (const { o, pos, quat } of f.objs) { o.position.copy(pos).sub(_v.set(...f.pivot)).applyQuaternion(_wq).add(_v); o.position.y += f.lift * e; o.quaternion.copy(_wq).multiply(quat); }
     }
-    if (done) { falling.splice(i, 1); f.end?.(); }
+    if (done) { falling.splice(i, 1); if (f.end) inMode(f.mode ?? null, f.end); }
   }
 }
+// ---- in a town everyone shares (CHUNKY-152), what's broken is the same for everyone and heals a day later, which is src/together.js's
+// Online, nothing at the places src/aside.js sets aside breaks at all, and a truck bumps off what's there like a wall. asideAt is null
+// in a game on its own.
+let asideAt = null;
+const spared = (x, z) => !!asideAt && asideAt(x, z);
+// What's broken here goes to everyone else, through tellBroken, which is null in a game on its own. What's taken from another phone
+// isn't said back: far off, or as he comes in, it's taken 'quiet', and lies where it fell without a sound or anything it set off. In
+// front of him it's an 'echo', and comes down as it did there, with what it hits left to that phone, which says so itself.
+let tellBroken = null, wreckMode = null;
+const broken = (kind, thing) => { if (tellBroken && !wreckMode) tellBroken(kind, thing); };
+function inMode(mode, fn) { const was = wreckMode; wreckMode = mode; try { return fn(); } finally { wreckMode = was; } }
 // ---- a building's pieces
-const damage = createDamage({ base: TOWN_Y, on: {
+const damage = createDamage({ base: TOWN_Y, spared: (s) => spared(s.wx, s.wz), on: {
   fall(s, p, wasBurning) {
     const stop = s.stops?.get(p.stop); if (stop) stop[4] = -1e9;
     if (p.fire) { p.fire.T = 0; p.fire = null; }
+    // taken quietly from another phone: where it lies, and nothing more
+    if (p.quiet) { if (s.cell.mesh) laid(s.cell.mesh.geometry, s.cell.starts.get(s.index) + p.first, s, p, true); buildingTies.get(s.index)?.(s, p); return; }
     if (wasBurning && p.kind !== 'kudzu') emberAt(p.x, p.z);
     if (s.cell.mesh) fallPiece(s, p);
     buildingTies.get(s.index)?.(s, p);
@@ -1606,7 +1640,7 @@ const damage = createDamage({ base: TOWN_Y, on: {
   },
   // the frame stays, dark, and the wall behind it's still a wall
   shatter(s, p) {
-    spray(p.x, p.y, p.z, 3, .08, 2.6, .55, .65, .75);
+    if (wreckMode !== 'quiet') spray(p.x, p.y, p.z, 3, .08, 2.6, .55, .65, .75);
     if (s.cell.mesh) unlight(s.cell.mesh.geometry, s.cell.starts.get(s.index) + p.first, p.count, true);
   },
   ignite(s, p) { burningHouses.add(s); p.fire = burnAt(p.x, flameFoot(p), p.z, FLAME_SIZE[p.kind] ?? 1, Infinity, { s }); },
@@ -1638,6 +1672,14 @@ function layDown(g, start, s) {
     else { if (p.shade) { const C = g.attributes.color.array; for (let i = (start + p.first) * 3, e = i + p.count * 3; i < e; i++) C[i] *= p.shade; } if (p.cracked) unlight(g, start + p.first, p.count, false); }
   }
 }
+// Healed: as it was built, with its walls stopping him again and what hung on it back, and written again if its cell's drawn
+function mendHouse(s) {
+  if (damage.has(s)) for (const p of damage.state(s).parts) if (p.fire) { p.fire.T = 0; p.fire = null; }
+  burningHouses.delete(s); damage.forget(s);
+  for (const w of collidersOf(s, TOWN_Y)) { const stop = s.stops.get(w[6]); if (stop) stop[4] = w[4]; }
+  buildingMends.get(s.index)?.(s);
+  if (s.cell.mesh) { dropHouses(s.cell); buildHouses(s.cell); }
+}
 // how much of a piece flies off when it goes
 const BITS = { wall: [5, .3, 3.2], lintel: [2, .2, 2.4], roof: [2, .34, 2], gable: [3, .3, 2.4], porch: [1, .3, 2], carport: [1, .3, 2], post: [1, .12, 2], door: [1, .22, 2], bay: [2, .3, 2.6], window: [3, .07, 3], shutter: [1, .12, 2], kudzu: [2, .2, 1.6], vent: [1, .14, 2] };
 function fallPiece(s, p) {
@@ -1655,9 +1697,10 @@ function fallPiece(s, p) {
   if (how.mode === 'topple') Object.assign(f, { pivot: how.pivot, dirx: p.dirx, dirz: p.dirz, angle: how.angle, lift: how.lift }), f.boxes[0].nor = g.attributes.normal.array.slice(at, at + len);
   falling.push(f);
 }
-// A building can have things hanging on it that aren't part of it: a sign, a steeple, a window
-const buildingTies = new Map();
-function tieTo(s, fn) { if (s) buildingTies.set(s.index, fn); }
+// A building can have things hanging on it that aren't part of it: a sign, a steeple, a window. `mend` puts back what fn took that isn't
+// a thing that breaks of its own, for when the building's healed.
+const buildingTies = new Map(), buildingMends = new Map();
+function tieTo(s, fn, mend) { if (s) { buildingTies.set(s.index, fn); if (mend) buildingMends.set(s.index, mend); } }
 const HOUSE_NEAR = new Set();
 function housesNear(x, z, r) {
   HOUSE_NEAR.clear();
@@ -1696,7 +1739,7 @@ const propDist = (p, x, y, z) => {
   return Math.hypot(Math.max(a.x - x, 0, x - b.x), dy, Math.max(a.z - z, 0, z - b.z));
 };
 function hitProp(p, power, dx, dz) {
-  if (p.down) return;
+  if (p.down || spared(p.cx, p.cz)) return;
   p.hp -= power; p.hit?.(p);
   spray(p.cx, Math.min(p.box.max.y, player.pos.y + 1.2), p.cz, FEW ? 1 : 2, .12, 2.4, p.color.r, p.color.g, p.color.b);
   if (p.hp <= 0) breakProp(p, dx, dz);
@@ -1710,12 +1753,20 @@ function dust(x, z, dirx, dirz, long, wide = 1.2) {
   }
 }
 function breakProp(p, dx = 0, dz = 0) {
-  if (p.down) return;
-  p.down = true; SFX.play(METAL_PROPS.has(p.kind) ? 'break.metal' : 'break.wood', { x: p.cx, z: p.cz });
+  if (p.down || spared(p.cx, p.cz)) return;
+  const quiet = wreckMode === 'quiet';
+  p.down = true; if (!quiet) SFX.play(METAL_PROPS.has(p.kind) ? 'break.metal' : 'break.wood', { x: p.cx, z: p.cz });
   const l = Math.hypot(dx, dz), a = (p.cx + p.cz) * 7, { min, max } = p.box;
   let dirx = l ? dx / l : Math.cos(a), dirz = l ? dz / l : Math.sin(a);
   // a stretch of fence only goes over one way or the other
   if (p.falls) { const side = dirx * p.falls[0] + dirz * p.falls[1] >= 0 ? 1 : -1; dirx = p.falls[0] * side; dirz = p.falls[1] * side; }
+  p.dirx = dirx; p.dirz = dirz;
+  // as it stood, for when it's healed in a town everyone shares
+  if (tellBroken) p.was = {
+    tops: [...p.solids, ...p.walls].map((c) => [c, c[4]]), hidden: p.hide.map((o) => [o, o.visible]),
+    kudzu: p.kudzu.map((i) => { const m = new THREE.Matrix4(); kudzuMesh.getMatrixAt(i, m); return [i, m]; }),
+    faces: p.faces.map((f) => { const m = new THREE.Matrix4(); f.im.getMatrixAt(f.i, m); return [f, m]; }),
+  };
   for (const b of p.solids) b[4] = -1e9;
   for (const w of p.walls) w[4] = -1e9;
   if (p.kudzu.length) { for (const i of p.kudzu) kudzuMesh.setMatrixAt(i, NOWHERE); kudzuMesh.instanceMatrix.needsUpdate = true; }
@@ -1724,39 +1775,67 @@ function breakProp(p, dx = 0, dz = 0) {
   // whatever was sitting on it comes down too
   for (const c of [...PICKUPS, ...LOOT]) if (!c.got && c.y > TOWN_Y + .6 && c.x > min.x - 1 && c.x < max.x + 1 && c.z > min.z - 1 && c.z < max.z + 1) c.y = TOWN_Y + .3;
   const size = Math.max(max.x - min.x, max.y - min.y, max.z - min.z), n = Math.min(FEW ? 4 : 7, 2 + Math.round(size));
-  spray(p.cx, p.rigid ? min.y + .6 : (min.y + max.y) / 2, p.cz, n, Math.min(.42, .1 + size * .04), 3, p.color.r, p.color.g, p.color.b, dirx, dirz);
+  if (!quiet) spray(p.cx, p.rigid ? min.y + .6 : (min.y + max.y) / 2, p.cz, n, Math.min(.42, .1 + size * .04), 3, p.color.r, p.color.g, p.color.b, dirx, dirz);
   p.broke?.(p, dirx, dirz);
-  if (folkOut && time - lastCrash > .3) { lastCrash = time; horde.noise(p.cx, p.cz, 26, 3); }
+  if (!quiet && folkOut && time - lastCrash > .3) { lastCrash = time; horde.noise(p.cx, p.cz, 26, 3); }
+  broken('prop', p);
   const boxes = p.boxes.filter((h) => h.g).map((h) => {
     const at = h.first * 3, len = h.count * 3, A = h.g.attributes.position.array;
     return { g: h.g, first: h.first, count: h.count, from: A.slice(at, at + len), nor: h.g.attributes.normal.array.slice(at, at + len), to: new Float32Array(len) };
   });
-  const land = p.landed && (() => p.landed(p, dirx, dirz));
+  if (p.was) p.was.boxes = boxes;
+  // taken quietly it's down by the next step, without the dust or what it lands on knowing about it
+  const land = !quiet && p.landed && (() => p.landed(p, dirx, dirz)), mode = wreckMode;
   if (p.rigid) {
-    const objs = p.objs.map((o) => ({ o, pos: o.position.clone(), quat: o.quaternion.clone() })), high = max.y - min.y;
-    falling.push({ boxes, objs, t: 0, T: p.T ?? Math.min(1.2, .45 + high * .07), pivot: [p.cx, p.pivotY ?? min.y, p.cz], dirx, dirz, angle: Math.PI / 2 - .05, lift: (p.pivotY ? TOWN_Y - p.pivotY + 1 : 0) + .08, end: () => { dust(p.cx + dirx * high * .5, p.cz + dirz * high * .5, dirx, dirz, Math.min(high, 12), 1.6); land?.(); } });
+    const objs = p.objs.map((o) => ({ o, pos: o.position.clone(), quat: o.quaternion.clone() })), high = max.y - min.y, T = p.T ?? Math.min(1.2, .45 + high * .07);
+    if (p.was) p.was.objs = objs;
+    falling.push({ boxes, objs, t: quiet ? T : 0, T, pivot: [p.cx, p.pivotY ?? min.y, p.cz], dirx, dirz, angle: Math.PI / 2 - .05, lift: (p.pivotY ? TOWN_Y - p.pivotY + 1 : 0) + .08, prop: p, mode, end: !quiet && (() => { dust(p.cx + dirx * high * .5, p.cz + dirz * high * .5, dirx, dirz, Math.min(high, 12), 1.6); land?.(); }) });
     return;
   }
-  const floor = TOWN_Y + .03, squash = p.squash ?? .2;
+  const floor = TOWN_Y + .03, squash = p.squash ?? .2, T = Math.min(.8, Math.sqrt(2 * Math.max(min.y - floor, .3) / 9.8) + .08);
   for (const b of boxes) {
     let lo = Infinity; for (let i = 1; i < b.from.length; i += 3) if (b.from[i] < lo) lo = b.from[i];
     for (let i = 0; i < b.from.length; i += 3) { b.to[i] = b.from[i]; b.to[i + 1] = floor + (b.from[i + 1] - lo) * squash; b.to[i + 2] = b.from[i + 2]; }
   }
-  falling.push({ boxes, t: 0, T: Math.min(.8, Math.sqrt(2 * Math.max(min.y - floor, .3) / 9.8) + .08), end: () => { if (size > 2) dust(p.cx, p.cz, dirx, dirz, Math.min(size, 10), Math.min(size, 3)); land?.(); } });
+  falling.push({ boxes, t: quiet ? T : 0, T, prop: p, mode, end: !quiet && (() => { if (size > 2) dust(p.cx, p.cz, dirx, dirz, Math.min(size, 10), Math.min(size, 3)); land?.(); }) });
+}
+// Healed: standing as it was, where it was, with what it did when it went undone by its own mend
+function mendProp(p) {
+  if (!p.down || !p.was) return;
+  const { tops, hidden, kudzu, faces, boxes = [], objs = [] } = p.was;
+  for (let i = falling.length - 1; i >= 0; i--) if (falling[i].prop === p) falling.splice(i, 1);
+  for (const b of boxes) {
+    const at = b.first * 3, len = b.count * 3, P = b.g.attributes.position, N = b.g.attributes.normal;
+    P.array.set(b.from, at); N.array.set(b.nor, at); touch(P, at, len); touch(N, at, len);
+  }
+  for (const { o, pos, quat } of objs) { o.position.copy(pos); o.quaternion.copy(quat); }
+  for (const [c, top] of tops) c[4] = top;
+  for (const [o, was] of hidden) o.visible = was;
+  if (kudzu.length) { for (const [i, m] of kudzu) kudzuMesh.setMatrixAt(i, m); kudzuMesh.instanceMatrix.needsUpdate = true; }
+  for (const [f, m] of faces) { f.im.setMatrixAt(f.i, m); f.im.instanceMatrix.needsUpdate = true; }
+  p.down = false; p.hp = p.max; p.was = null;
+  p.mend?.(p);
 }
 function dropWires(w) {
   if (!w || w.down) return; w.down = true;
   const P = w.g.attributes.position, at = w.first * 3, len = w.count * 3;
+  w.was = P.array.slice(at, at + len);
   for (let i = 0; i < len; i += 3) { P.array[at + i] = P.array[at]; P.array[at + i + 1] = P.array[at + 1]; P.array[at + i + 2] = P.array[at + 2]; }
   touch(P, at, len);
+}
+function raiseWires(w) {
+  if (!w?.down) return; w.down = false;
+  const P = w.g.attributes.position, at = w.first * 3;
+  P.array.set(w.was, at); touch(P, at, w.count * 3);
 }
 // ---- what does the breaking
 // A blow at one spot, from a skillet or a bumper. It lands on the nearest thing in reach, and says what it was, how much of the blow that took and whether it's gone.
 function strike(x, y, z, reach, power, dx, dz) {
   let bd = reach, part = null, house = null, prop = null, tree = null;
   for (const s of housesNear(x, z, reach)) { const e = damage.nearest(s, x, y, z, bd); if (e && e.d < bd) { bd = e.d; part = e.part; house = s; } }
-  propsNear(x, z, reach, (p) => { const e = propDist(p, x, y, z); if (e < bd) { bd = e; prop = p; part = null; } });
-  treesNear(x, z, reach, (t) => { const e = Math.hypot(t.x - x, t.z - z) - .2; if (e < bd) { bd = e; tree = t; prop = null; part = null; } });
+  // and online, nothing at a place that's set aside, the same as a building there (src/damage.js)
+  propsNear(x, z, reach, (p) => { const e = propDist(p, x, y, z); if (e < bd && !spared(p.cx, p.cz)) { bd = e; prop = p; part = null; } });
+  treesNear(x, z, reach, (t) => { const e = Math.hypot(t.x - x, t.z - z) - .2; if (e < bd && !spared(t.x, t.z)) { bd = e; tree = t; prop = null; part = null; } });
   if (part) { const had = part.hp; damage.hit(house, part, power, dx, dz); return { thing: part, house, used: Math.min(power, Math.max(had, 0)), gone: part.gone }; }
   if (prop) { const had = prop.hp; hitProp(prop, power, dx, dz); return { thing: prop, used: Math.min(power, Math.max(had, 0)), gone: prop.down }; }
   if (tree) { const had = tree.hp ?? treeToughness(tree); hitTree(tree, power, dx, dz); return { thing: tree, used: Math.min(power, Math.max(had, 0)), gone: !!tree.down }; }
@@ -1764,7 +1843,7 @@ function strike(x, y, z, reach, power, dx, dz) {
 }
 const treeToughness = (t) => (t.burnt ? .4 : t.size < (t.pine ? 1.05 : 1.1) ? .35 : t.size * 4);
 function hitTree(t, power, dx, dz) {
-  if (t.down) return;
+  if (t.down || spared(t.x, t.z)) return;
   t.hp = (t.hp ?? treeToughness(t)) - power;
   leafOf(t, _wc); const [x, y, z] = treeCrown(t); spray(x, y - .6, z, FEW ? 2 : 4, .13, 2.2, _wc.r, _wc.g, _wc.b);
   if (t.hp <= 0) fellTree(t, dx, dz);
@@ -1911,8 +1990,9 @@ const iceSign = (() => { const m = new THREE.Mesh(new THREE.PlaneGeometry(.72, .
 around(PLACES.gas, () => {
   pad(46, 60, 4, 15, 4);
   // a deep cream fascia with a red band along the top, as on the real one
-  canopyProp = breakable('canopy', 3, () => { addBox(canopyMat, 53, Y0 + 4.6, 10, 10, .35, 8, 1.5); for (const [x, z, sx, sz] of [[53, 5.97, 10.2, .06], [53, 14.03, 10.2, .06], [47.97, 10, .06, 8.1], [58.03, 10, .06, 8.1]]) { addBox(canopyMat, x, Y0 + 4.55, z, sx, .46, sz, 1.2); addBox(canopyPost, x, Y0 + 4.87, z, sx, .18, sz, 1.2); } kudzuOn(48, 58, Y0 + 4.9, 6, 14, 8); }, { high: true, broke() { gasPower = 0; gasStrip.visible = false; const i = horde.lights.indexOf(gasSpot); if (i >= 0) horde.lights.splice(i, 1); } });
-  for (const [x, z] of [[48.6, 6.6], [57.4, 6.6], [48.6, 13.4], [57.4, 13.4]]) breakable('post', 1.5, () => { addBox(canopyPost, x, Y0 + 2.3, z, .3, 4.6, .3, 1.2); solid(x - .25, x + .25, z - .25, z + .25, Y0 + 4.6); }, { rigid: true, broke() { if (++canopyPosts >= 2) breakProp(canopyProp); } });
+  canopyProp = breakable('canopy', 3, () => { addBox(canopyMat, 53, Y0 + 4.6, 10, 10, .35, 8, 1.5); for (const [x, z, sx, sz] of [[53, 5.97, 10.2, .06], [53, 14.03, 10.2, .06], [47.97, 10, .06, 8.1], [58.03, 10, .06, 8.1]]) { addBox(canopyMat, x, Y0 + 4.55, z, sx, .46, sz, 1.2); addBox(canopyPost, x, Y0 + 4.87, z, sx, .18, sz, 1.2); } kudzuOn(48, 58, Y0 + 4.9, 6, 14, 8); }, { high: true, broke() { gasPower = 0; gasStrip.visible = false; const i = horde.lights.indexOf(gasSpot); if (i >= 0) horde.lights.splice(i, 1); },
+    mend() { gasPower = 1; gasStrip.visible = true; if (crowdOut && !horde.lights.includes(gasSpot)) horde.lights.push(gasSpot); } });
+  for (const [x, z] of [[48.6, 6.6], [57.4, 6.6], [48.6, 13.4], [57.4, 13.4]]) breakable('post', 1.5, () => { addBox(canopyPost, x, Y0 + 2.3, z, .3, 4.6, .3, 1.2); solid(x - .25, x + .25, z - .25, z + .25, Y0 + 4.6); }, { rigid: true, broke() { if (++canopyPosts >= 2) breakProp(canopyProp); }, mend() { canopyPosts--; } });
   // old cream pumps on a concrete island, with a dial on each face and a hose hung up on the side
   for (const x of [51, 55]) breakable('pump', 2, () => {
     addBox(stoneMat, x, Y0 + .09, 10, 1.3, .18, 1.7, 1);
@@ -1985,11 +2065,15 @@ let churchWindow = null, churchZone = null;
 const churchLight = new THREE.PointLight('#ffb347', 10, 13, 1.7); churchLight.position.set(churchAt(68.5, 0)[0], Y0 + 2.6, churchAt(0, -5)[1]); scene.add(churchLight);
 // the windows go with the walls they're in, the steeple with enough of the walls under it, and past that it's no refuge
 tieTo(CHURCH_HOUSE, (s, p) => {
-  if (churchWindow.visible && Math.hypot(p.x - churchWindow.position.x, p.z - churchWindow.position.z) < 2.4) { churchWindow.visible = false; spray(churchWindow.position.x, Y0 + 3, churchWindow.position.z, 6, .12, 3, .9, .5, .2); }
-  if (roundWindow.visible && Math.hypot(p.x - roundWindow.position.x, p.z - roundWindow.position.z) < 2.4) { roundWindow.visible = false; spray(roundWindow.position.x, Y0 + 6, roundWindow.position.z, 5, .1, 3, .3, .45, .7); }
+  const loud = wreckMode !== 'quiet';
+  if (churchWindow.visible && Math.hypot(p.x - churchWindow.position.x, p.z - churchWindow.position.z) < 2.4) { churchWindow.visible = false; if (loud) spray(churchWindow.position.x, Y0 + 3, churchWindow.position.z, 6, .12, 3, .9, .5, .2); }
+  if (roundWindow.visible && Math.hypot(p.x - roundWindow.position.x, p.z - roundWindow.position.z) < 2.4) { roundWindow.visible = false; if (loud) spray(roundWindow.position.x, Y0 + 6, roundWindow.position.z, 5, .1, 3, .3, .45, .7); }
   const gone = damage.gone(s);
   if (gone > .35) breakProp(churchSteeple, 0, 1);
   if (gone > .4) { churchLight.intensity = 0; if (churchZone) { horde.zones.splice(horde.zones.indexOf(churchZone), 1); churchZone = null; } S.flags.churchDown = true; }
+}, () => {
+  churchWindow.visible = roundWindow.visible = true; churchLight.intensity = 10; S.flags.churchDown = false;
+  if (crowdOut && !churchZone) { const [cx, cz] = atTrue(-309, -228); churchZone = { x: cx, z: cz, r: 28 }; horde.zones.push(churchZone); }
 });
 // What stands on a roof doesn't go with the roof when he's inside, so it's in a group of its own that can: what's been drawn since the last flush
 function onTheRoof() { flushBuckets(); const drawn = DISTANT[DISTANT.length - 1].obj, g = new THREE.Group(); scene.remove(drawn); g.add(drawn); scene.add(g); return g; }
@@ -2393,13 +2477,15 @@ const wireMat = new THREE.MeshBasicMaterial({ color: '#0c080e' });
   const polesAlong = (id, x0, x1, step) => {
     const poles = [];
     // when a pole goes, so do the wires either side of it
-    const wires = [];
+    const wires = [], props = [];
     for (let x = x0; x <= x1; x += step) {
       if (id === 'us_80' && (Math.abs(x - adamsX) < 8 || (x > canopy0 && x < canopy1))) continue;
       const z = MAP.zAt(id, x) - 4.3;
       if (houseAt(x, z) || MAP.roadGrid.within(x, z, (road) => road.id === id ? 0 : road.width / 2 + 1.5)) continue;
       const j = poles.length;
-      breakable('pole', 2, () => { addBox(poleMat, x, Y0 + 4, z, .25, 8, .25, 1.1); addBox(poleMat, x, Y0 + 7.6, z, .12, .12, 2.2, 1); solid(x - .2, x + .2, z - .2, z + .2, Y0 + 8); }, { rigid: true, chip: '#4a3640', broke() { dropWires(wires[j - 1]); dropWires(wires[j]); } });
+      // and once it's healed, they're back up wherever the pole at the other end is standing too
+      props[j] = breakable('pole', 2, () => { addBox(poleMat, x, Y0 + 4, z, .25, 8, .25, 1.1); addBox(poleMat, x, Y0 + 7.6, z, .12, .12, 2.2, 1); solid(x - .2, x + .2, z - .2, z + .2, Y0 + 8); }, { rigid: true, chip: '#4a3640', broke() { dropWires(wires[j - 1]); dropWires(wires[j]); },
+        mend() { if (props[j - 1] && !props[j - 1].down) raiseWires(wires[j - 1]); if (props[j + 1] && !props[j + 1].down) raiseWires(wires[j]); } });
       poles.push([x, z]);
     }
     // one merged mesh for every eight spans, so wires out of view cost nothing
@@ -2453,7 +2539,8 @@ for (const [x, z] of [[...gasAt(51.4, 7.2)], [96, -5.5], [BOX.x - 3, BOX.z - 6]]
   const pl = new THREE.PointLight('#ff8a30', 12, 11, 1.7); pl.position.set(x, Y0 + 1.8, z); scene.add(pl);
   const f = { pl, ph: rnd() * 10, out: false, duty: false, burner: null, home: pl.position.clone(), spot: { x, z, r: 30 } };
   // two boxes at an eighth of a turn make a drum
-  breakable('barrel', 1, () => { addBox(railMat, x, Y0 + .5, z, .62, 1, .62, 1.2); addBox(railMat, x, Y0 + .5, z, .62, 1, .62, 1.2, new THREE.Quaternion().setFromAxisAngle(UP, Math.PI / 4)); solid(x - .4, x + .4, z - .4, z + .4, Y0 + 1); }, { broke() { f.out = true; pl.intensity = 0; if (f.burner) f.burner.dead = true; const i = horde.lights.indexOf(f.spot); if (i >= 0) horde.lights.splice(i, 1); burnAt(x, Y0 + .04, z, 1.1, 12 + wreckRand() * 8); for (const q of [[1, .4], [-.7, .9], [.2, -1.1]]) burnAt(x + q[0], Y0 + .04, z + q[1], .7, 7 + wreckRand() * 7); } });
+  breakable('barrel', 1, () => { addBox(railMat, x, Y0 + .5, z, .62, 1, .62, 1.2); addBox(railMat, x, Y0 + .5, z, .62, 1, .62, 1.2, new THREE.Quaternion().setFromAxisAngle(UP, Math.PI / 4)); solid(x - .4, x + .4, z - .4, z + .4, Y0 + 1); }, { broke() { f.out = true; pl.intensity = 0; if (f.burner) f.burner.dead = true; const i = horde.lights.indexOf(f.spot); if (i >= 0) horde.lights.splice(i, 1); burnAt(x, Y0 + .04, z, 1.1, 12 + wreckRand() * 8); for (const q of [[1, .4], [-.7, .9], [.2, -1.1]]) burnAt(x + q[0], Y0 + .04, z + q[1], .7, 7 + wreckRand() * 7); },
+    mend() { f.out = false; f.burner = burnAt(f.home.x, Y0 + .95, f.home.z, .58, Infinity, { barrel: true }); if (crowdOut && !horde.lights.includes(f.spot)) horde.lights.push(f.spot); } });
   fires.push(f);
 }
 {
@@ -6041,7 +6128,8 @@ const TALK = { back: 3, out: 1.7, up: 2.45, look: 1.5, along: .27 }, _talk = new
 let toastT = 0, cardT = 0;
 // game-clock timers, so story beats wait for the game when the tab sleeps or a test holds the clock
 const timers = [];
-function after(sec, fn) { timers.push({ at: time + sec, fn }); }
+// and whatever's set going by something taken from another phone goes off the same way, quietly or as an echo
+function after(sec, fn) { const mode = wreckMode; timers.push({ at: time + sec, fn: mode ? () => inMode(mode, fn) : fn }); }
 function toast(msg) { if (S.mode === 'fail') return; const t = $('toast'); t.textContent = msg; t.classList.add('show'); t.classList.toggle('low', !!S.flags.town); toastT = 2.2; }
 function card(h, p, dur = 3.2) { $('cardH').innerHTML = h; $('cardP').textContent = p || ''; $('card').classList.add('show'); cardT = dur; }
 const hudCache = {};
@@ -6954,6 +7042,7 @@ const VEHICLES = [
 ].map(({ kind, x, z, yaw, tone }) => {
   const v = makeVehicle(kind, x, z, yaw, floorAt(x, z)), list = PAINTS[kind];
   v.tone = tone; v.paint = new THREE.Color(list[Math.floor(tone * list.length) % list.length]); v.shownSpin = 0; v.seen = Infinity; settle(v, floorAt);
+  v.home = { x, z, yaw };
   return v;
 });
 function markVehicle(v, on) {
@@ -7464,6 +7553,8 @@ let smokeNext = 0, sparkNext = 0, sparksOn = 0, smokesOn = 0;
 const burners = [], burningHouses = new Set();
 let drawnBurners = [], burnersPicked = -1, fireClock = 0, heatAt = 0;
 function burnAt(x, y, z, size, T = Infinity, owner = null) {
+  // nothing's lit by what's taken quietly from another phone: one that's out already
+  if (wreckMode === 'quiet') return { x, y, z, size, T: 0, owner, dead: true };
   const b = { x, y, z, size, T, owner, age: 0, dead: false, floor: floorAt(x, z), seed: wreckRand() * 6.283, seen: 0 };
   burners.push(b); burnersPicked = -1; SFX.play('fire.catch', { x, z });
   return b;
@@ -7473,7 +7564,7 @@ function emberAt(x, z) { if (burners.length < BURNERS_MAX) burnAt(x + (wreckRand
 // Where a piece's flames stand: from about the middle of it, so that they lick up its face
 const flameFoot = (p) => p.y - (p.kind === 'wall' ? .9 : p.kind === 'kudzu' ? .3 : .2);
 function catchTree(t) {
-  if (t.down || t.burnt || t.burner) return;
+  if (t.down || t.burnt || t.burner || spared(t.x, t.z)) return;
   const [x, y, z] = treeCrown(t);
   t.burner = burnAt(x, y - 1.2, z, .9 + t.size * .7, 8 + wreckRand() * 7, { tree: t });
 }
@@ -7612,18 +7703,21 @@ function updateBooms(dt) {
 }
 // What a blast does to everything around it. Something heavy landing does the same without the fire.
 function shock(x, y, z, r, power, skip, fire) {
-  // it takes out what's close, and sets light to the nearest of what's left
-  for (const s of [...housesNear(x, z, r * 1.2)]) { damage.blast(s, x, y, z, r, power); if (fire) for (let i = 0; i < 3; i++) damage.catchNear(s, x, y, z, r * 1.2); }
-  propsNear(x, z, r, (p) => { const e = propDist(p, x, y, z); if (e < r) hitProp(p, power * (1 - e / r) ** 2, p.cx - x, p.cz - z); });
-  treesNear(x, z, r * .85, (t) => { const e = Math.hypot(t.x - x, t.z - z); if (e > r * .85) return; hitTree(t, power * 1.2 * (1 - e / r) ** 2, t.x - x, t.z - z); if (fire && e < r * .7) catchTree(t); });
-  for (const c of GAS_CANS) if (!c.got && Math.hypot(c.x - x, c.z - z) < r * .8) { c.got = true; gasDirty = true; after(.12 + Math.hypot(c.x - x, c.z - z) * .02, () => blastCan(c.x, c.y + .3, c.z)); }
-  for (const v of VEHICLES) {
-    if (v === skip || v.exploded) continue;
-    const dx = v.x - x, dz = v.z - z, d = Math.hypot(dx, dz) || 1;
-    if (d > r) continue;
-    const k = 1 - d / r;
-    if (hurtVehicle(v, power * k * 20)) wreckVehicle(v); else if (v.fuse > 0) v.fuse = Math.min(v.fuse, .25);
-    toss(v, dx / d * k * 9, dz / d * k * 9, 2 + k * 6); vehDirty = true;
+  // An echo of one on another phone only knocks him and the crowd about here: what it did to everything else comes from that phone
+  if (wreckMode !== 'echo') {
+    // it takes out what's close, and sets light to the nearest of what's left
+    for (const s of [...housesNear(x, z, r * 1.2)]) { damage.blast(s, x, y, z, r, power); if (fire) for (let i = 0; i < 3; i++) damage.catchNear(s, x, y, z, r * 1.2); }
+    propsNear(x, z, r, (p) => { const e = propDist(p, x, y, z); if (e < r) hitProp(p, power * (1 - e / r) ** 2, p.cx - x, p.cz - z); });
+    treesNear(x, z, r * .85, (t) => { const e = Math.hypot(t.x - x, t.z - z); if (e > r * .85) return; hitTree(t, power * 1.2 * (1 - e / r) ** 2, t.x - x, t.z - z); if (fire && e < r * .7) catchTree(t); });
+    for (const c of GAS_CANS) if (!c.got && Math.hypot(c.x - x, c.z - z) < r * .8) { c.got = true; gasDirty = true; after(.12 + Math.hypot(c.x - x, c.z - z) * .02, () => blastCan(c.x, c.y + .3, c.z)); }
+    for (const v of VEHICLES) {
+      if (v === skip || v.exploded || spared(v.x, v.z)) continue;
+      const dx = v.x - x, dz = v.z - z, d = Math.hypot(dx, dz) || 1;
+      if (d > r) continue;
+      const k = 1 - d / r;
+      if (hurtVehicle(v, power * k * 20)) wreckVehicle(v); else if (v.fuse > 0) v.fuse = Math.min(v.fuse, .25);
+      toss(v, dx / d * k * 9, dz / d * k * 9, 2 + k * 6); vehDirty = true;
+    }
   }
   if (folkOut) { horde.knock(x, z, r, DOWN_FOR.blast, 'blast'); horde.noise(x, z, r * 9, 6, 'blast'); }
   const P = player.pos, d = Math.hypot(P.x - x, P.z - z), reach = r * .8;
@@ -7634,6 +7728,8 @@ function thud(x, y, z, r, power) {
   if (!reduceMotion) cam.shake = Math.max(cam.shake, .45 * Math.max(.25, 1 - Math.hypot(player.pos.x - x, player.pos.z - z) / (r * 5)));
 }
 function blast(x, y, z, r, power, skip = null) {
+  // set off by something taken quietly from another phone, it's been and gone: what it did comes from there
+  if (wreckMode === 'quiet') return;
   shock(x, y, z, r, power, skip, true); SFX.play('explosion', { x, z });
   // what you see of it
   const d = Math.hypot(player.pos.x - x, player.pos.z - z), fl = floorAt(x, z), b = booms[boomNext]; boomNext = (boomNext + 1) % BOOM_N;
@@ -7682,6 +7778,16 @@ function explodeVehicle(v) {
   blast(x, y + .8, z, 6 + v.K.mass / 500, 4 + v.K.mass / 400, v);
   toss(v, (wreckRand() - .5) * 3, (wreckRand() - .5) * 3, 6 + wreckRand() * 3);
   if (v.burner) v.burner.T = 16 + wreckRand() * 12;
+}
+// Healed: back where it was first parked, whole, put out and still. Never with him in it, and the town doesn't heal one anyone's in.
+function mendVehicle(v) {
+  if (v === driving) return;
+  if (v.burner) { v.burner.T = 0; v.burner = null; }
+  const lit = fuses.indexOf(v); if (lit >= 0) fuses.splice(lit, 1);
+  if (v.loose) { loose.splice(loose.indexOf(v), 1); v.loose = null; } else markVehicle(v, false);
+  Object.assign(v, { x: v.home.x, z: v.home.z, yaw: v.home.yaw, f: 0, s: 0, vy: 0, steer: 0, pitch: 0, roll: 0, hp: v.K.hp, wrecked: false, drowned: false, exploded: false, grounded: true });
+  delete v.fuse;
+  v.y = floorAt(v.x, v.z); settle(v, floorAt); markVehicle(v, true); vehDirty = true;
 }
 // Thrown about with nobody at the wheel
 function toss(v, vx, vz, vy) {
@@ -9156,6 +9262,30 @@ const SHARED = location.hostname === 'online.chunky.ms' || new URLSearchParams(l
     },
     // the hero, as everyone else sees the owner: built as he is under "the hero", with a face of its own for its hood to turn
     heroTwin() { const r = makeRig({ ...HERO_BUILD, faceM: tapeMat(HERO_SHAPE) }); r.setHood(heroHood); return r; },
+    // What's broken, in the game's own terms, for src/together.js to share (CHUNKY-152). start() is where nothing breaks online and who's
+    // told of everything that does. Taken from another phone, it comes down in front of him as it did there, and anywhere else it's
+    // quietly where it lies. A mend is a heal: as it was first built, or parked.
+    wrecks: {
+      farm: FARM.data, houses: STRUCTURES, props: PROPS, treeHere: (x, z) => treeHere(x, z),
+      start(at, tell) { asideAt = at; tellBroken = tell; },
+      touched: () => damage.touched(), read: (s) => damage.read(s), parts: (s) => damage.state(s).parts,
+      takeHouse: (s, parts, out, live) => inMode(live ? 'echo' : 'quiet', () => damage.take(s, parts, { live, out })),
+      takeProp: (p, dirx, dirz, live) => inMode(live ? 'echo' : 'quiet', () => breakProp(p, dirx, dirz)),
+      takeTree: (t, { down, burnt, dirx, dirz }, live) => inMode(live ? 'echo' : 'quiet', () => { if (burnt && !t.burnt) scorchTree(t); if (down) fellTree(t, dirx, dirz); }),
+      // A vehicle's fuse is that phone's, so one that's wrecked here only burns until it goes up there, and going up here does nothing more
+      takeVehicle: (v, { hp, wrecked, up, drowned }, live) => inMode(live ? 'echo' : 'quiet', () => {
+        v.hp = Math.min(v.hp, hp); vehDirty = true;
+        if (drowned && !v.drowned) { v.drowned = true; if (live) SFX.play('flood', { x: v.x, z: v.z }); }
+        if ((wrecked || up) && !v.wrecked) { v.wrecked = true; if (live && !up) v.burner = burnAt(v.x, v.y + .7, v.z, v.K.length * .24, 30, { veh: v }); }
+        if (up && !v.exploded) {
+          v.exploded = true;
+          if (v === driving) getOut(true);
+          if (live) blast(v.x, v.y + .8, v.z, 6 + v.K.mass / 500, 4 + v.K.mass / 400, v);
+          if (v.burner) v.burner.T = live ? 16 + wreckRand() * 12 : 0;
+        }
+      }),
+      mendHouse, mendProp, mendTree: (t) => mendTree(t), mendVehicle,
+    },
   };
   if (SHARED) {
     // the title card's Play, and nothing of the story's

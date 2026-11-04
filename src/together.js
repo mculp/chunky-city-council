@@ -18,6 +18,8 @@ import { checkName, NAME_MOST } from './names.js';
 import { inVehicle, settle, KINDS } from './vehicles.js';
 import { toScreen, drawLabel, nameBeside, COLORS as MAPC } from './mapview.js';
 import { TRIP } from './rings.js';
+import { keyOf, kindOf, dirByte, dirOf, houseWrecks, takenParts, batches, BYTE } from './wrecks.js';
+import { createAside } from './aside.js';
 
 const MOST = 25;                  // everyone the town holds, you included
 const SEE = 160, NAMED = 40;      // drawn this far from the camera, and named this far from you
@@ -154,7 +156,7 @@ export function together(G) {
       if (!r.no) mine.wearing = r.wearing;
     }
     if (link) { link.again(); return; }
-    link = connectNet({ url, hello: () => ({ key, name: you.name, look: you.look, hero: secret, build }), status, on: { welcome, car: park, bump } });
+    link = connectNet({ url, hello: () => ({ key, name: you.name, look: you.look, hero: secret, build }), status, on: { welcome, car: park, bump, wreck: (m) => { for (const w of m.w ?? []) takeWreck(w, false); }, heal } });
     requestAnimationFrame(pump);
   }
   function status(s, m) {
@@ -236,6 +238,8 @@ export function together(G) {
   function welcome(m) {
     you = { ...you, id: m.id, name: m.name, look: m.look, hero: m.hero, rekt: m.rekt ?? null };
     for (const c of m.cars ?? []) park(c);
+    // a town from before it kept what's broken doesn't say
+    if (m.wrecks) takeWrecks(m.wrecks);
     panel.hidden = true;
     // back after the line dropped: nothing to start again
     if (started) return;
@@ -286,9 +290,10 @@ export function together(G) {
     // down until they're halfway up, coming to, and down rolling out of something going too: a pose has no room for which way over
     // they are, so it's lying along the ground. On a trip from a ring it's that, from sitting down to getting up at the other end.
     else link.update(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: howNow() });
-    // what they carry goes whenever it changes
+    // what they carry goes whenever it changes, and what's broken a few times a second
     const had = JSON.stringify({ beans: S.beans, items: S.items, gas: S.gas });
     if (link.id && had !== keptWas) { keptWas = had; link.keep({ beans: S.beans, items: { ...S.items }, gas: S.gas }); }
+    sayWrecks();
   }
 
   // ---------------- vehicles someone else is in
@@ -344,6 +349,92 @@ export function together(G) {
         break;
       }
     }
+  }
+
+  // ---------------- what's broken (CHUNKY-152): the same for everyone, and healed a day after it broke, which is the town's to say.
+  // What breaks here goes whole, as src/wrecks.js says it, at most four times a second. What the town says broke elsewhere comes down as
+  // it did there if it's in front of him, and anywhere else, or as he comes in, it's quietly where it lies. Nothing at a place
+  // src/aside.js sets aside breaks at all. `broke` is everything this phone knows is broken, so anything that healed while it was away
+  // is healed as it comes back.
+  const W = G.wrecks, LIVE = 200, SAY_EVERY = 250, saidHere = new Map(), broke = new Set();
+  W.start(createAside(W.farm).world, (kind, thing) => saidHere.set(thing, kind));
+  const houseOf = new Map(W.houses.map((s) => [keyOf.building(s.id), s]));
+  // every prop that breaks, by what it is and where it stands, and the next of the same in the same place after it, as every phone
+  // counts them; not the boards over the gas station's door, which are his to put up and not the town's
+  let propKey = null, propOf = null;
+  function props() {
+    if (propKey) return;
+    propKey = new Map(); propOf = new Map();
+    const seen = new Map();
+    for (const p of W.props) {
+      if (p.cx === undefined || p.kind === 'bar') continue;
+      const first = keyOf.prop(p.kind, p.cx, p.cz), n = seen.get(first) ?? 0, k = n ? `${first}#${n}` : first;
+      seen.set(first, n + 1); propKey.set(p, k); propOf.set(k, p);
+    }
+  }
+  const hpByte = (v) => Math.max(0, Math.floor(v.hp / v.K.hp * BYTE)), flagsOf = (v) => (v.wrecked ? 1 : 0) | (v.exploded ? 2 : 0) | (v.drowned ? 4 : 0);
+  const vehicleAt = (k) => { const i = +k.slice(1); return i < G.parked.length ? G.vehicles[i] : null; };
+  let sayAt = 0;
+  function sayWrecks() {
+    const now = performance.now();
+    if (!link?.id || now < sayAt) return;
+    sayAt = now + SAY_EVERY;
+    const list = [];
+    for (const s of W.touched()) list.push(...houseWrecks(keyOf.building(s.id), s.wx, s.wz, W.parts(s).length, W.read(s)));
+    props();
+    for (const [thing, kind] of saidHere) {
+      if (kind === 'tree') list.push({ k: keyOf.tree(thing.x, thing.z), x: thing.x, z: thing.z, d: thing.down ? dirByte(thing.dirx, thing.dirz) : 0, f: (thing.down ? 1 : 0) | (thing.burnt ? 2 : 0) });
+      else if (propKey.has(thing)) list.push({ k: propKey.get(thing), x: thing.cx, z: thing.cz, d: dirByte(thing.dirx, thing.dirz) });
+    }
+    saidHere.clear();
+    // A vehicle's said whenever it's lost hit points or been wrecked, gone up or drowned here, wherever it is, and once it's come to rest
+    // after being thrown about, unless someone else is driving it, since where it is then is theirs to say
+    for (let i = 0; i < G.parked.length; i++) {
+      const v = G.vehicles[i], told = v.told ?? { h: BYTE, f: 0 }, h = hpByte(v), f = flagsOf(v);
+      if (v.loose) v.flew = true;
+      const landed = v.flew && !v.loose && !v.net;
+      if (h >= told.h && !(f & ~told.f) && !landed) continue;
+      v.flew = false; v.told = { h: Math.min(h, told.h), f: f | told.f };
+      list.push({ k: keyOf.vehicle(i), x: v.x, z: v.z, y: v.y, yaw: v.yaw, h: v.told.h, f: v.told.f });
+    }
+    for (const w of list) broke.add(w.k);
+    for (const b of batches(list)) link.wreck(b);
+  }
+  function takeWreck(w, coming) {
+    const kind = kindOf(w.k), P = G.player.pos, live = !coming && Math.hypot(w.x - P.x, w.z - P.z) < LIVE;
+    if (!kind) return;
+    broke.add(w.k);
+    if (kind === 'b') {
+      const s = houseOf.get(w.k), built = s && W.parts(s);
+      if (built && w.n === built.length) W.takeHouse(s, takenParts(w, built), w.o === 1, live);
+    } else if (kind === 'p') {
+      props(); const p = propOf.get(w.k);
+      if (p) W.takeProp(p, ...dirOf(w.d), live);
+    } else if (kind === 't') {
+      const t = W.treeHere(w.x, w.z), [dirx, dirz] = dirOf(w.d);
+      if (t) W.takeTree(t, { down: !!(w.f & 1), burnt: !!(w.f & 2), dirx, dirz }, live);
+    } else {
+      const v = vehicleAt(w.k);
+      if (!v) return;
+      W.takeVehicle(v, { hp: w.h / BYTE * v.K.hp, wrecked: !!(w.f & 1), up: !!(w.f & 2), drowned: !!(w.f & 4) }, live);
+      v.told = { h: hpByte(v), f: flagsOf(v) };
+    }
+  }
+  function heal(m) {
+    for (const k of m.k ?? []) {
+      const kind = kindOf(k);
+      broke.delete(k);
+      if (kind === 'b') { const s = houseOf.get(k); if (s) W.mendHouse(s); }
+      else if (kind === 'p') { props(); const p = propOf.get(k); if (p) W.mendProp(p); }
+      else if (kind === 't') { const [x, z] = k.slice(1).split(':').map((n) => n / 10), t = W.treeHere(x, z); if (t) W.mendTree(t); }
+      else if (kind === 'v') { const v = vehicleAt(k); if (v) { W.mendVehicle(v); v.told = null; v.flew = false; } }
+    }
+  }
+  // as he comes in, and back after the line dropped: whatever's healed since this phone last knew, then everything as it is
+  function takeWrecks(list) {
+    const now = new Set(list.map((w) => w.k));
+    heal({ k: [...broke].filter((k) => !now.has(k)) });
+    for (const w of list) takeWreck(w, true);
   }
 
   // ---------------- going in a ghost's dither, on a trip from a mushroom ring: a ghost's holes, but as many as how far gone they are,
