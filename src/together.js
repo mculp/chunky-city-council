@@ -478,7 +478,9 @@ export function together(G) {
     if (twin) twin.root.visible = !far;
     if (far) return;
     if (!twin) {
-      const rig = G.heroTwin(), root = new THREE.Group(); root.add(rig.body); G.scene.add(root); twin = { rig, root };
+      // and the skillet he swings, which shares its iron and its lines with his own
+      const rig = G.heroTwin(), root = new THREE.Group(), pan = G.castIron.clone();
+      pan.visible = false; rig.body.add(pan); root.add(rig.body); G.scene.add(root); twin = { rig, root, pan, hands: [new THREE.Vector3(), new THREE.Vector3()] };
       // all of him goes at once on a trip from a ring, his tape and his lines too, or there'd be a face left over the ring
       rig.body.traverse((o) => { if (o.isMesh) o.material = madeToGo(o.material, true); });
     }
@@ -516,10 +518,15 @@ export function together(G) {
         R.leg(i, V(s * .13, -1.36 + lift, Math.sin(p) * .34 * a), V(s * .1, -1, .8), lift * 2);
       }
     }
+    // The skillet in his right hand, with the left out to the side for balance, as he swings it on his own screen. Where it lands isn't
+    // said, so it's the six drawings through, and from over his right shoulder, which is where a swing starts.
     const age = (w.at?.swung ?? -9), since = G.time - age, waved = G.time - (w.at?.waved ?? -9);
-    if (k === 'run' && since < G.SWING_T) {
-      const [x, y, z, turn] = G.SWING_POSES[Math.min(G.SWING_POSES.length - 1, Math.floor(since * 12))];
-      R.arm(1, V(x, y, z), V(.7, -.3, -.25), V(0, 1, .25)); R.arm(0, V(x - .05, y - Math.cos(turn) * .24, z - Math.sin(turn) * .24), V(-.7, -.3, -.25), V(0, 1, .25));
+    twin.pan.visible = k === 'run' && since < G.SWING_T;
+    if (twin.pan.visible) {
+      const n = Math.min(G.SWING_POSES.length - 1, Math.floor(since * 12)), [x, y, z, turn] = G.SWING_POSES[n], f = n / (G.SWING_POSES.length - 1);
+      twin.pan.position.copy(twin.hands[0].copy(R.arm(0, V(-x, y, z), V(-.7, -.3, -.25), V(0, Math.cos(turn), Math.sin(turn)))));
+      twin.hands[1].copy(R.arm(1, V(.6 + .06 * f, -.16 + .06 * f, .24 - .4 * f), V(.7, -.3, -.25)));
+      twin.pan.quaternion.setFromEuler(new THREE.Euler(turn, 0, 0));
     } else if (k !== 'drive' && waved < WAVE_FOR) R.arm(1, V(.52, .6 + (G.reduceMotion ? 0 : Math.sin(step * 1.9) * .05), .08), V(.8, .1, -.2));
     R.strings(tq, k === 'run' ? Math.sin(ph) * .1 * Math.min(1, w.speed / 4.2) : 0);
   }
@@ -672,7 +679,7 @@ export function together(G) {
             const B = at(bodies, i), yAxis = new THREE.Vector3().setFromMatrixColumn(B, 1).normalize(), armAt = (a) => deg(new THREE.Vector3().setFromMatrixColumn(at(arms, i * 2 + a), 1).normalize().negate().angleTo(down));
             return { ...s, look: z1.getX(i), far: z1.getY(i), hot: z1.getZ(i), up: deg(yAxis.angleTo(UP)), arms: [armAt(0), armAt(1)] };
           }),
-          hero: twin ? { visible: twin.root.visible, x: twin.root.position.x, y: twin.root.position.y, z: twin.root.position.z, sit: heroSit, gone: heroGone.value } : null,
+          hero: twin ? { visible: twin.root.visible, x: twin.root.position.x, y: twin.root.position.y, z: twin.root.position.z, sit: heroSit, gone: heroGone.value, pan: twin.pan.visible, hands: twin.hands.map((h) => h.toArray()) } : null,
         };
       },
       tags: () => tags.filter((t) => !t.e.hidden).map((t) => { const r = t.e.getBoundingClientRect(); return { id: t.id, text: t.e.textContent, x: r.left + r.width / 2, y: r.bottom }; }),

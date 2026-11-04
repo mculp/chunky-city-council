@@ -677,6 +677,14 @@ try {
     check('and not as a townsperson', !(await bodyOf(a, C.id)), await drawn(a));
     const tag = (await on(a, () => __net.tags())).find((t) => t.id === C.id);
     check(`with his name over him: "${tag?.text}"`, tag?.text === 'River', tag);
+    // and he swings the skillet as he does on his own screen: in his right hand, with the left out to the side for balance
+    const swung = on(a, () => new Promise((done) => {
+      const got = [], t0 = performance.now();
+      (function look() { const h = __net.drawn().hero; if (h) got.push({ pan: h.pan, hands: h.hands }); if (performance.now() - t0 < 1600) requestAnimationFrame(look); else done(got); })();
+    }));
+    await c.page.keyboard.press('f');
+    const frames = await swung, held = frames.filter((f) => f.pan), inRight = held.every((f) => f.hands[0][0] < 0 && f.hands[1][0] > .4);
+    check(`and A sees him swing the skillet in his right hand with his left out for balance, in ${held.length} frames of ${frames.length}, and put it away after`, held.length > 3 && inRight && !frames.at(-1).pan, { held: held.slice(0, 3), last: frames.at(-1) });
     await snap(a, '06-a-sees-the-hero');
     // and on everyone else's map he's in the orange of his own arrow, a way up the road so that A's arrow isn't over him
     await onRoad(c, A.x + 60, await on(c, (x) => __game.map.zAt('us_80', x), A.x + 60));
