@@ -5872,8 +5872,8 @@ function hudVitals() {
   setHidden('stam', S.mode === 'bitten' || S.mode === 'dream' || S.mode === 'wake' || (S.mode !== 'swim' && S.mode !== 'drive' && !player.ran)); $('stamFill').style.transform = `scaleX(${left.toFixed(2)})`;
   setHidden('mph', S.mode !== 'drive'); if (S.mode === 'drive') setHTML('mph', `${Math.round(speedOf(driving) * 2.237)} MPH`);
   const town = S.mode === 'town' || S.mode === 'drive' || S.mode === 'grabbed' || S.mode === 'dialog' || S.mode === 'sweep' || S.mode === 'end';
-  // the twelve are the hero's chapters, so anyone else just has their count
-  setHidden('beans', !town); setHTML('beans', net && !net.hero ? `Beans ${S.beans}` : `Beans ${S.beans}/12`); setHidden('rep', !town);
+  // the twelve are the story's, so in a town that's shared everyone just has their count
+  setHidden('beans', !town); setHTML('beans', net ? `Beans ${S.beans}` : `Beans ${S.beans}/12`); setHidden('rep', !town);
   const pockets = Object.keys(LOOT_NAMES).filter((k) => S.items[k] > 0).map((k) => `${LOOT_NAMES[k]} ${S.items[k]}`).join(' · ');
   setHidden('pockets', !town || !pockets); setHTML('pockets', pockets);
   if (town) drawPeople();
@@ -5890,7 +5890,7 @@ function drawPeople() {
 $('repHead').addEventListener('click', () => { peopleOpen = !peopleOpen; drawPeople(); });
 function flash() { const f = $('flash'); f.style.transition = 'none'; f.style.opacity = '.45'; requestAnimationFrame(() => { f.style.transition = ''; f.style.opacity = '0'; }); }
 function glitch(p, d) { SFX.play('glitch'); if (!reduceMotion) { triggerBurst(p, d, false, false); stepBurst(); } }
-function addBeans(n) { SFX.play('can.clink'); SFX.say('beans'); S.beans += n; toast(`+${n} beans`); if (S.beans >= 12 && !S.flags.ended) { S.flags.ended = true; after(1.4, endChapter); } }
+function addBeans(n) { SFX.play('can.clink'); SFX.say('beans'); S.beans += n; toast(`+${n} beans`); if (S.beans >= 12 && !S.flags.ended && !net) { S.flags.ended = true; after(1.4, endChapter); } }
 
 function hurt(dir, kind) {
   if (player.inv > 0 || S.mode === 'fail') return;
@@ -5931,8 +5931,10 @@ function comeToAgain() {
   S.hp = 3; player.inv = 1; player.kb.set(0, 0); player.vy = 0; player.grounded = true; cam.snap = true; cam.pitch = .42;
   feverLeft = 1; heartT = 0; HP.kind = 'down'; HP.down = 1;
   if (S.flags.town) {
-    // once they're out, back on the church steps, where they won't come
-    if (crowdOut) { const [x, z] = churchAt(68.5, -3); player.pos.set(x, floorAt(x, z), z); horde.calm(); } else onWakeBridge();
+    // in a town that's shared, by the pumps where everyone starts, on a spot src/together.js picks; once they're out, back on the church
+    // steps, where they won't come
+    if (net) { const at = net.spot(); player.pos.set(at.x, at.y, at.z); player.yaw = at.yaw; cam.yaw = at.yaw + Math.PI; }
+    else if (crowdOut) { const [x, z] = churchAt(68.5, -3); player.pos.set(x, floorAt(x, z), z); horde.calm(); } else onWakeBridge();
     d.then = () => { S.mode = 'town'; player.grounded = true; townObjective(); };
   }
   else if (S.flags.bridgeStarted) { resetPlanks(); player.pos.set(-24.5, ROAD_TOP, 0); player.yaw = Math.PI / 2; cam.yaw = player.yaw + Math.PI; d.then = startBridge; }
@@ -6207,8 +6209,8 @@ function nextBeans() {
   return (far.length ? far : left).sort((a, b) => away(a) - away(b))[0];
 }
 function townObjective() {
-  // in a town that's shared the chapters are the hero's, and everyone else is only shown the road into town
-  if (net && !net.hero) { objective(S.flags.arrived ? null : `Follow ${street('griffis_fountain_rd')} into town`, standing(NPCS.coop)); return; }
+  // a town that's shared has no chapters, the hero's included, so there's nothing to tell anyone until the side quests (CHUNKY-169)
+  if (net) { objective(null); return; }
   if (S.flags.ended) { objective('Chunky is yours. For now.'); return; }
   if (!S.flags.arrived) { objective(`Follow ${street('griffis_fountain_rd')} into town`, standing(NPCS.coop)); return; }
   const count = `Stock up on beans (${S.beans}/12)`;

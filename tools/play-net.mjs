@@ -1,10 +1,11 @@
 // Playing together (CHUNKY-151, step 1), in real Chrome against a real town on this machine, with real key presses, clicks and taps.
 // Two newcomers press Play with others, one on a keyboard and one on a phone: a name each and a look, and they're straight into town
-// out front of the gas station, where Coop can see them, on dry ground and with nothing in the objective box (CHUNKY-169). Then each
-// sees the other, by name and by look, walking, running, driving and swinging, and on the map; a truck nudges someone aside and a
-// swing goes through them, and nobody's hurt. One goes into the river and comes back out front of the gas station, with what they
-// had. Then the hero's link, who starts there too: everyone sees the hero, and only one phone at a time is him. Fails on anything out
-// of place or a console error.
+// out front of the gas station, where Coop can see them, on dry ground and with nothing in the objective box (CHUNKY-169), and a
+// twelfth can of beans ends nothing, since a town that's shared has no chapters. Then each sees the other, by name and by look,
+// walking, running, driving and swinging, and on the map; a truck nudges someone aside and a swing goes through them, and nobody's
+// hurt. A try that ends is the fever, with the other seeing them lying where they went down, and they come to by the pumps. One goes
+// into the river and comes back out front of the gas station, with what they had. Then the hero's link, who starts there too with
+// no chapters: everyone sees the hero, and only one phone at a time is him. Fails on anything out of place or a console error.
 //
 //   npm i && npm run net -- [--shots dir]
 import { createHash } from 'node:crypto';
@@ -166,6 +167,18 @@ try {
   check(`once they're in town they're given nothing more: ${inTown.map((t) => `"${t.says}"`).join(' / ')}`, inTown.every((t) => t.arrived && t.says === ''), inTown);
   const counted = await Promise.all(pages.map((p) => on(p, () => { const e = document.getElementById('beans'); return e.hidden ? null : e.textContent; })));
   check(`and their beans are just a count, since the twelve are the chapters': ${counted.map((t) => `"${t}"`).join(' / ')}`, counted.every((t) => /^Beans \d+$/.test(t ?? '')), counted);
+  // and twelve beans is twelve beans: Chapter 1 doesn't end, since a town that's shared has no chapters
+  {
+    // every can of beans lying about, which aren't the loot's
+    const back = await me(b), can = await on(b, () => { const c = __game.pickups.find((c) => !c.got); __game.S.beans = 11; return { x: c.x, z: c.z }; });
+    await on(b, (c) => __game.place(c.x, c.z), can);
+    const got = await until(() => on(b, () => (__game.S.beans >= 12 ? __game.S.beans : 0)), 3000);
+    // the end card would come 1.4 s after the twelfth
+    await sleep(2000);
+    const after = await on(b, () => ({ mode: __game.S.mode, end: !document.getElementById('end').hidden, said: window.__seen.said, beans: document.getElementById('beans').textContent }));
+    check(`B picks up a twelfth can (${got} beans), and that's all: no end card, still in town and nothing said, "${after.beans}"`, got >= 12 && !after.end && after.mode === 'town' && !after.said.length && after.beans === `Beans ${got}`, after);
+    await on(b, ([x, z]) => __game.place(x, z), [back.x, back.z]);
+  }
 
   // ---------------- walking and running, with real keys and a real thumb
   async function seenStop(watcher, who, end) {
@@ -266,6 +279,24 @@ try {
     await sleep(800);
     const after = await on(b, () => ({ ...__game.state(), inv: __game.player.inv }));
     check('and it goes through B, who isn\'t hurt or knocked down', after.hp === before.hp && after.mode === 'town' && after.kind === 'run' && !(after.inv > 0) && Math.hypot(after.pos[0] - before.pos[0], after.pos[2] - before.pos[2]) < .05, { before, after });
+  }
+
+  // ---------------- a try that ends: the story's own fever, lying where they went down for everyone else to see, and coming to by the
+  // pumps with what they had
+  {
+    const went = await me(b), had = (await state(b)).beans;
+    await record(b);
+    await on(b, ([x, z]) => __game.die('blast', { x: x + 2, z }), [went.x, went.z]);
+    const fever = await until(() => on(b, () => (__game.S.mode === 'fail' ? 'fail' : null)), 2000);
+    const lying = await until(async () => { const s = await bodyOf(a, B.id); return s && s.up > 60 && away(s, went) < 1 ? s : null; }, 4000);
+    check(`B's try ends in the fever, and A sees B lying where B went down, ${lying ? lying.up.toFixed(0) + '° off upright' : 'not at all'}`, fever === 'fail' && !!lying, { fever, lying: lying ?? await bodyOf(a, B.id) });
+    await until(() => on(b, () => __game.S.mode === 'town' && __game.HP.kind === 'run'), 20000);
+    const up = await cameIn(b);
+    check(`B goes through the fever and nothing else of the story's: ${up.modes.join(' → ')}`, up.modes.join() === 'town,fail,town', up);
+    check(`and comes to out front of the gas station, ${up.fromCoop.toFixed(1)} m from Coop, facing him to ${up.facing.toFixed(3)} radians, on their feet on dry ground and inside nothing`, up.fromCoop > 1 && up.fromCoop < 6.5 && up.facing < .05 && up.kind === 'run' && Math.abs(up.feet) < .1 && up.dry > .05 && !up.blocked, up);
+    check(`with what they had, ${(await state(b)).beans} beans, and the objective box still empty: ${up.said.map((t) => `"${t}"`).join(' / ') || 'nothing'}`, (await state(b)).beans === had && !up.said.length, up);
+    B = await me(b);
+    await snap(b, '04-b-comes-to-by-the-pumps');
   }
 
   // ---------------- a wave, and the map
@@ -429,7 +460,7 @@ try {
     await c.page.click('#joinGo');
     const Cin = await cameIn(c);
     startsAtTheGasStation('The hero', Cin);
-    check(`and his chapters are all the objective box says: ${Cin.said.map((t) => `"${t}"`).join(' / ') || 'nothing'}`, Cin.said.length > 0 && Cin.said.every((t) => /^Stock up on beans/.test(t)), Cin);
+    check(`and his objective box never says a thing either, since a town that's shared has no chapters: ${Cin.said.map((t) => `"${t}"`).join(' / ') || 'nothing'}`, !Cin.said.length, Cin);
     const C = await me(c);
     check('the owner\'s phone is the hero, in his hoodie, on his own screen', C.hero, C);
     await onRoad(c, A.x + 4, A.z);
@@ -460,12 +491,11 @@ try {
     check(`B stands on the hero and his name keeps its place, and B's ${put}`, away(await seenOnA(B.id) ?? {}, H) < 1 && !!hd && !!named && Math.abs(named.x0 - hd.x - 11) < 1.5 && dees.every((w) => !meets(w, named) && !meets(w, dotBox(hd))), { hd, named, dees });
     await a.page.keyboard.press('Escape');
     await until(() => on(a, () => !__game.mapState().open));
-    // and by the gas station, where A and B were given nothing more, the chapters are his
+    // and by the gas station, where the story would start him on Coop's bag, there's nothing for him either, and his beans are a count
     await onRoad(c, spot.x + 3, await on(c, (x) => __game.map.zAt('us_80', x), spot.x + 3));
-    const his = await until(() => on(c, () => { const o = document.getElementById('obj'); return __game.S.flags.arrived && !o.hidden ? o.textContent : null; }), 4000);
-    check(`and the chapters are his: "${his}"`, /^Stock up on beans/.test(his ?? ''), his);
-    const count = await on(c, () => document.getElementById('beans').textContent);
-    check(`and so are the twelve beans: "${count}"`, /^Beans \d+\/12$/.test(count), count);
+    await sleep(600);
+    const his = await on(c, () => ({ said: window.__seen.said, beans: document.getElementById('beans').textContent }));
+    check(`and by the gas station the hero's objective box is still empty, and his beans are just a count: "${his.beans}"`, !his.said.length && /^Beans \d+$/.test(his.beans), his);
 
     const d = await serveAndOpen({ viewport: { width: 390, height: 844 }, query: `${query}#hero=${HERO}` });
     pages.push(d);

@@ -129,8 +129,6 @@ export function together(G) {
     if (started) return;
     started = true; G.trainsOff();
     if (m.saved) restore(m.saved);
-    // in town from the first, so there's no road into town for the objective box to give them
-    S.flags.arrived = true;
     G.toTown(startSpot());
   }
   function restore(had) {
@@ -397,6 +395,8 @@ export function together(G) {
   const net = {
     // whether this phone is the hero's, which the town says as it lets him in
     get hero() { return you.hero; },
+    // where they come to when a try ends, which is by the pumps where they start
+    spot: () => startSpot(),
     // after the world's placed, each frame that's drawn
     frame(dt, step) {
       if (!started) return;
