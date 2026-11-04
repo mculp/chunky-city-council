@@ -379,8 +379,10 @@ if (made) {
   const LOOPS = /^(amb|engine|vehicle\.(road|dirt|skid))/.source;
   const shots = await r(async (loops) => { const out = { played: 0, missed: [] }; for (const name of Snd.cueNames()) { if (new RegExp(loops).test(name)) continue; while (Snd.state().voices > 6) await sleep(50); if (Snd.play(name)) out.played++; else out.missed.push(name); await sleep(60); } return out; }, LOOPS);
   check(`all ${shots.played} of the sounds that play once do`, shots.missed.length === 0, shots.missed);
-  const round = await r(async (loops) => { const out = {}; for (const name of Snd.cueNames()) { if (!new RegExp(loops).test(name)) continue; Snd.loop(name, 1); await sleep(300); out[name] = Snd.state().loopLevels[name]; Snd.loop(name, 0); } return out; }, LOOPS);
-  check(`all ${Object.keys(round).length} of the loops do`, Object.values(round).every((v) => v > 0), round);
+  // a loop turned all the way down on the sheet isn't played, but its file still has to come
+  const round = await r(async (loops) => { const out = {}; for (const name of Snd.cueNames()) { if (!new RegExp(loops).test(name)) continue; Snd.loop(name, 1); await sleep(300); out[name] = { level: Snd.state().loopLevels[name] ?? 0, on: (Snd.data.cues[name].gain ?? 1) > 0, file: Snd.state().files.includes(name) }; Snd.loop(name, 0); } return out; }, LOOPS);
+  const loopsOn = Object.values(round).filter((v) => v.on), loopsOff = Object.keys(round).filter((n) => !round[n].on);
+  check(`all ${loopsOn.length} of the loops that are on do${loopsOff.length ? `, and ${loopsOff.join(', ')}, turned off on the sheet, ${loopsOff.length > 1 ? 'stay' : 'stays'} quiet with ${loopsOff.length > 1 ? 'their files' : 'its file'} there` : ''}`, loopsOn.every((v) => v.level > 0) && loopsOff.every((n) => round[n].level === 0 && round[n].file), round);
   const walked = await r(async () => { G.jump('town'); await run(.5); Snd.forget(); G.key('w', true); await run(2); G.key('w', false); const s = Snd.state(); return { heard: s.heard, track: s.track, voices: s.voices, most: s.maxVoices }; });
   check('in town his feet are heard over the real track', walked.heard.some((n) => n.startsWith('step.')) && walked.track?.startsWith('audio/music/town') && walked.voices <= walked.most, walked);
   const cost = await r(() => crowdCost());

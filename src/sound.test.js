@@ -154,6 +154,13 @@ test('a loop keeps both its channels, except on a phone, where the memory is bet
   }
 });
 
+test('a loop turned all the way down on its sheet never starts, and one that isn\'t does', async () => {
+  const d = data(); d.cues['amb.wind'].file = 'c.mp3'; d.cues['amb.wind'].gain = 0; d.cues['amb.crickets'].file = 'd.mp3';
+  const w = fakeWorld({ respond: () => tone({ seconds: 2, amp: .2 }) }), s = createSound(d, { win: w.win }); w.touch(); await w.settle();
+  s.loop('amb.wind', 1); s.loop('amb.crickets', 1);
+  assert.deepEqual(s.state().loops, ['amb.crickets']);
+});
+
 const scored = (extra) => { const d = data(); Object.assign(d.music.title, { file: 'title.mp3' }); Object.assign(d.music.hang, { file: 'title.mp3' }); Object.assign(d.music.town, { file: ['t1.mp3', 't2.mp3'], next: ['chase'] }); Object.assign(d.music.chase, { file: 'chase.mp3' }); Object.assign(d.music.dream, { file: 'dream.mp3', once: true }); extra?.(d); return d; };
 const started = (w) => w.made.sources.filter((x) => x.started && x.buffer?.length >= 1000);
 

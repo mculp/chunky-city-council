@@ -11,11 +11,12 @@ export const TRAINS = {
   from: 1500, past: 1100,    // metres along the line from him it starts, and how far its tail gets past him
   hear: 3200,                // further than this from the line and nobody'd know, so there's no train
   outrun: 2400,              // and if he's got this far ahead of one it's as good as gone
-  horn: 420,                 // metres short of a crossing or a trestle it sounds the horn
+  horn: 420,                 // metres short of a crossing or a trestle it comes to the horn
+  hornNear: 300,             // and the page only blows it for a road crossing this near him
   shutFor: 13,               // seconds before it gets there that a crossing shuts
   clear: 14,                 // metres its tail has to be past a crossing before it opens
   sees: 260, onIt: 2.2,      // how far ahead it blows for someone on the tracks, and how near the middle counts as on them
-  blastEvery: 5,             // seconds
+  blastEvery: 15,            // seconds from one blast at him to the next
   locos: [1, 2], cars: [14, 24],
   couple: .9,                // metres between cars
 };

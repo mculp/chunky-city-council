@@ -325,7 +325,8 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
       let l = loops.get(name);
       const c = cueOf(name), to = (c?.gain ?? 1) * level;
       if (!l) {
-        if (level <= 0 || !c) return;
+        // one that's turned all the way down on its sheet never starts
+        if (to <= 0 || !c) return;
         const takes = takesOf(name); if (!takes) return;
         const src = ctx.createBufferSource(), gain = ctx.createGain(); src.buffer = takes[0]; src.loop = true; src.playbackRate.value = rate; gain.gain.value = 0; src.connect(gain); gain.connect(buses[c.bus]); src.start();
         l = { src, gain, level: 0, rate, since: ctx.currentTime }; loops.set(name, l);

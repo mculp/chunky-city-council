@@ -137,7 +137,7 @@ test('it blows once for each crossing and trestle it comes to, far enough short 
   assert.equal(post.shut, undefined, 'and a trestle never shuts');
 });
 
-test('it blows for him on the tracks ahead, again and again, and not if he\'s off them or it\'s gone by', () => {
+test('it blows for him on the tracks ahead, and no oftener than every blastEvery seconds, and not if he\'s off them or it\'s gone by', () => {
   const log = [];
   let clock = 0;
   const t = make({ blast: () => log.push(clock) });
@@ -150,12 +150,25 @@ test('it blows for him on the tracks ahead, again and again, and not if he\'s of
   assert.equal(log.length, 0, 'not while it\'s too far off to see him');
   const first = clock;
   step({ x: 1000 + TRAINS.sees + 200, z: .5 }, 9.5);
-  assert.ok(log.length >= 2, `blew ${log.length} times`);
+  assert.equal(log.length, 1, `blew ${log.length} times`);
   assert.ok(log[0] - first < 5);
-  assert.ok(Math.abs(log[1] - log[0] - TRAINS.blastEvery) < .2);
+  // at the speed it goes, it's on him before it can blow again
+  assert.ok(TRAINS.sees / TRAINS.speed < TRAINS.blastEvery);
   const n = log.length;
   step({ x: 1000, z: .5 }, 5);
   assert.equal(log.length, n, 'it\'s past him now');
+});
+
+test('a slow one blows for him again, but not until blastEvery seconds have gone', () => {
+  const log = [];
+  let clock = 0;
+  const t = make({ blast: () => log.push(clock), tuning: { speed: 5 } });
+  t.send(1, 1000);
+  const step = (p, seconds) => { for (let e = clock + seconds; clock < e; clock += .05) t.update(.05, p); };
+  t.train.head = 1000;
+  step({ x: 1000 + TRAINS.sees - 20, z: .5 }, TRAINS.blastEvery + 3);
+  assert.equal(log.length, 2, `blew ${log.length} times`);
+  assert.ok(Math.abs(log[1] - log[0] - TRAINS.blastEvery) < .2);
 });
 
 test('how near it is and which way that\'s going', () => {

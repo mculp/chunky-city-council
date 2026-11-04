@@ -51,9 +51,9 @@
     "groan.hunt": { "gain": 0.785, "reach": 50, "spread": 0.12, "max": 3, "gap": 0.14, "file": ["audio/sfx/groan.hunt.1.mp3", "audio/sfx/groan.hunt.2.mp3", "audio/sfx/groan.hunt.3.mp3", "audio/sfx/groan.hunt.4.mp3"] },
     "groan.grab": { "gain": 0.641, "reach": 20, "spread": 0.08, "max": 2, "gap": 0.3, "file": ["audio/sfx/groan.grab.1.mp3", "audio/sfx/groan.grab.2.mp3", "audio/sfx/groan.grab.3.mp3"] },
     "groan.reach": { "gain": 0.7, "reach": 24, "spread": 0.06, "max": 2, "gap": 0.25, "rate": 1.4, "file": ["audio/sfx/groan.hunt.1.mp3", "audio/sfx/groan.hunt.2.mp3", "audio/sfx/groan.hunt.3.mp3", "audio/sfx/groan.hunt.4.mp3"] },
-    "amb.wind": { "bus": "ambience", "gain": 0.342, "file": "audio/sfx/amb.wind.1.mp3" },
+    "amb.wind": { "bus": "ambience", "gain": 0, "file": "audio/sfx/amb.wind.1.mp3" },
     "amb.river": { "bus": "ambience", "gain": 1.245, "file": "audio/sfx/amb.river.1.mp3" },
-    "amb.crickets": { "bus": "ambience", "gain": 0.098, "file": "audio/sfx/amb.crickets.1.mp3" },
+    "amb.crickets": { "bus": "ambience", "gain": 0.02, "file": "audio/sfx/amb.crickets.1.mp3" },
     "amb.fire": { "bus": "ambience", "gain": 0.707, "file": "audio/sfx/amb.fire.1.mp3" },
     "amb.flies": { "bus": "ambience", "gain": 0.45, "loop": 0.3, "file": "audio/sfx/amb.flies.1.mp3" },
     "engine.car": { "gain": 0.639, "file": "audio/sfx/engine.car.1.mp3" },
@@ -77,8 +77,8 @@
     "crossing.bell": { "bus": "ambience", "gain": 0.32, "loop": true, "file": "audio/sfx/crossing.bell.1.mp3" },
     "train.clatter": { "gain": 0.75, "loop": true, "file": "audio/sfx/train.clatter.1.mp3" },
     "train.rumble": { "gain": 0.9, "loop": true, "file": "audio/sfx/train.rumble.1.mp3" },
-    "train.horn": { "gain": 0.8, "reach": 3200, "max": 1, "gap": 1, "file": "audio/sfx/train.horn.1.mp3", "stereo": true },
-    "train.blast": { "gain": 0.8, "reach": 700, "max": 1, "gap": 1, "file": "audio/sfx/train.blast.1.mp3" },
+    "train.horn": { "gain": 0.5, "reach": 1000, "max": 1, "gap": 1, "file": "audio/sfx/train.horn.1.mp3", "stereo": true },
+    "train.blast": { "gain": 0.5, "reach": 500, "max": 1, "gap": 1, "file": "audio/sfx/train.blast.1.mp3" },
     "church.bell": { "gain": 0.8, "reach": 900, "max": 3, "gap": 1, "file": ["audio/sfx/church.bell.1.mp3", "audio/sfx/church.bell.2.mp3"] }
   },
   "music": {

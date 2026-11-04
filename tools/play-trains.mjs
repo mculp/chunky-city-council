@@ -58,7 +58,7 @@ await page.waitForFunction(() => __game.sound.state().ctx === 'running', null, {
 await page.waitForFunction(() => { const Snd = __game.sound, names = ['train.horn', 'train.blast', 'train.rumble', 'train.clatter', 'crossing.bell']; for (const n of names) Snd.loop(n, .01); return names.every((n) => Snd.state().loops.includes(n)); }, null, { timeout: 60000, polling: 250 });
 await g(() => { for (const n of ['train.horn', 'train.blast', 'train.rumble', 'train.clatter', 'crossing.bell']) G.sound.loop(n, 0); G.sim(9, T); });
 const pass = await g(() => {
-  const Snd = G.sound, c = gate('chestnut_st'), arms = R.arms.filter((a) => a.gate === c); Snd.forget();
+  const Snd = G.sound, c = gate('chestnut_st'), arms = R.arms.filter((a) => a.gate === c); Snd.forget(); R.horns.length = 0;
   stand(c.s + 60, 14); TR.send(1, c.s - 700);
   const out = { armsAtFirst: arms.map((a) => a.down), shut0: c.shut };
   // up to the horn
@@ -67,9 +67,11 @@ const pass = await g(() => {
   let shutAt = null; while ((c.s - TR.train.head) > 8) { G.sim(.1, T); if (c.shut && shutAt === null) shutAt = Math.round(c.s - TR.train.head); }
   out.shutAt = shutAt; out.armsDown = arms.map((a) => a.down); out.bell = Snd.state().loopLevels['crossing.bell'] ?? 0; out.shutHere = TR.shutAt(c.x, c.z); out.shutElse = TR.shutAt(c.x + 50, c.z);
   G.sim(4, T); out.clatter = Snd.state().loopLevels['train.clatter'] ?? 0; out.rumbleNear = Snd.state().loopLevels['train.rumble'] ?? 0; out.alive = alive(); out.gap = TR.train?.gap; out.shake = G.cam.shake;
+  out.blows = R.horns.filter((h) => h.blown).map((h) => h.road);
   return out;
 });
 check('it blows for the crossing, and it\'s heard', pass.horn, pass);
+check('it blows the once, for the crossing he\'s by', pass.blows.length === 1 && pass.blows[0] === 'chestnut_st', pass);
 check('it\'s heard coming, a little sharp', pass.rumbleFar > 0 && pass.rateComing > 1.02, pass);
 check('the crossing shuts in good time', pass.shutAt > 200 && pass.shutAt < 340 && pass.shutHere && !pass.shutElse, pass);
 check('and its arms are down when it gets there', pass.armsAtFirst.every((a) => a === 0) && pass.armsDown.length === 2 && pass.armsDown.every((a) => a === 1), pass);
@@ -394,6 +396,18 @@ await page.tap('#bA');
 const read = await g(() => { G.step(.1, 1 / 24); const e = document.querySelector('#prompt .words'); return e ? e.textContent : null; });
 check('and it says what happened, in a line or two, and no ghost', /1863|flood/.test(read ?? '') && /Vicksburg/.test(read ?? '') && !/ghost|haunt/i.test(read ?? ''), read);
 await snap('8-read');
+
+// ---- and the horn's only for a crossing he's near: from 520 m short of one, it doesn't blow at all, even as it goes right by him.
+// It's down here, after the crowd, because another train before them changes which trains they get.
+const far = await g(() => {
+  done(); const Snd = G.sound, c = gate('chestnut_st'); Snd.forget(); R.horns.length = 0;
+  stand(c.s - 520, 14);
+  const near = TR.gates.filter((g) => Math.hypot(g.x - P().x, g.z - P().z) < TR.T.hornNear).map((g) => g.road);
+  TR.send(1, c.s - 700); G.sim(14, T);
+  return { near, came: R.horns.map((h) => h.road), blown: R.horns.filter((h) => h.blown).length, heard: !!Snd.lastHeard('train.horn'), alive: alive() };
+});
+check('it doesn\'t blow for a crossing 520 m off, even going right by him', far.near.length === 0 && far.came.includes('chestnut_st') && far.blown === 0 && !far.heard && far.alive, far);
+await g(() => done());
 
 // ---- what it costs, with it going right by him and the crowd about
 const cost = async (rate) => {
