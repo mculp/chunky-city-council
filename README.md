@@ -35,7 +35,7 @@ and the Managed Agents backend.
 ## Setup on the Mac mini
 
 You need Ruby 3.3 or newer, Claude Code 2.1.312 or newer signed in to your subscription, and checkouts of
-chunky-survival and giraffe-rb. Use giraffe-rb's `claude/builder-profile` branch until that PR merges.
+chunky-survival and giraffe-rb (main has the runner profile and landing the council uses).
 
 ```sh
 cp config/council.example.json config/council.json   # then edit the paths
