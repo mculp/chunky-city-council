@@ -65,7 +65,7 @@ Forget everyone, on the title, wipes it with everything else, and keeps only wha
 
 ## The model
 
-It's the first in `MODELS` in `server/talk.js` until the side-by-side trial picks one. `node tools/talk-trial.mjs` asks each of them through the talk server for three visits with Coop and three with Miss Bobby, the way the game does, and writes what each said, what the checker turned away, how long each took and what a hundred lines cost to `data/raw/talk-trial.md`. The Creative Director picks the cheapest that sounds like them. It spends the owner's money, so nothing runs it but someone asking to. `--server` points it at the canned server on this machine instead.
+It's the first in `MODELS` in `server/talk.js` until the side-by-side trial picks one. `node tools/talk-trial.mjs` asks each of them through the talk server for three visits with Coop and three with Miss Bobby, the way the game does, and writes what each said, what the checker turned away, how long each took and what a hundred lines cost to `data/raw/talk-trial.md`. The Creative Director picks the cheapest that sounds like them. A model OpenRouter turns down goes in the report as turned away, and the rest still get their turn: only a server that won't answer the run's very first ask stops it, since that's the key not being in. It spends the owner's money, so nothing runs it but someone asking to. `--server` points it at the canned server on this machine instead.
 
 An ask is about 4,700 letters, which is about 1,200 tokens, and a line back is under 100. At the prices `server/talk.js` keeps, that's about $0.004 to $0.01 for a hundred lines.
 

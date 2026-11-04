@@ -20,7 +20,7 @@ const phone = makeKey(), WHO = ['coop', 'bobby'], VISITS = 3, EVERY = 2200;
 // after Chapter 1, with the bag run done and the crowd out, which is where he'll mostly be talking to them
 const here = { beans: 7, carrying: ['a gas can', '2 bottles'], happened: [data.happened.flags.delivered, data.happened.flags.paid, data.happened.flags.ended], tonight: data.tonight };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-let last = 0;
+let last = 0, asked = 0;
 async function ask(model, messages) {
   await pause(Math.max(0, last + EVERY - Date.now())); last = Date.now();
   const res = await fetch(server, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ phone, model, messages }) });
@@ -38,9 +38,11 @@ for (const model of models) {
       const turns = [];
       let heard = null;
       for (let step = 0; step < 2; step++) {
-        const answer = await ask(model, messagesFor({ data, who, here, mind, turns, heard, me: 'trial' }));
+        const answer = await ask(model, messagesFor({ data, who, here, mind, turns, heard, me: 'trial' })), first = !asked++;
         if (answer.quiet) {
-          if (answer.quiet === 'off' && !costs.length && !away.length) { console.error(`The talk server at ${server} isn't answering ("off"): is the owner's key in?`); process.exit(1); }
+          // Only the run's very first ask says whether the server's answering at all. After that, "off" is OpenRouter turning that model
+          // down, which is something to report about it, and the rest of the models still get their turn.
+          if (answer.quiet === 'off' && first) { console.error(`The talk server at ${server} isn't answering ("off"): is the owner's key in, and does OpenRouter take ${model}?`); process.exit(1); }
           away.push(`${who} ${v}.${step}: ${answer.quiet}`); lines.push(`- visit ${v}${heard ? ` (he says "${heard}")` : ''}: nothing, ${answer.quiet}`); break;
         }
         costs.push(answer.cost ?? 0); times.push(answer.ms ?? 0);
