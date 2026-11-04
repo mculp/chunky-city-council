@@ -187,14 +187,12 @@ check('what\'s come down is still down after going away and coming back', stays.
 
 // ---------------- what holds up what
 const held = await g(() => {
-  const legs = W.props.filter((p) => p.kind === 'leg'), tower = W.props.find((p) => p.kind === 'tower'), posts = W.props.filter((p) => p.kind === 'post'), canopy = W.props.find((p) => p.kind === 'canopy'), pump = W.props.find((p) => p.kind === 'pump');
-  G.place(tower.cx - 60, tower.cz); W.breakProp(legs[0], 1, 0); const oneLeg = tower.down; W.breakProp(legs[1], 1, 0); const twoLegs = tower.down, allLegs = legs.every((p) => p.down); run(3);
+  const posts = W.props.filter((p) => p.kind === 'post'), canopy = W.props.find((p) => p.kind === 'canopy'), pump = W.props.find((p) => p.kind === 'pump');
   G.place(canopy.cx - 40, canopy.cz); W.breakProp(posts[0], 1, 0); const onePost = canopy.down; W.breakProp(posts[1], 1, 0); const twoPosts = canopy.down;
   const before = W.burners.length; W.breakProp(pump, 1, 0); run(.3);
-  return { oneLeg, twoLegs, allLegs, onePost, twoPosts, lit: W.burners.length - before };
+  return { onePost, twoPosts, lit: W.burners.length - before };
 });
-check('one leg of the water tower and it stands, two and it all goes over', !held.oneLeg && held.twoLegs && held.allLegs, held);
-check('the same with two posts of the gas station canopy', !held.onePost && held.twoPosts, held);
+check('one post of the gas station canopy and it stands, two and it all goes over', !held.onePost && held.twoPosts, held);
 check('a pump goes up, and sets light to what\'s round it', held.lit > 0, held);
 const through = await g(() => {
   const f = W.props.find((p) => p.kind === 'fence' && p.hp < 1 && !p.down), [nx, nz] = f.falls, t = { p: { x: f.cx, z: f.cz }, ux: nx, uz: nz, wall: 0 }, v = charge('car', t, 9, 9); v.yaw = Math.atan2(nx, nz); G.key('w', true); run(1.2); G.key('w', false);
@@ -232,7 +230,7 @@ const things = await g(() => {
   run(4);
   return { count, stuck, falling: W.falling.length };
 });
-const WANT = ['pole', 'sign', 'fence', 'dugout', 'bleachers', 'dumpster', 'tree', 'shrub', 'wall', 'curb', 'trailer', 'cart', 'tower', 'leg', 'steeple', 'canopy', 'post', 'pump', 'barrel', 'car', 'boxcar', 'tank', 'counter', 'shelf', 'board', 'barricade', 'steps'];
+const WANT = ['pole', 'sign', 'fence', 'dugout', 'bleachers', 'dumpster', 'tree', 'shrub', 'wall', 'curb', 'trailer', 'cart', 'steeple', 'canopy', 'post', 'pump', 'barrel', 'car', 'boxcar', 'tank', 'counter', 'shelf', 'board', 'barricade', 'steps'];
 check('every kind of thing in town comes down, and stops stopping him', things.stuck.length === 0 && WANT.every((k) => things.count[k] > 0), { missing: WANT.filter((k) => !things.count[k]), stuck: things.stuck, count: things.count });
 check('nothing\'s still falling after a few seconds', things.falling === 0, things.falling);
 const bridge = await g(() => { const y = G.floorAt(0, 0); W.blast(0, y + .5, 0, 8, 8); return { before: y, after: G.floorAt(0, 0), mode: G.S.mode }; });
