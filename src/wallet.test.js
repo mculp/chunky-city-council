@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { walletUrl, walletOf, pageFor, openIn, seenOf, signIn, WAIT_EVERY } from './wallet.js';
+import { walletUrl, walletOf, pageFor, openIn, seenOf, signIn, WAIT_EVERY, PAIR_FOR } from './wallet.js';
 import { TOWN_URL } from './net.js';
-import { createWalletRoutes, createMemoryStore } from '../server/wallet.js';
+import { createWalletRoutes, createMemoryStore, PAIR_FOR as KEPT_FOR } from '../server/wallet.js';
 import { createChain } from '../server/chain.js';
 import { chainStandIn } from '../tools/chain-stand-in.mjs';
 
@@ -30,6 +30,10 @@ test('the wallet\'s side of a town is beside it', () => {
   assert.equal(walletUrl('ws://localhost:8787'), 'http://localhost:8787');
   assert.equal(walletUrl('ws://localhost:8788/town'), 'http://localhost:8788');
   assert.equal(walletUrl('not an address'), null);
+});
+
+test('the phone waits for the wallet as long as the town keeps a pairing, by its own clock, which needn\'t be the town\'s', () => {
+  assert.equal(PAIR_FOR, KEPT_FOR);
 });
 
 test('the wallet\'s page is on the game\'s own site, with the pairing, and on this machine it says which town', () => {

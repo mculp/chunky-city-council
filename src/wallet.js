@@ -8,6 +8,9 @@
 // so the town needs no asking first, and nothing private is ever in an address.
 
 export const WAIT_EVERY = 1500;   // ms between the phone asking whether it's done
+// ms the phone waits for the wallet at most, which is as long as the town keeps a pairing, counted on the phone's own clock from
+// when it asked, since the town's until is by the town's clock. Once it's over, the town says so.
+export const PAIR_FOR = 5 * 60 * 1000;
 
 // where the wallet's side of a town is: beside it, at its own origin
 export function walletUrl(town) {

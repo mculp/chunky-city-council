@@ -1,12 +1,14 @@
 // Wearing your own rektguy online (CHUNKY-170), in real Chrome against a town on this machine, with real taps and clicks, wallets made
 // up for it and a stand-in for the chain, so nothing real is asked or signed. A town that doesn't say it can pair a wallet isn't asked
-// and doesn't offer it. On a phone, the title card has Connect a wallet under Play, which shows four letters and the wallet apps that open the game's own page in their browser. That page, in the wallet app's
-// browser, shows the same four letters, takes them off its address, and asks the wallet for its address and one signature, on words
-// that say it costs nothing and moves nothing, and nothing else. Back on the phone, the looks have their two rektguys' pictures over
-// the town's, neither worn yet, with nothing said; they pick one and come in wearing it, and someone else in town sees it by its handle
-// and has its picture, which a canvas can read. Nobody's shown the wallet's address. Then backing out, and a wallet with none, each
-// end at the looks with nothing said; whoever's wearing rektguy 1386 comes in as the hero, in the hero's own look; and a laptop whose
-// browser has a wallet of its own does it in a tab beside the game, with one signature. Fails on anything out of place or a console error.
+// and doesn't offer it. On a phone, the title card has Connect a wallet under Play, which shows four letters and the wallet apps that
+// open the game's own page in their browser. That page, in the wallet app's browser, shows the same four letters, takes them off its
+// address, and asks the wallet for its address and one signature, on words that say it costs nothing and moves nothing, and nothing
+// else. Back on the phone, the looks have their two rektguys' pictures over the town's, neither worn yet, with nothing said; they pick
+// one and come in wearing it, and someone else in town sees it by its handle and has its picture, which a canvas can read. Nobody's
+// shown the wallet's address. Then backing out, and a wallet with none, each end at the looks with nothing said; a phone whose clock
+// is ten minutes fast waits for a wallet that takes its time; whoever's wearing rektguy 1386 comes in as the hero, in the hero's own
+// look; and a laptop whose browser has a wallet of its own does it in a tab beside the game, with one signature. Fails on anything out
+// of place or a console error.
 //
 //   npm i && npm run wallet -- [--shots dir]
 import { mkdir } from 'node:fs/promises';
@@ -54,6 +56,14 @@ async function open({ touch = true } = {}) {
   await on(p, () => __game.resume());
   await until(() => on(p, () => !!window.__net), 20000);
   return p;
+}
+// the page loaded again, for what's been added to its browser since, back on the title card with the town's said it can pair
+async function again(p) {
+  await p.page.reload({ waitUntil: 'load' });
+  await p.page.waitForFunction(() => window.__game?.resume);
+  await on(p, () => __game.resume());
+  await until(() => on(p, () => !!window.__net), 20000);
+  await on(p, () => __net.here());
 }
 const press = (p, sel) => (p.touch ? p.page.tap(sel) : p.page.click(sel));
 // what's shown of pairing: the four letters, the wallet apps and where each goes, and whether the browser's own wallet is offered
@@ -190,10 +200,16 @@ try {
   check('and a wallet with none ends at the looks too, with none of theirs and nothing said', after?.yours === 0 && after.said === '', after);
   await none.context.close();
 
-  // ---------------- the owner's own: worn straight away, and the hero
+  // ---------------- the owner's own: worn straight away, and the hero, on a phone whose clock is ten minutes fast, which waits for
+  // the wallet as long as any other
   const o = await open();
+  await o.page.context().addInitScript(() => { const real = Date.now; Date.now = () => real() + 10 * 60 * 1000; });
+  await again(o);
   await press(o, '#connectWallet');
   const ownersPairing = await until(() => pairPanel(o)), owners = await walletApp(browser, W.owner, pageIn(ownersPairing));
+  // reading what it says first, for long enough that the phone's asked whether it's done more than once
+  await sleep(4000);
+  check('the phone\'s still waiting for the wallet while it\'s read', !!(await pairPanel(o)), await on(o, () => __net.wallet()));
   await signs(owners.page, owners.asked, ownersPairing.letters, 'the owner\'s own');
   const one = await until(async () => { const l = await looks(o); return l?.yours && l; }, 12000);
   check('one rektguy is worn straight away', JSON.stringify(one?.pressed) === '[true]', one);
@@ -208,10 +224,7 @@ try {
   // ---------------- a laptop with a wallet in its browser: a tab beside the game, one signature
   const l = await open({ touch: false }), asked = [];
   await holding(l.page.context(), asked, W.one);
-  await l.page.reload({ waitUntil: 'load' });
-  await l.page.waitForFunction(() => window.__game?.resume);
-  await on(l, () => __game.resume());
-  await until(() => on(l, () => !!window.__net), 20000);
+  await again(l);
   await l.page.click('#connectWallet');
   const lp = await until(() => pairPanel(l));
   check('a laptop whose browser has a wallet of its own is offered it', lp?.here === true, lp);

@@ -13,7 +13,7 @@
 // driving nudges you aside and does you no harm.
 import * as THREE from 'three';
 import { connectNet, rollLook, makeKey, worldOf, townUrl, hereUrl, HOW, PHONE_KEY } from './net.js';
-import { walletUrl, walletOf, pageFor, openIn, WAIT_EVERY } from './wallet.js';
+import { walletUrl, walletOf, pageFor, openIn, WAIT_EVERY, PAIR_FOR } from './wallet.js';
 import { checkName, NAME_MOST } from './names.js';
 import { inVehicle, settle, KINDS } from './vehicles.js';
 import { toScreen, drawLabel, nameBeside, COLORS as MAPC } from './mapview.js';
@@ -173,7 +173,7 @@ export function together(G) {
   document.body.appendChild(pairing);
   let pairingCode = null, pairTimer = null;
   async function connectWallet() {
-    const p = await wallet.pair();
+    const asked = Date.now(), p = await wallet.pair();
     if (p.no) { show(''); return; }
     document.getElementById('title').hidden = true;
     pairingCode = p.code;
@@ -190,7 +190,7 @@ export function together(G) {
     pairing.querySelector('#pairCopy').onclick = async () => { try { await navigator.clipboard.writeText(page); } catch { /* nothing to copy to */ } };
     pairing.hidden = false;
     if (document.pointerLockElement) document.exitPointerLock();
-    waitFor(p.until);
+    waitFor(asked + PAIR_FOR);
   }
   // A town that can't be reached for a moment, as when the phone comes back from the wallet app, is asked again while there's time
   function waitFor(until) {
