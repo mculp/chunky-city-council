@@ -1,10 +1,12 @@
-// Serves the repo and opens the game in the system Chrome with the GPU on, so WebGL runs for real.
+// Serves the repo and opens the game in the system Chrome with the GPU on, so WebGL runs for real. Every screenshot a check keeps
+// is looked at, and one that's nearly all one colour fails the check, since that's the camera inside something, such as his hood.
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
+import { basename, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { WALL, oneColour } from './picture.mjs';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css' };
@@ -30,6 +32,33 @@ async function fromCache(route) {
   } catch { return route.continue().catch(() => {}); }
 }
 
+// How much of a screenshot is one colour, and which (tools/picture.mjs), decoded in `page`, which only has to be open
+export const oneColourIn = (page, image) => page.evaluate(async ([b64, measure]) => {
+  const bmp = await createImageBitmap(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))]));
+  const canvas = new OffscreenCanvas(bmp.width, bmp.height), g = canvas.getContext('2d');
+  g.drawImage(bmp, 0, 0);
+  return (0, eval)(`(${measure})`)(g.getImageData(0, 0, canvas.width, canvas.height));
+}, [Buffer.from(image).toString('base64'), oneColour.toString()]);
+
+// A kept screenshot that's a wall of one colour, more of it than tools/picture.mjs's WALL, fails the check. The night's never a
+// wall, so the dark at the end of a fever is fine as it is. One that's meant to be a wall, such as the train's light when it's all
+// there is, says so with { flat: true } among its options, which Playwright never sees.
+const WATCHED = Symbol('watched');
+export function watchShots(page) {
+  if (page[WATCHED]) return page;
+  page[WATCHED] = true;
+  const shoot = page.screenshot.bind(page);
+  page.screenshot = async ({ flat = false, ...options } = {}) => {
+    const image = await shoot(options);
+    if (options.path && !flat) {
+      const { share, colour } = await oneColourIn(page, image);
+      if (share > WALL) throw new Error(`${basename(options.path)} is ${Math.round(share * 100)}% ${colour}: is the camera inside something? One that's meant to be one colour says so with { flat: true }`);
+    }
+    return image;
+  };
+  return page;
+}
+
 // `overrides` serves its contents at those paths in place of what's in the repo, or as well as it. Null means there's nothing there.
 // `args` go to Chrome as well as the GPU's.
 export async function serveAndOpen({ touch = false, viewport, query = '?test', reducedMotion, overrides = {}, args = [] } = {}) {
@@ -46,7 +75,8 @@ export async function serveAndOpen({ touch = false, viewport, query = '?test', r
   const size = viewport || (touch ? { width: 390, height: 844 } : { width: 513, height: 696 });
   const context = await browser.newContext({ viewport: size, deviceScaleFactor: 2, hasTouch: touch, isMobile: touch, reducedMotion });
   await context.route(CDN, fromCache);
-  const page = await context.newPage();
+  context.on('page', watchShots);
+  const page = watchShots(await context.newPage());
   // What's written on the screen right now, a line at a time: whatever anything in the page says other than its dials, which are the HUD (the street, the objective and how far it is, the speed,
   // hearts, beans and pockets, and the people panel, which is the names of the people he knows), the buttons and what the big one would do ("Get in the pickup"). Those change all the time
   // as he moves, and none of them is a reason. The checks that watch one of the crowd stop, turn to him and flare compare it before and after, because nothing on the screen says why.
