@@ -7021,7 +7021,7 @@ const MAP_PLACES = [
   ...SIGN_SHEET.churches.map((c) => ['Church', ...atTrue(c.x, c.z), 2]),
   ...TRESTLES.map((t) => ['Trestle', t.x, t.z, 2]),
 ].sort((a, b) => b[3] - a[3]);
-let mapOpen = false, mapDirty = false, mapCam = { x: 0, z: 0, scale: .4 };
+let mapOpen = false, mapDirty = false, mapDrawnAt = 0, mapCam = { x: 0, z: 0, scale: .4 };
 // Paper for the big map: scratches, in the game's own hatching, repeating too far apart to notice
 const mapPaper = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'); let x = 4242;
@@ -7065,6 +7065,7 @@ function updateMini(step) {
 }
 // The whole thing, north up
 function drawFullMap() {
+  mapDrawnAt = performance.now();
   const c = $('mapC'), w = innerWidth, h = innerHeight, dpr = Math.min(devicePixelRatio, 2), g = c.getContext('2d');
   if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
   mapCam = clampCam(mapCam, mapData.bounds, w, h);
@@ -7623,7 +7624,9 @@ function updateWorld() {
 }
 scene.traverse((o) => { if (o.isPointLight) hillLights.push(o); });
 let paused = TEST;
-function loop() { if (paused) return; if (!mapOpen) tick(Math.min(clock.getDelta(), .05)); requestAnimationFrame(loop); }
+// The game stands still while the big map's open, but everyone else playing doesn't, so it's drawn again five times a second
+// while there's anyone else in town
+function loop() { if (paused) return; if (!mapOpen) tick(Math.min(clock.getDelta(), .05)); else if (net && performance.now() - mapDrawnAt > 200 && net.anyone) drawFullMap(); requestAnimationFrame(loop); }
 // the click that starts it takes the mouse, if it was the mouse that did it
 const clickedIn = (e) => { if (e.isTrusted && e.detail > 0) takeMouse(); };
 $('start').addEventListener('click', (e) => { $('title').hidden = true; startHang(); clickedIn(e); });

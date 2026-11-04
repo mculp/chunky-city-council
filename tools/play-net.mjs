@@ -68,15 +68,10 @@ const worldAt = (sx, sy) => on(a, async ([sx, sy]) => {
 }, [sx, sy]);
 // Where A's phone has someone, near or far, which is what its map goes by
 const seenOnA = (id) => on(a, (id) => __net.link.others().find((o) => o.id === id), id);
-// Moves someone, with A's map shut while they go since nothing moves on A while it's open, and opens it again once A has them
-// there
+// Moves someone and waits until A's phone has them there, which its map does too, open or not
 const standOnA = async (p, id, at) => {
-  if (await on(a, () => __game.mapState().open)) { await a.page.keyboard.press('Escape'); await until(() => on(a, () => !__game.mapState().open)); }
   await on(p, ([x, z]) => __game.place(x, z), [at.x, at.z]);
-  const s = await until(async () => { const s = await seenOnA(id); return s && away(s, at) < .3 ? s : null; }, 4000);
-  await sleep(150);
-  await a.page.keyboard.press('m'); await until(() => on(a, () => __game.mapState().open));
-  return s;
+  return until(async () => { const s = await seenOnA(id); return s && away(s, at) < .3 ? s : null; }, 4000);
 };
 
 try {
@@ -298,6 +293,20 @@ try {
     const dot = await on(a, (id) => __net.dotOnMap(id), B.id);
     check(`B is a blue dot on A's map, where B is, and not the cast's cyan: ${dot ? dot.rgb.join(',') : 'nothing'}`, dot && Math.abs(dot.rgb[0] - 0x5b) < 30 && Math.abs(dot.rgb[1] - 0x8c) < 30 && Math.abs(dot.rgb[2] - 0xff) < 30, dot);
     await snap(a, '05-a-map');
+
+    // The game stands still while the big map's open, but nobody else does: B goes 30 m up the road, and without A shutting the
+    // map it has B where B is now
+    const still = (await state(a)).time, from = await me(b);
+    await onRoad(b, from.x - 30, await on(b, (x) => __game.map.zAt('us_80', x), from.x - 30));
+    const gone = await me(b);
+    const blueAt = (at) => on(a, async ([x, z]) => {
+      const { makeView, toScreen } = await import('./src/mapview.js'), c = __game.mapState().cam, g = document.getElementById('mapC').getContext('2d'), dpr = g.canvas.width / innerWidth;
+      const [sx, sy] = toScreen(makeView(c.x, c.z, c.scale, 0, innerWidth, innerHeight), x, z), px = g.getImageData(Math.round(sx * dpr), Math.round(sy * dpr), 1, 1).data;
+      return { x: sx, y: sy, rgb: [px[0], px[1], px[2]] };
+    }, [at.x, at.z]);
+    const blue = (d) => Math.abs(d.rgb[0] - 0x5b) < 30 && Math.abs(d.rgb[1] - 0x8c) < 30 && Math.abs(d.rgb[2] - 0xff) < 30;
+    const followed = await until(async () => { const d = await blueAt(gone); return blue(d) ? d : null; }, 3000) ?? await blueAt(gone);
+    check(`with A's map open, B goes 30 m up the road and A's map has them there: ${followed.rgb.join(',')}, while A's game stands still`, blue(followed) && (await state(a)).time === still && (await on(a, () => __game.mapState().open)), { followed, still, now: (await state(a)).time });
 
     // Names take their turn for room: the hero, then everyone else playing, then the cast, then places and streets. One further
     // down goes to the other side of its dot, or is left out. So B keeps their name beside their dot, where it always is, with

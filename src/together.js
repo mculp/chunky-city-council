@@ -448,11 +448,15 @@ export function together(G) {
       nameTags(list);
       shownList = list;
     },
+    // whether there's anyone else in town to keep moving on the big map while it's open
+    get anyone() { return started && !alone && !!link && link.others().length > 0; },
     // Their turn for room on the big map, which comes before the cast's, the places' and the streets', with the hero's first:
-    // each dot keeps its room, and a name goes on whichever side of it has room, or is left out
+    // each dot keeps its room, and a name goes on whichever side of it has room, or is left out. It's where they are now, since
+    // the game stands still while the big map's open and nobody else does.
     roomOnMap(v, free, w, h) {
       named.clear();
       if (!started) return;
+      shownList = alone || !link ? [] : link.others();
       for (const o of [...shownList].sort((p, q) => !!q.hero - !!p.hero)) {
         const [x, y] = toScreen(v, o.x, o.z);
         if (x < -10 || y < -10 || x > w + 10 || y > h + 10) continue;
