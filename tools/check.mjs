@@ -60,6 +60,13 @@ if (at) {
     if (existsSync(join(ROOT, d)) && !existsSync(join(dir, d))) { symlinkSync(join(ROOT, d), join(dir, d)); linked.push(join(dir, d)); }
   }
 }
+// the copy goes however this ends: done, failed, stopped with ^C, or stopped by whatever started it. The links go first, so
+// removing it can never reach through them into this worktree
+process.on('exit', () => {
+  if (dir === ROOT) return;
+  try { for (const l of linked) unlinkSync(l); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+  catch (e) { console.error(`left ${dir}: ${e.message}`); }
+});
 const git = (...a) => execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8' }).trim();
 const what = at ? `${at} (${git('rev-parse', '--short', at)})` : `${git('rev-parse', '--short', 'HEAD')}${git('status', '--porcelain') ? ' with uncommitted changes' : ''}`;
 
@@ -169,24 +176,40 @@ const run = (c, alone) => new Promise((done) => {
   });
 });
 const report = (r) => console.log(`${r.ok ? 'ok  ' : 'FAIL'} ${r.secs.toFixed(1).padStart(6)} s  ${r.name}${r.alone ? ', alone' : ''}${r.ok ? '' : `  (${r.why}: ${r.log})`}`);
+let stopping = false;
 const pool = async (list, n, alone) => {
   const results = [];
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(n, list.length) }, async () => {
-    while (next < list.length) { const r = await run(list[next++], alone); results.push(r); report(r); }
+    while (next < list.length && !stopping) { const r = await run(list[next++], alone); results.push(r); report(r); }
   }));
   return results;
 };
-process.on('SIGINT', () => { for (const child of running) stop(child, 'SIGKILL'); process.exit(130); });
+// stopped from outside, it stops the checks the way a timeout does, so each closes its own browsers and servers, and then makes
+// sure after 5 s. Playwright starts Chrome in a process group of its own and closes it on SIGTERM, so a SIGKILL straight away
+// would leave Chrome running with nobody to close it. A second ^C doesn't wait.
+for (const [signal, n] of [['SIGINT', 2], ['SIGTERM', 15], ['SIGHUP', 1]]) process.on(signal, async () => {
+  if (stopping) { for (const child of running) stop(child, 'SIGKILL'); process.exit(128 + n); }
+  stopping = true;
+  const gone = Promise.all([...running].map((child) => new Promise((r) => child.once('exit', r))));
+  for (const child of running) stop(child, 'SIGTERM');
+  await Promise.race([gone, new Promise((r) => setTimeout(r, 5000))]);
+  for (const child of running) stop(child, 'SIGKILL');
+  process.exit(128 + n);
+});
 
 console.log(`${chosen.length} checks of ${what}, ${jobs} at a time, longest first`);
 const t0 = Date.now();
+// while it's being stopped, what's stopped isn't a failure to run again or report, and the signal's handler ends it
+const unlessStopping = () => stopping && new Promise(() => {});
 const first = await pool(chosen, jobs, false);
+await unlessStopping();
 const failed = first.filter((r) => !r.ok);
 let again = [];
 if (failed.length && !args.includes('--no-retry')) {
   console.log(`\nrunning the ${failed.length} that failed again, one at a time`);
   again = await pool(failed, 1, true);
+  await unlessStopping();
 }
 
 const passed = (r) => r.ok || again.some((a) => a.name === r.name && a.ok);
@@ -205,5 +228,4 @@ for (const r of broken) {
 console.log(broken.length ? `\n${broken.length} failed: ${broken.map((r) => r.name).join(', ')}` : '\nall passed');
 console.log(`output: ${logs}`);
 
-if (dir !== ROOT) { for (const l of linked) unlinkSync(l); rmSync(dir, { recursive: true, force: true }); }
 process.exit(broken.length ? 1 : 0);
