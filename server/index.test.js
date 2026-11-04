@@ -206,6 +206,28 @@ test('without --talk there\'s no /talk, and the town still works', async () => {
   } finally { await s.close(); }
 });
 
+// how many are in town, as the title card asks before anyone's said who they are
+const here = (port) => fetch(`http://localhost:${port}/here`, { headers: { Origin: 'http://localhost:4321' } });
+
+test('it says how many are in town right now at /here, for the title card, counting only those let in', async () => {
+  const s = await startServer({ port: 0, quiet: true });
+  try {
+    const empty = await here(s.port);
+    assert.equal(empty.status, 200);
+    assert.equal(empty.headers.get('access-control-allow-origin'), '*', 'any page can ask, as any page can join');
+    assert.equal(empty.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await empty.json(), { here: 0 });
+    const a = client(s.port), b = client(s.port), quiet = client(s.port, {}, { silent: true });
+    await Promise.all([a.in(), b.in(), quiet.ready]);
+    assert.deepEqual(await (await here(s.port)).json(), { here: 2 }, 'a phone that hasn\'t said hello isn\'t in town');
+    b.ws.close();
+    await until(() => b.closed !== null);
+    await sleep(50);
+    assert.deepEqual(await (await here(s.port)).json(), { here: 1 }, 'and one who leaves isn\'t counted');
+    a.ws.close(); quiet.ws.close();
+  } finally { await s.close(); }
+});
+
 test('closing it closes everyone and lets the port go', async () => {
   const s = await startServer({ port: 0, quiet: true }), port = s.port;
   const a = client(port); await a.in();

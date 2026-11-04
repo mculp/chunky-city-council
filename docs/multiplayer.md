@@ -48,7 +48,7 @@ and it's `?net=ws://localhost:8788/town`. `npm run town:host` checks it there.
 - `src/net.js`: what goes over the wire, and how someone's steps are smoothed. Poses are 18 bytes, twenty times a second each way, and everything else goes as JSON words. Each phone sends about 400 bytes a second, and gets about 400 a second for each other person in town, so 25 in town is under 10 KB a second down.
 - `src/names.js`: the PG-13 check.
 - `server/town.js`, `server/host.js` and `server/index.js`: the town, the town behind any socket, and a Node server for it on this machine.
-- `server/worker.js`: the town hosted for everyone, as the Durable Object `Town`, beside the characters' words.
+- `server/worker.js`: the town hosted for everyone, as the Durable Object `Town`, beside the characters' words. `/town/here` says how many are in town right now, for the title card, to the same pages `/town` lets in. The town on this machine says it at `/here`, to any page, as any page can join it.
 - `src/together.js`: the phone's side. It covers the panel, where everyone starts, everyone's bodies (the crowd's own, in six draw calls however many there are), the hero as others see him, names over heads, map dots, vehicles and WAVE.
 - `index.html`: six lines hang on `net`, which is null in a game on its own, so the opening is the same to the byte (`npm run frames`).
 - `npm run net`: the check, and `npm run town:host` the hosted town's.

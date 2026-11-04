@@ -1,7 +1,8 @@
 // Plays the town everyone shares (CHUNKY-151) in Cloudflare's own runtime on this machine, with wrangler dev, the way it'll be hosted:
-// two phones let in and each seeing the other twenty times a second, one going, the hero's link, a page on another site turned away,
-// and someone coming back after the Worker's been stopped and started again, to where they were and with what they had. What the town
-// does is tested in server/town.test.js and server/host.test.js, and npm run net plays it in the game.
+// two phones let in, one of them on a page at online.chunky.ms, and each seeing the other twenty times a second, the title card told
+// how many are in town (CHUNKY-169), one going, the hero's link, a page on another site turned away, and someone coming back after the
+// Worker's been stopped and started again, to where they were and with what they had. What the town does is tested in
+// server/town.test.js and server/host.test.js, and npm run net plays it in the game.
 //
 //   npm run town:host
 import assert from 'node:assert/strict';
@@ -43,17 +44,25 @@ function phone(url, { key, name = 'Junebug', hero, origin = 'https://chunky.ms' 
   return p;
 }
 const sees = (p, who, x, z) => p.snaps.at(-1)?.some((q) => q.id === who.id && Math.abs(q.x - x) < .01 && Math.abs(q.z - z) < .01);
+// how many are in town, as the title card on a page at online.chunky.ms asks before anyone's said who they are
+const hereOf = (url, origin = 'https://online.chunky.ms') => fetch(`${url.replace(/^ws/, 'http')}/here`, { headers: { Origin: origin } });
 
 try {
   let url = await start();
-  const a = phone(url, { key: 'a'.repeat(32) }), b = phone(url, { key: 'b'.repeat(32), name: 'Dee' });
+  const empty = await hereOf(url);
+  assert.equal(empty.status, 200); assert.equal(empty.headers.get('access-control-allow-origin'), 'https://online.chunky.ms');
+  assert.equal(empty.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await empty.json(), { here: 0 });
+  const a = phone(url, { key: 'a'.repeat(32) }), b = phone(url, { key: 'b'.repeat(32), name: 'Dee', origin: 'https://online.chunky.ms' });
   await until(() => a.id && b.id, 'both to be let in');
   a.say(5, 6); b.say(-3, 4);
   await until(() => sees(b, a, 5, 6) && sees(a, b, -3, 4), 'each to see the other');
   const before = b.snaps.length; await sleep(1000);
   const rate = b.snaps.length - before;
   assert.ok(rate >= 15 && rate <= 25, `${rate} snapshots in a second`);
-  console.log(`two phones are let in, and each sees the other where they said, ${rate} times a second`);
+  console.log(`two phones are let in, one on a page at online.chunky.ms, and each sees the other where they said, ${rate} times a second`);
+  assert.deepEqual(await (await hereOf(url)).json(), { here: 2 });
+  console.log('the title card is told how many are in town: nobody, then the two of them');
 
   a.ws.send(say({ t: 'keep', beans: 4, items: { bottle: 1 }, gas: 0 }));
   await sleep(100);
@@ -70,7 +79,8 @@ try {
   const away = phone(url, { key: 'x'.repeat(32), name: 'Ray', origin: 'https://elsewhere.example' });
   await until(() => away.refused !== null || away.closed !== null, 'a page on another site to be answered');
   assert.equal(away.refused, 403); assert.equal(away.id, 0);
-  console.log('a page on another site is turned away');
+  assert.equal((await hereOf(url, 'https://elsewhere.example')).status, 403);
+  console.log('a page on another site is turned away, and isn\'t told how many are in town');
 
   for (const p of [b, h, n]) p.ws.close();
   await until(() => [b, h, n].every((p) => p.closed !== null), 'everyone to have gone');

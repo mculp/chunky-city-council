@@ -52,10 +52,13 @@ export async function startServer({ port = NET_PORT, rate = NET_RATE, max, silen
     catch (e) { unsaved = true; console.error(`Couldn't keep the town in ${save}: ${e.message}`); }
   }
 
-  // the town's a WebSocket, and anything else asked of it is /talk, when it's answering that, or nothing
+  // The town's a WebSocket. Anything else asked of it is how many are in town, for the title card, which any page can ask as any
+  // page can join, or /talk when it's answering that, or nothing.
   const http = createServer(async (req, res) => {
     try {
-      if (!words || new URL(req.url, 'http://here').pathname !== '/talk') { res.writeHead(426, { 'Content-Type': 'text/plain' }); res.end('This is the town, over a WebSocket.'); return; }
+      const { pathname } = new URL(req.url, 'http://here');
+      if (pathname === '/here') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify({ here: host.here })); return; }
+      if (!words || pathname !== '/talk') { res.writeHead(426, { 'Content-Type': 'text/plain' }); res.end('This is the town, over a WebSocket.'); return; }
       const asked = new Request(`http://localhost${req.url}`, { method: req.method, headers: req.headers, body: req.method === 'POST' ? Readable.toWeb(req) : undefined, duplex: 'half' });
       const answer = await words(asked);
       res.writeHead(answer.status, Object.fromEntries(answer.headers));

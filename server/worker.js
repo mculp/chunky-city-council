@@ -54,6 +54,8 @@ export class Town extends DurableObject {
     this.wake();
     return new Response(null, { status: 101, webSocket: phone });
   }
+  // how many are in town right now, for the title card
+  here() { return this.host.here; }
 
   webSocketMessage(ws, data) {
     const s = this.phones.get(ws);
@@ -104,12 +106,15 @@ let talk = null;
 export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
-    if (pathname === '/town') {
+    if (pathname === '/town' || pathname === '/town/here') {
       const origin = request.headers.get('origin');
       if (origin && !pagesOf(env).includes(origin)) return new Response('Chunky only talks to Chunky.', { status: 403 });
-      if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('This is the town, over a WebSocket.', { status: 426 });
       // made the first time anyone comes, in the eastern US, which is nearest Mississippi
-      return env.TOWN.get(env.TOWN.idFromName('chunky'), { locationHint: 'enam' }).fetch(request);
+      const town = env.TOWN.get(env.TOWN.idFromName('chunky'), { locationHint: 'enam' });
+      // how many are in town right now, which the title card asks before anyone's said who they are
+      if (pathname === '/town/here') return Response.json({ here: await town.here() }, { headers: { 'Cache-Control': 'no-store', ...(origin && { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' }) } });
+      if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('This is the town, over a WebSocket.', { status: 426 });
+      return town.fetch(request);
     }
     if (pathname === '/talk') {
       const bill = () => env.BILL.get(env.BILL.idFromName('chunky'));
