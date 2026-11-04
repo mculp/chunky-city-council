@@ -82,7 +82,8 @@ check('and it stops when he moves', moved.was && !moved.now && moved.shown, move
 // ---------------- a look through what the page and the sheet actually say
 {
   const html = readFileSync('index.html', 'utf8'), block = html.slice(html.indexOf('===== the second trailer'), html.indexOf('===== the community pool')), stone = JSON.parse(readFileSync('data/stone.json', 'utf8'));
-  check('the words on the stone are only ever the owner\'s', stone.words === '', stone);
+  // whatever the owner's put on it, or nothing yet: either way it's only ever words in it, and never printed here
+  check('the stone\'s sheet is its words and nothing else', typeof stone.words === 'string' && Object.keys(stone).sort().join() === 'version,words', Object.keys(stone));
   check('the screen is the Buddy List, with nobody on it', /Buddy List/.test(block) && /Offline \(41\/41\)/.test(block) && !/ChunkyNet/.test(block), null);
 }
 
@@ -155,8 +156,9 @@ check('up the loop and in through the gate', found.up.off < 1.2, found.up);
 check('there\'s a way through to it, and it\'s a walk', found.done && found.steps > 15 && found.walk?.off < .9, { done: found.done, steps: found.steps, walk: found.walk });
 check('nothing says anything till he\'s right up to it', found.start !== 'Read the stone' && found.act === 'Read the stone' && found.button === 'READ', found);
 await tap(); await g(() => __game.sim(.1, 1 / 30));
-const read = await g(() => ({ says: promptSays(), read: __game.stumble.stoneRead() }));
-check('it says there are words on it, and which they are is the owner\'s to fill in', read.read && /imprinted on the stone/.test(read.says), read);
+// the owner's words exactly, once they've put them in data/stone.json, and that there are words from a song on it until then
+const read = await g(() => { const says = promptSays(), words = __game.stumble.sheet.words; return { read: __game.stumble.stoneRead(), theirs: !!words, right: words ? says === words : /imprinted on the stone/.test(says) }; });
+check(read.theirs ? 'it says the owner\'s words, exactly' : 'it says there are words from a song on it, which are the owner\'s to fill in', read.read && read.right, read);
 await snap('the-stone');
 const typed = await g(() => { const G = __game, S = G.stumble; S.sheet.words = 'A LINE FROM THE SHEET'; G.sim(.1, 1 / 30); const says = promptSays(); S.sheet.words = ''; return says; });
 check('and whatever goes on the sheet is what it says', typed === 'A LINE FROM THE SHEET', typed);
