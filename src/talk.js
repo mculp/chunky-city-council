@@ -4,7 +4,11 @@
 // anything's shown, the 988 Lifeline, and what each of them remembers of him. There's no three.js or page in here, so node tests load
 // it too. The words and the rules are in data/talk.json, and data/talk.md has the rest. Whenever the model can't answer, is slow or
 // says something it shouldn't, they say their written lines, as they always have.
+//
+// In a town that's shared (CHUNKY-169) they talk to whoever's come by: the hero as the story has him, and anyone else by name and
+// as "they", since nobody's said what anyone goes by. That's `as`, { name, hero }, and without it it's him, as it's always been.
 import { TALK_URL, PHONE_KEY, makeKey } from './net.js';
+import { NAME_MOST } from './names.js';
 
 export const LIMITS = {
   words: 30,        // a line's under this many words
@@ -25,6 +29,20 @@ export const LIMITS = {
 const REST = { off: 300, cap: 3600, fast: 15, slow: 30, bad: 300 };
 
 const blankMind = () => ({ notes: [], said: [], visits: 0 });
+
+// How what's put to them says whoever's talking to them: each {word} in the rules and the lines below is said one way for him and the
+// other for anyone else. His are what the story's always said, to the byte.
+const FORMS = {
+  him: { They: 'He', they: 'he', them: 'him', their: 'his', themselves: 'himself', "They've": "He's", "they're": "he's", have: 'has', are: 'is', say: 'says', walk: 'walks' },
+  them: { They: 'They', they: 'they', them: 'them', their: 'their', themselves: 'themselves', "They've": "They've", "they're": "they're", have: 'have', are: 'are', say: 'say', walk: 'walk' },
+};
+const someoneElse = (as) => !!as && !as.hero;
+const spoken = (text, as) => { const f = FORMS[someoneElse(as) ? 'them' : 'him']; return text.replace(/\{([\w']+)\}/g, (all, k) => f[k] ?? all); };
+// A name's only ever a name, the player's own words and never anything to do: letters, numbers, spaces and the marks names have, and
+// no longer than the town lets one be. It's put to them in quotes.
+const nameOf = (as) => String(as?.name ?? '').replace(/[^\p{L}\p{N}' -]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, NAME_MOST).trim() || 'Someone';
+// who they're talking to, as it's put to them
+const whoItIs = (data, as) => (someoneElse(as) ? data.online.them.replace('{name}', () => nameOf(as)) : data.him);
 const plain = (t) => String(t).toLowerCase().replace(/[’‘]/g, "'").replace(/n't\b/g, ' not').replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim();
 export const wordsIn = (t) => (String(t).match(/\S+/g) ?? []).length;
 // The same line, or near enough to it: for anything five words or longer, three words in four that the two have between them in both
@@ -140,14 +158,33 @@ export const inDistress = (text, data) => { const t = String(text).replace(/[’
 export const changesNothing = (effects, { check, flags }) => (effects ?? []).every((e) => !check(e.when) || (e.set ? !!flags[e.set] : e.unset ? !flags[e.unset] : false));
 
 // What he's just said, as it's put to them, or that he's walked up. This visit's talk so far goes in the same way, his and theirs in turn.
-export const heardAs = (data, heard) => (heard ? `He says: "${heard}"` : data.opener);
+// What he said goes in as he said it, and only the words around it are said for whoever it is.
+export const heardAs = (data, heard, as) => (heard ? `${spoken('{They} {say}', as)}: "${heard}"` : spoken(data.opener, as));
+
+// The written line a visit opens with: this is the one place it's chosen. On its own it's the story's. In a town that's shared it's the
+// first time's on their first visit, coming back's after that, and for the hero, whom they know, Coop's line for him or else coming
+// back's; then the lines for any time in turn. Each is said once to each of them, and once they all have been it's null, and they nod.
+export function writtenOpener(data, who, { mind = blankMind(), as, story = null } = {}) {
+  if (!as) return story;
+  const l = data.online.lines[who];
+  if (!l) return null;
+  const first = as.hero ? l.hero ?? l.back : mind.visits ? l.back : l.first;
+  return [first, ...l.any].find((s) => s && !mind.said.includes(s)) ?? null;
+}
+// What they say when nothing new comes in time: this is the one place it's chosen. On its own it's a spare line they haven't said to
+// him, or else the story's. In a town that's shared it's the next of their lines for any time, each once, and then null, and they nod.
+export function writtenFallback(data, who, { mind = blankMind(), as, story = null } = {}) {
+  if (!as) return data.people[who].spare.find((s) => !mind.said.includes(s)) ?? story;
+  return data.online.lines[who]?.any.find((s) => !mind.said.includes(s)) ?? null;
+}
 
 const listed = (items) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
 // Everything that goes with one line: who they are, the world, what's going on, what they remember of him and what they've said to him,
 // and how to answer, then this visit's talk so far and what he's just said, or that he's walked up. `here` is what's going on: his beans,
 // what he's carrying, what's happened and what's happening tonight. What they've said goes first, the oldest of it first, then their
-// oldest notes, then the start of this visit, until it all fits under the server's limit.
-export function messagesFor({ data, who, here = {}, mind = blankMind(), turns = [], heard = null, me = '' }) {
+// oldest notes, then the start of this visit, until it all fits under the server's limit. Only the words around what's remembered, said
+// and carrying are said for whoever it is, never those themselves.
+export function messagesFor({ data, who, here = {}, mind = blankMind(), turns = [], heard = null, me = '', as }) {
   const p = data.people[who], beans = here.beans ?? 0;
   let said = mind.said.slice(-LIMITS.sent), notes = mind.notes.filter((n) => n.about === me).slice(-LIMITS.notes), talk = turns.slice(-LIMITS.turns);
   const build = () => {
@@ -158,16 +195,16 @@ export function messagesFor({ data, who, here = {}, mind = blankMind(), turns = 
       `How you talk: ${p.voice} ${p.samples.map((l) => `"${l}"`).join(' ')}`,
       `Where you are: ${p.place}.`,
       '',
-      `${data.him}${mind.visits ? ` He's been by to talk to you ${mind.visits === 1 ? 'once' : `${mind.visits} times`} before.` : ''}`,
-      `He has ${beans} ${beans === 1 ? 'can' : 'cans'} of beans${here.carrying?.length ? `, and he's carrying ${listed(here.carrying)}` : ''}.`,
+      `${whoItIs(data, as)}${mind.visits ? ` ${spoken("{They've}", as)} been by to talk to you ${mind.visits === 1 ? 'once' : `${mind.visits} times`} before.` : ''}`,
+      `${spoken('{They} {have}', as)} ${beans} ${beans === 1 ? 'can' : 'cans'} of beans${here.carrying?.length ? `, and ${spoken("{they're}", as)} carrying ${listed(here.carrying)}` : ''}.`,
       ...(here.happened?.length ? [`What's happened: ${here.happened.join(' ')}`] : []),
       ...(here.tonight ? [here.tonight] : []),
-      ...(notes.length ? ['What you remember about him:', ...notes.map((n) => `- ${n.text}`)] : []),
-      ...(said.length ? ["What you've already said to him, which you never say again:", ...said.map((s) => `- ${s}`)] : []),
+      ...(notes.length ? [spoken('What you remember about {them}:', as), ...notes.map((n) => `- ${n.text}`)] : []),
+      ...(said.length ? [spoken("What you've already said to {them}, which you never say again:", as), ...said.map((s) => `- ${s}`)] : []),
       '',
-      data.rules.join('\n'),
+      spoken(data.rules.join('\n'), as),
     ];
-    return [{ role: 'system', content: system.join('\n') }, ...talk, { role: 'user', content: heardAs(data, heard) }];
+    return [{ role: 'system', content: system.join('\n') }, ...talk, { role: 'user', content: heardAs(data, heard, as) }];
   };
   let messages = build();
   const size = () => messages.reduce((n, m) => n + m.content.length, 0);
@@ -237,9 +274,9 @@ export function createTalk({ data, store = null, fetch = globalThis.fetch, now =
     // whatever's still being asked, for a test to wait on
     settled: () => (asking ? new Promise((r) => waiting.push(r)) : Promise.resolve()),
     // What they'd say: { reply } that's been through the checker, { bad } with why it didn't pass, or { quiet } with why nothing came
-    async ask(who, { here, turns = [], heard = null, wait = LIMITS.wait } = {}) {
+    async ask(who, { here, turns = [], heard = null, wait = LIMITS.wait, as } = {}) {
       if (!talk.ready() || !talk.talks(who)) return { quiet: 'rest' };
-      const messages = messagesFor({ data, who, here, mind: mind(who), turns, heard, me: talk.me() });
+      const messages = messagesFor({ data, who, here, mind: mind(who), turns, heard, me: talk.me(), as });
       const stop = new AbortController(), timer = setTimeout(() => stop.abort(), wait);
       asking++;
       try {

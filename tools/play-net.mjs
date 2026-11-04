@@ -12,6 +12,7 @@
 //
 //   npm i && npm run net -- [--shots dir]
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { serveAndOpen } from './browser.mjs';
@@ -36,6 +37,27 @@ const a = await serveAndOpen({ viewport: { width: 390, height: 844 }, query }), 
 const pages = [a, b];
 const press = (p, sel) => (p === b ? p.page.tap(sel) : p.page.click(sel));
 const state = (p) => on(p, () => __game.state());
+// The cast's words, and a talk server a page can be given that plays a line at a time and keeps what it was asked
+const TALK = JSON.parse(readFileSync(new URL('../data/talk.json', import.meta.url), 'utf8'));
+const scripted = async (p) => {
+  p.heard = []; p.script = [];
+  await p.page.route('http://localhost:65533/talk', async (route) => {
+    p.heard.push(JSON.parse(route.request().postData()));
+    const next = p.script.shift() ?? { quiet: 'off' };
+    await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(typeof next === 'string' ? { reply: next, model: 'scripted', cost: 0, ms: 1 } : next) });
+  });
+};
+// Up to one of the cast and E, on a keyboard: what the box says once they've said it, or with { box: false } whatever's there straight away.
+// Each is walked up to from where there's room, as in npm run talk.
+const FROM = { coop: [0, -1.5], rocky: [.5, -1.5], bobby: [1.5, 0] };
+const talkTo = async (p, who, { box = true } = {}) => {
+  await on(p, ([who, [dx, dz]]) => { const n = __game.npcs[who]; __game.place(n.x + dx, n.z + dz); }, [who, FROM[who]]);
+  await sleep(250); await p.page.keyboard.press('e');
+  if (!box) { await sleep(50); return (await state(p)).dialog; }
+  const d = await until(async () => { const s = await state(p); return s.dialog && !s.dialog.waiting ? s.dialog : null; }, 4000);
+  return d && { ...d, opts: d.opts.map((o) => o.replace(/^\d\. /, '')) };
+};
+const later = async (p) => { await p.page.locator('#dOpts button', { hasText: 'Later.' }).first().click(); await until(async () => !(await state(p)).dialog, 2000); };
 const me = (p) => on(p, () => { const P = __game.player.pos; return { id: __net.link.id, x: P.x, y: P.y, z: P.z, yaw: __game.player.yaw, mode: __game.S.mode, hero: __game.heroRoot.visible }; });
 const drawn = (p) => on(p, () => __net.drawn());
 const bodyOf = async (p, id) => (await drawn(p)).bodies.find((s) => s.id === id);
@@ -174,6 +196,36 @@ try {
   check('nobody has the hoodie or the tape, not even on their own screen', !came[0].hero && !came[1].hero, came);
   await snap(a, '02-a-at-the-gas-station');
   await snap(b, '02-b-at-the-gas-station');
+
+  // ---------------- the cast online (CHUNKY-169): without the model, the lines written for online, each once to each player, never the
+  // story's, then a nod; with it, something new every time, put to them as someone who un-quit and by a quoted name. A's on a keyboard.
+  {
+    const L = TALK.online.lines;
+    for (const [who, line] of [['coop', L.coop.first], ['coop', L.coop.back], ['coop', L.coop.any[0]], ['coop', L.coop.any[1]]]) {
+      const d = await talkTo(a, who);
+      check(`Coop says "${d?.say}" to A, with only Later. to press`, d?.say === line && d.opts.join() === 'Later.', d);
+      await later(a);
+    }
+    const nodded = await talkTo(a, 'coop', { box: false });
+    const dip = await until(async () => { const n = await on(a, () => __game.talk.nodding('coop')); return n > .05 ? n : null; }, 1500);
+    const still = (await state(a)).prompt;
+    check(`and once they've all been said, TALK opens nothing and he nods, ${dip ? (dip * 57.3).toFixed(0) : 0}°, with "${still}" still there`, !nodded && dip > .05 && !!still, { nodded, dip, still });
+    await snap(a, '02-a-coop-nods');
+    // and with the model back, something new, which is all he says now; then it's slow, and he nods with what he said up
+    await scripted(a);
+    a.script.push(JSON.stringify({ say: 'Still standing up straight, I see.', mood: 'plain', do: [], remember: 'Comes back a lot.', replies: ['Still here.', 'You too.', 'Barely.'] }));
+    await on(a, () => __game.talk.on('http://localhost:65533/talk'));
+    const own = await talkTo(a, 'coop');
+    const asked = a.heard.at(-1)?.messages ?? [], sys = asked[0]?.content ?? '';
+    check(`with the model back, Coop says something new: "${own?.say}", with A's answers and Later.`, own?.say === 'Still standing up straight, I see.' && own.opts.join() === 'Still here.,You too.,Barely.,Later.', own);
+    check('and he was asked as someone who un-quit, by a quoted name, and "they"', sys.includes(TALK.online.them.replace('{name}', 'Junebug')) && !sys.includes(TALK.him) && asked.at(-1)?.content === '(They walk up to talk to you.)', { start: sys.slice(sys.indexOf('"Junebug"'), sys.indexOf('"Junebug"') + 120), last: asked.at(-1) });
+    await a.page.locator('#dOpts button', { hasText: 'Barely.' }).first().click();
+    const mid = await until(async () => { const s = await state(a), n = await on(a, () => __game.talk.nodding('coop')); return s.dialog && !s.dialog.waiting && n > .05 ? { ...s.dialog, opts: s.dialog.opts.map((o) => o.replace(/^\d\. /, '')), n } : null; }, 4000);
+    check(`and when it's slow with nothing written left, what he said stays up with only Later. while he nods: "${mid?.say}"`, mid?.say === 'Still standing up straight, I see.' && mid.opts.join() === 'Later.', mid);
+    check(`A's answer went as theirs: ${a.heard.at(-1)?.messages.at(-1)?.content}`, a.heard.at(-1)?.messages.at(-1)?.content === 'They say: "Barely."', a.heard.at(-1)?.messages.at(-1));
+    await later(a);
+    await on(a, () => __game.talk.on(null));
+  }
 
   // ---------------- each sees the other: who they are and what they look like
   let A = await me(a), B = await me(b);
@@ -556,6 +608,24 @@ try {
     await sleep(600);
     const his = await on(c, () => ({ said: window.__seen.said, beans: document.getElementById('beans').textContent }));
     check(`and by the gas station the hero's objective box is still empty, and his beans are just a count: "${his.beans}"`, !his.said.length && /^Beans \d+$/.test(his.beans), his);
+    // and the cast know him: no first-time line for the hero, but Coop's for him, and Rocky's for coming back, and with the model on,
+    // he's asked about as the story has him, and as "he"
+    {
+      const L = TALK.online.lines;
+      for (const [who, line, name] of [['coop', L.coop.hero, 'Coop'], ['rocky', L.rocky.back, 'Rocky']]) {
+        const d = await talkTo(c, who);
+        check(`${name} says "${d?.say}" to the hero`, d?.say === line && d.opts.join() === 'Later.', d);
+        await later(c);
+      }
+      await scripted(c);
+      c.script.push(JSON.stringify({ say: 'There he is.', mood: 'plain', do: [], remember: '', replies: ['Here I am.'] }));
+      await on(c, () => __game.talk.on('http://localhost:65533/talk'));
+      const own = await talkTo(c, 'bobby');
+      const asked = c.heard.at(-1)?.messages ?? [], sys = asked[0]?.content ?? '';
+      check(`and with the model on, Miss Bobby says "${own?.say}", asked about the hero as the story has him`, own?.say === 'There he is.' && sys.includes(TALK.him) && !sys.includes(TALK.online.them.split('. ')[1]) && asked.at(-1)?.content === '(He walks up to talk to you.)', { say: own?.say, last: asked.at(-1) });
+      await later(c);
+      await on(c, () => __game.talk.on(null));
+    }
 
     const d = await serveAndOpen({ viewport: { width: 390, height: 844 }, query: `${query}#hero=${HERO}` });
     pages.push(d);

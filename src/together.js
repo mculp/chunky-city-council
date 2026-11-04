@@ -412,8 +412,9 @@ export function together(G) {
   }
   let shownList = [];
   const net = {
-    // whether this phone is the hero's, which the town says as it lets him in
+    // whether this phone is the hero's, which the town says as it lets him in, and the name they're in town by, for the cast
     get hero() { return you.hero; },
+    get name() { return you.name; },
     // where they come to when a try ends, which is by the pumps where they start
     spot: () => startSpot(),
     // after the world's placed, each frame that's drawn

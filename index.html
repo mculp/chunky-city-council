@@ -271,7 +271,7 @@ import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/
 import { FROGS, BEST, TONI, createToni, frogLine, askLine, forgetToni } from './src/toni.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
 import { createPantry, PANTRY } from './src/pantry.js';
-import { createTalk, talkUrl, inDistress, changesNothing, heardAs, LIMITS as TALK_LIMITS } from './src/talk.js';
+import { createTalk, talkUrl, inDistress, changesNothing, heardAs, writtenOpener, writtenFallback, LIMITS as TALK_LIMITS } from './src/talk.js';
 import { makeLight, stepLight, lightAt } from './src/light.js';
 import { FEVER, feverAt, wakesAt } from './src/fever.js';
 
@@ -4513,6 +4513,11 @@ function makeAstral(body) {
     o.material = made.get(m);
   });
 }
+// The cast's arms, hung from wherever their shoulders are
+function hangArms(rig) {
+  const [L, R] = rig.S, V3 = (a, b, c) => new THREE.Vector3(a, b, c);
+  rig.arm(0, L.clone().add(V3(-.045, -.74, .09)), L.clone().add(V3(-.495, -.36, -.3))); rig.arm(1, R.clone().add(V3(.045, -.74, .09)), R.clone().add(V3(.495, -.36, -.3)));
+}
 function makeNPC({ id, name, x, z, y = Y0, yaw, extra, ghost = false, ph = null }) {
   const look = LOOKS.cast[id], far = look.degree ?? 0;
   const sheet = canvasFor(1024, 1024, (g) => drawPerson(g, 0, 0, 1024, 1024, look), false), wear = (part) => zombieMat(sheet, part, { far });
@@ -4524,18 +4529,20 @@ function makeNPC({ id, name, x, z, y = Y0, yaw, extra, ghost = false, ph = null 
   if (extra) extra(rig.body);
   // Having only quit a little, they stand a little over: the top half and whatever's on it turned forward about the hips, and their arms hung from
   // wherever that puts their shoulders. Robby's not one of them.
+  const top = ghost ? [] : [rig.hm, ...rig.body.children.filter((o) => !bare.has(o) && o.position.y > ZOMBIE_HIP)];
   if (!ghost) {
     const pivot = V3(0, ZOMBIE_HIP, 0), turn = new THREE.Quaternion().setFromAxisAngle(V3(1, 0, 0), Math.PI * (1 - hipsDrawn(flickering(far)) / 180));
-    for (const o of [rig.hm, ...rig.body.children.filter((o) => !bare.has(o) && o.position.y > ZOMBIE_HIP)]) { o.position.sub(pivot).applyQuaternion(turn).add(pivot); o.quaternion.premultiply(turn); }
+    for (const o of top) { o.position.sub(pivot).applyQuaternion(turn).add(pivot); o.quaternion.premultiply(turn); }
     for (const S of rig.S) S.sub(pivot).applyQuaternion(turn).add(pivot);
   }
-  const [L, R] = rig.S;
-  rig.arm(0, L.clone().add(V3(-.045, -.74, .09)), L.clone().add(V3(-.495, -.36, -.3))); rig.arm(1, R.clone().add(V3(.045, -.74, .09)), R.clone().add(V3(.495, -.36, -.3)));
+  hangArms(rig);
   rig.leg(0, V3(-.11, -1.36, 0), V3(-.1, -1, .8)); rig.leg(1, V3(.11, -1.36, 0), V3(.1, -1, .8));
   if (ghost) makeGhost(rig.body);
   const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTex([name.toUpperCase()], 256, 64, 'rgba(0,0,0,0)', '#f1e6cf', '34px Bungee, Impact, sans-serif'), transparent: true, depthTest: false, fog: false }));
   tag.scale.set(1.4, .35, 1); tag.position.set(0, 2.15, 0); tag.renderOrder = 10; root.add(tag);
-  return { name, root, rig, yaw, tag, ghost, ph: ph ?? rnd() * 6 };
+  // how they stand, for a nod to go from and come back to
+  const rest = { top: top.map((o) => ({ o, p: o.position.clone(), q: o.quaternion.clone() })), S: rig.S.map((s) => s.clone()) };
+  return { name, root, rig, yaw, tag, ghost, rest, ph: ph ?? rnd() * 6 };
 }
 const gold = new THREE.MeshStandardMaterial({ color: '#e8b54a', metalness: .9, roughness: .3, emissive: '#3a2a08' });
 const NPCS = {
@@ -6077,13 +6084,33 @@ const onPlayed = (when) => people.check(when, played);
 // Whether someone would say something new: they talk, the server's there, and all they'd say is a written line they've said to him
 // before, that changes nothing. The story's lines are always the written ones.
 const wouldSayNew = (who, line = people.line(who, played)) => talk.ready() && talk.talks(who) && talk.mind(who).said.includes(line.say) && changesNothing(line.do, { check: onPlayed, flags: S.flags });
+// In a town that's shared (CHUNKY-169) there's nothing of the story to say, so they say something new every time the model can, to
+// whoever's come by: the hero as the story has him, or anyone else by name. When it can't, it's a line they've written for online,
+// each once to each of them, with only Later. after it, and once they've all been said, they nod. On its own `as` is nothing.
+const talkAs = () => (net ? { name: net.name, hero: net.hero } : undefined);
+const wouldTalk = (who) => (net ? talk.ready() && talk.talks(who) : wouldSayNew(who));
+const onlineLine = (who) => ({ whoId: who, who: NPCS[who].name, say: writtenOpener(talk.data, who, { mind: talk.mind(who), as: talkAs() }), opts: [{ say: 'Later.' }], do: [] });
+const lineFor = (who) => (net ? onlineLine(who) : people.line(who, played));
+// they look at whoever it is and dip their head once, over NOD_T seconds: the top half of them NOD_A further over about the hips, as
+// they stand over already, and back up, with their arms hung from wherever that puts their shoulders
+const NOD_T = .6, NOD_A = .2, nod = (who) => { NPCS[who].nodAt = time; };
+const _bow = new THREE.Quaternion(), BOW_AXIS = new THREE.Vector3(1, 0, 0), BOW_AT = new THREE.Vector3(0, ZOMBIE_HIP, 0);
+function bow(n, a) {
+  const R = n.rig, rest = n.rest; n.bowed = a;
+  if (!rest.top.length) return;
+  _bow.setFromAxisAngle(BOW_AXIS, a);
+  // and exactly as they were once it's over
+  for (const { o, p, q } of rest.top) { o.position.copy(p); o.quaternion.copy(q); if (a) { o.position.sub(BOW_AT).applyQuaternion(_bow).add(BOW_AT); o.quaternion.premultiply(_bow); } }
+  R.S.forEach((s, i) => { s.copy(rest.S[i]); if (a) s.sub(BOW_AT).applyQuaternion(_bow).add(BOW_AT); });
+  hangArms(R);
+}
 // What's going on, for whoever he's talking to: his beans, what he's carrying, what's happened, and whether the crowd's out
 function talkHere() {
   const H = talk.data.happened, carrying = [];
   if (S.gas) carrying.push(S.gas === 1 ? 'a gas can' : `${S.gas} gas cans`);
   for (const [k, name] of Object.entries(LOOT_NAMES)) if (S.items[k] > 0) carrying.push(`${S.items[k]} ${name.toLowerCase()}`);
   if (S.flags.bat) carrying.push('a bat with tape on the grip');
-  const happened = [...Object.keys(H.flags).filter((f) => S.flags[f]).map((f) => H.flags[f]), ...Object.keys(H.items).filter((k) => S.items[k] > 0).map((k) => H.items[k])];
+  const happened = net ? [] : [...Object.keys(H.flags).filter((f) => S.flags[f]).map((f) => H.flags[f]), ...Object.keys(H.items).filter((k) => S.items[k] > 0).map((k) => H.items[k])];
   return { beans: S.beans, carrying, happened, tonight: crowdOut ? talk.data.tonight : '' };
 }
 {
@@ -6096,18 +6123,20 @@ function talkHere() {
 function openDialog(id) {
   // after Chapter 1 her steps want sweeping again each day
   if (S.flags.ended) S.flags.swept = pantry.sweptOn(today());
-  const node = people.line(id, played), who = node.whoId;
+  const node = net ? onlineLine(id) : people.line(id, played), who = node.whoId, fresh = S.mode !== 'dialog' || convo?.who !== who;
   if (toniTalking) { toniTalking = false; toni.later(); }
-  if (S.mode !== 'dialog' || convo?.who !== who) { convo = { who, turns: [], moved: {}, last: null, care: false }; comeBack.delete(who); }
-  const own = id === who && !convo.care && (!!convo.last || wouldSayNew(who, node));
+  if (net && fresh && !node.say && !talk.ready()) { nod(who); return; }
+  if (fresh) { convo = { who, turns: [], moved: {}, last: null, care: false }; comeBack.delete(who); }
+  const own = id === who && !convo.care && (!!convo.last || (net ? wouldTalk(who) : wouldSayNew(who, node)));
   people.meet(who); people.apply(node.do, played); SFX.play('ui.tap');
   if (S.mode !== 'dialog') faceWhoever(NPCS[who]);
   S.mode = 'dialog'; HP.speed = 0; $('dialog').hidden = false; prompt(null);
   $('dWho').textContent = node.who; $('dHeard').hidden = true; $('dCare').hidden = true;
   if (own) ownWords(node); else sayWritten(node);
 }
-// The written line, and the written answers to it, as they've always been
+// The written line, and the written answers to it, as they've always been. Online with none left they haven't said, they nod instead.
 function sayWritten(node) {
+  if (!node.say) { convo = null; closeDialog(); nod(node.whoId); return; }
   waiting(false); showType(false);
   $('dSay').textContent = node.say;
   if (talk.talks(node.whoId)) talk.said(node.whoId, node.say);
@@ -6137,15 +6166,15 @@ function ownWords(node) {
   if (visit.last) { showOwn(node, visit.last); return; }
   waiting(true);
   const pre = early.get(who); early.delete(who);
-  (pre && time - pre.at < 90 ? pre.answer : talk.ask(who, { here: talkHere() })).then((got) => {
+  (pre && time - pre.at < 90 ? pre.answer : talk.ask(who, { here: talkHere(), as: talkAs() })).then((got) => {
     if (convo !== visit || S.mode !== 'dialog') return;
-    if (got.reply?.say) { took(who, got.reply); showOwn(people.line(who, played), visit.last); } else sayWritten(node);
+    if (got.reply?.say) { took(who, got.reply); showOwn(lineFor(who), visit.last); } else sayWritten(node);
   });
 }
 // What they've said goes into what they remember, after what he said or his walking up, so the talk goes his, theirs, his, and anything
 // it does to how they feel about him: each of trust and fear moves once a visit at most, by a point
 function took(who, r, heard = null) {
-  convo.turns.push({ role: 'user', content: heardAs(talk.data, heard) }, { role: 'assistant', content: JSON.stringify({ say: r.say }) });
+  convo.turns.push({ role: 'user', content: heardAs(talk.data, heard, talkAs()) }, { role: 'assistant', content: JSON.stringify({ say: r.say }) });
   talk.said(who, r.say);
   if (r.remember) talk.note(who, r.remember);
   for (const e of r.do) {
@@ -6173,13 +6202,15 @@ function answer(text, typed = false) {
   if (typed && inDistress(text, talk.data)) { stepOut(); return; }
   $('dHeard').textContent = text; $('dHeard').hidden = false;
   waiting(true);
-  talk.ask(who, { here: talkHere(), turns: visit.turns, heard: text }).then((got) => {
+  talk.ask(who, { here: talkHere(), turns: visit.turns, heard: text, as: talkAs() }).then((got) => {
     if (convo !== visit || S.mode !== 'dialog') return;
     if (got.reply?.care && typed) { stepOut(); return; }
-    if (got.reply?.say) { took(who, got.reply, text); showOwn(people.line(who, played), visit.last); return; }
-    const mind = talk.mind(who), spare = talk.data.people[who].spare.find((l) => !mind.said.includes(l)) ?? people.line(who, played).say;
+    if (got.reply?.say) { took(who, got.reply, text); showOwn(lineFor(who), visit.last); return; }
+    const spare = writtenFallback(talk.data, who, { mind: talk.mind(who), as: talkAs(), story: people.line(who, played).say });
+    // online, with none left they haven't said, what they said last stays up with only Later. while they nod
+    if (!spare) { waiting(false); $('dSay').textContent = visit.last?.say ?? ''; setOpts([{ say: 'Later.', act: closeDialog }]); nod(who); return; }
     took(who, { say: spare, do: [], remember: '', replies: [] }, text);
-    showOwn(people.line(who, played), visit.last);
+    showOwn(lineFor(who), visit.last);
   });
 }
 // He sounded like he's really not okay: they step out of the game and say so, the 988 Lifeline's there, and nothing more is asked of anyone
@@ -8324,7 +8355,7 @@ function tick(dt, draw = true) {
       for (const who of talk.data.who) {
         const n = NPCS[who], d = n ? Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z) : Infinity;
         if (d > AWAY) comeBack.add(who);
-        else if (d < NEAR && comeBack.has(who) && wouldSayNew(who)) { comeBack.delete(who); early.set(who, { at: time, answer: talk.ask(who, { here: talkHere() }) }); }
+        else if (d < NEAR && comeBack.has(who) && wouldTalk(who)) { comeBack.delete(who); early.set(who, { at: time, answer: talk.ask(who, { here: talkHere(), as: talkAs() }) }); }
       }
       const ride = near ? null : vehicleInReach();
       const meat = !near && !ride && skillet.visible && Math.hypot(HEARTH.x - player.pos.x, HEARTH.z - player.pos.z) < 2.2;
@@ -8424,6 +8455,8 @@ function tick(dt, draw = true) {
   for (const n of Object.values(NPCS)) {
     if (n.box) jumpClear(n, dt);
     n.ph += dt; n.rig.body.position.y = TOWN_HIPS + Math.sin(n.ph * 1.6) * (n.ghost ? .05 : .012);
+    // a nod, once, in a town that's shared when they've nothing left to say
+    if (n.nodAt != null) { const k = (time - n.nodAt) / NOD_T; bow(n, k < 1 ? Math.sin(k * Math.PI) * NOD_A : 0); if (k >= 1) n.nodAt = null; }
     const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z);
     const want = d < 7 && (M === 'town' || M === 'dialog' || M === 'drive') ? Math.atan2(player.pos.x - n.root.position.x, player.pos.z - n.root.position.z) : n.yaw;
     n.root.rotation.y += angDiff(n.root.rotation.y, want) * Math.min(1, dt * 3); n.tag.visible = d < 14 && M !== 'title' && M !== 'dialog';
@@ -8798,6 +8831,8 @@ if (TEST) {
     talk: {
       on(url) { talk.on(url); early.clear(); }, ready: () => talk.ready(), mind: (who) => JSON.parse(JSON.stringify(talk.mind(who))), forget() { talk.forget(); early.clear(); }, AWAY,
       settled: () => talk.settled(), early: () => [...early.keys()], said: (who, line) => talk.said(who, line),
+      // how much further over they are in a nod, in radians, or null when they aren't nodding
+      nodding: (who) => (NPCS[who].nodAt != null ? NPCS[who].bowed ?? 0 : null),
       visit: () => (convo ? { who: convo.who, turns: convo.turns.length, moved: { ...convo.moved }, care: convo.care } : null),
       type(text) { $('dTyped').value = text; $('dType').requestSubmit(); return this; }, data: talk.data, LIMITS: TALK_LIMITS,
     },

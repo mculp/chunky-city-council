@@ -23,6 +23,17 @@ Who they are in `data/talk.json` comes from the bible's section 7 and the world 
 - A line the checker turns away is only that line.
 - With nothing asked, everything they say and every button is just what it was before any of this.
 
+## In the town everyone shares
+
+Online (CHUNKY-169, and the bible's section 19), there's nothing of the story to say, so it goes differently.
+
+- **Something new every time.** Whenever the model can, all they say is their own words, the first time too, with his answers and Later.
+- **To whoever's come by.** The hero is asked about as the story has him, to the letter. Anyone else is `online.them`: from Chunky, quit too and un-quit, standing all the way up and not glowing, by the name they gave, in quotes, and "they" all through. Everything in `opener` and `rules` that changes for them is written with `{They}`, `{them}`, `{their}` and the like, and `src/talk.js` puts in his or theirs, the same for what's said about their visits, beans and answers. The name only goes in as a short name in quotes, with anything but letters, figures, spaces, hyphens and apostrophes taken out, so it can't tell the model anything.
+- **Nothing from the chapters.** What's happened isn't told them, and they've no written lines from the story to fall back on.
+- **When there's nothing new.** With the model off, slow or turned down, it's a line from `online.lines`, each once to each player: `first` on their first visit, `back` on the next, then each of `any` in turn. The hero gets no `first`: Coop's `hero`, or the others' `back`, then their `any`. Each has only Later. after it. Once they've all been said, they don't go round again.
+- **The nod.** With none of those left, TALK opens nothing: they look at whoever it is and dip their head once, over 0.6 s. Answering them when nothing new comes in time, what they said last stays up with only Later. while they nod. TALK stays, so pressing it again gets another nod.
+- **The 988 Lifeline** is the same as anywhere.
+
 ## What every line is held to
 
 The checker in `src/talk.js` reads what comes back before anything's shown. A line that doesn't pass is the written line instead.
@@ -78,9 +89,10 @@ An ask is about 4,700 letters, which is about 1,200 tokens, and a line back is u
 | `pages` | string[] | The pages that ask the talk server. |
 | `world` | string[] | The world, as each of them is told it. |
 | `him` | string | Who he is, as they're told it. |
-| `opener` | string | What's asked when he walks up. |
+| `opener` | string | What's asked when he walks up, with `{They}` and `{walk}` for whoever it is. |
+| `online` | object | The town everyone shares: `them`, who anyone but the hero is, as they're told it, with `{name}` for their name; and `lines`, by cast id, what each says there when there's nothing new: `first`, `back`, `any`, and Coop's `hero`. |
 | `tonight` | string | What's told them while the crowd's out. |
-| `rules` | string[] | How to answer, a line each, and what every line's held to. |
+| `rules` | string[] | How to answer, a line each, and what every line's held to, with `{they}`, `{them}`, `{their}`, `{themselves}`, `{have}`, `{are}` and `{say}` for whoever it is. |
 | `people` | object | Each of them, by cast id: `name`; `sheet`, who they are; `place`, where they are; `voice`, how they talk; `samples`, their lines, for how they sound; and `spare`, the lines they can say any time. |
 | `happened` | object | What's told them about what's happened: `flags` and `items`, each a sentence by the flag or the item. |
 | `moods` | string[] | The moods a line can have. |
@@ -99,5 +111,6 @@ With `?test`, nothing is asked until `__game.talk.on(url)` says where. `__game.t
 - `visit()`: this visit: who, how many things have been said, how far their feelings have moved and whether they've stepped out of the game.
 - `type(text)`: types it into the box and says it.
 - `settled()`: a promise that's kept once nothing's being asked.
+- `nodding(who)`: how much further over they are in a nod, in radians, or null when they aren't nodding.
 
 `state().dialog` has `heard`, what he said that they're answering, and `care`, `typing` and `waiting`.
