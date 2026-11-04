@@ -21,11 +21,11 @@ Later:
 
 > Maybe not everyone should be zombies. There should be some people to communicate with. Zombies should be less aggressive in general if they are not messed with. Their idle state should be with their torso folded and arms hanging towards the ground. They can also but don't have to chase after you in the folded state.
 
-**In the game, leaving him be:** most of the crowd have gone quiet. They stand folded over at the waist with their arms hanging to the ground and leave him be, however close he walks, until he starts something: knocks one down, hits one with something he's thrown, or picks something up from right at one's feet. Then that one comes for him, and so does anyone gone quiet close by who saw it. Once they've lost him they go quiet again. `data/folks.md` has the numbers. Decided around it:
+**In the game, leaving him be:** most of the crowd have gone quiet. They stand folded over at the waist with their arms hanging towards the ground and leave him be, however close he walks, until he starts something: knocks one down, hits one with something he's thrown, or picks something up from right at one's feet. Then that one comes for him, and so does anyone gone quiet close by who saw it. Once they've lost him they go quiet again. `data/folks.md` has the numbers. Decided around it:
 
 - "Gone quiet" is what the docs call it. Nobody in the game says zombie.
 - The furthest gone of them have burnt down: about one in fifteen in town, and one in five a few kilometres out. They come for him on sight, the way the whole crowd used to.
-- Some come for him stood up and leaning in, and some, as the owner says they can, come folded over, low and quick, with their arms dragging. Running, he still gets away from either.
+- Some come for him stood up and leaning in, and some, as the owner says they can, stay folded over and scuttle: a quick shuffle on their feet with their arms swinging, never on their hands. Running, he still gets away from either.
 - Close to him, some of the quiet ones mutter something faint over their heads. Each has one line, from twenty the Creative Director wrote.
 - Noises, lures, lights, the church bell and the train still bring them, quiet or not.
 - Coop, Rocky and Miss Bobby still never come for him, and nobody at home does unless he gives them a reason. Provoking the three of them isn't built.

@@ -93,7 +93,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     if (F) { const who = extra.who ?? F.next(); Object.assign(s, who.looks, extra); s.who = who; who.body = s; s.homeX = x; s.homeZ = z; s.mood = 0; }
     // whether they've gone quiet, unless it's been said. The people at home have their own way of being.
     if (s.quiet === undefined && !s.who?.calm) s.quiet = !!world.quiet?.(s);
-    // how far over they stand, in degrees at the hips, and whether that's far enough over to come after him low and quick like that
+    // how far over they stand, as their number in degrees at the hips, and whether that's far enough over to stay folded over and scuttle after him
     s.hips ??= world.hips?.(s) ?? 180;
     s.scuttle ??= s.hips < HOW.hips.scuttles;
     all.push(s); return s;

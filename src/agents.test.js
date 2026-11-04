@@ -110,7 +110,7 @@ describe('who they are', () => {
     assert.ok(many.every((w) => { const h = hipsOf({ ...w, calm: true }, 4000); return h >= 30 && h <= 150; }));
   });
 
-  test('anyone folded further over than a table comes after him low and quick, and that\'s every one who\'s burnt down', () => {
+  test('anyone numbered further over than a table stays folded over and scuttles after him, and that\'s every one who\'s burnt down', () => {
     const h = createHorde(field(folks(), { hips: (s) => hipsOf(s.who, 0), quiet: (s) => !burntDown(s.who, 0) }));
     const all = Array.from({ length: 400 }, (_, i) => h.add(i % 20, Math.floor(i / 20)));
     assert.ok(all.every((s) => s.scuttle === s.hips < 90));

@@ -28,8 +28,8 @@ export const HOW = {
   burnt: [1 / 15, 1 / 5],     // how many have burnt down in town, and from out past...
   burntOut: [1000, 3000],     // ...this far from the middle of town, in true metres, going from one to the other between
   // How far over they stand, as the angle at the hips between their legs and their back: 180° stood up straight, 90° flat like a table and 0°
-  // folded right over. It goes with how far gone they are, from the least gone to the furthest of each, and anyone folded further over than
-  // `scuttles` comes after him low and quick like that, where everyone else stands up to run.
+  // folded right over, though it's drawn at 90° plus half of it. It goes with how far gone they are, from the least gone to the furthest of
+  // each, and anyone under `scuttles` stays folded over and scuttles after him, a quick shuffle on their feet, where everyone else stands up.
   hips: { quiet: [150, 30], burnt: [30, 0], flickering: [170, 150], scuttles: 90 },
   flickers: .4,               // how far gone the cast's looks go, in data/looks.json, while they've only quit a little
 };
