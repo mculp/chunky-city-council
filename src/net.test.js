@@ -413,6 +413,18 @@ test('losing the connection empties the town, says so once, and tries again afte
   assert.deepEqual(said, ['joined', 'lost']);
 });
 
+test('a town the browser won\'t even ask, as a page on https won\'t ask one on ws://, is lost like any other and asked again later', () => {
+  const said = [], t = { now: 0 }; let tries = 0;
+  const WS = class { constructor() { tries++; throw new Error('An insecure WebSocket connection may not be initiated from a page loaded over HTTPS.'); } };
+  const net = connectNet({ url: 'ws://chunky.ms:8787', WS, clock: () => t.now, status: (s) => said.push(s), retry: 2000 });
+  assert.doesNotThrow(() => net.update(0, 0, 0, 0));
+  assert.deepEqual(said, ['lost']); assert.equal(net.id, 0);
+  t.now = 1000; net.update(0, 0, 0, 0);
+  assert.equal(tries, 1, 'asked again too soon');
+  t.now = 2001; assert.doesNotThrow(() => net.update(0, 0, 0, 0));
+  assert.equal(tries, 2); assert.deepEqual(said, ['lost'], 'said again');
+});
+
 test('a full town says so, and it tries again, but later', () => {
   const said = []; const { net, t, socket } = link({ status: (s) => said.push(s), retry: 2000 });
   net.update(0, 0, 0, 0); socket().opened(); socket().hear(say({ t: 'no', why: 'full', say: 'Chunky\'s full.' })); const first = socket(); first.shut(1000);

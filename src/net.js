@@ -157,7 +157,10 @@ export function connectNet({ url, WS = globalThis.WebSocket, clock = () => perfo
   const tell = (s, m) => { if (s !== said) { said = s; status(s, m); } };
   const send = (data) => { sock.send(data); count.framesOut++; count.bytesOut += data.length; };
   function open() {
-    const me = sock = new WS(url); me.binaryType = 'arraybuffer';
+    // one the browser won't even ask, such as ws:// from a page on https or an address that isn't one, is lost like any other
+    let me;
+    try { me = sock = new WS(url); } catch { openAt = clock() + retry; tell('lost'); return; }
+    me.binaryType = 'arraybuffer';
     me.onopen = () => { if (sock === me) send(say({ t: 'hello', ...hello() })); };
     // one that's been let go of says nothing more
     me.onmessage = (e) => {
