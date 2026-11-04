@@ -28,7 +28,7 @@ function cannedTalk({ line = LINE, quiet = null } = {}) {
   return createTalk({
     fetch: model, key: 'canned', cap: quiet === 'cap' ? 0 : 5, origins: onThisMachine,
     phoneLimit: async () => quiet !== 'fast', placeLimit: async () => true,
-    bill: { spent: async () => 0, add: async (month, cost) => cost },
+    bill: { spent: async () => 0, add: async (month, cost) => cost }, log: () => {},
   });
 }
 

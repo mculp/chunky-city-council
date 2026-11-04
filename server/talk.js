@@ -12,25 +12,29 @@
 import { PHONE_KEY } from '../src/net.js';
 
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-export const TALK = { body: 8192, messages: 24, chars: 6000, wait: 2500, tokens: 200 };
+// `hedge` is when the fallback's asked alongside a pick that hasn't answered yet. In the trial the fallback was never slower than
+// 0.7 s, which leaves it time to answer inside `wait`.
+export const TALK = { body: 8192, messages: 24, chars: 6000, wait: 2500, hedge: 1800, tokens: 200 };
 // The cheap models it'll use, and what OpenRouter charged a million tokens in and out on 2026-11-03, for working out what a line
-// cost when OpenRouter doesn't say. The first is the one used, until trying them side by side on Coop and Miss Bobby picks one, and
-// a page can only name another for that.
+// cost when OpenRouter doesn't say. Trying them side by side on Coop and Miss Bobby (tools/talk-trial.mjs, 2026-11-04) picked the
+// first, for how they sound, and the second to answer when the first can't. A page can only name another, for trying them again.
+// z-ai/glm-5.3-flash is off the list: OpenRouter only runs it reasoning, and these are asked with reasoning off.
 export const MODELS = {
-  'mistralai/mistral-nemo': { in: 0.029, out: 0.03 },
-  'z-ai/glm-5.3-flash': { in: 0.028, out: 0.093 },
-  'qwen/qwen3.7-flash': { in: 0.03, out: 0.13 },
-  'meta-llama/llama-3.1-8b-instruct': { in: 0.05, out: 0.08 },
   'google/gemma-4-26b-a4b-it': { in: 0.06, out: 0.18 },
+  'meta-llama/llama-3.1-8b-instruct': { in: 0.05, out: 0.08 },
+  'mistralai/mistral-nemo': { in: 0.029, out: 0.03 },
+  'qwen/qwen3.7-flash': { in: 0.03, out: 0.13 },
   'mistralai/mistral-small-3.2-24b-instruct': { in: 0.075, out: 0.2 },
 };
-export const MODEL = Object.keys(MODELS)[0];
+export const [MODEL, FALLBACK] = Object.keys(MODELS);
 const ROLES = new Set(['system', 'user', 'assistant']);
 const MINUTE = 60000;
 
 // by UTC, which is when OpenRouter's own month on the key starts over
 export const monthOf = (ms) => new Date(ms).toISOString().slice(0, 7);
 const priced = (model, tokensIn, tokensOut) => (MODELS[model].in * tokensIn + MODELS[model].out * tokensOut) / 1e6;
+// a few words off an error that are safe for the log, or nothing
+const plain = (s) => (/^[\w .:,'-]{1,80}$/.test(String(s ?? '')) ? String(s) : null);
 
 // what a phone asked, or null if it broke any of the limits
 export function readAsk(text) {
@@ -45,7 +49,7 @@ export function readAsk(text) {
     if (!ROLES.has(m?.role) || typeof m.content !== 'string') return null;
     chars += m.content.length; messages.push({ role: m.role, content: m.content });
   }
-  return chars > TALK.chars ? null : { phone: a.phone, messages, model: a.model ?? MODEL };
+  return chars > TALK.chars ? null : { phone: a.phone, messages, model: a.model };
 }
 
 // the body, as long as it's no more than `most` bytes however it's sent
@@ -65,13 +69,13 @@ async function readCapped(request, most) {
   return new TextDecoder().decode(all);
 }
 
-// One line from the model. Nothing about the game goes with it, so it isn't listed on OpenRouter, and it only goes to providers that
-// don't keep what's sent, since it's what people type. `charged` is what a line given up on may still have cost.
-async function askModel({ fetch, url, key, model, messages, wait, clock }) {
-  const began = clock(), stop = new AbortController(), timer = setTimeout(() => stop.abort(), wait);
+// One line from one model, or why there isn't one. Nothing about the game goes with it, so it isn't listed on OpenRouter, and it
+// only goes to providers that don't keep what's sent, since it's what people type. When OpenRouter turns it down, the log says how,
+// by its status, code and provider, and never by its message, which can repeat what was said.
+async function askOne({ fetch, url, key, model, messages, signal, log }) {
   try {
     const res = await fetch(url, {
-      method: 'POST', signal: stop.signal,
+      method: 'POST', signal,
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model, messages, max_tokens: TALK.tokens, temperature: 0.9, reasoning: { enabled: false },
@@ -81,22 +85,56 @@ async function askModel({ fetch, url, key, model, messages, wait, clock }) {
     const json = await res.json().catch(() => null);
     if (res.status === 402 || (res.status === 403 && /limit/i.test(json?.error?.message ?? ''))) return { quiet: 'cap' };
     const reply = json?.choices?.[0]?.message?.content;
-    if (!res.ok || json?.error || typeof reply !== 'string' || !reply.trim()) return { quiet: 'off' };
+    if (!res.ok || json?.error || typeof reply !== 'string' || !reply.trim()) {
+      const code = plain(json?.error?.code), from = plain(json?.error?.metadata?.provider_name);
+      log(`OpenRouter turned ${model} down: ${res.status}${code ? `, code ${code}` : ''}${from ? `, from ${from}` : ''}`);
+      return { quiet: 'off' };
+    }
     const used = json.usage ?? {};
-    const cost = Number.isFinite(used.cost) ? used.cost : priced(model, used.prompt_tokens ?? 0, used.completion_tokens ?? 0);
-    return { reply, model, cost, ms: Math.round(clock() - began) };
-  } catch {
-    if (!stop.signal.aborted) return { quiet: 'off' };
-    const chars = messages.reduce((n, m) => n + m.content.length, 0);
-    return { quiet: 'slow', charged: priced(model, chars / 4, TALK.tokens) };
-  } finally { clearTimeout(timer); }
+    return { reply, cost: Number.isFinite(used.cost) ? used.cost : priced(model, used.prompt_tokens ?? 0, used.completion_tokens ?? 0) };
+  } catch (e) {
+    if (!signal.aborted) log(`OpenRouter couldn't be asked for ${model}: ${plain(e?.message) ?? e?.name}`);
+    return { quiet: 'off' };
+  }
+}
+
+// The line, from the first of `models` that has one. The next is asked as soon as one's turned down, or alongside it once it's gone
+// `hedge` without answering, and whichever answers first is the line. Whatever's still being asked when there's a line, or when
+// `wait` is up, is given up on, and goes in `charged`, since OpenRouter may charge for it anyway. A key out of money is out for all.
+function askModels({ fetch, url, key, models, messages, wait, hedge, clock, log }) {
+  const began = clock(), chars = messages.reduce((n, m) => n + m.content.length, 0), asked = [];
+  return new Promise((resolve) => {
+    let over = false;
+    const end = (said) => {
+      if (over) return;
+      over = true; clearTimeout(alongside); clearTimeout(late);
+      const left = asked.filter((a) => !a.back);
+      for (const a of left) a.stop.abort();
+      const charged = left.reduce((n, a) => n + priced(a.model, chars / 4, TALK.tokens), 0);
+      resolve(charged ? { ...said, charged } : said);
+    };
+    const next = () => {
+      if (over || asked.length === models.length) return;
+      const a = { model: models[asked.length], stop: new AbortController(), back: false };
+      asked.push(a);
+      askOne({ fetch, url, key, model: a.model, messages, signal: a.stop.signal, log }).then((said) => {
+        a.back = true;
+        if (said.reply !== undefined) end({ reply: said.reply, model: a.model, cost: said.cost, ms: Math.round(clock() - began) });
+        else if (said.quiet === 'cap') end(said);
+        else if (asked.length < models.length) next();
+        else if (asked.every((b) => b.back)) end({ quiet: 'off' });
+      });
+    };
+    const alongside = setTimeout(next, hedge), late = setTimeout(() => end({ quiet: 'slow' }), wait);
+    next();
+  });
 }
 
 // The talk server, given how to ask OpenRouter, the owner's key, the month's cap in dollars, the pages it answers (a list, or a rule
 // for pages that are somewhere different each time, like a test's on this machine), the two limits (each is told a key and says
 // whether it may go on) and the bill (a month's spent, and adding to it, which says the new total). It remembers what the month's
 // spent for up to a minute, so most lines don't wait on the bill, and each line's cost goes on the bill after the phone has its answer.
-export function createTalk({ fetch, key, cap = 20, origins = [], url = OPENROUTER_URL, wait = TALK.wait, clock = Date.now, phoneLimit, placeLimit, bill }) {
+export function createTalk({ fetch, key, cap = 20, origins = [], url = OPENROUTER_URL, wait = TALK.wait, hedge = TALK.hedge, clock = Date.now, phoneLimit, placeLimit, bill, log = console.error }) {
   // a cap that isn't a sum of money is no money at all, never no limit
   if (!(typeof cap === 'number' && Number.isFinite(cap) && cap >= 0)) cap = 0;
   const answers = typeof origins === 'function' ? origins : (o) => origins.includes(o);
@@ -119,13 +157,15 @@ export function createTalk({ fetch, key, cap = 20, origins = [], url = OPENROUTE
       const [phoneOk, placeOk] = await Promise.all([phoneLimit(ask.phone), placeLimit(request.headers.get('cf-connecting-ip') ?? '')]);
       if (!phoneOk || !placeOk) return say({ quiet: 'fast' });
       if (known.month !== month || clock() - known.at > MINUTE) known = { month, spent: await bill.spent(month), at: clock() };
-    } catch { return say({ quiet: 'off' }); }
+    } catch (e) { log(`The talk server couldn't ask the limits or the bill: ${plain(e?.message) ?? e?.name}`); return say({ quiet: 'off' }); }
     if (known.spent >= cap) return say({ quiet: 'cap' });
 
-    const { charged, ...said } = await askModel({ fetch, url, key, model: ask.model, messages: ask.messages, wait, clock });
+    // a model the page names is asked alone, for trying them side by side, and otherwise it's the pick with its fallback
+    const models = ask.model ? [ask.model] : [MODEL, FALLBACK];
+    const { charged = 0, ...said } = await askModels({ fetch, url, key, models, messages: ask.messages, wait, hedge, clock, log });
     // OpenRouter's own limit on the key is spent, whatever the count here says: not asked again for a minute
     if (said.quiet === 'cap') known = { month, spent: Math.max(known.spent, cap), at: clock() };
-    const cost = said.cost ?? charged ?? 0;
+    const cost = (said.cost ?? 0) + charged;
     if (cost > 0) {
       waitUntil(bill.add(month, cost).then((spent) => { if (known.month === month && spent > known.spent) known = { month, spent, at: clock() }; })
         .catch((e) => console.error(`A line's cost didn't go on the bill: ${e.message}`)));

@@ -1,7 +1,7 @@
 // The characters' words (CHUNKY-107): what a phone may ask, what goes on to OpenRouter, and when it all goes quiet
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTalk, MODEL, MODELS, TALK, OPENROUTER_URL, monthOf } from './talk.js';
+import { createTalk, MODEL, FALLBACK, MODELS, TALK, OPENROUTER_URL, monthOf } from './talk.js';
 
 const PHONE = 'a-phone-of-their-own-1234';
 const SAID = [{ role: 'system', content: 'You are Coop.' }, { role: 'user', content: 'Hey, Coop.' }];
@@ -22,6 +22,21 @@ function upstream({ status = 200, json = { choices: [{ message: { content: WORDS
   };
   return { fetch, calls };
 }
+// OpenRouter answering each model its own way: words, or a status and what it said, after a while, or not until it's given up on.
+// Each call keeps which model it was for and whether it was given up on.
+function voices(by = {}) {
+  const calls = [];
+  const fetch = async (url, init) => {
+    const { model } = JSON.parse(init.body), how = by[model] ?? {}, call = { model, stopped: false };
+    calls.push(call);
+    init.signal.addEventListener('abort', () => { call.stopped = true; });
+    if (how.hang) return new Promise((_, no) => init.signal.addEventListener('abort', () => no(new DOMException('gave up', 'AbortError'))));
+    if (how.after) await new Promise((r) => setTimeout(r, how.after));
+    const json = how.json ?? { choices: [{ message: { content: WORDS } }], usage: { cost: how.cost ?? 0.0002 } };
+    return new Response(JSON.stringify(json), { status: how.status ?? 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  return { fetch, calls };
+}
 // what the month's cost, kept as the Durable Object keeps it
 function ledger(months = {}) {
   const kept = new Map(Object.entries(months)), b = { asked: 0, kept };
@@ -33,7 +48,7 @@ const NOW = Date.UTC(2026, 10, 4, 5, 0);
 function talk({ up = upstream(), bill = ledger(), phoneOk = true, placeOk = true, ...over } = {}) {
   const t = { now: NOW }, later = [], limited = [];
   const handle = createTalk({
-    fetch: up.fetch, key: 'sk-test', cap: 5, origins: ['https://chunky.ms', 'http://localhost:8000'], clock: () => t.now, bill,
+    fetch: up.fetch, key: 'sk-test', cap: 5, origins: ['https://chunky.ms', 'http://localhost:8000'], clock: () => t.now, bill, log: () => {},
     phoneLimit: async (k) => { limited.push(['phone', k]); return phoneOk; }, placeLimit: async (k) => { limited.push(['place', k]); return placeOk; }, ...over,
   });
   // each answer, once whatever it left to finish has finished
@@ -80,6 +95,81 @@ test('the page can only pick a model that\'s on the list, for trying them side b
   assert.equal(up.calls[0].body.model, other);
   for (const model of ['openai/gpt-6', 'constructor', 7]) assert.equal((await go(ask(body({ model })))).json.quiet, 'bad', String(model));
   assert.equal(up.calls.length, 1);
+});
+
+// The Creative Director's pick from tools/talk-trial.mjs, and what answers when it can't
+test('with nothing named, the Creative Director\'s pick is asked, and nothing else once it answers', async () => {
+  const { go, up } = talk({ up: voices() });
+  assert.equal((await go()).json.model, MODEL);
+  assert.deepEqual(up.calls.map((c) => c.model), [MODEL]);
+  assert.notEqual(FALLBACK, MODEL);
+});
+
+test('when the pick\'s turned down, the fallback\'s asked straight away and its words are the line, with nothing charged for the other', async () => {
+  const up = voices({ [MODEL]: { status: 400, json: { error: { code: 400, message: 'Reasoning is mandatory' } } }, [FALLBACK]: { cost: 0.0003 } });
+  const { go, bill } = talk({ up, hedge: 5000, wait: 10000 });
+  const began = performance.now(), { json } = await go();
+  assert.ok(performance.now() - began < 1000, 'not left until it would have been asked alongside');
+  assert.deepEqual(json, { reply: WORDS, model: FALLBACK, cost: 0.0003, ms: 0 });
+  assert.equal(bill.kept.get('2026-11'), 0.0003);
+});
+
+test('when the pick\'s slow, the fallback\'s asked alongside it, and the first to answer has the line', async () => {
+  const up = voices({ [MODEL]: { hang: true }, [FALLBACK]: { cost: 0.0003 } });
+  const { go, bill } = talk({ up, hedge: 20, wait: 1000 });
+  assert.equal((await go()).json.model, FALLBACK);
+  assert.deepEqual(up.calls.map((c) => [c.model, c.stopped]), [[MODEL, true], [FALLBACK, false]], 'the pick given up on once there\'s a line');
+  assert.ok(bill.kept.get('2026-11') > 0.0003, 'with what it may still cost on the bill');
+});
+
+test('the pick still has the line when it answers before the fallback asked alongside it', async () => {
+  const up = voices({ [MODEL]: { after: 60 }, [FALLBACK]: { hang: true } });
+  const { go } = talk({ up, hedge: 20, wait: 1000 });
+  assert.equal((await go()).json.model, MODEL);
+  assert.deepEqual(up.calls.map((c) => [c.model, c.stopped]), [[MODEL, false], [FALLBACK, true]]);
+});
+
+test('when neither answers in time it\'s slow, and both count against the month', async () => {
+  const up = voices({ [MODEL]: { hang: true }, [FALLBACK]: { hang: true } });
+  const { go, bill } = talk({ up, hedge: 10, wait: 60 });
+  assert.deepEqual((await go()).json, { quiet: 'slow' });
+  const chars = SAID.reduce((n, m) => n + m.content.length, 0), may = (m) => (MODELS[m].in * chars / 4 + MODELS[m].out * TALK.tokens) / 1e6;
+  assert.ok(Math.abs(bill.kept.get('2026-11') - may(MODEL) - may(FALLBACK)) < 1e-12);
+});
+
+test('a model the page names is asked alone, with nothing to fall back on, so trying them side by side tries just that one', async () => {
+  const named = Object.keys(MODELS).find((m) => m !== MODEL && m !== FALLBACK);
+  for (const how of [{ status: 500, json: { error: { code: 500 } } }, { hang: true }]) {
+    const up = voices({ [named]: how }), { go } = talk({ up, hedge: 10, wait: 60 });
+    await go(ask(body({ model: named })));
+    assert.deepEqual(up.calls.map((c) => c.model), [named], JSON.stringify(how));
+  }
+});
+
+test('a key that\'s out of money is out for every model, so the fallback isn\'t asked', async () => {
+  const up = voices({ [MODEL]: { status: 402, json: { error: { message: 'Insufficient credits' } } } });
+  const { go } = talk({ up, hedge: 5000, wait: 10000 });
+  assert.equal((await go()).json.quiet, 'cap');
+  assert.deepEqual(up.calls.map((c) => c.model), [MODEL]);
+});
+
+test('the log says how OpenRouter turned a line down, by its status, code and provider, and never what was said or the key', async () => {
+  const logged = [], up = voices({
+    [MODEL]: { status: 403, json: { error: { code: 403, message: 'Your input was flagged: Hey, Coop.', metadata: { flagged_input: 'Hey, Coop.', provider_name: 'DeepInfra' } } } },
+    [FALLBACK]: { json: { error: { code: 502, message: 'Provider returned error', metadata: { raw: 'Hey, Coop.', provider_name: 'Parasail' } } } },
+  });
+  assert.equal((await talk({ up, log: (line) => logged.push(line) }).go()).json.quiet, 'off');
+  assert.equal(logged.length, 2);
+  assert.ok(logged[0].includes(MODEL) && /403/.test(logged[0]) && /DeepInfra/.test(logged[0]), logged[0]);
+  assert.ok(logged[1].includes(FALLBACK) && /502/.test(logged[1]) && /Parasail/.test(logged[1]), logged[1]);
+  for (const line of logged) assert.doesNotMatch(line, /Coop|flagged|Provider returned|sk-test/);
+});
+
+test('when the limits or the bill can\'t be asked, the log says which went wrong', async () => {
+  const logged = [], broken = ledger();
+  broken.spent = async () => { throw new Error('Durable Object reset because its code was updated.'); };
+  await talk({ bill: broken, log: (line) => logged.push(line) }).go();
+  assert.match(logged.join('\n'), /bill.*Durable Object reset/);
 });
 
 test('an ask that breaks any limit is turned away and never reaches OpenRouter', async () => {
