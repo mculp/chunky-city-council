@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import { connectNet, rollLook, makeKey, worldOf, townUrl, HOW, PHONE_KEY } from './net.js';
 import { checkName, NAME_MOST } from './names.js';
 import { inVehicle, settle, KINDS } from './vehicles.js';
-import { toScreen, drawLabel, COLORS as MAPC } from './mapview.js';
+import { toScreen, drawLabel, nameBeside, COLORS as MAPC } from './mapview.js';
 
 const MOST = 25;                  // everyone the town holds, you included
 const SEE = 160, NAMED = 40;      // drawn this far from the camera, and named this far from you
@@ -448,15 +448,27 @@ export function together(G) {
       nameTags(list);
       shownList = list;
     },
+    // Their turn for room on the big map, which comes before the cast's, the places' and the streets', with the hero's first:
+    // each dot keeps its room, and a name goes on whichever side of it has room, or is left out
+    roomOnMap(v, free, w, h) {
+      named.clear();
+      if (!started) return;
+      for (const o of [...shownList].sort((p, q) => !!q.hero - !!p.hero)) {
+        const [x, y] = toScreen(v, o.x, o.z);
+        if (x < -10 || y < -10 || x > w + 10 || y > h + 10) continue;
+        named.set(o.id, nameBeside(free, x, y, o.name, 11));
+      }
+    },
     // a dot for each of them on the map, in blue so they aren't taken for the cast, who are cyan, and the hero in the orange of
-    // his own arrow, with their names on the big one
+    // his own arrow and over everyone else's, with their names on the big one where they found room
     onMap(g, v, dpr, big = false) {
       if (!started) return;
-      for (const w of shownList) {
+      for (const w of [...shownList].sort((p, q) => !!p.hero - !!q.hero)) {
         const [x, y] = toScreen(v, w.x, w.z), hue = w.hero ? MAPC.rust : MAPC.blue;
         if (x < -10 || y < -10 || x > g.canvas.width / dpr + 10 || y > g.canvas.height / dpr + 10) continue;
         g.beginPath(); g.arc(x, y, big ? 5 : 3.5, 0, 7); g.fillStyle = hue; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.stroke(); g.fill();
-        if (big && w.name) drawLabel(g, w.name, x + 11, y, '13px Bungee, Impact, sans-serif', hue, 0, 'left');
+        const at = named.has(w.id) ? named.get(w.id) : { x: x + 11, align: 'left' };
+        if (big && w.name && at) drawLabel(g, w.name, at.x, y, '13px Bungee, Impact, sans-serif', hue, 0, at.align);
       }
       if (big) lastMap = { v, dpr, g };
     },
@@ -464,6 +476,8 @@ export function together(G) {
     open() { show(''); },
   };
   let lastMap = null;
+  // where each of them has their name on the big map, by id, from its last turn for room
+  const named = new Map();
   // ---------------- for the tests
   if (G.TEST) {
     window.__net = {

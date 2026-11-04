@@ -249,7 +249,7 @@ import { createFolks, burntDown, hipsOf, flickering, AFTER, HOW } from './src/ag
 import { createTraffic } from './src/traffic.js';
 import { LURES, ALARM, GRAVITY, inHand, nextUp, kindsHeld, rangeOf, throwOf, aimedAt } from './src/lures.js';
 import { keysFor, buttonsFor, actWord, fastWord, lookBy, edgeTurn, needsCursor, mouseLooks, MOUSE } from './src/controls.js';
-import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRim, drawArrow, drawLabel, labelSpace, clampCam, zoomAbout, fitScale, COLORS as MAPC } from './src/mapview.js';
+import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRim, drawArrow, drawLabel, labelSpace, nameBeside, clampCam, zoomAbout, fitScale, COLORS as MAPC } from './src/mapview.js';
 import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, wallsOf, Sheet, PATTERN, hash2 } from './src/structures.js';
 import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
 import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, rimHit, placeVehicles, settle, speedOf } from './src/vehicles.js';
@@ -7074,20 +7074,22 @@ function drawFullMap() {
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const free = labelSpace(), on = (x, y) => x > -40 && x < w + 40 && y > -20 && y < h + 20;
   const BIG = '13px Bungee, Impact, sans-serif', SMALL = '11px "IBM Plex Mono", ui-monospace, monospace';
-  // what's asked of you, then him, then who's where, then what's where, then the streets
+  // him, then what's asked of you, then everyone else playing with the hero first, then the cast, then what's where, then the
+  // streets. Everyone else playing is drawn last, over the rest.
   const at = objectivePoint(), [hx, hy] = toScreen(v, player.pos.x, player.pos.z);
   free(hx, hy, 28, 28);
   if (at) {
     const [x, y] = toScreen(v, at.x, at.z);
     if (on(x, y)) { free(x, y, 20, 20); g.beginPath(); g.arc(x, y, 9, 0, 7); g.strokeStyle = MAPC.ink; g.lineWidth = 5; g.stroke(); g.strokeStyle = MAPC.hot; g.lineWidth = 3; g.stroke(); g.beginPath(); g.arc(x, y, 3, 0, 7); g.fillStyle = MAPC.hot; g.fill(); }
   }
+  net?.roomOnMap(v, free, w, h);
   if (mapCam.scale > .2) for (const o of VEHICLES) if (o !== driving && !o.wrecked && !o.drowned) drawVehicleMark(g, v, o, 2 + mapCam.scale * 1.6);
   const known = new Set(people.known().map((p) => p.id));
   for (const [id, n] of Object.entries(NPCS)) {
     const [x, y] = toScreen(v, n.root.position.x, n.root.position.z); if (!on(x, y)) continue;
     g.beginPath(); g.arc(x, y, 5, 0, 7); g.fillStyle = MAPC.cyan; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.stroke(); g.fill();
-    const name = known.has(id) ? n.name : '?', tw = name.length * 9 + 8;
-    if (free(x + 13 + tw / 2, y, tw, 16)) drawLabel(g, name, x + 13, y, BIG, MAPC.cyan, 0, 'left');
+    const name = known.has(id) ? n.name : '?', side = nameBeside(free, x, y, name, 13);
+    if (side) drawLabel(g, name, side.x, y, BIG, MAPC.cyan, 0, side.align);
   }
   for (const [name, wx, wz, rank] of MAP_PLACES) {
     if (mapCam.scale < [0, .3, .16, .012][rank]) continue;

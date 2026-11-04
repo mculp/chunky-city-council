@@ -143,8 +143,22 @@ export function drawLabel(g, text, x, y, font, fill = COLORS.cream, angle = 0, a
   g.lineJoin = 'round'; g.strokeStyle = COLORS.ink; g.lineWidth = 4; g.strokeText(text, 0, 0); g.fillStyle = fill; g.fillText(text, 0, 0); g.restore();
 }
 
-// Labels take turns, most important first, and one that'd land on another is left out
+// Labels take turns, most important first, and one that'd land on another is left out. A dot takes its room with `take`
+// whatever's there, since it always shows.
 export function labelSpace() {
-  const used = [];
-  return (x, y, w, h) => { const a = { x0: x - w / 2, x1: x + w / 2, y0: y - h / 2, y1: y + h / 2 }; for (const b of used) if (a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0) return false; used.push(a); return true; };
+  const used = [], box = (x, y, w, h) => ({ x0: x - w / 2, x1: x + w / 2, y0: y - h / 2, y1: y + h / 2 });
+  const free = (x, y, w, h) => { const a = box(x, y, w, h); for (const b of used) if (a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0) return false; used.push(a); return true; };
+  free.take = (x, y, w, h) => { used.push(box(x, y, w, h)); };
+  return free;
+}
+
+// Someone's name beside their dot, in 13px Bungee: on the right if there's room, on the left if there isn't, and left out if
+// there's room on neither side. Where it starts and which way it runs from there, or null.
+export function nameBeside(free, x, y, text, gap) {
+  free.take(x, y, 12, 12);
+  if (!text) return null;
+  const w = text.length * 9 + 8;
+  if (free(x + gap + w / 2, y, w, 16)) return { x: x + gap, align: 'left' };
+  if (free(x - gap - w / 2, y, w, 16)) return { x: x - gap, align: 'right' };
+  return null;
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMapData, clampCam, fitScale, makeView, roadLabels, toRim, toScreen, toWorld, worldBox, zoomAbout, labelSpace } from './mapview.js';
+import { buildMapData, clampCam, fitScale, makeView, roadLabels, toRim, toScreen, toWorld, worldBox, zoomAbout, labelSpace, nameBeside } from './mapview.js';
 
 const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) < e, `${a} is not ${b}`);
 const data = () => buildMapData({
@@ -90,4 +90,22 @@ test('labels don\'t land on each other', () => {
   assert.equal(free(10, 10, 20, 10), true);
   assert.equal(free(15, 12, 20, 10), false);
   assert.equal(free(60, 10, 20, 10), true);
+});
+
+test('a dot takes its room even where a label already is, and what comes after keeps off it', () => {
+  const free = labelSpace();
+  assert.equal(free(10, 10, 20, 10), true);
+  free.take(18, 10, 12, 12);
+  assert.equal(free(26, 10, 8, 8), false, 'on the edge of the dot');
+  assert.equal(free(40, 10, 8, 8), true, 'clear of it');
+});
+
+test('a name goes on the right of its dot if there\'s room, then on the left, and otherwise it\'s left out', () => {
+  const free = labelSpace();
+  assert.deepEqual(nameBeside(free, 100, 100, 'Dee', 11), { x: 111, align: 'left' });
+  assert.deepEqual(nameBeside(free, 100, 100, 'Coop', 13), { x: 87, align: 'right' }, 'whoever came first keeps the right');
+  assert.equal(nameBeside(free, 100, 100, 'Rocky', 13), null);
+  assert.equal(free(100, 100, 4, 4), false, 'and the dots keep their room all the same');
+  assert.equal(nameBeside(free, 300, 100, '', 11), null, 'a dot without a name yet');
+  assert.equal(free(300, 100, 4, 4), false);
 });

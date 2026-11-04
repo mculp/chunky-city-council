@@ -37,6 +37,47 @@ const bodyOf = async (p, id) => (await drawn(p)).bodies.find((s) => s.id === id)
 // Where one phone has a vehicle, every frame for so long from now, so that something over in a tenth of a second isn't missed
 const film = (p, i, ms) => on(p, ([i, ms]) => { const v = __game.vehicles[i], end = performance.now() + ms, seen = window.__film = []; window.__filmed = false; (function look() { seen.push({ x: v.x, z: v.z }); if (performance.now() < end) requestAnimationFrame(look); else window.__filmed = true; })(); }, [i, ms]);
 const filmed = async (p) => { await p.page.waitForFunction(() => window.__filmed); return on(p, () => window.__film); };
+// Every word the big map draws with the camera at cam, and the box each takes on the screen in CSS pixels, from what fillText
+// was given: the cast in cyan, everyone else playing in blue, the hero in orange, and places and streets in cream
+const wordsOnMap = (p, cam) => on(p, (cam) => {
+  if (!window.__words) {
+    window.__words = [];
+    const fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...more) {
+      if (this.canvas.id === 'mapC') {
+        const t = this.getTransform(), k = Math.hypot(t.a, t.b), cos = t.a / k, sin = t.b / k;
+        const w = this.measureText(text).width, size = +/([\d.]+)px/.exec(this.font)[1], u0 = x + ({ center: -w / 2, right: -w }[this.textAlign] ?? 0);
+        const xs = [], ys = [];
+        for (const [u, v] of [[u0, y - size / 2], [u0 + w, y - size / 2], [u0, y + size / 2], [u0 + w, y + size / 2]]) { xs.push(t.e / k + u * cos - v * sin); ys.push(t.f / k + u * sin + v * cos); }
+        window.__words.push({ text, fill: this.fillStyle, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) });
+      }
+      return fill.call(this, text, x, y, ...more);
+    };
+  }
+  window.__words.length = 0;
+  __game.mapCamTo(cam);
+  return window.__words.slice();
+}, cam);
+const meets = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+const dotBox = (d) => ({ x0: d.x - 6, x1: d.x + 6, y0: d.y - 6, y1: d.y + 6 });
+// Where on A's map someone has to stand for their dot to be at (sx, sy) on the screen
+const worldAt = (sx, sy) => on(a, async ([sx, sy]) => {
+  const { makeView, toWorld } = await import('./src/mapview.js'), c = __game.mapState().cam;
+  const [x, z] = toWorld(makeView(c.x, c.z, c.scale, 0, innerWidth, innerHeight), sx, sy);
+  return { x, z };
+}, [sx, sy]);
+// Where A's phone has someone, near or far, which is what its map goes by
+const seenOnA = (id) => on(a, (id) => __net.link.others().find((o) => o.id === id), id);
+// Moves someone, with A's map shut while they go since nothing moves on A while it's open, and opens it again once A has them
+// there
+const standOnA = async (p, id, at) => {
+  if (await on(a, () => __game.mapState().open)) { await a.page.keyboard.press('Escape'); await until(() => on(a, () => !__game.mapState().open)); }
+  await on(p, ([x, z]) => __game.place(x, z), [at.x, at.z]);
+  const s = await until(async () => { const s = await seenOnA(id); return s && away(s, at) < .3 ? s : null; }, 4000);
+  await sleep(150);
+  await a.page.keyboard.press('m'); await until(() => on(a, () => __game.mapState().open));
+  return s;
+};
 
 try {
   for (const p of pages) await on(p, () => __game.resume());
@@ -257,6 +298,34 @@ try {
     const dot = await on(a, (id) => __net.dotOnMap(id), B.id);
     check(`B is a blue dot on A's map, where B is, and not the cast's cyan: ${dot ? dot.rgb.join(',') : 'nothing'}`, dot && Math.abs(dot.rgb[0] - 0x5b) < 30 && Math.abs(dot.rgb[1] - 0x8c) < 30 && Math.abs(dot.rgb[2] - 0xff) < 30, dot);
     await snap(a, '05-a-map');
+
+    // Names take their turn for room: the hero, then everyone else playing, then the cast, then places and streets. One further
+    // down goes to the other side of its dot, or is left out. So B keeps their name beside their dot, where it always is, with
+    // nothing on it or on the dot, standing where the gas station's name goes and standing on Coop.
+    const cam = { x: B.x, z: B.z, scale: 1.5 }, west = B.x - 200;
+    // where the gas station's name goes with nobody on it, B being well off the screen, and then B stands on it
+    await standOnA(b, B.id, { x: west, z: await on(b, (x) => __game.map.zAt('us_80', x), west) });
+    let words = await wordsOnMap(a, cam);
+    const gas = words.find((w) => w.text === 'Gas station');
+    if (gas) await standOnA(b, B.id, await worldAt((gas.x0 + gas.x1) / 2 - 20, (gas.y0 + gas.y1) / 2));
+    // B's name where it always is, beside their dot, with no other word on either
+    const keeps = async (words) => {
+      const d = await on(a, (id) => __net.dotOnMap(id), B.id), mine = words.find((w) => w.text === 'Dee');
+      if (!d) return { kept: false };
+      const onIt = words.filter((w) => w !== mine && (meets(w, dotBox(d)) || (mine && meets(w, mine))));
+      return { d, mine, onIt: onIt.map((w) => w.text), wouldBe: mine && { x0: d.x + 11, x1: d.x + 11 + mine.x1 - mine.x0, y0: d.y - 8, y1: d.y + 8 }, kept: !!mine && Math.abs(mine.x0 - d.x - 11) < 1.5 && !onIt.length };
+    };
+    words = await wordsOnMap(a, cam);
+    const there = await keeps(words), gasNow = words.find((w) => w.text === 'Gas station');
+    const went = !gasNow ? 'is left out' : gasNow.y1 <= gas.y0 + 1 ? 'goes up' : gasNow.y0 >= gas.y1 - 1 ? 'goes down' : 'stays put';
+    check(`B stands where the gas station's name goes and keeps their own beside their dot, and the gas station's ${went}`, !!gas && !!there.wouldBe && meets(there.wouldBe, gas) && there.kept, { gas, ...there });
+    await snap(a, '05-a-map-names');
+    const coop = await on(a, () => __game.npcs.coop);
+    await standOnA(b, B.id, coop);
+    words = await wordsOnMap(a, { x: coop.x, z: coop.z, scale: 1.5 });
+    const onCoop = await keeps(words), cyan = onCoop.d ? words.filter((w) => w.fill === '#6fd6c8' && Math.abs((w.y0 + w.y1) / 2 - onCoop.d.y) < 4 && Math.abs(w.x0 - onCoop.d.x) < 120) : [];
+    const side = !cyan.length ? 'is left out' : cyan.every((w) => w.x1 <= onCoop.d.x) ? 'goes to the other side' : 'stays where it was';
+    check(`B stands on Coop and keeps their name, and Coop's ${side}`, away(await seenOnA(B.id) ?? {}, coop) < 1 && onCoop.kept, { coop, ...onCoop, cyan });
     await a.page.keyboard.press('Escape');
     await until(() => on(a, () => !__game.mapState().open));
   }
@@ -345,6 +414,12 @@ try {
     await sleep(200);
     const dot = await on(a, (id) => __net.dotOnMap(id), C.id);
     check(`he's an orange dot on A's map, like his own arrow: ${dot ? dot.rgb.join(',') : 'nothing'}`, dot && Math.abs(dot.rgb[0] - 0xec) < 30 && Math.abs(dot.rgb[1] - 0x80) < 30 && Math.abs(dot.rgb[2] - 0x3a) < 30, dot);
+    // and his name comes before anyone else's: B stands on him, and B's name goes to the other side or is left out
+    await standOnA(b, B.id, H);
+    const said = await wordsOnMap(a, { x: H.x, z: H.z, scale: 1.5 });
+    const hd = await on(a, (id) => __net.dotOnMap(id), C.id), named = said.find((w) => w.text === 'Matt' && w.fill === '#ec803a'), dees = said.filter((w) => w.text === 'Dee');
+    const put = !dees.length ? 'is left out' : hd && dees.every((w) => w.x1 <= hd.x) ? 'goes to the other side' : 'stays where it was';
+    check(`B stands on the hero and his name keeps its place, and B's ${put}`, away(await seenOnA(B.id) ?? {}, H) < 1 && !!hd && !!named && Math.abs(named.x0 - hd.x - 11) < 1.5 && dees.every((w) => !meets(w, named) && !meets(w, dotBox(hd))), { hd, named, dees });
     await a.page.keyboard.press('Escape');
     await until(() => on(a, () => !__game.mapState().open));
     // and by the gas station, where A and B were given nothing more, the chapters are his
