@@ -245,6 +245,11 @@ test('what\'s where: golf carts at churches, four-wheelers by trailers, pickups 
   assert.deepEqual(kinds('church'), ['golf']); assert.deepEqual(kinds('mobile'), ['quad']); assert.deepEqual(kinds('house'), ['pickup']); assert.deepEqual(kinds('shed'), []);
 });
 
+test('nobody lives in a ruin, so nothing\'s parked by one', () => {
+  assert.deepEqual(placeVehicles([{ ...house(1, 'house', 0), condition: 'ruin' }], roadSide), []);
+  assert.equal(placeVehicles([{ ...house(1, 'house', 0), condition: 'worn' }], roadSide).length, 1);
+});
+
 test('not every house has one, and the same house always does or doesn\'t', () => {
   const hash = (id, n) => ((id * 2654435761 + n * 40503) % 1000) / 1000, many = Array.from({ length: 200 }, (_, i) => house(i + 1, 'house', i * 40));
   const a = placeVehicles(many, { ...roadSide, hash }), b = placeVehicles(many, { ...roadSide, hash });

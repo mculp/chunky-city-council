@@ -191,6 +191,46 @@ export function bat(color = '#a9793f', tape = '#a82a2a') {
     cyl(0, .02, 0, .03, .04, color, 8), cyl(0, .16, 0, .02, .24, tape, 6, .021), cyl(0, .42, 0, .027, .28, color, 6, .02), cyl(0, .68, 0, .034, .26, color, 8, .027), cyl(0, .82, 0, .03, .03, color, 8, .034),
   ];
 }
+// ---- a frog, sitting, of the kinds in the ditches here, each with what tells it from the others. `size` is how long it is from its nose to its back end.
+const blob = (x, y, z, rx, ry, rz, color, n = 8) => painted(new THREE.SphereGeometry(1, n, Math.max(4, Math.round(n * .6))).scale(rx, ry, rz).translate(x, y, z), color);
+export const FROG_KINDS = {
+  bullfrog: { body: '#5f6b34', head: '#6f8a3c', belly: '#d3c996', ears: '#4b4628' },
+  'green treefrog': { body: '#5fa63a', belly: '#e6dfbd', stripe: '#ece4ba' },
+  'gray treefrog': { body: '#8a8e86', belly: '#d8d3bf', mottle: '#585d56', under: '#e6a22b' },
+  'southern leopard frog': { body: '#7a9947', belly: '#dcd7bc', spots: '#2b3720', nose: 1.3 },
+  'spring peeper': { body: '#b48d5e', belly: '#e0d2af', cross: '#57391f' },
+  'cricket frog': { body: '#76704a', belly: '#d5cba9', warts: '#8c8659', triangle: '#332e1d' },
+  'bronze frog': { body: '#8a5f32', belly: '#d7caa5', lip: '#6c9d3a' },
+  toad: { body: '#7a593a', belly: '#ccba97', warts: '#5c4128', glands: '#8d6c4a', stout: true },
+};
+export function frog(kind = 'bullfrog', size = .08) {
+  const K = FROG_KINDS[kind] ?? FROG_KINDS.bullfrog, wide = K.stout ? 1.22 : 1, leg = K.stout ? .8 : 1, nose = K.nose ?? 1, head = K.head ?? K.body;
+  // where its marks go on its back, the same for every frog of a kind
+  const on = (i, n) => { const a = i * 2.39996 + 1, r = Math.sqrt((i + .5) / n); return [Math.cos(a) * r * .22 * wide, Math.sin(a) * r * .3 - .06]; };
+  const parts = [
+    blob(0, .21, -.05, .3 * wide, .19 * (K.stout ? 1.15 : 1), .4, K.body, 10), blob(0, .13, 0, .27 * wide, .1, .35, K.belly),
+    blob(0, .29, .3, .26 * wide, .15, .2 * nose, head, 10),
+    ...both((s) => blob(s * .15 * wide, .43, .31, .075, .075, .075, '#c9a43a', 6)), ...both((s) => blob(s * .19 * wide, .445, .35, .03, .04, .03, '#120e10', 4)),
+    // front legs, and the back ones folded up under it
+    ...both((s) => bar([s * .15 * wide, .22, .24], [s * .2 * wide, .02, .33], .06, K.body)),
+    ...both((s) => bar([s * .18 * wide, .15, -.3], [s * .34 * wide, .12, -.3 + .28 * leg], .1, K.body)),
+    ...both((s) => bar([s * .34 * wide, .12, -.3 + .28 * leg], [s * .3 * wide, .05, -.3 - .08 * leg], .08, K.body)),
+    ...both((s) => bar([s * .3 * wide, .03, -.3 - .08 * leg], [s * .4 * wide, .015, -.3 + .25 * leg], .06, K.body)),
+  ];
+  if (K.ears) parts.push(...both((s) => cylX(s * .245 * wide, .35, .2, .065, .012, K.ears, 10)));
+  if (K.stripe) parts.push(...both((s) => bar([s * .29, .2, -.32], [s * .25, .29, .38], .035, K.stripe)));
+  if (K.mottle) for (let i = 0; i < 6; i++) { const [x, z] = on(i, 6); parts.push(blob(x, .39, z, .07, .02, .06, K.mottle, 6)); }
+  if (K.under) parts.push(...both((s) => bar([s * .16, .13, -.27], [s * .3, .09, -.04], .065, K.under)));
+  if (K.spots) for (let i = 0; i < 8; i++) { const [x, z] = on(i, 8); parts.push(blob(x, .39, z, .045, .016, .045, K.spots, 6)); }
+  if (K.spots) parts.push(...both((s) => blob(s * .3, .15, -.12, .035, .02, .035, K.spots, 6)));
+  if (K.cross) parts.push(bar([-.11, .4, -.22], [.11, .405, .08], .035, K.cross), bar([.11, .4, -.22], [-.11, .405, .08], .035, K.cross));
+  if (K.warts) for (let i = 0; i < 14; i++) { const [x, z] = on(i, 14); parts.push(blob(x * 1.15, .38 + .02 * Math.cos(i), z * 1.1, .026, .022, .026, K.warts, 5)); }
+  if (K.triangle) parts.push(painted(new THREE.CylinderGeometry(.075, .075, .012, 3).rotateY(Math.PI / 2).translate(0, .44, .25), K.triangle));
+  if (K.lip) parts.push(...both((s) => bar([s * .22, .25, .2], [s * .07, .25, .3 + .19 * nose], .035, K.lip)));
+  if (K.glands) parts.push(...both((s) => blob(s * .18 * wide, .39, .16, .06, .04, .1, K.glands, 6)));
+  return parts.map((g) => g.scale(size, size, size));
+}
+
 // A low red cap for the top of a post
 export function cap(color = '#a82a2a') {
   return [cyl(0, .06, 0, .075, .1, color, 8, .1), cyl(0, .115, 0, .018, .012, color, 6), box(0, .018, .13, .17, .014, .12, color)];

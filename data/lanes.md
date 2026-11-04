@@ -49,6 +49,8 @@ TIGER has no width or surface, so those are assumed, in `tools/lane_config.json`
 
 `ownDrive` there is for buildings with a drive or a forecourt of their own, built by hand in `index.html` or measured: the owner's house and barn, the gas station, the town hall, the house just north of it and the compound on Pine Forest Rd. A shed beside one of those shares its way in, as it does with a drive.
 
+`surfaceOf` there is a generated drive that Street View shows is something other than dirt, by the building it's for. The burned house on Gallatin St, where Toni is, has a gravel track going in through the tall grass.
+
 ## A building and a track
 
 A named road or a highway is in the right place, so a building that's on it moves off it, as `data/structures.md` says. Somebody's track is only roughly where TIGER has it, so it gives way to the building: it's cut where it goes through one and finds its way round. If that cuts a piece off from the rest, the piece gets a generated way back.

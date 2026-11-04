@@ -256,4 +256,4 @@ Asked what Toni looks like, her hair and what she wears:
 
 > Brown hair, a big green military jacket or trench coat, boots and SHE HOLDS THE FROGS IN HER HAND
 
-**In the game:** she isn't in it yet.
+**In the game:** she's at the burned house on the south side of Gallatin St, straight across from Clay St, ten years old and see-through, in rows like a picture on an old television, with long brown hair, a big green coat and boots, and a frog in her hand. There's no jar. She catches them all night in the ditch along Gallatin and the tall grass round the house, and goes up to whoever comes by and shows them one. She has twelve, with names, and shows him one he hasn't seen every time he comes by, and remembers which. When he's seen them all she gives him Gerald, and he can't swing till he lets Gerald go in a ditch. Nothing can hurt her, nobody lives in the house and nothing's parked at it. What she says and the cast say about Gerald is the Creative Director's, in `data/toni.json` and `data/cast.json`, and `data/toni.md` has the rest.

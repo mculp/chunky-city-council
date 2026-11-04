@@ -100,7 +100,7 @@
     "75022980": { "seen": true, "walls": "siding", "wallColor": "cream", "roof": "gable", "floors": 1, "what": "plain cream outbuilding with a gable roof and no windows on the front" },
     "75026373": { "seen": true, "wallColor": "white", "floors": 1 },
     "75034573": { "seen": true, "walls": "siding", "wallColor": "blue", "roof": "gable", "roofMat": "shingle", "floors": 1, "porch": "front" },
-    "75037508": { "seen": true, "floors": 1, "porch": "front", "condition": "ruin", "what": "overgrown derelict house with a sagging brown roof" },
+    "75037508": { "seen": true, "floors": 1, "porch": "front", "condition": "ruin", "roofColor": "#664a33", "what": "overgrown derelict house with a sagging brown roof" },
     "75047303": { "seen": true, "open": true, "roof": "gable", "roofMat": "metal", "floors": 1, "what": "large open timber pavilion with a green metal roof, cars parked under it" },
     "75069853": { "seen": true, "walls": "brick", "wallColor": "tan", "roof": "hip", "roofMat": "shingle", "floors": 1, "porch": "front", "carport": true, "what": "long low brick building with a covered porch and a carport at one end" },
     "75087805": { "seen": true, "walls": "plank", "wallColor": "brown", "roof": "gable", "floors": 2, "what": "tall reddish-brown wood building with a steep gable roof and a garage bay" },

@@ -75,6 +75,7 @@ A node is `{ who, lines, opts }`. The first of its `lines` whose `when` all hold
 | `!metCoop` | The flag isn't set. |
 | `has:bag` | You're carrying at least one. |
 | `!has:bag` | You aren't. |
+| `has:gerald` | Gerald's in his hand, which is Toni's to give and is in `data/toni.md`. Coop, Rocky and Miss Bobby each have one line for it, said once and remembered with `geraldCoop`, `geraldRocky` and `geraldBobby`, and while he has Gerald the button with someone to show him to says SHOW. |
 | `coop.trust >= 1` | A meter compares, with `>=`, `<=`, `>`, `<` or `==`. |
 | `beans >= 3` | Your beans compare, the same way. |
 | `pantry > 0` | What the pantry would pay for the steps right now, the same way. |

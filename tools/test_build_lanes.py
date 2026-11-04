@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from build_lanes import Places, clear_of_buildings, closed_ends, crossings_of, lane_spec, measured_lanes, moves_buildings, rounded, split_off  # noqa: E402
+from build_lanes import Places, clear_of_buildings, closed_ends, crossings_of, drive_surface, lane_spec, measured_lanes, moves_buildings, rounded, split_off  # noqa: E402
 
 CONFIG = {
     "classes": {"S1400named": {"width": 5.5, "surface": "asphalt"}, "S1400": {"width": 4.2, "surface": "gravel"}, "S1740": {"width": 3.2, "surface": "dirt"}},
@@ -125,6 +125,14 @@ class TestMeasured(unittest.TestCase):
     def test_too_far_from_anything_stops_the_build(self):
         with self.assertRaises(SystemExit):
             measured_lanes(ROADS, [], {"measured": [{"width": 4, "surface": "gravel", "points": [[500, 500], [510, 500]]}]})
+
+
+class DriveSurface(unittest.TestCase):
+    def test_a_drive_is_dirt_unless_it_was_seen_to_be_something_else(self):
+        config = {"drive": {"width": 3, "surface": "dirt"}, "surfaceOf": {"7": "gravel"}}
+        self.assertEqual(drive_surface(7, config), "gravel")
+        self.assertEqual(drive_surface(8, config), "dirt")
+        self.assertEqual(drive_surface(7, {"drive": {"width": 3, "surface": "dirt"}}), "dirt")
 
 
 class NearestRoad(unittest.TestCase):

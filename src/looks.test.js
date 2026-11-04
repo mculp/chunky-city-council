@@ -18,7 +18,7 @@ test('everyone in the cast has a look', () => {
 });
 
 test('every field is one the drawing knows', () => {
-  const colors = { tee: [1, 2], flannel: [2, 3], overalls: [2, 2], camo: [2, 4], coveralls: [1, 1], dress: [1, 3], none: [0, 0] };
+  const colors = { tee: [1, 2], flannel: [2, 3], overalls: [2, 2], camo: [2, 4], coveralls: [1, 1], dress: [1, 3], coat: [1, 3], none: [0, 0] };
   for (const l of all) {
     assert.ok(TOPS.includes(l.top.kind), l.id);
     const n = (l.top.colors ?? []).length, [lo, hi] = colors[l.top.kind];
@@ -32,6 +32,9 @@ test('every field is one the drawing knows', () => {
     if (l.line) assert.ok(color(l.line), l.id);
     if (l.top.vest) assert.ok(color(l.top.vest), l.id);
     if (l.mark) { assert.ok(MARKS.includes(l.mark.kind), l.id); assert.ok(color(l.mark.color), l.id); }
+    if (l.face !== undefined) assert.equal(l.face, 'kid', l.id);
+    if (l.hairLong !== undefined) assert.ok(l.hairLong === true && l.hair, l.id);
+    if (l.boots !== undefined) assert.equal(l.boots, true, l.id);
   }
 });
 

@@ -2,7 +2,7 @@
 // through them. Canvas only, so the game has no image files and this has no idea three.js exists. The looks are in data/looks.json.
 const TAU = Math.PI * 2, INK = '#060408';
 
-export const TOPS = ['tee', 'flannel', 'overalls', 'camo', 'coveralls', 'dress', 'none'];
+export const TOPS = ['tee', 'flannel', 'overalls', 'camo', 'coveralls', 'dress', 'coat', 'none'];
 export const BOTTOMS = ['trousers', 'shorts', 'skirt'];
 export const MARKS = ['caution', 'flammable', 'radioactive'];
 
@@ -100,9 +100,25 @@ function drawTop(p) {
   } else if (t.kind === 'tee') {
     if (c[1]) { g.fillStyle = c[1]; g.fillRect(p.x, V(p, -.02), p.w, 14 * k); g.fillRect(p.x, V(p, -.14), p.w, 14 * k); }
     g.strokeStyle = 'rgba(10,8,12,.6)'; g.lineWidth = 2.4 * k; g.beginPath(); g.ellipse(U(p, .25), top, 26 * k, 11 * k, 0, 0, TAU); g.stroke();
+  } else if (t.kind === 'coat') {
+    // a big army coat, done up: a collar turned down either side of the neck, snaps down the front, a pocket with a flap either side of the chest
+    // and two more low down, and a drawstring at the waist. It hangs past the hips, so the legs start under it.
+    const seam = 'rgba(10,8,12,.55)', flap = c[1] ?? '#3c4426';
+    g.fillStyle = flap;
+    for (const s of [-1, 1]) { g.beginPath(); g.moveTo(U(p, .25 + s * .005), top); g.lineTo(U(p, .25 + s * .11), top); g.lineTo(U(p, .25 + s * .07), V(p, .04)); g.closePath(); g.fill(); }
+    g.strokeStyle = seam; g.lineWidth = 2.2 * k;
+    g.beginPath(); g.moveTo(U(p, .25), V(p, .06)); g.lineTo(U(p, .25), p.y + p.h); g.stroke();
+    g.fillStyle = c[2] ?? '#9a9a7a'; for (let at2 = .02; at2 > -.6; at2 -= .1) { g.beginPath(); g.arc(U(p, .25) + 4 * k, V(p, at2), 1.8 * k, 0, TAU); g.fill(); }
+    g.lineWidth = 1.8 * k;
+    for (const [mid, hi, lo] of [[.085, -.01, -.13], [.1, -.33, -.48]]) for (const s of [-1, 1]) {
+      const x0 = U(p, .25 + s * mid) - 12 * k, w0 = 24 * k;
+      g.fillStyle = flap; g.fillRect(x0, V(p, hi), w0, 7 * k); g.strokeRect(x0, V(p, hi), w0, V(p, lo) - V(p, hi));
+    }
+    g.beginPath(); g.moveTo(p.x, V(p, -.24)); g.lineTo(p.x + p.w, V(p, -.24)); g.stroke();
+    for (const u of [0, .5]) { g.beginPath(); g.moveTo(U(p, u), top); g.lineTo(U(p, u), p.y + p.h); g.stroke(); }
   }
   // a shirt tucked in, or at least it was
-  if (!['coveralls', 'dress', 'overalls'].includes(t.kind)) { g.fillStyle = bottomOf; g.fillRect(p.x, at, p.w, p.y + p.h - at); }
+  if (!['coveralls', 'dress', 'overalls', 'coat'].includes(t.kind)) { g.fillStyle = bottomOf; g.fillRect(p.x, at, p.w, p.y + p.h - at); }
   if (t.kind === 'dress' && look.bottom?.kind !== 'skirt') { g.fillStyle = c[0]; g.fillRect(p.x, at, p.w, p.y + p.h - at); }
   if (look.mark) { const s = p.h / (BODY.to - BODY.from); g.save(); g.translate(U(p, t.kind === 'overalls' ? .25 : .32), V(p, -.14)); g.scale(s * .9, s * .9); drawMark(g, look.mark, r); g.restore(); }
 }
@@ -116,11 +132,20 @@ function buttons(p, color) {
 function drawHead(p) {
   const { g, r, k, look } = p, side = (off) => U(p, across(off, BODY.head));
   // neck and head, and a little of where the shoulders go down into the collar
-  const top = V(p, BODY.to), neck = V(p, BODY.neck + .01);
+  const top = V(p, BODY.to), neck = V(p, BODY.neck + .01), kid = look.face === 'kid';
   g.fillStyle = look.skin; g.fillRect(p.x, top, p.w, neck - top);
   // gone hollow under the cheekbones
   g.strokeStyle = 'rgba(16,8,16,.38)';
-  for (const s of [-1, 1]) for (let i = 0; i < 3; i++) { g.lineWidth = (1.6 + i * .8) * k; g.beginPath(); g.moveTo(side(s * (.094 - i * .005)), V(p, .345 - i * .004)); g.quadraticCurveTo(side(s * .07), V(p, .31), side(s * (.05 + i * .004)), V(p, .262)); g.stroke(); }
+  if (!kid) for (const s of [-1, 1]) for (let i = 0; i < 3; i++) { g.lineWidth = (1.6 + i * .8) * k; g.beginPath(); g.moveTo(side(s * (.094 - i * .005)), V(p, .345 - i * .004)); g.quadraticCurveTo(side(s * .07), V(p, .31), side(s * (.05 + i * .004)), V(p, .262)); g.stroke(); }
+  // hair down to the shoulders, at the back and the sides, ragged at the ends
+  if (look.hair && look.hairLong) {
+    const from = V(p, .3), end = V(p, BODY.neck - .1);
+    g.fillStyle = look.hair;
+    for (const [u0, u1] of [[.42, 1], [0, .08]]) {
+      g.fillRect(U(p, u0), from, p.w * (u1 - u0), end - from);
+      for (let u = u0; u < u1 - .005; u += .02) { g.beginPath(); g.moveTo(U(p, u), end - 1); g.lineTo(U(p, u + .01), end + (4 + r() * 8) * k); g.lineTo(U(p, Math.min(u1, u + .02)), end - 1); g.fill(); }
+    }
+  }
   // hair: the back of the head and the crown, with a hairline across the front
   if (look.hair) {
     g.fillStyle = look.hair;
@@ -132,6 +157,20 @@ function drawHead(p) {
     g.strokeStyle = look.hair; g.lineWidth = 2 * k;
     for (let i = 0; i < 14; i++) { const u = .1 + r() * .3, at = BODY.hairline - (Math.abs(u - .25) > .13 ? .07 : .012); g.globalAlpha = .4 + r() * .4; g.beginPath(); g.moveTo(U(p, u), V(p, at)); g.lineTo(U(p, u + (r() - .5) * .02), V(p, at - .006 - r() * .02)); g.stroke(); }
     g.globalAlpha = 1;
+  }
+  // somebody it hasn't touched: eyes with whites to them, brows, and a mouth shut
+  if (kid) {
+    for (const s of [-1, 1]) {
+      const cx = side(s * .046), cy = V(p, BODY.eyes);
+      g.fillStyle = '#efe8dc'; g.beginPath(); g.ellipse(cx, cy, 7.5 * k, 4.6 * k, 0, 0, TAU); g.fill();
+      g.fillStyle = '#2a1c14'; g.beginPath(); g.arc(cx + s * .6 * k, cy + .4 * k, 3.6 * k, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(40,24,16,.85)'; g.lineWidth = 2 * k; g.beginPath(); g.moveTo(cx - 8 * k, V(p, BODY.brow) + 1 * k); g.quadraticCurveTo(cx, V(p, BODY.brow) - 2.5 * k, cx + 8 * k, V(p, BODY.brow) + 1 * k); g.stroke();
+    }
+    g.fillStyle = 'rgba(60,30,24,.45)';
+    g.beginPath(); g.moveTo(side(0), V(p, BODY.nose + .012)); g.lineTo(side(.01), V(p, BODY.nose - .004)); g.lineTo(side(-.01), V(p, BODY.nose - .004)); g.closePath(); g.fill();
+    const my = V(p, BODY.mouth); g.strokeStyle = 'rgba(70,26,26,.85)'; g.lineWidth = 2 * k;
+    g.beginPath(); g.moveTo(U(p, .25) - 8 * k, my); g.quadraticCurveTo(U(p, .25), my + 2.5 * k, U(p, .25) + 8 * k, my - .5 * k); g.stroke();
+    return;
   }
   // the sockets, sunk in, and the whites that are left round what's lit
   for (const s of [-1, 1]) {
@@ -152,7 +191,7 @@ function drawHead(p) {
 
 function drawArm(p) {
   const { g, k, look, y, h } = p, t = look.top ?? { kind: 'none' };
-  const to = { none: 0, tee: .68, dress: .72, overalls: .68, camo: .12, flannel: .12, coveralls: .1 }[t.kind] ?? 0;
+  const to = { none: 0, tee: .68, dress: .72, overalls: .68, camo: .12, flannel: .12, coveralls: .1, coat: .03 }[t.kind] ?? 0;
   g.fillStyle = look.skin; g.fillRect(p.x, y, p.w, h);
   if (to) {
     g.fillStyle = (t.sleeve ?? t.colors?.[0]); g.fillRect(p.x, y, p.w, h * (1 - to));
@@ -172,6 +211,10 @@ function drawLeg(p) {
   g.fillRect(p.x, y, p.w, h * (1 - to));
   // a seam, and the knee worn through
   g.strokeStyle = 'rgba(8,6,10,.4)'; g.lineWidth = 1.6 * k; g.beginPath(); g.moveTo(p.x + p.w * .5, y); g.lineTo(p.x + p.w * .5, y + h * (1 - to)); g.stroke();
+  // a coat that comes down over the tops of the legs, with its hem
+  if (t?.kind === 'coat') { g.fillStyle = t.colors[0]; g.fillRect(p.x, y, p.w, h * .36); g.fillStyle = 'rgba(8,6,10,.55)'; g.fillRect(p.x, y + h * .36 - 2 * k, p.w, 3 * k); }
+  // boots, up over the bottoms of the trousers, with a top that catches the light and a shadow under it
+  if (look.boots) { const top = y + h * .7; g.fillStyle = look.shoes ?? '#2a2228'; g.fillRect(p.x, top, p.w, h * .3); g.fillStyle = 'rgba(255,240,220,.2)'; g.fillRect(p.x, top, p.w, 3 * k); g.fillStyle = 'rgba(8,6,10,.5)'; g.fillRect(p.x, top + 3 * k, p.w, 2 * k); }
   // shoes are all that's at the very end, which is all a crowd's foot looks at
   g.fillStyle = look.shoes ?? '#2a2228'; g.fillRect(p.x, y + h * .925, p.w, h * .075);
   if (to < .2) { g.fillStyle = 'rgba(8,6,10,.45)'; g.fillRect(p.x, y + h * .905, p.w, 3 * k); }

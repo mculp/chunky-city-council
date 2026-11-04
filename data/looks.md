@@ -20,10 +20,13 @@ Everyone in here is a radiating zombie of some degree, which is the owner's word
 | `id` | string | Unique. Seeds the drawing, so a look comes out the same every time. |
 | `degree` | number | The cast only. How far gone they are, from 0, which is not at all, to 1. The crowd's are worked out person by person (`degreeOf`), and `farOf` keeps the ones who've burnt down the furthest gone of all, which `data/folks.md` explains. |
 | `skin` | string | The colour of their skin. They've all gone a little grey. |
+| `face` | string | Optional. `kid` is a child's face, which hasn't gone hollow under the cheekbones. Only Toni's so far. |
 | `hair` | string | Optional. Without it they're bald. |
+| `hairLong` | boolean | Optional. The hair comes down to the shoulders at the back and the sides, ragged at the ends. It needs `hair`. |
 | `top` | object | What's on top. See below. |
 | `bottom` | object | `kind` is `trousers`, `shorts` or `skirt`, and `color` is its colour. |
 | `shoes` | string | The colour of their shoes. |
+| `boots` | boolean | Optional. Their shoes come up the shin as boots, in the colour of `shoes`. |
 | `mark` | object | Optional. A patch on the chest. See below. |
 | `line` | string | Optional. The colour of their outline, for someone it isn't burning in, like a ghost. Otherwise it goes by how far gone they are. |
 
@@ -39,6 +42,7 @@ Everyone in here is a radiating zombie of some degree, which is the owner's word
 | `camo` | base, and up to three blotches | A long-sleeved jacket. `vest` is optional, and it's the colour of a hunter's vest over it. |
 | `coveralls` | cloth | One piece, with a zip and two chest pockets. Their legs are the cloth too. |
 | `dress` | cloth, and optionally flowers and a collar | A short-sleeved dress. |
+| `coat` | cloth, flaps, snaps | A big army coat, done up: a collar turned down, snaps down the front, four pockets with flaps and a drawstring at the waist. It hangs past the hips, so the legs start under it. |
 | `none` | nothing | No shirt, and ribs. |
 
 ### `mark`

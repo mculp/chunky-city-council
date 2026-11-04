@@ -37,6 +37,19 @@
       "top": { "kind": "tee", "colors": ["#cfe6ee"] },
       "bottom": { "kind": "trousers", "color": "#8fa9b6" },
       "shoes": "#b4cdd8"
+    },
+    "toni": {
+      "id": "toni-frogs",
+      "degree": 0,
+      "face": "kid",
+      "line": "#e4ead2",
+      "skin": "#dcc1a6",
+      "hair": "#5b3b23",
+      "hairLong": true,
+      "top": { "kind": "coat", "colors": ["#56603a", "#3d4527", "#a9a582"] },
+      "bottom": { "kind": "trousers", "color": "#2e3340" },
+      "shoes": "#3b2a1d",
+      "boots": true
     }
   },
   "crowd": [

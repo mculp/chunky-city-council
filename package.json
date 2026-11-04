@@ -35,6 +35,7 @@
     "church": "node tools/play-church.mjs",
     "water": "node tools/play-water.mjs",
     "lore": "node tools/play-lore.mjs",
+    "toni": "node tools/play-toni.mjs",
     "lanes": "node tools/play-lanes.mjs",
     "sound": "node tools/play-sound.mjs",
     "sound:make": "node tools/make-sound.mjs",

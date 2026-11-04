@@ -405,7 +405,7 @@
     {"id":"drive_74541327","structure":74541327,"generated":true,"width":3,"surface":"dirt","points":[[5591.53,1822.04],[5590.04,1813.21]]},
     {"id":"drive_74538664","structure":74538664,"generated":true,"width":3,"surface":"dirt","points":[[25.95,-360.31],[15.02,-372.16]]},
     {"id":"drive_75094597","structure":75094597,"generated":true,"width":3,"surface":"dirt","points":[[-384.77,115.42],[-393.62,95.69]]},
-    {"id":"drive_75037508","structure":75037508,"generated":true,"width":3,"surface":"dirt","points":[[-189.31,-299.34],[-189.31,-283.97]]},
+    {"id":"drive_75037508","structure":75037508,"generated":true,"width":3,"surface":"gravel","points":[[-189.31,-299.34],[-189.31,-283.97]]},
     {"id":"drive_74691788","structure":74691788,"generated":true,"width":3,"surface":"dirt","points":[[11582.99,-1793.98],[11583.43,-1812.6]]},
     {"id":"drive_74746760","structure":74746760,"generated":true,"width":3,"surface":"dirt","points":[[2762.77,3395.97],[2766.04,3373.27]]},
     {"id":"drive_75004021","structure":75004021,"generated":true,"width":3,"surface":"dirt","points":[[221.74,-4008.64],[223.19,-3993.49]]},

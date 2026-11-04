@@ -66,6 +66,8 @@ body.talking #mini,body.talking #miniName{visibility:hidden}
 #who b{font-weight:400;color:var(--rust);font-size:9px;letter-spacing:.04em;margin-left:6px}
 .mutter{position:fixed;left:0;top:0;z-index:3;pointer-events:none;font-size:10px;font-style:italic;letter-spacing:.03em;white-space:nowrap;color:var(--cream);text-shadow:0 0 3px var(--ink),0 1px 1px var(--ink);opacity:0;will-change:transform,opacity}
 .mutter[hidden]{display:none}
+#toniSays{position:fixed;left:0;top:0;z-index:3;pointer-events:none;max-width:min(230px,64vw);font-size:12px;line-height:1.3;letter-spacing:.02em;text-align:center;color:var(--cream);text-shadow:0 0 3px var(--ink),0 1px 1px var(--ink),0 0 7px var(--ink);opacity:0;will-change:transform,opacity}
+#toniSays[hidden]{display:none}
 @media (pointer:coarse){.rep-head{min-height:40px}}
 .pips{letter-spacing:2px;font-variant-numeric:tabular-nums}
 #prompt{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom, 0px) + 176px);transform:translateX(-50%);z-index:4;pointer-events:none;
@@ -189,7 +191,7 @@ body.talking #mute,body.talking #levels,body.talking #levelsBox{visibility:hidde
 </div>
 <div id="prompt" hidden></div>
 <div id="toast"></div>
-<div id="who" hidden></div><div id="susMeters"></div><div id="mutters"></div>
+<div id="who" hidden></div><div id="susMeters"></div><div id="mutters"></div><div id="toniSays" hidden></div>
 <div id="sub" hidden></div>
 <div id="flash"></div>
 <div class="card" id="card"><div><h2 id="cardH"></h2><p id="cardP"></p></div></div>
@@ -256,9 +258,10 @@ import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVe
 import { vehicleGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
 import { makeLine, createTrains } from './src/trains.js';
 import { trainGeometries, TRAIN_LAMPS, gateArm } from './src/trainmodels.js';
-import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, feedBin, stockTank } from './src/things.js';
+import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, feedBin, stockTank, frog } from './src/things.js';
 import { CEMETERY, layGraves, graveSolid } from './src/graves.js';
 import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/volley.js';
+import { FROGS, BEST, TONI, createToni, sayFrog, forgetToni } from './src/toni.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
 import { createPantry, PANTRY } from './src/pantry.js';
 import { makeLight, stepLight, lightAt } from './src/light.js';
@@ -594,17 +597,25 @@ const SEE_THROUGH = `if(uSee.w>0.&&gl_FragCoord.z<uSee.z&&vSeeY>uSeeY){ float se
 // A ghost's drawn in the dither a wall you're seeing through is drawn in: him, the same as anyone, with holes through him that move on the twelve frames.
 // His line has the same holes, or the inside of it would show through them. With reduced motion they hold still, since it's all of him flickering otherwise.
 const ghostHoles = (px, step) => `if(fract(sin(dot(floor(gl_FragCoord.xy/(2.*${px}))+${reduceMotion ? '0.' : step}*3.,vec2(91.7,47.3)))*24634.6345)<.52) discard;`;
-function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = false, headTip = false } = {}) {
-  const key = [color, px, chalk, tinted, cut, ghost, headTip].join('|');
+// An astral projection isn't a ghost, so she isn't drawn as one: she's drawn in rows, like a picture thrown on the night, with two rows in every five gone and
+// the gaps climbing up through her a row each of the twelve frames, and her rows wavering a little from side to side. Her line has the same gaps.
+// None of it glows. With reduced motion it all holds still.
+// Her rows climb on a step of their own, kept with the twelve frames (in tick), so that nothing else that moves with the frames has to move for them to
+const ASTRAL = { uStep: { value: 0 } };
+const ASTRAL_STEP = (step) => (reduceMotion ? '0.' : step);
+const astralRows = (px, step) => `{ float aM=mod(floor(gl_FragCoord.y/(2.*${px}))-${ASTRAL_STEP(step)},5.); if(aM<.5||(aM>1.5&&aM<2.5)) discard; }`;
+const astralWaver = (v, step) => `${v}.x+=sin(${v}.y*41.+${ASTRAL_STEP(step)}*1.9)*.007;`;
+function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = false, astral = false, headTip = false } = {}) {
+  const key = [color, px, chalk, tinted, cut, ghost, astral, headTip].join('|');
   if (outlineMats.has(key)) return outlineMats.get(key);
   const uniforms = Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
-    uColor: { value: new THREE.Color(color) }, uPx: { value: px }, uChalk: { value: chalk }, uStep: G.uStep, uRes: G.uRes, uPxScale: G.uPxScale, uMask: G.uMask, uSee: G.uSee, uSeeY: G.uSeeY, uHideRoof: G.uHideRoof
+    uColor: { value: new THREE.Color(color) }, uPx: { value: px }, uChalk: { value: chalk }, uStep: G.uStep, uRes: G.uRes, uPxScale: G.uPxScale, uMask: G.uMask, uSee: G.uSee, uSeeY: G.uSeeY, uHideRoof: G.uHideRoof, uAstralStep: ASTRAL.uStep
   });
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, fog: true, uniforms, userData: { outline: true },
-    defines: { ...(tinted && { TINTED: 1 }), ...(cut && { CUT: 1 }), ...(ghost && { GHOST: 1 }), ...(headTip && { HEADTIP: 1 }) },
+    defines: { ...(tinted && { TINTED: 1 }), ...(cut && { CUT: 1 }), ...(ghost && { GHOST: 1 }), ...(astral && { ASTRAL: 1 }), ...(headTip && { HEADTIP: 1 }) },
     vertexShader: `#include <hill_pars>
-      uniform float uPx, uStep, uChalk, uPxScale; uniform vec2 uRes;
+      uniform float uPx, uStep, uChalk, uPxScale, uAstralStep; uniform vec2 uRes;
       #ifdef TINTED
       varying vec3 vTint;
       #endif
@@ -624,6 +635,9 @@ function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = fal
         vec3 pos=position, nor=normal;
         #ifdef HEADTIP
           { float a=iHead*aBend, c=cos(a), s=sin(a); pos=tipHead(position,a); nor=vec3(normal.x,normal.y*c-normal.z*s,normal.y*s+normal.z*c); }
+        #endif
+        #ifdef ASTRAL
+          ${astralWaver('pos', 'uAstralStep')}
         #endif
         mat4 mm=modelViewMatrix; vec3 n=nor;
         #ifdef USE_INSTANCING
@@ -649,7 +663,7 @@ function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = fal
         #endif
         #include <fog_vertex>
       }`,
-    fragmentShader: `uniform vec3 uColor; uniform float uStep, uChalk, uPxScale, uMask;
+    fragmentShader: `uniform vec3 uColor; uniform float uStep, uChalk, uPxScale, uMask, uAstralStep;
       #ifdef TINTED
       varying vec3 vTint;
       #endif
@@ -662,6 +676,9 @@ function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = fal
         if(uMask>.5){ gl_FragColor=vec4(1.); return; }
         #ifdef GHOST
           ${ghostHoles('uPxScale', 'uStep')}
+        #endif
+        #ifdef ASTRAL
+          ${astralRows('uPxScale', 'uAstralStep')}
         #endif
         #ifdef CUT
           ${SEE_THROUGH}
@@ -4396,6 +4413,9 @@ function poseHero(tq) {
     tool.position.copy(g); tool.quaternion.setFromEuler(new THREE.Euler(turn, 0, 0));
   } else if (throwT > 0 && k === 'run') R.arm(1, V3(.3, .28, .42), V3(.8, -.1, -.2));
   else if (bumpT > 0 && k === 'run') { R.arm(1, V3(.08, -.2, .46), V3(.7, -.3, -.25)); R.arm(0, V3(-.08, -.2, .46), V3(-.7, -.3, -.25)); }
+  // Gerald, in the hand he doesn't throw with, the way Toni holds them, whatever the rest of him's doing
+  heroGerald.visible = !!S.items.gerald && (k === 'run' || k === 'air');
+  if (heroGerald.visible) heroGerald.position.copy(R.arm(0, V3(-.2, -.3, .38), V3(-.7, -.35, -.25), V3(0, 1, 0))).add(V3(0, .05, .02));
   R.strings(tq, k === 'hang' ? HP.lag : Math.sin(ph) * .1 * Math.min(1, HP.speed / 4.2));
 }
 
@@ -4425,6 +4445,30 @@ function makeGhost(body) {
     if (m.userData?.outline) { const u = m.uniforms; o.material = outlineMat(`#${u.uColor.value.getHexString()}`, u.uPx.value, u.uChalk.value, { ghost: true }); return; }
     if (m.isShaderMaterial) return;
     if (!made.has(m)) made.set(m, ghostMat(m));
+    o.material = made.get(m);
+  });
+}
+// An astral projection, the same way: her rows (astralRows), and a band a little lighter climbing her with them, which never takes anything up past where a light would bloom
+function astralMat(m) {
+  const c = m.clone(), before = m.onBeforeCompile;
+  c.onBeforeCompile = (sh, r) => {
+    before.call(m, sh, r); sh.uniforms.uAstralStep = ASTRAL.uStep; sh.uniforms.uAstralPx = G.uPxScale;
+    sh.vertexShader = 'uniform float uAstralStep;\n' + sh.vertexShader.replace('#include <project_vertex>', `${astralWaver('transformed', 'uAstralStep')}\n#include <project_vertex>`);
+    sh.fragmentShader = 'uniform float uAstralStep, uAstralPx;\n' + sh.fragmentShader
+      .replace('#include <clipping_planes_fragment>', `${astralRows('uAstralPx', 'uAstralStep')}\n#include <clipping_planes_fragment>`)
+      .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+        if(mod(floor(gl_FragCoord.y/(2.*uAstralPx))-${ASTRAL_STEP('uAstralStep')},23.)<2.5) gl_FragColor.rgb=min(gl_FragColor.rgb*1.2,max(gl_FragColor.rgb,vec3(.8)));`);
+  };
+  c.customProgramCacheKey = () => `astral${m.hasOwnProperty('onBeforeCompile') ? 1 : 0}`;
+  return c;
+}
+function makeAstral(body) {
+  const made = new Map();
+  body.traverse((o) => {
+    if (!o.isMesh) return; const m = o.material;
+    if (m.userData?.outline) { const u = m.uniforms; o.material = outlineMat(`#${u.uColor.value.getHexString()}`, u.uPx.value, u.uChalk.value, { astral: true }); return; }
+    if (m.isShaderMaterial) return;
+    if (!made.has(m)) made.set(m, astralMat(m));
     o.material = made.get(m);
   });
 }
@@ -4685,7 +4729,7 @@ function drawMutters() {
       overHead(s, _mut); if (_mut.z >= 1 || Math.abs(_mut.x) > .95 || Math.abs(_mut.y) > .95) continue;
       best = s; bd = d;
     }
-    if (best) { free.s = best; free.at = time; free.w = 0; free.e.textContent = best.who.says; best.mutterNext = time + MUTTER.gap[0] + hash2(best.who.id, Math.floor(time)) * (MUTTER.gap[1] - MUTTER.gap[0]); }
+    if (best) { free.s = best; free.at = time; free.w = 0; free.e.textContent = frogWord(best) ?? best.who.says; best.mutterNext = time + MUTTER.gap[0] + hash2(best.who.id, Math.floor(time)) * (MUTTER.gap[1] - MUTTER.gap[0]); }
   }
   for (const m of mutterSlots) {
     const s = m.s, age = time - m.at;
@@ -5315,10 +5359,218 @@ const pantry = createPantry({ store: saveStore }), today = () => (signNow === nu
 const pantryOwes = () => (S.flags.ended ? pantry.owes(today()) : PANTRY.pays);
 function fromPantry(why) { const n = pantryOwes(); pantry.sweep(today(), n); showPantry(); if (n) addBeans(n, why); }
 showPantry();
+
+// ================================================================ Toni, at the burned house on Gallatin St
+// Ten years old and an astral projection (CHUNKY-135). What she does is src/toni.js and what she says is data/toni.json. She's the townsfolk's build at a child's
+// size, stood up straight like Robby, in her look from data/looks.json and drawn as a projection (astralMat). Nothing stops on her, the crowd never sees her and a
+// swing goes through her, since she's in none of what any of that looks at. The frog in her hand is solid, and drawn the way things are.
+const TONI_WORDS = await (await fetch('data/toni.json')).json();
+const TONI_HOUSE = STRUCTURES.find((s) => s.id === 75037508), TONI_KID = .74, TONI_SCALE = TOWN_SCALE * TONI_KID;
+const TONI_HOME = { x: TONI_HOUSE.wx, z: TONI_HOUSE.wz };
+// Gallatin St in front of it: where along the road the house is, which side it's on, and the ditch past the shoulder on that side, with a gap where its drive crosses
+const TONI_ROAD = (() => {
+  const id = 'gallatin_st', road = MAP.roadById.get(id), s0 = MAP.sOn(id, TONI_HOME.x, TONI_HOME.z), p = MAP.along(id, s0);
+  const side = Math.sign((TONI_HOME.x - p.x) * p.nx + (TONI_HOME.z - p.z) * p.nz) || 1, off = road.width / 2 + SHOULDER + .8;
+  const dr = MAP.roadById.get('drive_75037508'), gap = (pt) => { const q = MAP.along(id, MAP.sOn(id, pt[0], pt[1])); return Math.hypot(pt[0] - q.x, pt[1] - q.z); };
+  const join = dr ? [dr.pts[0], dr.pts.at(-1)].sort((a, b) => gap(a) - gap(b))[0] : null;
+  const at = (s, o = off) => { const q = MAP.along(id, s); return [q.x + q.nx * side * o, q.z + q.nz * side * o]; };
+  return { id, s0, side, off, at, drive: join ? MAP.sOn(id, join[0], join[1]) : s0, along: [p.tx, p.tz], toHouse: [p.nx * side, p.nz * side] };
+})();
+// where she looks for frogs: along the ditch, either side of the drive, and in the grass round the house
+const TONI_DITCH = [-17, -11, -6, 6, 11, 17].map((d) => TONI_ROAD.s0 + d).filter((s) => Math.abs(s - TONI_ROAD.drive) > 2.6).map((s) => TONI_ROAD.at(s));
+const TONI_SPOTS = (() => {
+  const { along: [ux, uz], toHouse: [vx, vz] } = TONI_ROAD, H = TONI_HOME, yard = (u, v) => [H.x + ux * u + vx * v, H.z + uz * u + vz * v];
+  return [...TONI_DITCH, yard(-10, -9), yard(9, -8), yard(-11, 1), yard(10, 2), yard(-4, 9), yard(5, 10)];
+})();
+const toni = createToni({ home: TONI_HOME, spots: TONI_SPOTS, storage: saveStore, rand: randomFrom(135) });
+// The ditch along Gallatin in front of the house, where she catches most of them: mud either side of a thin line of water, rushes along both its edges, and a gap where
+// the drive crosses. Then the tall grass round the house, kept off the house, the drive and the road. All one mesh, laid on the ground like the ball field's clay, and the
+// blades are the farm's tufts grown tall, each one twice back to back and lit as the ground is.
+{
+  const R = TONI_ROAD, H = TONI_HOME, pos = [], col = [], k = new THREE.Color();
+  // the water's the sky in it, which at night is all that shows it's there
+  const MUD = new THREE.Color('#58472f'), WET = new THREE.Color('#8a7aa6'), RUSH = new THREE.Color('#6f8a4a'), GREEN = new THREE.Color('#8f9a52'), STRAW = new THREE.Color('#c9b878');
+  const put = (x, y, z, c, f = 1) => { pos.push(x, y, z); col.push(c.r * f, c.g * f, c.b * f); };
+  // a triangle on the ground, turned to face up whichever way round it came
+  const flat = (a, b, c, lift, color) => {
+    if ((b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]) < 0) [b, c] = [c, b];
+    for (const [x, z] of [a, b, c]) put(x, groundH(x, z) + lift, z, color);
+  };
+  const strip = (o0, o1, lift, color) => {
+    for (let s = R.s0 - 24; s < R.s0 + 24; s += 1) {
+      if (Math.abs(s + .5 - R.drive) < 2.4) continue;
+      const a = R.at(s, o0), b = R.at(s, o1), c = R.at(s + 1, o1), d = R.at(s + 1, o0);
+      flat(a, b, c, lift, color); flat(a, c, d, lift, color);
+    }
+  };
+  strip(R.off - 1.1, R.off + 1.1, .025, MUD); strip(R.off - .3, R.off + .3, .035, WET);
+  const clump = (x, z, turn, size, tall, color) => {
+    const y = groundH(x, z);
+    for (let i = 0; i < 7; i++) {
+      const a = i * 2.4 + .4 + turn, lean = (.05 + i * .03) * size, h = (tall + (i % 4) * .1) * size, cx = Math.cos(a), sz = Math.sin(a), wx = -sz * .028 * size, wz = cx * .028 * size, ox = cx * (.03 + i * .018) * size, oz = sz * (.03 + i * .018) * size;
+      const L = [x + ox - wx, z + oz - wz], Rr = [x + ox + wx, z + oz + wz], T = [x + ox + cx * lean, z + oz + sz * lean];
+      put(L[0], y, L[1], color, .62); put(Rr[0], y, Rr[1], color, .62); put(T[0], y + h, T[1], color);
+      put(Rr[0], y, Rr[1], color, .62); put(L[0], y, L[1], color, .62); put(T[0], y + h, T[1], color);
+    }
+  };
+  // rushes along both sides of the water
+  for (let s = R.s0 - 24, i = 0; s < R.s0 + 24; s += .9, i++) {
+    if (Math.abs(s - R.drive) < 2.6) continue;
+    for (const e of [-1, 1]) { const [x, z] = R.at(s + hash(i, e, 1351) * .6, R.off + e * (.8 + hash(i, e, 1352) * .5)); clump(x, z, hash(i, e, 1353) * 6.28, .9 + hash(i, e, 1354) * .45, .55, RUSH); }
+  }
+  // and the tall grass, thinning out away from the house
+  const off = (x, z) => [[0, 0], [.7, 0], [-.7, 0], [0, .7], [0, -.7]].some(([dx, dz]) => insideRing(x + dx, z + dz, TONI_HOUSE.pts));
+  for (let i = -15; i <= 15; i++) for (let j = -15; j <= 15; j++) {
+    const x = H.x + (i + hash(i, j, 1355)) * 1.15, z = H.z + (j + hash(i, j, 1356)) * 1.15, r = Math.hypot(x - H.x, z - H.z);
+    if (hash(i, j, 1357) > .78 * (1 - sstep(11, 17, r)) || off(x, z)) continue;
+    const d = MAP.roadGrid.nearest(x, z), road = MAP.roadGrid.seg?.owner;
+    if (road && (d < roadHalf(road, x, z) + 1 || (road.id === R.id && d < R.off + 1.3))) continue;
+    clump(x, z, hash(i, j, 1358) * 6.28, .8 + hash(i, j, 1359) * .7, .42, k.copy(GREEN).lerp(STRAW, hash(i, j, 1360)));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
+  scene.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .95, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })));
+}
+// A frog, drawn as things are, one geometry each, but lit by itself as much as by the night, or it's a dark lump in her hand
+const frogLit = (m) => { m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * .9;'); }; m.customProgramCacheKey = () => 'frog'; return m; };
+const frogMat = frogLit(thingMat.clone());
+function frogMesh(i, mat = frogMat) {
+  const f = FROGS[i], geo = mergeGeometries(frog(f.kind, f.size)), g = new THREE.Group();
+  g.add(new THREE.Mesh(geo, mat), new THREE.Mesh(smoothed(geo), thingLine)); return g;
+}
+// Grandma turns green when nobody's looking, as gray treefrogs really do. She's gray while Toni's showing her to someone.
+const GRANDMA = FROGS.findIndex((f) => f.name === 'Grandma'), grandmaMat = frogLit(thingMat.clone());
+const GRANDMA_GREEN = new THREE.Color('#9ccf73'), WHITE = new THREE.Color(1, 1, 1);
+const toniBody = (() => {
+  const look = LOOKS.cast.toni, sheet = canvasFor(1024, 1024, (g) => drawPerson(g, 0, 0, 1024, 1024, look), false), wear = (part) => zombieMat(sheet, part, { far: 0 });
+  const handM = new THREE.MeshToonMaterial({ color: look.skin, emissive: look.skin, emissiveIntensity: .3, gradientMap: toonGrad });
+  // the coat's too big for her: a body a little wider than she is
+  const rig = makeRig({ hood: townBody, hoodM: wear('body'), sleeveM: wear('arm'), pantsM: wear('leg'), handM, ol: look.line, lineK: .85, strip: true, shoulder: [.205, .06], reach: [.39, .39], thick: .66, legSize: .8, hip: [.1, ZOMBIE_HIP], shin: .41, shoe: look.shoes });
+  rig.setHood(townBody); rig.hm.scale.set(1.1, 1, 1.12);
+  const root = new THREE.Group(); root.add(rig.body); rig.body.scale.setScalar(TONI_SCALE); rig.body.position.y = TOWN_HIPS * TONI_KID; scene.add(root);
+  makeAstral(rig.body);
+  // the frogs in her hand, at their own size whatever size she is, one showing at a time
+  const held = new THREE.Group(); held.scale.setScalar(1 / TONI_SCALE); rig.body.add(held);
+  const frogs = FROGS.map((_, i) => { const m = frogMesh(i, i === GRANDMA ? grandmaMat : frogMat); m.visible = false; held.add(m); return m; });
+  return { rig, root, held, frogs, step: -1, ph: 0 };
+})();
+// How she stands for what she's doing, on the twelve frames like everyone else. She's stood up straight, and only bends from the hips to reach into the grass,
+// which takes her shoulders down with her.
+const TONI_S0 = toniBody.rig.S.map((s) => s.clone()), TONI_PIVOT = new THREE.Vector3(0, ZOMBIE_HIP, 0), _toniBend = new THREE.Quaternion();
+function poseToni(T, ph) {
+  const R = toniBody.rig, V3 = (x, y, z) => new THREE.Vector3(x, y, z), d = T.doing, walking = d === 'walk' || d === 'go';
+  const down = d === 'crouch' ? .5 : 0, a = walking ? (d === 'go' ? 1 : .6) : 0;
+  _toniBend.setFromAxisAngle(V3(1, 0, 0), down ? .9 : 0);
+  R.hm.position.copy(TONI_PIVOT).negate().applyQuaternion(_toniBend).add(TONI_PIVOT); R.hm.quaternion.copy(_toniBend);
+  R.S.forEach((s, i) => s.copy(TONI_S0[i]).sub(TONI_PIVOT).applyQuaternion(_toniBend).add(TONI_PIVOT));
+  R.body.position.y = TOWN_HIPS * TONI_KID - down * TONI_SCALE + (walking ? Math.abs(Math.sin(ph)) * .02 : 0);
+  for (let i = 0; i < 2; i++) {
+    const s = i ? 1 : -1, p = ph + (i ? Math.PI : 0);
+    if (down) R.leg(i, V3(s * .13, -1.36 + down, .28), V3(s * .16, -.7, 1));
+    else { const lift = Math.max(0, Math.cos(p)) * .14 * a; R.leg(i, V3(s * .11, -1.36 + lift, Math.sin(p) * .3 * a), V3(s * .1, -1, .8), lift * 2); }
+  }
+  // The frog's in one hand: down in the grass catching one, held up to whoever she's showing, right out at arm's length to give it, and carefully in front
+  // of her the rest of the time. The other hand's cupped under it so it can't jump, except walking, when it swings.
+  const [L, Rs] = R.S, showing = d === 'ask' || d === 'show', giving = d === 'give';
+  const hand = down ? V3(.1, -.86, .6) : giving ? V3(.04, -.2, .6) : showing ? V3(.06, -.12, .44) : V3(.12, -.42, .3);
+  const grip = R.arm(1, hand, Rs.clone().add(V3(.5, -.36, -.3)), V3(0, 1, 0));
+  if (walking) R.arm(0, L.clone().add(V3(-.045, -.72, .09 - Math.sin(ph) * .2 * a)), L.clone().add(V3(-.495, -.36, -.3)));
+  else R.arm(0, hand.clone().add(V3(-.1, -.07, -.02)), L.clone().add(V3(-.3, -.5, -.15)), V3(0, 1, 0));
+  toniBody.held.position.copy(grip).add(V3(0, .05, .02));
+}
+// What she says, over her head: a line at a time, each up long enough to read
+const toniSays = document.getElementById('toniSays'), _toniAt = new THREE.Vector3(), toniLines = [];
+let toniLine = null;
+const readFor = (text) => 1.4 + text.split(/\s+/).length * .3;
+function toniSay(...lines) { for (const text of lines) toniLines.push(text); }
+// Gerald, once she's given him to him: in his hand the way she holds them, until he lets him go in a ditch. While he's got him his hand's full, so there's no
+// swinging, which takes both hands. He has him in the hand he doesn't throw with.
+const heroGerald = frogMesh(BEST); heroGerald.visible = false; heroGerald.scale.setScalar(1 / HERO_SCALE); hero.body.add(heroGerald);
+heroGerald.traverse((o) => { o.layers.enable(1); if (o.material?.userData.outline) o.layers.enable(2); });
+const freeGerald = frogMesh(BEST); freeGerald.visible = false; scene.add(freeGerald);
+let geraldGoing = null;
+S.items.gerald = toni.holding() ? 1 : 0;
+// A ditch is the low ground along any road just past its shoulder, though not along somebody's drive, or the edge of any water
+const aDrive = (r) => r.structure != null;
+function inDitch(x, z) {
+  const d = MAP.roadGrid.nearest(x, z, aDrive);
+  if (d < Infinity) { const half = roadHalf(MAP.roadGrid.seg.owner, x, z); if (d > half + SHOULDER - .4 && d < half + SHOULDER + 4) return true; }
+  return (WATER.look(x, z) && WATER.d < 3) || riverDist(x, z) < 8;
+}
+// who of the cast has something to say about him, and remembers having said it
+const GERALD_SEEN = { coop: 'geraldCoop', rocky: 'geraldRocky', bobby: 'geraldBobby' };
+function letGeraldGo() {
+  if (!toni.letGo()) return;
+  S.items.gerald = 0;
+  heroGerald.getWorldPosition(freeGerald.position); freeGerald.rotation.y = player.yaw; freeGerald.visible = true; heroGerald.visible = false;
+  geraldGoing = { t: 0, x: freeGerald.position.x, y: freeGerald.position.y, z: freeGerald.position.z, fx: Math.sin(player.yaw), fz: Math.cos(player.yaw) };
+  SFX.play('frog.a', { x: freeGerald.position.x, z: freeGerald.position.z });
+}
+// he hops down out of his hand and off into the ditch, twice, and he's gone
+function stepFreeGerald(dt) {
+  if (!geraldGoing) return;
+  const G0 = geraldGoing, t = (G0.t += dt), hop = Math.min(2, t / .38), n = Math.floor(hop), k = hop - n, far = (n + k) * .55;
+  const ground = floorAt(G0.x + G0.fx * far, G0.z + G0.fz * far);
+  freeGerald.position.set(G0.x + G0.fx * far, (n === 0 ? G0.y + (ground - G0.y) * k : ground) + Math.sin(Math.PI * Math.min(1, k)) * .22, G0.z + G0.fz * far);
+  if (t > 1.1) { freeGerald.visible = false; geraldGoing = null; }
+}
+// Did she show you Gerald? Once he's seen any, the gone quiet near her sometimes say so, naming one he's seen.
+function frogWord(s) {
+  const seen = toni.mind.seen;
+  if (!seen.length || Math.hypot(s.x - TONI_HOME.x, s.z - TONI_HOME.z) > 220 || hash2(s.who.id, Math.floor(time / 40)) > .35) return null;
+  return TONI_WORDS.word.replace('{frog}', seen[Math.floor(hash2(s.who.id, 9) * seen.length)]);
+}
+// Whether she's showing him one now, and the shoulder the camera looks at her over while she does (the camera's in tick). She's short and close up, so it's
+// further round to the side than for talking to anyone grown (TALK), lower, and looking more at her, or he'd hide her.
+const toniShowing = () => S.mode === 'town' && toni.T.who === 'him' && (toni.T.doing === 'ask' || toni.T.doing === 'show' || toni.T.doing === 'give');
+let toniTalk = { side: 1, k: 1, dir: 1 };
+const TONI_TALK = { back: 1.9, out: 2.6, up: 2.1, look: 1.1, along: .5 };
+// Everyone she might go up to: him on foot, and the gone quiet about, who don't react
+const _toniQuiet = [];
+function stepToni(dt) {
+  const T = toni.T, M = S.mode, P = player.pos, near = Math.hypot(T.x - camera.position.x, T.z - camera.position.z) < 120;
+  _toniQuiet.length = 0;
+  if (folkOut) for (const s of horde.active) if (s.quiet && !s.thrown && !(s.flat > 0) && s.under === undefined && Math.abs(s.x - TONI_HOME.x) < 40 && Math.abs(s.z - TONI_HOME.z) < 40) _toniQuiet.push({ id: s.who.id, x: s.x, z: s.z });
+  const said = toni.update(dt, { him: M === 'town' ? P : null, quiet: _toniQuiet });
+  if (said === 'ask') { toniLines.length = 0; toniLine = null; toniSay(TONI_WORDS.ask); if (T.who === 'him') toniTalk = shoulderFor(T, [1], TONI_TALK); }
+  else if (said === 'frog') { toniLines.length = 0; toniLine = null; toniSay(...sayFrog(TONI_WORDS, T.frog, T.turn - 1)); }
+  else if (said === 'quiet' && Math.hypot(P.x - T.x, P.z - T.z) < 25) toniSay(TONI_WORDS.quiet);
+  else if (said === 'give') { toniLines.length = 0; toniLine = null; toniSay(TONI_WORDS.give); }
+  else if (said === 'gave') S.items.gerald = 1;
+  // a line at a time, each up long enough to read
+  if (toniLine && time - toniLine.at > readFor(toniLine.text)) toniLine = null;
+  if (!toniLine && toniLines.length) toniLine = { text: toniLines.shift(), at: time };
+  // a new night, by the church signs' days: the gone quiet are worth showing again
+  const day = today(); if (toniBody.day !== day) { toniBody.day = day; toni.night(); }
+  toniBody.root.visible = near && M !== 'title';
+  if (!toniBody.root.visible) return;
+  toniBody.root.position.set(T.x, floorAt(T.x, T.z), T.z);
+  toniBody.root.rotation.y += angDiff(toniBody.root.rotation.y, T.yaw) * Math.min(1, dt * 6);
+  const walking = T.doing === 'walk' || T.doing === 'go';
+  if (walking) toniBody.ph += dt * (T.doing === 'go' ? 9 : 5.5);
+  const step = Math.floor(time * 12);
+  if (step !== toniBody.step) { toniBody.step = step; poseToni(T, toniBody.ph); }
+  toniBody.frogs.forEach((f, i) => { f.visible = i === T.frog && T.doing !== 'gave'; });
+  // Grandma greens up while nobody's looking at her, and goes back gray when she's shown
+  const looked = T.doing === 'ask' || T.doing === 'show';
+  grandmaMat.color.lerp(looked ? WHITE : GRANDMA_GREEN, Math.min(1, dt * (looked ? 2 : .25)));
+}
+function drawToniSays() {
+  const T = toni.T, show = toniLine && S.mode === 'town' && toniBody.root.visible;
+  if (!show) { toniSays.hidden = true; return; }
+  _toniAt.set(T.x, toniBody.root.position.y + hillUp(T.x, T.z) + 2.05 * TONI_KID * TOWN_SCALE + .1, T.z).project(camera);
+  if (_toniAt.z >= 1) { toniSays.hidden = true; return; }
+  if (toniSays.textContent !== toniLine.text) toniSays.textContent = toniLine.text;
+  const age = time - toniLine.at, fade = Math.min(1, reduceMotion ? 1 : age / .25, (readFor(toniLine.text) - age) / .4);
+  toniSays.hidden = false; toniSays.style.opacity = Math.max(0, fade).toFixed(2);
+  const w = toniSays.offsetWidth, x = Math.min(Math.max((_toniAt.x * .5 + .5) * innerWidth, w / 2 + 6), innerWidth - w / 2 - 6);
+  toniSays.style.transform = `translate(${x.toFixed(1)}px,${((-_toniAt.y * .5 + .5) * innerHeight).toFixed(1)}px) translate(-50%,-100%)`;
+}
 // what dialogue reads and changes
 const played = { flags: S.flags, items: S.items, get beans() { return S.beans; }, addBeans, get pantry() { return pantryOwes(); }, fromPantry };
 const player = { pos: new THREE.Vector3(), vy: 0, yaw: Math.PI, grounded: true, inv: 0, stamina: 1, running: false, winded: false, ran: false, runK: 0, boostT: 0, kb: new THREE.Vector2(), fallV: new THREE.Vector3(), lastSafe: new THREE.Vector3() };
-const cam = { yaw: -.6, pitch: .28, shake: 0, snap: false, talk: 0 };
+const cam = { yaw: -.6, pitch: .28, shake: 0, snap: false, talk: 0, toni: 0 };
 // over his shoulder when he's talking: how far back, how far out, how high, how high it looks, and how far along towards them
 const TALK = { back: 3, out: 1.7, up: 2.45, look: 1.5, along: .27 }, _talk = new THREE.Vector3();
 let toastT = 0, cardT = 0;
@@ -5374,11 +5626,11 @@ function setButton(id, label, sizes) {
   el.innerHTML = label.replace(' ', '<br>'); el.style.fontSize = `${sizes[label.includes(' ') ? 2 : label.length < 4 ? 0 : label.length < 5 ? 1 : 2]}px`; el.setAttribute('aria-label', label);
 }
 function updateControls() {
-  const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, thrown = thrownNow(), held = mouseHeld(), now = `${S.mode}|${act}|${map}|${thrown?.word}|${thrown?.n}|${thrown?.more}|${held}|${shambling}|${crowdOut}`;
+  const act = S.mode === 'town' ? S.act : null, map = !!S.flags.town, thrown = thrownNow(), held = mouseHeld(), full = !!S.items.gerald, now = `${S.mode}|${act}|${map}|${thrown?.word}|${thrown?.n}|${thrown?.more}|${held}|${shambling}|${crowdOut}|${full}`;
   if (hudCache.controls === now) return; hudCache.controls = now;
   $('stam').classList.toggle('veh', S.mode === 'drive');
-  if (touchUI) { const { a, b, run, c, swap, shamble } = buttonsFor(S.mode, { act, thrown, crowd: crowdOut }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); setHidden('bC', !c); setHidden('bN', !swap); setHidden('bH', !shamble); $('bH').classList.toggle('held', shambling); $('bH').setAttribute('aria-pressed', shambling); if (c) { $('bC').innerHTML = c.replace(' ', '<br>'); $('bC').style.fontSize = thrown.word.length > 6 ? '10.5px' : '13px'; $('bC').setAttribute('aria-label', `Throw ${thrown.name}`); } return; }
-  const list = keysFor(S.mode, { act, map, thrown, mouse: held, shambling, crowd: crowdOut });
+  if (touchUI) { const { a, b, run, c, swap, shamble } = buttonsFor(S.mode, { act, thrown, crowd: crowdOut, full }); setButton('bA', a, [24, 20, 16]); setButton('bB', b, [18, 15, 12]); setHidden('bR', !run); setHidden('bC', !c); setHidden('bN', !swap); setHidden('bH', !shamble); $('bH').classList.toggle('held', shambling); $('bH').setAttribute('aria-pressed', shambling); if (c) { $('bC').innerHTML = c.replace(' ', '<br>'); $('bC').style.fontSize = thrown.word.length > 6 ? '10.5px' : '13px'; $('bC').setAttribute('aria-label', `Throw ${thrown.name}`); } return; }
+  const list = keysFor(S.mode, { act, map, thrown, mouse: held, shambling, crowd: crowdOut, full });
   setHidden('keyStrip', !list.length); $('keyStrip').innerHTML = list.map(([key, what]) => `<span class="ks"><span class="kc">${key}</span>${what}</span>`).join('');
 }
 function hudVitals() {
@@ -5469,11 +5721,16 @@ function openDialog(id) {
 // He turns to them, and the camera goes over whichever shoulder has room. With his back to a wall, it goes over theirs and looks at him.
 function faceWhoever(n) {
   S.talkTo = n; if (!n) return;
-  const P = player.pos, N = n.root.position, L = Math.hypot(N.x - P.x, N.z - P.z) || 1, ux = (N.x - P.x) / L, uz = (N.z - P.z) / L;
-  cam.yaw = Math.atan2(-ux, -uz);
-  const clear = (from, dir, side, k) => { for (let t = .3; t <= 1; t += .1) if (blocked(from.x + t * k * (-dir * ux * TALK.back - dir * uz * side * TALK.out), from.z + t * k * (-dir * uz * TALK.back + dir * ux * side * TALK.out), P.y + 1)) return false; return true; };
-  S.talk = { side: 1, k: .45, dir: 1 };
-  for (const k of [1, .8, .62, .45]) for (const [from, dir] of [[P, 1], [N, -1]]) for (const side of [1, -1]) if (clear(from, dir, side, k)) { S.talk = { side, k, dir }; return; }
+  const P = player.pos, N = n.root.position;
+  cam.yaw = Math.atan2(P.x - N.x, P.z - N.z);
+  S.talk = shoulderFor(N);
+}
+// Which shoulder there's room to look over at someone N: his, or else theirs, looking at him, unless `dirs` says only his will do. `shape` is where the camera goes, as TALK.
+function shoulderFor(N, dirs = [1, -1], shape = TALK) {
+  const P = player.pos, L = Math.hypot(N.x - P.x, N.z - P.z) || 1, ux = (N.x - P.x) / L, uz = (N.z - P.z) / L;
+  const clear = (from, dir, side, k) => { for (let t = .3; t <= 1; t += .1) if (blocked(from.x + t * k * (-dir * ux * shape.back - dir * uz * side * shape.out), from.z + t * k * (-dir * uz * shape.back + dir * ux * side * shape.out), P.y + 1)) return false; return true; };
+  for (const k of [1, .8, .62, .45]) for (const dir of dirs) for (const side of [1, -1]) if (clear(dir > 0 ? P : N, dir, side, k)) return { side, k, dir };
+  return { side: 1, k: .45, dir: 1 };
 }
 function closeDialog() { $('dialog').hidden = true; if (S.mode === 'dialog') S.mode = 'town'; townObjective(); }
 const street = (id) => MAP.roadById.get(id).name;
@@ -6783,7 +7040,8 @@ function updateTrains(dt) {
 // With the mouse, what he swings at or throws at is what the camera's looking at. He keeps going the way he was going while he does.
 let aimT = 0;
 function aimWithCamera() { if (mouseHeld()) { player.yaw = cam.yaw + Math.PI; aimT = .35; } }
-function swing() { if (swingT < 0 && S.mode === 'town') { giveAway(); aimWithCamera(); faceNearest(); swingT = 0; swingHit = false; SFX.play('swing'); } }
+// both hands, so not with Gerald in one
+function swing() { if (swingT < 0 && S.mode === 'town' && !S.items.gerald) { giveAway(); aimWithCamera(); faceNearest(); swingT = 0; swingHit = false; SFX.play('swing'); } }
 // the nearest one in front of him he can reach, and sooner one who's coming for him than one who isn't
 function faceNearest() {
   if (!folkOut) return;
@@ -7244,11 +7502,12 @@ function soundTick(dt, M) {
   for (const f of fires) if (!f.out) fire = Math.min(fire, Math.hypot(f.home.x - P.x, f.home.z - P.z));
   SFX.loop('amb.fire', 1 - sstep(4, 40, fire));
   SFX.loop('amb.flies', fliesLeft > 0 ? Math.sqrt(fliesLeft) * (1 - sstep(2, 22, Math.hypot(ROBBY.x - P.x, ROBBY.z - P.z))) : 0);
-  // frogs: more of them near water, all round him, and none in the fever
+  // frogs: more of them near water, all round him, and none in the fever. Toni's ditch on Gallatin St is full of them, and most of what's heard near it is from it.
   if (quiet === 1 && (frogT -= .25) <= 0) {
-    frogT = (water > .2 ? .4 : 1.6) + soundRand() * (water > .2 ? 1.6 : 4);
-    const a = soundRand() * 6.283, d = 14 + soundRand() * 34, kind = soundRand();
-    SFX.play(kind < .5 ? 'frog.b' : kind < .85 ? 'frog.a' : 'frog.c', { x: P.x + Math.cos(a) * d, z: P.z + Math.sin(a) * d });
+    const many = water > .2 || Math.hypot(P.x - TONI_HOME.x, P.z - TONI_HOME.z) < 70;
+    frogT = (many ? .4 : 1.6) + soundRand() * (many ? 1.6 : 4);
+    const a = soundRand() * 6.283, d = 14 + soundRand() * 34, kind = soundRand(), ditch = water <= .2 && many && soundRand() < .7 ? TONI_DITCH[Math.floor(soundRand() * TONI_DITCH.length)] : null;
+    SFX.play(kind < .5 ? 'frog.b' : kind < .85 ? 'frog.a' : 'frog.c', ditch ? { x: ditch[0], z: ditch[1] } : { x: P.x + Math.cos(a) * d, z: P.z + Math.sin(a) * d });
   }
   // snakes, close by, some of the time
   if (M === 'swim' && !S.flags.town) { for (const s of SNAKES) if (soundRand() < .3) SFX.play('snake.hiss', { x: s.p.x, z: s.p.z }); }
@@ -7308,7 +7567,7 @@ function tick(dt, draw = true) {
   readInput();
   updateMouse(dt);
   const step = Math.floor(time * 12);
-  if (step !== lastStepIdx) { lastStepIdx = step; G.uStep.value = step % 4; gifMat.uniforms.uFrame.value = step % 997; const k = step % 3; heroHoodM.map = heroHoodM.emissiveMap = hatch[k]; heroSleeveM.map = heroSleeveM.emissiveMap = hatch[(k + 1) % 3]; heroPantsM.map = heroPantsM.emissiveMap = pantsHatch[k]; poseHero(step / 12); stepBurst(); pointAtObjective(); }
+  if (step !== lastStepIdx) { lastStepIdx = step; G.uStep.value = ASTRAL.uStep.value = step % 4; gifMat.uniforms.uFrame.value = step % 997; const k = step % 3; heroHoodM.map = heroHoodM.emissiveMap = hatch[k]; heroSleeveM.map = heroSleeveM.emissiveMap = hatch[(k + 1) % 3]; heroPantsM.map = heroPantsM.emissiveMap = pantsHatch[k]; poseHero(step / 12); stepBurst(); pointAtObjective(); }
   if (player.inv > 0) player.inv -= dt;
   gifMat.uniforms.uHurt.value = Math.max(0, player.inv - .9) * .8;
 
@@ -7426,11 +7685,13 @@ function tick(dt, draw = true) {
       if (crtLook && (Math.hypot(input.x, input.y) > .1 || input.sEdge || input.cEdge)) crtLook = false;
       const crt = !near && !ride && !meat && !door && !jam && !ball && (crtLook || crtInReach()), stone = !near && !ride && !meat && !door && !jam && !ball && stoneInReach(), plate = !near && !ride && !meat && !door && !jam && !ball && railMarkerInReach();
       const bell = !near && !ride && !meat && !door && !jam && !ball && !crt && bellInReach();
-      S.act = near ? `Talk to ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : bell ? 'Ring the bell' : gear && S.flags.sixInARow ? 'Take the bat' : null;
+      // with Gerald in his hand, the cast are who to show him to, and any ditch is where to let him go
+      const showTo = near && S.items.gerald && GERALD_SEEN[near] && !S.flags[GERALD_SEEN[near]], ditch = !!S.items.gerald && inDitch(player.pos.x, player.pos.z);
+      S.act = near ? `${showTo ? 'Show Gerald to' : 'Talk to'} ${NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : bell ? 'Ring the bell' : gear && S.flags.sixInARow ? 'Take the bat' : ditch ? 'Let Gerald go' : null;
       if (!stone) stoneRead = false;
       if (!plate) railMarkerRead = false;
-      if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (railMarkerRead && S.act === 'Read the marker') prompt(`<span class="words">${RAIL_MARKER.words}</span>`); else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
-      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) stoneRead = true; else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else swing(); }
+      if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (railMarkerRead && S.act === 'Read the marker') prompt(`<span class="words">${RAIL_MARKER.words}</span>`); else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH && !S.items.gerald) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
+      if (input.aEdge) { if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) stoneRead = true; else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else if (ditch) letGeraldGo(); else swing(); }
       if (input.sEdge) swing();
       if (input.hEdge) toggleShamble();
       if (input.cEdge) throwOne();
@@ -7545,12 +7806,23 @@ function tick(dt, draw = true) {
     { const up = hillUp(V.x, V.z); if (up > 0) V.y = Math.max(V.y, TOWN_Y + up + .6); }
     // talking: over his shoulder, looking between them, or a hood that size is all you'd see of whoever it is
     cam.talk = clamp(cam.talk + (M === 'dialog' && S.talkTo ? dt : -dt) * 2.5, 0, 1);
+    const overShoulder = (N, { side, k, dir }, w, shape = TALK) => {
+      const H = heroRoot.position, L = Math.hypot(N.x - H.x, N.z - H.z) || 1, A = dir > 0 ? H : N, ux = (N.x - H.x) / L * dir, uz = (N.z - H.z) / L * dir;
+      V.lerp(_talk.set(A.x + k * (-ux * shape.back - uz * side * shape.out), H.y + shape.up, A.z + k * (-uz * shape.back + ux * side * shape.out)), w);
+      tgt.lerp(_talk.set(A.x + ux * L * shape.along, H.y + shape.look, A.z + uz * L * shape.along), w);
+    };
     if (cam.talk > 0 && S.talkTo) {
-      const H = heroRoot.position, N = S.talkTo.root.position, L = Math.hypot(N.x - H.x, N.z - H.z) || 1, { side, k, dir } = S.talk, A = dir > 0 ? H : N, ux = (N.x - H.x) / L * dir, uz = (N.z - H.z) / L * dir;
-      if (M === 'dialog') player.yaw += angDiff(player.yaw, Math.atan2(ux * dir, uz * dir)) * Math.min(1, dt * 7);
-      const w = sstep(0, 1, cam.talk);
-      V.lerp(_talk.set(A.x + k * (-ux * TALK.back - uz * side * TALK.out), H.y + TALK.up, A.z + k * (-uz * TALK.back + ux * side * TALK.out)), w);
-      tgt.lerp(_talk.set(A.x + ux * L * TALK.along, H.y + TALK.look, A.z + uz * L * TALK.along), w);
+      const H = heroRoot.position, N = S.talkTo.root.position;
+      if (M === 'dialog') player.yaw += angDiff(player.yaw, Math.atan2(N.x - H.x, N.z - H.z)) * Math.min(1, dt * 7);
+      overShoulder(N, S.talk, sstep(0, 1, cam.talk));
+    }
+    // Toni showing him one, with him stood still and not looking about: he turns to her and the camera goes over his shoulder the same way, since that's the only
+    // way to see her, right in front of him. Moving or looking about has it back.
+    cam.toni = clamp(cam.toni + (toniShowing() && !moving && time - lastLook > 1.2 ? dt : -dt) * 2.5, 0, 1);
+    if (cam.toni > 0 && !(cam.talk > 0)) {
+      const H = heroRoot.position, N = toniBody.root.position;
+      if (!moving) player.yaw += angDiff(player.yaw, Math.atan2(N.x - H.x, N.z - H.z)) * Math.min(1, dt * 7);
+      overShoulder(N, toniTalk, sstep(0, 1, cam.toni), TONI_TALK);
     }
     // right up to the glass, and him out of the way while it's there
     if (crtLook && M !== 'town') crtLook = false;
@@ -7580,6 +7852,7 @@ function tick(dt, draw = true) {
   // ---------------- HUD timers
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').classList.remove('show'); }
   if (cardT > 0) { cardT -= dt; if (cardT <= 0) $('card').classList.remove('show'); }
+  if (S.flags.town) { stepToni(dt); stepFreeGerald(dt); }
   hudVitals();
   soundTick(dt, M);
   input.aEdge = false; input.bEdge = false; input.cEdge = false; input.nEdge = false; input.sEdge = false; input.hEdge = false;
@@ -7597,6 +7870,7 @@ function tick(dt, draw = true) {
   if (folkOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
   else if (folkOut) drawSeated(step);
   if (folkOut) { drawWho(); drawSus(); drawMutters(); }
+  drawToniSays();
   if (S.flags.town) { drawVehicles(step); drawWreck(step); if (trainsOn) drawTrain(); }
   updateParticles(dt, M);
   if (bottle.visible) levelLiquid();
@@ -7631,8 +7905,8 @@ function loop() { if (paused) return; if (!mapOpen) tick(Math.min(clock.getDelta
 const clickedIn = (e) => { if (e.isTrusted && e.detail > 0) takeMouse(); };
 $('start').addEventListener('click', (e) => { $('title').hidden = true; startHang(); clickedIn(e); });
 $('free').addEventListener('click', (e) => { startFree(); clickedIn(e); });
-$('forget').hidden = !people.hasSave() && !folks.hasSave();
-$('forget').addEventListener('click', () => { people.forget(); folks.forget(); pantry.forget(); showPantry(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
+$('forget').hidden = !people.hasSave() && !folks.hasSave() && !toni.mind.seen.length;
+$('forget').addEventListener('click', () => { people.forget(); folks.forget(); pantry.forget(); toni.forget(); S.items.gerald = 0; showPantry(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
 // first frame: him hanging behind the title
 heroRoot.position.copy(ANCHOR); poseHero(0); drawPlanks();
 for (const s of SNAKES) s.update(.016); deckSnake.update(.016);
@@ -7709,6 +7983,23 @@ if (TEST) {
     // each one that has stopped, turned to him and flared, with what woke it (the last 64, and the tests empty it), and how much hotter the flare is than the glow of anyone after him
     roused: { log: rousedLog, FLARE: ROUSE_FLARE },
     mutters: () => mutterSlots.filter((m) => m.s && !m.e.hidden).map((m) => ({ says: m.e.textContent, id: m.s.who.id, opacity: +m.e.style.opacity, transform: m.e.style.transform, box: m.e.getBoundingClientRect().toJSON() })),
+    // Toni: what she's doing and where, what she remembers, what's over her head, which frog's in her hand, and Gerald, in his or let go
+    toni: {
+      state: () => ({ ...toni.T, mind: { ...toni.mind, seen: [...toni.mind.seen] }, home: TONI_HOME, spots: TONI_SPOTS, drawn: toniBody.root.visible, inHand: toniBody.frogs.findIndex((f) => f.visible), y: toniBody.root.position.y }),
+      // what she's saying now, and whether it's up over her head and how faded, as of the last frame drawn
+      says: () => (toniLine ? { text: toniLine.text, shown: !toniSays.hidden && toniSays.textContent === toniLine.text, opacity: +toniSays.style.opacity, box: toniSays.getBoundingClientRect().toJSON() } : null),
+      // her rows' own step, for a test to move them and nothing else
+      rows(step) { ASTRAL.uStep.value = step; },
+      gerald: () => ({ held: !!S.items.gerald, drawn: heroGerald.visible, free: freeGerald.visible, at: heroGerald.getWorldPosition(new THREE.Vector3()).toArray() }),
+      road: { ...TONI_ROAD }, inDitch, night() { toni.night(); }, grandma: () => grandmaMat.color.toArray(), FROGS, T: toni.T,
+      // whether all of her's drawn as a projection, and the frogs in her hand aren't
+      astral() {
+        const isAstral = (m) => (m.userData?.outline ? !!m.defines?.ASTRAL : m.customProgramCacheKey?.().startsWith('astral'));
+        let all = true, frogSolid = true;
+        toniBody.rig.body.traverse((o) => { if (!o.isMesh) return; let held = false; for (let p = o.parent; p; p = p.parent) if (p === toniBody.held) held = true; if (held) frogSolid &&= !isAstral(o.material); else all &&= isAstral(o.material); });
+        return { all, frogSolid };
+      },
+    },
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
     topDown({ x0, z0, x1, z1, scale, everywhere, houses }) {

@@ -206,6 +206,8 @@ export function placeVehicles(structures, { hash, road, free }) {
   };
   for (const s of structures) {
     const h = hash(s.id ?? 0, 3), which = hash(s.id ?? 0, 5);
+    // nobody lives in a ruin, so nobody's parked by one
+    if (s.condition === 'ruin') continue;
     if (s.use === 'church') beside('golf', s);
     else if (s.use === 'mobile') { if (h < .4) beside('quad', s); }
     else if (s.use === 'house') { if (h < .2) beside(which < .62 ? 'pickup' : 'car', s); }

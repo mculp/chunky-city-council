@@ -250,6 +250,11 @@ def lane_spec(record, config):
     return config["classes"].get(record.mtfcc) or config["classes"]["S1740"]
 
 
+def drive_surface(structure_id, config):
+    """A generated drive is dirt, unless Street View shows that the building's is something else."""
+    return config.get("surfaceOf", {}).get(str(structure_id), config["drive"]["surface"])
+
+
 def moves_buildings(lane):
     """A real road's in the right place and a building beside it moves off it. Somebody's track is only roughly where TIGER has it, so it gives way to the building."""
     return bool(lane["name"]) or lane["mtfcc"] == "S1200"
@@ -652,7 +657,7 @@ def build_drives(roads, lanes, structures, water, config):
             return how
         spec = config["drive"]
         places.add_line(pts, spec["width"] / 2, "drive_%d" % s["id"])
-        drives.append({"id": "drive_%d" % s["id"], "structure": s["id"], "generated": True, "width": spec["width"], "surface": spec["surface"], "points": [[round(p[0] + world.bridge_x, 2), round(p[1] + world.bridge_z, 2)] for p in pts]})
+        drives.append({"id": "drive_%d" % s["id"], "structure": s["id"], "generated": True, "width": spec["width"], "surface": drive_surface(s["id"], config), "points": [[round(p[0] + world.bridge_x, 2), round(p[1] + world.bridge_z, 2)] for p in pts]})
         return how
 
     # again for whatever's left, because a drive made later can be the way in for one that was stuck. And one last time with less room past the walls.

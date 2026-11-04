@@ -5,7 +5,7 @@
     "fear": { "min": 0, "max": 3 },
     "debt": { "min": -12, "max": 12 }
   },
-  "remember": ["metCoop", "metRocky", "chain", "tank", "robbySaid"],
+  "remember": ["metCoop", "metRocky", "chain", "tank", "robbySaid", "geraldCoop", "geraldRocky", "geraldBobby"],
   "renamed": { "tre": "rocky", "odessa": "bobby", "metTre": "metRocky" },
   "cast": [
     { "id": "coop", "name": "Coop", "short": "Coop", "known": true },
@@ -34,6 +34,11 @@
         { "say": "Later." }
       ],
       "lines": [
+        {
+          "when": ["has:gerald", "!geraldCoop"],
+          "say": "That one of Toni's? Keep him off my counter. Last one got in the jerky.",
+          "do": [{ "set": "geraldCoop" }]
+        },
         {
           "when": ["opened", "!coopMad"],
           "say": "You opened my bag? Get off my concrete before I sell you for parts.",
@@ -84,6 +89,12 @@
       "who": "rocky",
       "lines": [
         {
+          "when": ["has:gerald", "!geraldRocky"],
+          "say": "Keep him away from the tank. Bobby's been looking.",
+          "do": [{ "set": "geraldRocky" }],
+          "opts": [{ "say": "What's in the tank?", "to": "rockyTank" }, { "say": "Later." }]
+        },
+        {
           "when": ["has:bag"],
           "say": "That Coop's bag? Hand it here.",
           "opts": [{ "say": "Here.", "to": "rockyHand" }, { "say": "Open the bag.", "to": "rockyOpen" }]
@@ -133,6 +144,7 @@
         { "say": "Later." }
       ],
       "lines": [
+        { "when": ["has:gerald", "!geraldBobby"], "say": "She gave you Gerald? Baby, she doesn't give Gerald to anybody.", "do": [{ "set": "geraldBobby" }] },
         { "when": ["swept"], "say": "Stay off that bridge at night, baby. The lantern man walks it." },
         { "say": "Baby, you look like you've been through it. The Lord loves a quitter who un-quits." }
       ]

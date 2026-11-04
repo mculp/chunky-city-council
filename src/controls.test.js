@@ -94,6 +94,19 @@ test('he swings in town, and only has something to throw once he\'s carrying it'
   assert.equal(buttonsFor('bridge', { thrown: gas }).c, null);
 });
 
+test('with Gerald in his hand there\'s no swinging, but he can still throw, show him to people and let him go', () => {
+  const gas = { name: 'gas', word: 'GAS', n: 2 };
+  for (const mouse of [false, true]) assert.ok(!keysFor('town', { full: true, mouse }).some(([, what]) => what === 'Swing'), `mouse ${mouse}`);
+  assert.ok(keysFor('town', { full: true, thrown: gas }).some(([k]) => k === 'Q'));
+  assert.ok(keysFor('town', { full: true, act: 'Let Gerald go' }).some(([k, what]) => k === 'E' && what === 'Let Gerald go'));
+  assert.equal(buttonsFor('town', { full: true }).a, null);
+  assert.equal(buttonsFor('town', { full: true, thrown: gas }).c, 'GAS 2');
+  assert.equal(buttonsFor('town', { full: true, act: 'Show Gerald to Coop' }).a, 'SHOW');
+  assert.equal(buttonsFor('town', { full: true, act: 'Let Gerald go' }).a, 'LET GO');
+  assert.equal(buttonsFor('town', { full: true, act: 'Talk to Rocky' }).a, 'TALK');
+  assert.equal(buttonsFor('town', { full: true, crowd: true }).shamble, true);
+});
+
 test('he can only switch what he\'s throwing if there\'s something to switch to', () => {
   const one = { name: 'gas', word: 'GAS', n: 2 }, two = { ...one, more: true };
   assert.ok(!keysFor('town', { thrown: one }).some(([k]) => k === 'R'));

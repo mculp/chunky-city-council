@@ -1,0 +1,26 @@
+{
+  "ask": "Wanna see a frog?",
+  "frogs": {
+    "Gerald": "This is Gerald. He's a bullfrog. He doesn't know that yet.",
+    "Tuba": "This is Tuba. He's the loudest thing on Gallatin, and he knows it.",
+    "Princess": "This is Princess. She's a treefrog. She's never been in a tree. Don't bring it up.",
+    "Pickle": "This is Pickle. Same as Princess, but Pickle.",
+    "Grandma": "This is Grandma. She turns green when nobody's looking. Grandma, quit it.",
+    "Cheetah": "This is Cheetah. She's a leopard frog. I named her wrong on purpose.",
+    "Freckles": "This is Freckles. Count her spots. I got to twenty-six and she jumped.",
+    "Button": "This is Button. He's no bigger than a quarter and he yells all night.",
+    "Marbles": "This is Marbles. He sounds like marbles. That's not why I named him. It is, though.",
+    "Jellybean": "This is Jellybean. He can jump thirty times longer than he is. I measured.",
+    "Banjo": "This is Banjo. He only knows the one note.",
+    "Dumpling": "This is Dumpling. He's a toad. Don't tell him."
+  },
+  "he": ["Gerald", "Tuba", "Button", "Marbles", "Jellybean", "Banjo", "Dumpling"],
+  "after": [
+    { "say": "You can pet him with one finger. One.", "he": true },
+    { "say": "Kiss him if you want. Nothing happens. I checked.", "he": true },
+    { "say": "I'm not really here. The frogs are, though." }
+  ],
+  "quiet": "He liked it. He just doesn't show it.",
+  "give": "Take Gerald. He knows now.",
+  "word": "Did she show you {frog}?"
+}
