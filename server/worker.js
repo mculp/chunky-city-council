@@ -94,8 +94,13 @@ export class Town extends DurableObject {
   // without holding up what's going to the phones until it's written
   keep() {
     this.keptAt = Date.now();
-    const failed = (e) => console.error(`Couldn't keep the town: ${e.message}`), minds = this.town.keepMinds();
-    // whoever's memories changed, a hundred and twenty-eight to a put, which is as many as one takes, and any that don't go go next time
+    const failed = (e) => console.error(`Couldn't keep the town: ${e.message}`), minds = this.town.keepMinds(), gone = this.town.forgotten();
+    // whoever the town's let go of is forgotten here too, a hundred and twenty-eight to a delete, which is as many as one takes
+    for (let i = 0; i < gone.length; i += 128) {
+      try { this.ctx.storage.delete(gone.slice(i, i + 128).map((k) => `mind:${k}`), { allowUnconfirmed: true }).catch(failed); }
+      catch (e) { failed(e); }
+    }
+    // whoever's memories changed, as many to a put, and any that don't go go next time
     for (let i = 0; i < minds.length; i += 128) {
       const some = minds.slice(i, i + 128), again = (e) => { this.town.notKept(some); failed(e); };
       try { this.ctx.storage.put(Object.fromEntries(some.map(([k, m]) => [`mind:${k}`, m])), { allowUnconfirmed: true }).catch(again); }

@@ -33,7 +33,7 @@ Online (CHUNKY-169, and the bible's section 19), there's nothing of the story to
 - **When there's nothing new.** With the model off, slow or turned down, it's a line from `online.lines`, each once to each player: `first` on their first visit, `back` on the next, then each of `any` in turn. The hero gets no `first`: Coop's `hero`, or the others' `back`, then their `any`. Each has only Later. after it. Once they've all been said, they don't go round again.
 - **The nod.** With none of those left, TALK opens nothing: they look at whoever it is and dip their head once, over 0.6 s. Answering them when nothing new comes in time, what they said last stays up with only Later. while they nod. TALK stays, so pressing it again gets another nod.
 - **The 988 Lifeline** is the same as anywhere.
-- **What they remember** of each player is the town's, under "What they remember". A town that doesn't say what they remember, as one from before this doesn't, leaves it on the phone as it was.
+- **What they remember** of each player is the town's, under "What they remember", and goes with them if the town lets them go, which is once a thousand others have been by since. A town that doesn't say what they remember, as one from before this doesn't, leaves it on the phone as it was.
 - **How they feel** isn't kept online, and nothing there goes by it. Trust and fear, and who's met them, are the story's, in the game on its own, and talking online leaves them as they were.
 
 ## What every line is held to

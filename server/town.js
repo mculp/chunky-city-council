@@ -7,11 +7,18 @@
 // their name and look, where they were and what they had. It also keeps where each vehicle was left, by its place in the game's
 // list, which is the same on every phone that has the same vehicles. What the cast remember of each of them is kept apart, since
 // there can be a lot of it: it comes in with them, and goes out to be kept with keepMinds().
+//
+// It keeps the thousand who've been here last, and only vehicles the game could have, so that however many come and whatever their
+// phones say, it's all one value Cloudflare can keep. Whoever's been away longest is let go of first, and forgotten() says who, so
+// that what the cast remember of them goes too.
 import { NET_MAX, POSE_BYTES, encodeSnapshot, decodePose } from '../src/net.js';
 import { checkName } from '../src/names.js';
 
 const EDGE = 40000;   // metres from Stuckey's Bridge, well past anything on the map
 const KINDS_MOST = 32, EACH_MOST = 999, KEY = /^[0-9a-f]{64}$/, ITEM = /^[a-z][a-z0-9_]{0,23}$/i;
+// About 1.1 KB each at most, as Cloudflare keeps them, and a few bytes for each place a vehicle's left, against its 2 MB for a
+// value. The game parks at most one vehicle by each building, which is far fewer than that.
+const KEEPS = 1000, VEHICLES_MOST = 4096;
 const SAY = {
   key: 'Something went wrong. Reload the page to play.',
   full: 'Chunky\'s full right now. Trying again in a bit.',
@@ -54,11 +61,25 @@ function tidyMinds(kept) {
   return minds;
 }
 
-export function createTown({ max = NET_MAX, clock = () => performance.now() } = {}) {
+export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => performance.now() } = {}) {
   const here = new Map(), riders = new Map();   // id → who's in town; a vehicle's place in the list + 1 → who's in it
-  let saved = new Map(), cars = new Map();       // key hash → what's kept for them; a vehicle's place in the list → where it was left
+  // key hash → what's kept for them, the longest away first; a vehicle's place in the list → where it was left
+  let saved = new Map(), cars = new Map();
   const minds = new Map(), unkept = new Set();   // key hash → what the cast remember of them, while they're about; and whose has changed
+  const letGoOf = new Set();                     // and who's been let go of, whose memories are to go too
   let build = { at: 0, world: '' }, next = 1, dirty = false;
+
+  // someone's here, or has just gone, so they're the last to be let go of
+  const seen = (k) => { const s = saved.get(k); if (s) { saved.delete(k); saved.set(k, s); } };
+  // whoever's been away longest is let go of until it's down to as many as it keeps, and nobody who's here
+  function makeRoom() {
+    const about = new Set([...here.values()].map((p) => p.keyHash));
+    for (const k of saved.keys()) {
+      if (saved.size <= keeps) break;
+      if (about.has(k)) continue;
+      saved.delete(k); minds.delete(k); unkept.delete(k); letGoOf.add(k); dirty = true;
+    }
+  }
 
   const roster = () => ({ t: 'who', players: [...here.values()].map((p) => ({ id: p.id, name: p.name, look: p.look, hero: p.hero })) });
   const carList = () => [...cars].sort((a, b) => a[0] - b[0]).map(([v, c]) => ({ v, ...c }));
@@ -72,7 +93,7 @@ export function createTown({ max = NET_MAX, clock = () => performance.now() } = 
   // someone gone, and what everyone else is to be told about it
   function drop(id) {
     const p = here.get(id), out = [];
-    here.delete(id);
+    here.delete(id); seen(p.keyHash);
     if (p.ride) out.push(...leaveCar(p, p.last));
     out.push({ to: 'all', msg: roster() });
     return out;
@@ -106,7 +127,10 @@ export function createTown({ max = NET_MAX, clock = () => performance.now() } = 
       const p = { id, keyHash, name: named.name, look: Number.isInteger(look) && look >= 0 && look < 256 ? look : 0, hero: hero === true, pose: new Uint8Array(POSE_BYTES), placed: false, heard: clock(), ride: 0, last: null };
       here.set(id, p);
       const before = saved.get(keyHash);
+      // back before they were forgotten where what the cast remember of them is kept, so it stays
+      saved.delete(keyHash); letGoOf.delete(keyHash);
       saved.set(keyHash, { beans: 0, items: {}, gas: 0, ...before, name: p.name, look: p.look }); dirty = true;
+      makeRoom();
       const back = before && 'x' in before ? { x: before.x, y: before.y, z: before.z, yaw: before.yaw, beans: before.beans, items: before.items, gas: before.gas } : null;
       if (!minds.has(keyHash)) minds.set(keyHash, tidyMinds(kept));
       out.push({ to: id, msg: { t: 'welcome', id, name: p.name, look: p.look, hero: p.hero, saved: back, minds: minds.get(keyHash), cars: carList() } });
@@ -119,8 +143,8 @@ export function createTown({ max = NET_MAX, clock = () => performance.now() } = 
       const q = decodePose(bytes);
       if (!(Math.abs(q.x) < EDGE && Math.abs(q.z) < EDGE && Number.isFinite(q.y))) return out;
       p.heard = clock();
-      // someone else is already in it: he's told, and nobody's shown in it twice
-      let ride = q.ride;
+      // someone else is already in it: he's told, and nobody's shown in it twice. One the game couldn't have is nobody's.
+      let ride = q.ride <= VEHICLES_MOST ? q.ride : 0;
       if (ride && riders.has(ride) && riders.get(ride) !== id) { out.push({ to: id, msg: { t: 'bump', ride } }); ride = 0; }
       if (p.ride && p.ride !== ride) out.push(...leaveCar(p, p.last));
       if (ride && ride !== p.ride) { riders.set(ride, id); if (cars.delete(ride - 1)) dirty = true; }
@@ -162,6 +186,8 @@ export function createTown({ max = NET_MAX, clock = () => performance.now() } = 
     },
     // and any of those that couldn't be kept, to go again next time
     notKept(list) { for (const [k, m] of list) { if (!minds.has(k)) minds.set(k, m); unkept.add(k); } },
+    // whoever's been let go of since this was last asked, by key hash, whose memories are to be forgotten wherever they're kept
+    forgotten() { const out = [...letGoOf]; letGoOf.clear(); return out; },
     leave(id) { return here.has(id) ? drop(id) : []; },
     // nobody's in it until they've said where they are, or they'd be standing on Stuckey's Bridge
     snapshot() { return encodeSnapshot([...here.values()].filter((p) => p.placed)); },
@@ -171,7 +197,7 @@ export function createTown({ max = NET_MAX, clock = () => performance.now() } = 
     dump() { dirty = false; return { build, players: Object.fromEntries(saved), cars: Object.fromEntries(cars) }; },
     load(data) {
       saved = new Map(Object.entries(data?.players ?? {}).filter(([k, v]) => KEY.test(k) && v && typeof v === 'object'));
-      cars = new Map(Object.entries(data?.cars ?? {}).map(([k, v]) => [+k, v]).filter(([k, v]) => Number.isInteger(k) && Number.isFinite(v?.x) && Number.isFinite(v?.z)));
+      cars = new Map(Object.entries(data?.cars ?? {}).map(([k, v]) => [+k, v]).filter(([k, v]) => Number.isInteger(k) && k >= 0 && k < VEHICLES_MOST && Number.isFinite(v?.x) && Number.isFinite(v?.z)));
       if (typeof data?.build?.world === 'string') build = { at: Number.isFinite(data.build.at) ? data.build.at : 0, world: data.build.world };
     },
   };

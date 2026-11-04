@@ -32,11 +32,11 @@ function cannedTalk({ line = LINE, quiet = null } = {}) {
   });
 }
 
-export async function startServer({ port = NET_PORT, rate = NET_RATE, max, silence = 5000, helloWithin = 5000, save = null, saveEvery = 5000, heroHash = '', talk = false, quiet = false } = {}) {
+export async function startServer({ port = NET_PORT, rate = NET_RATE, max, keeps, silence = 5000, helloWithin = 5000, save = null, saveEvery = 5000, heroHash = '', talk = false, quiet = false } = {}) {
   // what the cast remember of everyone, by the hash of their key: in the same file as the town here, beside what it keeps itself,
   // as the town for everyone keeps them each on their own
   let minds = {};
-  const town = createTown({ max }), host = createHost({ town, heroHash, silence, helloWithin, mindsOf: async (k) => (Object.hasOwn(minds, k) ? minds[k] : null) });
+  const town = createTown({ max, keeps }), host = createHost({ town, heroHash, silence, helloWithin, mindsOf: async (k) => (Object.hasOwn(minds, k) ? minds[k] : null) });
   const words = talk ? cannedTalk(talk === true ? {} : talk) : null;
 
   // A town that's been kept is taken back out. One that can't be read is left as it is for someone to look at, not written over.
@@ -53,6 +53,7 @@ export async function startServer({ port = NET_PORT, rate = NET_RATE, max, silen
     if (!save) return;
     const changed = town.keepMinds();
     for (const [k, m] of changed) minds[k] = m;
+    for (const k of town.forgotten()) delete minds[k];
     if (!(town.dirty || unsaved || changed.length)) return;
     try { writeFileSync(`${save}.tmp`, JSON.stringify({ ...town.dump(), minds })); renameSync(`${save}.tmp`, save); unsaved = false; }
     catch (e) { unsaved = true; console.error(`Couldn't keep the town in ${save}: ${e.message}`); }

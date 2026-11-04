@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import v8 from 'node:v8';
 import { createTown } from './town.js';
 import { encodePose, decodeMessage, decodePose, HOW } from '../src/net.js';
 
@@ -151,6 +152,60 @@ test('what the town holds goes into a save and comes back out of it', () => {
   const back = u.join(me);
   assert.equal(to(back.out, back.id)[0].saved.x, 33);
   assert.equal(JSON.stringify(save).includes(me.keyHash), true, 'kept by the hash of their key, which is all the town ever sees');
+});
+
+// ---------------- how much it keeps, so that however many come, it's still one value Cloudflare can keep
+const keptIn = (t) => Object.keys(t.dump().players).sort();
+
+test('the town keeps so many, and lets go of whoever\'s been away longest', () => {
+  const t = createTown({ keeps: 2 }), [a, b, c] = [hello(), hello(), hello()];
+  t.leave(t.join(a).id); t.leave(t.join(b).id); t.leave(t.join(a).id);
+  t.join(c);
+  assert.deepEqual(keptIn(t), [a.keyHash, c.keyHash].sort(), 'b, who\'d been away longest, since a came back');
+  assert.deepEqual(t.forgotten(), [b.keyHash], 'and what the cast remember of them is to go too, wherever it\'s kept');
+  assert.deepEqual(t.forgotten(), [], 'once');
+});
+
+test('nobody who\'s here is let go, however long ago they came', () => {
+  const t = createTown({ keeps: 2 }), [a, b, c] = [hello(), hello(), hello()];
+  t.join(a); t.leave(t.join(b).id); t.join(c);
+  assert.deepEqual(keptIn(t), [a.keyHash, c.keyHash].sort());
+});
+
+test('someone who\'s been let go comes back as someone new, with nothing, and what they were told that wasn\'t kept yet isn\'t', () => {
+  const t = createTown({ keeps: 1 }), a = hello(), id = t.join(a).id;
+  t.move(id, pose(40, 0, 50)); t.keep(id, { beans: 3 }); t.mind(id, { who: 'coop', said: 'Hey.' }); t.leave(id);
+  t.leave(t.join(hello()).id);
+  assert.deepEqual(t.keepMinds(), []);
+  const back = t.join(a);
+  assert.equal(to(back.out, back.id)[0].saved, null);
+  assert.deepEqual(to(back.out, back.id)[0].minds, {});
+});
+
+test('a vehicle is only one the game could have, so nobody can fill the town with where they left them', () => {
+  const t = createTown(), a = inTown(t);
+  t.move(a, pose(1, 2, 3, { ride: 4097 }));
+  assert.equal(decodeMessage(t.snapshot()).players[0].ride, 0, 'on foot, to everyone');
+  assert.deepEqual(kinds(t.move(a, pose(5, 2, 3))), [], 'and nothing left anywhere');
+  t.move(a, pose(1, 2, 3, { ride: 4096 }));
+  assert.deepEqual(kinds(t.move(a, pose(5, 2, 3))), ['all:car']);
+});
+
+test('however many come, whatever they say they carry and wherever they leave things, the town is less than Cloudflare keeps in one value', () => {
+  const t = createTown(), most = Object.fromEntries(Array.from({ length: 32 }, (_, k) => [`a${String(k).padStart(23, 'x')}`, 999]));
+  for (let i = 0; i < 1100; i++) {
+    const id = t.join({ keyHash: key(1e6 + i), name: 'Abcdefghijklmnop', look: 255 }).id;
+    t.move(id, encodePose(1, -39999.123 + i * .37, 123.45, 39999.987 - i * .29, 6.28));
+    t.keep(id, { beans: 999, items: most, gas: 999 }); t.leave(id);
+  }
+  const id = inTown(t);
+  for (let v = 1; v <= 4097; v++) t.move(id, encodePose(1, -39999.123 + v * .37, 123.45, 39999.987, 6.28, { ride: v }));
+  t.leave(id);
+  const save = t.dump();
+  assert.equal(Object.keys(save.players).length, 1000);
+  assert.equal(Object.keys(save.cars).length, 4096);
+  // Cloudflare's limit is 2 MB for a key and its value together, and the value as it keeps it is V8's own serialization
+  assert.ok(v8.serialize(save).length + 'town'.length < 2e6, `${v8.serialize(save).length} bytes`);
 });
 
 // ---------------- what the cast remember of each of them (CHUNKY-169), kept apart from the town's one value, since there can be a lot of it

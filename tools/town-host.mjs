@@ -2,7 +2,9 @@
 // two phones let in, one of them on a page at online.chunky.ms, and each seeing the other twenty times a second, the title card told
 // how many are in town (CHUNKY-169), one going, the hero's link, a page on another site turned away, and someone coming back after the
 // Worker's been stopped and started again, to where they were, with what they had and with what the cast remember of them, which is
-// kept on its own. What the town does is tested in server/town.test.js and server/host.test.js, and npm run net plays it in the game.
+// kept on its own, and then a thousand more coming and going, after which whoever'd been away longest comes back as someone new, with
+// what the cast remembered of them gone from where it was kept. What the town does is tested in server/town.test.js and
+// server/host.test.js, and npm run net plays it in the game.
 //
 //   npm run town:host
 import assert from 'node:assert/strict';
@@ -94,6 +96,22 @@ try {
   assert.deepEqual(back.welcome().minds, { coop: { notes: [], said: ['Hey.'], visits: 1 } });
   assert.deepEqual(n.welcome().minds, {});
   console.log('stopped and started again, someone coming back finds where they were, what they had, and Coop remembering them');
+
+  // a thousand more come and go, twenty at a time, so that they're the thousand the town keeps
+  back.ws.close();
+  await until(() => back.closed !== null, 'them to go again');
+  for (let i = 0; i < 1000; i += 20) {
+    const some = Array.from({ length: 20 }, (_, j) => phone(url, { key: `someone-${i + j}`.padEnd(16, '-') }));
+    await until(() => some.every((p) => p.id), 'twenty more to be let in');
+    for (const p of some) p.ws.close();
+    await until(() => some.every((p) => p.closed !== null), 'them to go');
+  }
+  await sleep(500);
+  const forgotten = phone(url, { key: 'a'.repeat(32) });
+  await until(() => forgotten.id, 'the one away longest to come back');
+  assert.equal(forgotten.welcome().saved, null);
+  assert.deepEqual(forgotten.welcome().minds, {});
+  console.log('a thousand more come and go, and whoever\'d been away longest comes back as someone new, with Coop not remembering them');
   console.log('town host: all good');
 } finally {
   for (const p of phones) p.ws.terminate();

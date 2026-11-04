@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startServer } from './index.js';
@@ -151,6 +151,21 @@ test('and what the cast remember of them is kept beside the town, and comes back
       assert.deepEqual(someone.words.find((w) => w.t === 'welcome').minds, {});
       back.ws.close(); someone.ws.close();
     } finally { await again.close(); }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('someone the town lets go of, to keep only so many, is gone from what\'s kept, with what the cast remember of them', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'chunky-town-')), save = join(dir, 'town.json');
+  try {
+    const s = await startServer({ port: 0, quiet: true, save, saveEvery: 50, keeps: 1 });
+    const a = client(s.port, { key: 'me-on-my-phone-0003' }); await a.in();
+    a.ws.send(say({ t: 'mind', who: 'coop', said: 'Hey.' }));
+    await sleep(200); a.ws.close(); await sleep(100);
+    const b = client(s.port); await b.in(); b.ws.close();
+    await sleep(200); await s.close();
+    const kept = JSON.parse(readFileSync(save, 'utf8'));
+    assert.equal(Object.keys(kept.players).length, 1);
+    assert.equal(JSON.stringify(kept).includes('Hey.'), false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
