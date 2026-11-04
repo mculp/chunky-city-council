@@ -165,12 +165,23 @@ test('nearly every building stands on ground that has been levelled for it', () 
   assert.ok(leaning <= 12, `${leaning} lean more than 8%`);
 });
 
+// how far a point is from the middle of a track, and how high the track's points put it there, going by the nearest stretch
+const alongTrack = (t, x, z) => {
+  let best = { d: Infinity };
+  for (let k = 1; k < t.points.length; k++) {
+    const [ax, az, ah] = t.points[k - 1], [bx, bz, bh] = t.points[k], ex = bx - ax, ez = bz - az, f = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez))), d = Math.hypot(x - ax - ex * f, z - az - ez * f);
+    if (d < best.d) best = { d, h: ah + (bh - ah) * f };
+  }
+  return best;
+};
+const tracked = (x, z) => hills.tracks.some((t) => alongTrack(t, x, z).d < t.width / 2 + t.edge);
+
 test('ground that has been cut and filled flat is level across its box, and goes back to the land without a step', () => {
   const bare = buildHills({ ...hills, terraces: [] });
   assert.ok(hills.terraces.length > 0 && hills.terraces.length <= 2, 'the graphics card has room for two');
   for (const t of hills.terraces) {
     for (let x = t.x0; x <= t.x1; x += .5) for (let z = t.z0; z <= t.z1; z += .5) assert.ok(Math.abs(H.at(x, z) - t.at) < 1e-6, `${H.at(x, z)} at ${x}, ${z}`);
-    // out past its edge it's the land as it was, and on the way there it's somewhere between the two, a little at a time
+    // out past its edge it's the land as it was, and on the way there it's somewhere between the two, a little at a time. A track down to it has a test of its own.
     const cx = (t.x0 + t.x1) / 2, cz = (t.z0 + t.z1) / 2;
     let steepest = 0;
     for (let a = 0; a < 64; a++) {
@@ -179,11 +190,53 @@ test('ground that has been cut and filled flat is level across its box, and goes
       for (let s = .05; s < 30; s += .05) {
         const x = cx + dx * s, z = cz + dz * s, h = H.at(x, z), land = bare.at(x, z), out = Math.hypot(Math.max(t.x0 - x, 0, x - t.x1), Math.max(t.z0 - z, 0, z - t.z1));
         if (out >= t.edge) assert.ok(Math.abs(h - land) < 1e-9, `${h} at ${x}, ${z}, where the land's ${land}`);
-        else assert.ok(h >= Math.min(t.at, land) - 1e-9 && h <= Math.max(t.at, land) + 1e-9, `${h} at ${x}, ${z}`);
+        else if (!tracked(x, z)) assert.ok(h >= Math.min(t.at, land) - 1e-9 && h <= Math.max(t.at, land) + 1e-9, `${h} at ${x}, ${z}`);
         steepest = Math.max(steepest, Math.abs(h - was) / .05); was = h;
       }
     }
     assert.ok(steepest < 1.5, `it gets as steep as ${steepest}`);
+  }
+});
+
+test('a track down a hill falls evenly to the terrace at its foot, is level across, and goes back to the land without a step', () => {
+  const bare = buildHills({ ...hills, tracks: [] });
+  assert.ok(hills.tracks.length > 0 && hills.tracks.length <= 1 && hills.tracks.every((t) => t.points.length <= 8), 'the graphics card has room for one, of eight points');
+  for (const t of hills.tracks) {
+    const pts = t.points, foot = pts.at(-1), terrace = hills.terraces.find((r) => Math.hypot(Math.max(r.x0 - foot[0], 0, foot[0] - r.x1), Math.max(r.z0 - foot[1], 0, foot[1] - r.z1)) < r.edge);
+    assert.ok(terrace && foot[2] === terrace.at, `it ends at the level of the terrace it goes down to, ${foot[2]} against ${terrace?.at}`);
+    // within a step of the file's, since the build reads the land before it's put in steps
+    assert.ok(Math.abs(pts[0][2] - bare.at(pts[0][0], pts[0][1])) < 1 / hills.quantum, `it starts from the land, at ${pts[0][2]} where that's ${bare.at(pts[0][0], pts[0][1])}`);
+    // it runs level with the terrace for its last stretch, beside it, so it's down before it's close enough to the terrace for the two to pull against each other
+    const down = pts.findIndex((p) => p[2] === foot[2]);
+    assert.ok(down > 0 && down < pts.length - 1 && pts.slice(down).every((p) => p[2] === foot[2]), `it's level for its last ${pts.length - 1 - down} stretches`);
+    // along its middle, it's where its points put it, give or take how the bends are rounded, and no steeper than a truck can take, which is half again what it falls on
+    // average down to its foot
+    let L = 0, steepest = 0, off = 0, across = 0;
+    for (let k = 1; k <= down; k++) L += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+    const grade = (pts[0][2] - foot[2]) / L;
+    for (let k = 1; k < pts.length; k++) {
+      const [ax, az] = pts[k - 1], [bx, bz] = pts[k], l = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / l, uz = (bz - az) / l;
+      for (let s = 0; s < l; s += .25) {
+        const x = ax + ux * s, z = az + uz * s, h = H.at(x, z);
+        off = Math.max(off, Math.abs(h - alongTrack(t, x, z).h)); steepest = Math.max(steepest, Math.abs(H.at(x + ux * .25, z + uz * .25) - h) / .25);
+        across = Math.max(across, Math.abs(H.at(x - uz * t.width / 2, z + ux * t.width / 2) - H.at(x + uz * t.width / 2, z - ux * t.width / 2)) / t.width);
+      }
+    }
+    assert.ok(grade < .1, `it falls ${grade} a metre on average down to its foot`);
+    assert.ok(off < .1, `it's ${off} m off where its points put it`);
+    assert.ok(steepest < grade * 1.5, `it gets as steep as ${steepest}`);
+    assert.ok(across < .05, `across it, it leans as much as ${across}`);
+    // out of its reach it's the land as it was, and on the way there it goes a little at a time
+    let worst = 0;
+    for (let x = Math.min(...pts.map((p) => p[0])) - 12; x < Math.max(...pts.map((p) => p[0])) + 12; x += .25) {
+      let was = H.at(x, Math.min(...pts.map((p) => p[1])) - 12);
+      for (let z = Math.min(...pts.map((p) => p[1])) - 12; z < Math.max(...pts.map((p) => p[1])) + 12; z += .25) {
+        const h = H.at(x, z);
+        if (alongTrack(t, x, z).d >= t.width / 2 + t.edge) assert.ok(Math.abs(h - bare.at(x, z)) < 1e-9, `${h} at ${x}, ${z}, where the land's ${bare.at(x, z)}`);
+        worst = Math.max(worst, Math.abs(h - was) / .25); was = h;
+      }
+    }
+    assert.ok(worst < 1.5, `beside it the land gets as steep as ${worst}`);
   }
 });
 

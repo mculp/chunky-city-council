@@ -50,7 +50,7 @@ const built = await g(async () => {
   return { want: ids.length, found: found.length, lanes, parked, spots, ninetyNine, jam: G.compound.JAM.map((j) => j.name) };
 });
 check('every building is in the game', built.found === built.want, built);
-check('the drive and what comes off it are the measured ones', built.lanes.length === 5, built.lanes);
+check('the drive, what comes off it and the track down the hill are the measured ones', built.lanes.length === 6, built.lanes);
 check('the truck, the car and the two trucks are parked where they were', built.parked === 4, built.spots);
 const n99 = built.ninetyNine[0];
 check('ETB2k4\'s green \'99 is up the hill from the cabin, where it was left, looking down at it', built.ninetyNine.length === 1 && n99.d < .5 && n99.paint === '2f5d48' && n99.turn < .3 && n99.above > 1, built.ninetyNine);
@@ -58,7 +58,7 @@ check('the room has drums, a guitar, a bass and a keyboard', built.jam.join() ==
 
 // ---------------- up the drive from the road, on foot
 const drive = await g(() => {
-  const G = __game, P = G.player.pos, lane = G.map.lanes.filter((l) => measured.includes(l.id)).sort((a, b) => b.pts.length - a.pts.length)[0];
+  const G = __game, P = G.player.pos, lane = G.map.lanes.filter((l) => measured.includes(l.id)).sort((a, b) => b.length - a.length)[0];
   const pts = lane.pts; G.place(pts[0][0], pts[0][1]); G.sim(.1, .1);
   let off = 0; const r = walkTo(pts.slice(1).map(([x, z]) => [x, z]), .8, 200);
   for (let i = 2; i < pts.length; i++) for (let k = 0; k <= 12; k++) { const x = pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * k / 12, z = pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * k / 12; if (!G.onRoad(x, z) || G.pavedAt(x, z)) off++; }
@@ -134,7 +134,7 @@ await snap('pool');
 
 // ---------------- from the end of the drive down the hill to the cabin, onto its deck and in, then along the decks past the swing to the cinema, and on to the studio and in
 await g(() => {
-  const G = __game, P = G.player.pos, [x, z] = G.map.lanes.filter((l) => measured.includes(l.id)).sort((a, b) => b.pts.length - a.pts.length)[0].pts.at(-1); G.place(x, z); G.sim(.2, .2);
+  const G = __game, P = G.player.pos, [x, z] = G.map.lanes.filter((l) => measured.includes(l.id)).sort((a, b) => b.length - a.length)[0].pts.at(-1); G.place(x, z); G.sim(.2, .2);
   window.stand = () => ({ up: +(P.y - G.groundH(P.x, P.z)).toFixed(2), under: G.surfaceUnder(), deck: G.compound.onDeck(P.x, P.z), hit: G.houseAt(P.x, P.z)?.id ?? null });
 });
 // the rail's along the side of the deck that looks out over the river, so it's up onto the next one along from the cabin, and along to its door
@@ -155,6 +155,61 @@ const things = await g(() => {
 });
 check('the swing is out on the deck', things.swing, things);
 check('the studio has the easel, the bench and six canvases', things.easel === 1 && things.bench === 1 && things.canvases === 6, things);
+
+// ---------------- the track down the hill, in a pickup with the phone's stick: from the end of the drive along the yard north of the big house, round the yard's east side and
+// down to the cabin's terrace, touching nothing, with the land falling as evenly as it's been cut, and how much it falls as drawn
+await g(() => {
+  const G = __game, T = 1 / 30, lane = G.map.lanes.filter((l) => measured.includes(l.id) && l.surface === 'dirt').sort((a, b) => b.length - a.length)[0], [a, b] = lane.pts;
+  const v = G.vehicles.filter((o) => o.kind === 'pickup' && !o.wrecked).sort((p, q) => Math.hypot(p.x - a[0], p.z - a[1]) - Math.hypot(q.x - a[0], q.z - a[1]))[0];
+  G.getIn(v); v.x = a[0]; v.z = a[1]; v.y = G.floorAt(a[0], a[1]); v.yaw = Math.atan2(b[0] - a[0], b[1] - a[1]); v.f = v.s = 0; G.sim(T, T);
+  const up = (x, z) => G.hills.at(x, z) * G.hills.uniforms.uHillScale.value;
+  // how far along the track the nearest point to x, z is, how far off it that is, and the point `L` metres on along it from there
+  const ahead = (x, z, L) => {
+    const P = lane.pts; let best = { d: Infinity }, run = 0;
+    for (let k = 1; k < P.length; k++) {
+      const [ax, az] = P[k - 1], [bx, bz] = P[k], ex = bx - ax, ez = bz - az, l = Math.hypot(ex, ez), f = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / (l * l))), d = Math.hypot(x - ax - ex * f, z - az - ez * f);
+      if (d < best.d) best = { d, k, f, at: run + l * f };
+      run += l;
+    }
+    let { k, f } = best, left = L;
+    for (; k < P.length; k++, f = 0) {
+      const [ax, az] = P[k - 1], [bx, bz] = P[k], l = Math.hypot(bx - ax, bz - az);
+      if (left <= l * (1 - f)) return { x: ax + (bx - ax) * (f + left / l), z: az + (bz - az) * (f + left / l), at: best.at, end: false };
+      left -= l * (1 - f);
+    }
+    return { x: P.at(-1)[0], z: P.at(-1)[1], at: best.at, end: true };
+  };
+  window.down = { lane, v, hits: 0, hp: v.hp, off: 0, t: 0, steep: 0, was: [v.x, v.z, up(v.x, v.z)], top: up(v.x, v.z), up, ahead };
+  // on along it until it's `to` metres along, with the wheels turned for the curve through the point 4 m on along it from wherever it is, at about 5 m/s, and 3 in a bend
+  window.driveDown = (to) => {
+    const D = down, K = v.K;
+    for (; D.t < 60; D.t += T) {
+      const A = D.ahead(v.x, v.z, 4);
+      if (A.at >= to || (A.end && Math.hypot(A.x - v.x, A.z - v.z) < 2.5)) break;
+      let d = Math.atan2(A.x - v.x, A.z - v.z) - v.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+      const wheels = Math.atan(2 * K.wheelbase * Math.sin(d) / Math.max(1, Math.hypot(A.x - v.x, A.z - v.z))), most = K.lock / (1 + Math.abs(v.f) / K.top * 1.5), go = Math.abs(d) > .15 ? 3 : 5;
+      G.stick(Math.max(-1, Math.min(1, -wheels / most)), Math.abs(v.f) > go + .5 ? -1 : Math.abs(v.f) > go - .5 ? 0 : 1);
+      G.sim(T, T);
+      if (v.hp < D.hp) { D.hits++; D.hp = v.hp; }
+      D.off = Math.max(D.off, G.map.roadGrid.nearest(v.x, v.z));
+      const h = D.up(v.x, v.z), run = Math.hypot(v.x - D.was[0], v.z - D.was[1]); if (run > 1) { D.steep = Math.max(D.steep, Math.abs(h - D.was[2]) / run); D.was = [v.x, v.z, h]; }
+    }
+  };
+});
+await g(() => { driveDown(down.lane.length / 2); __game.step(.1); });
+await snap('track');
+const track = await g(() => {
+  const G = __game, D = down, v = D.v; driveDown(Infinity); G.stick(0, 0); for (let k = 0; k < 30; k++) G.sim(1 / 30, 1 / 30);
+  const cabin = G.structures.find((s) => s.id === G.compound.CABIN).pts, cx = cabin.reduce((s, p) => s + p[0], 0) / cabin.length, cz = cabin.reduce((s, p) => s + p[1], 0) / cabin.length, end = D.lane.pts.at(-1);
+  // what it was cut to fall, as drawn: from its top down to where it's level with the terrace
+  const P = G.hills.tracks[0].pts, low = P.at(-1)[2], foot = P.findIndex((p) => p[2] === low);
+  let run = 0; for (let k = 1; k <= foot; k++) run += Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]);
+  const out = { lane: D.lane.id, length: Math.round(D.lane.length), hits: D.hits, off: +D.off.toFixed(1), t: +D.t.toFixed(1), left: +Math.hypot(end[0] - v.x, end[1] - v.z).toFixed(1), fell: +(D.top - D.up(v.x, v.z)).toFixed(1), steep: Math.round(D.steep * 100), even: Math.round((P[0][2] - low) / run * G.hills.uniforms.uHillScale.value * 100), terrace: Math.abs(G.hills.at(v.x, v.z) - G.hills.terraces[0].at) < .05, cabin: +Math.hypot(v.x - cx, v.z - cz).toFixed(1) };
+  G.getOut(true); G.sim(.2, .2); return out;
+});
+check(`a pickup goes down the ${track.length} m track with the phone's stick, from the end of the drive to the cabin's terrace, ${track.cabin} m from the cabin`, track.left < 4 && track.terrace && track.cabin < 15, track);
+check('  touching nothing on the way, and on the track the whole way', track.hits === 0 && track.off < 3, track);
+check(`  down ${track.fell} m as drawn, and no steeper than ${track.steep}% as drawn anywhere, where it was cut to fall ${track.even}%`, track.fell > 6 && track.steep <= track.even * 1.25, track);
 
 // ---------------- which way the cinema faces: the screen right up against the cabin's west end with its face to the south, the chairs in rows in front of it facing north,
 // and the projector behind them. Then from between the rows, looking north, the screen's straight ahead and fills the view, with the cabin just to its right.

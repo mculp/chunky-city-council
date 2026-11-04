@@ -79,6 +79,14 @@ TERRACES = (
     # ground flat there and the river at its foot as well. So the lookup flattens a box: level with the ground at the cabin's door, back to the land by `edge`.
     {"box": (1041.5, 588.0, 1062.5, 608.5), "level": (1058.6, 597.5), "edge": 7},
 )
+# A track cut and filled down a hill too steep for a pixel to hold one: level across `width`, falling evenly along its points from the land at the first to the level of
+# the terrace it goes down to (`to`), and level with it for its last `foot` points, which run beside it. It's back to the land by `edge`. The lookup does it after the
+# terraces and not on one, so it keeps its grade down to the terrace and the terrace stays flat.
+TRACKS = (
+    # from the end of the drive into the compound on Pine Forest Rd, along the yard north of the big house, round the yard's east side and down to beside the cabin.
+    # None shows from above, so it's on the gentlest line, clear of the big house and the '99, and it turns no tighter than 9 m, which a pickup can take.
+    {"points": ((1037.0, 625.0), (1047.0, 619.0), (1052.0, 617.8), (1057.0, 617.5), (1061.5, 616.3), (1064.8, 613.0), (1066.0, 608.5), (1065.5, 603.0)), "to": 0, "foot": 2, "width": 4.5, "edge": 3},
+)
 
 
 def sstep(a, b, x):
@@ -555,11 +563,23 @@ def build(body, fetched, sha, roads, lanes, water, structures):
         "elevation": {"lowest": round(min(dem.v), 1), "highest": round(max(dem.v), 1), "highestOverFloodplain": round(high, 1)},
         "dips": [{"x": d["at"][0], "z": d["at"][1], "core": d["core"], "edge": d["edge"], "depth": d["depth"]} for d in DIPS],
         "terraces": [{"x0": t["box"][0], "z0": t["box"][1], "x1": t["box"][2], "z1": t["box"][3], "edge": t["edge"], "at": round(drawn_at(H, *t["level"]), 2)} for t in TERRACES],
+        "tracks": [track(H, t) for t in TRACKS],
         "x0": round(H.x0, 3), "z0": round(H.z0, 3), "dx": round(H.dx, 4), "dz": round(H.dz, 4), "cols": H.cols, "rows": H.rows,
         "quantum": QUANTUM,
         "coarse": coarse,
         "data": data,
     }
+
+
+def track(H, t):
+    """Its points with a height each: from the land at the first down to the terrace's level, by how far along it they are, and at that level for the last `foot`."""
+    pts, top, bottom = t["points"], drawn_at(H, *t["points"][0]), drawn_at(H, *TERRACES[t["to"]]["level"])
+    falls = len(pts) - t["foot"] + 1
+    along = [0.0]
+    for (ax, az), (bx, bz) in zip(pts[:falls], pts[1:falls]):
+        along.append(along[-1] + math.hypot(bx - ax, bz - az))
+    heights = [top + (bottom - top) * s / along[-1] for s in along] + [bottom] * (len(pts) - falls)
+    return {"width": t["width"], "edge": t["edge"], "points": [[x, z, round(h, 2)] for (x, z), h in zip(pts, heights)]}
 
 
 def render(out):

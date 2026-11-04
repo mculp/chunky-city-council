@@ -2,7 +2,7 @@
 
 `data/lanes.json` holds the smaller roads that `data/roads.json` leaves out, and a drive to every building that needs one, so that nobody has to go through the woods to get to a house. `tools/build_lanes.py` generates it. `src/map.js` loads it into `MAP.lanes`.
 
-There are 243 lanes, 102.5 km of them, and 994 drives, 40.9 km.
+There are 244 lanes, 102.6 km of them, and 994 drives, 40.9 km.
 
 ## Where it comes from
 
@@ -17,6 +17,8 @@ Every vertex of a lane is where TIGER has it, apart from the few that say `measu
 The paved drive along the north side of the house just north of the town hall, off Commerce St, is the first from Google's satellite and Street View, which are the source of truth. It's concrete on Street View, and drawn as asphalt, which is the nearest there is. That house's footprint, and the town hall's, sit about 5 m south of where the satellite has them, so the drive's placed against the house rather than where the satellite has it, so that it runs past the house's north wall to its front corner as it does in life.
 
 The dirt drive into the clearing on the east side of Chestnut St, where Robby's house was, is off Google's satellite too, from the junction across the road to just short of his memorial. It's `for` his lot, or the building north-east of it would have its drive start at the drive's end and go through the woods.
+
+The last of them isn't measured, because nothing shows from above. It's the dirt track down the hill from the end of the drive into the compound on Pine Forest Rd to its cabin, which the owner asked for. It's on the gentlest line: along the yard north of the big house, round the yard's east side and down into the flat ground by the cabin, where `data/hills.json` has it cut and filled into the land at an even grade. It says `measured` all the same, since that's what a drive that isn't TIGER's and isn't generated is in this file.
 
 A road doesn't stop for a stretch just because nothing on that stretch needed it. Where one of TIGER's roads is in the game on both sides of a gap of up to 350 m, the gap comes in too, so that True Light Rd isn't barricaded from itself. Two longer gaps stay out, on Point Wanita Lake Rd and Pauldin Rd.
 

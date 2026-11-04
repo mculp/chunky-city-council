@@ -247,7 +247,8 @@
     {"measured":true,"id":"lane_240","name":null,"mtfcc":"S1740","linearId":null,"width":3.2,"surface":"dirt","points":[[-268,1329],[-21,1328],[-10,1312],[9,1230],[27,1140],[39,1072],[42,990],[46,975],[185,971],[207,980],[252,962],[350,990],[447,1022],[395,1100],[342,1175],[324,1242],[326,1298]]},
     {"measured":true,"id":"lane_241","name":null,"mtfcc":"S1740","linearId":null,"width":3.2,"surface":"dirt","points":[[-273,984],[-262,960],[-262,746],[-205,720],[-130,745],[-70,700],[-20,640],[40,610]]},
     {"measured":true,"id":"lane_242","name":null,"mtfcc":"S1740","linearId":null,"width":4.3,"surface":"asphalt","points":[[-36.105,-87.31],[-55.2,-87.31]]},
-    {"measured":true,"id":"lane_243","name":null,"mtfcc":"S1740","linearId":null,"width":3.5,"surface":"dirt","points":[[-279.067,197.593],[-269,199]]}
+    {"measured":true,"id":"lane_243","name":null,"mtfcc":"S1740","linearId":null,"width":3.5,"surface":"dirt","points":[[-279.067,197.593],[-269,199]]},
+    {"measured":true,"id":"lane_244","name":null,"mtfcc":"S1740","linearId":null,"width":4,"surface":"dirt","points":[[1037,625],[1047,619],[1052,617.8],[1057,617.5],[1061.5,616.3],[1064.8,613],[1066,608.5],[1065.5,603]]}
   ],
   "drives": [
     {"id":"drive_74894810","structure":74894810,"generated":true,"width":3,"surface":"dirt","points":[[1827.94,3837.45],[1832.22,3841.33]]},
