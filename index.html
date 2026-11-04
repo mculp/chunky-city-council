@@ -146,9 +146,6 @@ body.talking .ctl{visibility:hidden}
 #mute.muted .on{display:none}
 #mute.muted .off{display:block}
 body.talking #mute{visibility:hidden}
-#hillsAB{align-self:flex-start;margin-top:-2px;font:inherit;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--cream);background:var(--panel);border:1px solid var(--line);padding:7px 9px;pointer-events:auto;touch-action:manipulation}
-#hillsAB[aria-pressed="true"]{color:var(--rust)}
-body.talking #hillsAB{visibility:hidden}
 #sub{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom, 0px) + 176px);z-index:6;max-width:min(86vw,520px);padding:6px 12px;background:var(--panel);border:1px solid var(--line);color:var(--cream);font-size:15px;line-height:1.35;text-align:center;pointer-events:none}
 #sub[hidden]{display:none}
 #board{overflow-y:auto;padding:calc(env(safe-area-inset-top, 0px) + 16px) 16px 32px;align-items:flex-start;display:block}
@@ -173,7 +170,6 @@ body.talking #hillsAB{visibility:hidden}
     <div class="beans" id="beans" hidden>Beans 0/12</div>
     <div class="pockets" id="pockets" hidden></div>
     <button id="mute" aria-label="Sound" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.6L12 18.5v-13L7.6 9.5z" fill="currentColor"/><path class="on" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"/><path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
-    <button id="hillsAB" aria-pressed="false" hidden>Real hills</button>
   </div>
   <div class="right">
     <div class="obj" id="obj" hidden></div>
@@ -461,8 +457,8 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 // and neither is it along the river. data/hills.md has the rest.
 const noHills = new THREE.DataTexture(new Uint16Array(1), 1, 1, THREE.RedFormat, THREE.HalfFloatType); noHills.needsUpdate = true;
 let hillTex = noHills;
-// uHillScale is how many times their real height the hills are drawn, which is 1 but while the owner's trying them taller with the switch under the sound
-const HILL = { uHills: { value: null }, uHillMap: { value: new THREE.Vector4() }, uHillSize: { value: new THREE.Vector2() }, uHillHere: { value: 0 }, uRiverUp: { value: 0 }, uHillScale: { value: 1 } };
+// uHillScale is how many times their real height the hills are drawn: twice, which is what the owner chose, having tried them both standing in town
+const HILL = { uHills: { value: null }, uHillMap: { value: new THREE.Vector4() }, uHillSize: { value: new THREE.Vector2() }, uHillHere: { value: 0 }, uRiverUp: { value: 0 }, uHillScale: { value: 2 } };
 THREE.ShaderChunk.hill_pars = `
   #ifndef FLAT_WORLD
   uniform highp sampler2D uHills; uniform vec4 uHillMap; uniform vec2 uHillSize; uniform float uHillHere, uHillScale;
@@ -6845,10 +6841,6 @@ function showMuted(on) {
 }
 showMuted(SFX.muted);
 $('mute').addEventListener('click', () => showMuted(!SFX.muted));
-// The owner's trying the hills taller than they really are, against how they are, standing in the same place, so a tap flips them. It goes once they've chosen.
-const HILLS_TALL = 2;
-function showHills(k) { HILL.uHillScale.value = k; $('hillsAB').textContent = k === 1 ? 'Real hills' : `Hills ×${k}`; $('hillsAB').setAttribute('aria-pressed', k === 1 ? 'false' : 'true'); }
-$('hillsAB').addEventListener('click', () => showHills(HILL.uHillScale.value === 1 ? HILLS_TALL : 1));
 // The tap that starts the sound is asking for sound, so it doesn't turn it straight off again
 $('soundWord').addEventListener('click', () => { if (SFX.muted || performance.now() - SFX.startedAt > 900) showMuted(!SFX.muted); });
 // Every sound and every part of the score, one button each, at #sounds and #sounds-new. Nothing else in the game runs while it's up.
@@ -7191,7 +7183,7 @@ function updateWorld() {
   if (jumped || worldTick % 20 === 0) for (const d of DISTANT) d.obj.visible = Math.hypot(x - d.x, z - d.z) < d.r;
   // Nothing but the real land near him ever showed before he wakes at the edge of town, and the first chapter's frames are kept exactly as they are, even out at the horizon
   skyline.visible = !!S.flags.town;
-  if (hillsOn !== skyline.visible) { hillsOn = skyline.visible; HILL.uHills.value = hillsOn ? hillTex : noHills; $('hillsAB').hidden = !hillsOn; }
+  if (hillsOn !== skyline.visible) { hillsOn = skyline.visible; HILL.uHills.value = hillsOn ? hillTex : noHills; }
 }
 scene.traverse((o) => { if (o.isPointLight) hillLights.push(o); });
 let paused = TEST;
