@@ -14,7 +14,8 @@
 // - town:host, for the town's own files in server/ and the Worker that hosts it
 // - net, for the town's own files in server/ and the name check in src/names.js
 // - for index.html, the checks named in its changed lines, but for names it uses everywhere, and the sound checks,
-//   which are the slowest and come from sound files instead
+//   which are the slowest and come from sound files instead, and the checks that look after what those lines touch,
+//   such as fling for the crowd's pose, aura and shoes
 // - everything, for a new dependency or a change to tools/browser.mjs
 // --dry says what would run, and why, without running it.
 // Other sessions run Chrome on this machine too, and a few suites fail on frame time or a dropped connection when it's
@@ -37,8 +38,11 @@ const limit = (+opt('--timeout') || 600) * 1000, at = opt('--at');
 const NEVER = new Set(['check', 'deploy', 'sound:make', 'sound:level', 'frames', 'net:server', 'net:bots']);
 // run as well as the plain script, when its tool takes the flag
 const VARIANTS = { smoke: '--touch', sound: '--old' };
-// for --changed: modules whose check isn't named after them, and names too common in index.html to mean a check
-const ALIASES = { vehicles: ['drive'], damage: ['wreck'], roads: ['walk'], mapview: ['net', 'keys', 'water'], fever: ['deaths', 'trains', 'horde'] };
+// for --changed: the checks for a module besides any named after it, the checks that look after parts of index.html by
+// other names than their own, and names too common in index.html to mean a check
+const ALIASES = { vehicles: ['drive'], damage: ['wreck'], roads: ['walk'], mapview: ['net', 'keys', 'water'], fever: ['deaths', 'trains', 'horde'],
+  horde: ['fling'], agents: ['fling'], folks: ['fling'] };
+const LOOKS_AFTER = { fling: /poseCrowd|aura|shoe|\bhop|\bfl[iu]ng/i };
 const COMMON = new Set(['play', 'test', 'town', 'water']);
 
 // where it runs: here, or a copy of a commit with this worktree's installs and raw downloads linked in
@@ -111,6 +115,8 @@ if (args.includes('--changed')) {
     for (const c of checks) {
       const name = script(c).split(':')[0];
       if (name.length > 3 && !COMMON.has(name) && name !== 'sound' && word(name).test(lines)) add(c, `index.html's changes mention ${name}`);
+      const touched = LOOKS_AFTER[script(c)]?.exec(lines)?.[0];
+      if (touched) add(c, `index.html's changes touch ${touched}`);
     }
   }
   console.log(`${files.length} files changed${base ? ` since ${base}` : dirty ? ', not committed yet' : ' in the last commit'}`);
