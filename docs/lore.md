@@ -233,3 +233,15 @@ Asked who David and ETB2004 are:
 Shown a picture from above of the big building behind a fuel canopy on US 80, about 12 km east of town, and asked what it is. Word for word, with the two shops' names taken out, since they're real:
 
 > Holy shit the map is this big? That's a gigantic gas station with a [sandwich shop], [doughnut shop], full 24 hour restaurant (truck stop), canopy over gas pumps for cars. The blue building is just the truck fuel canopy
+
+## Toni
+
+Typed into the Creative Director session on 2026-11-03:
+
+> Put another astral projection of a 10 year old girl named Toni who catches frogs and shows them to people at the house that burned down on gallatin right across from the first street on the left
+
+Asked what Toni looks like, her hair and what she wears:
+
+> Brown hair, a big green military jacket or trench coat, boots and SHE HOLDS THE FROGS IN HER HAND
+
+**In the game:** she isn't in it yet.
