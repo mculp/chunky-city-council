@@ -10,6 +10,7 @@
     "talk:host": "node tools/talk-host.mjs",
     "town:host": "node tools/town-host.mjs",
     "net": "node tools/play-net.mjs",
+    "wallet": "node tools/play-wallet.mjs",
     "frames": "node tools/opening-frames.mjs",
     "smoke": "node tools/smoke.mjs",
     "walk": "node tools/walk-roads.mjs",

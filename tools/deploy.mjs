@@ -5,7 +5,8 @@
 //
 // --ref puts up another commit instead, such as an older one to go back to. --dry says what would go up and stops there.
 //
-// Only what the game loads goes up: index.html, src/, data/ and audio/, without the tests or the notes beside them. It's a list
+// Only what the game loads goes up: index.html and the wallet's page beside it, src/, data/ and audio/, without the tests or the
+// notes beside them. A commit from before there was a wallet's page sends what it has. It's a list
 // of what goes rather than of what stays, so that something new in the repo, like the notes about real people in docs/, can't
 // end up on the web by being forgotten. A favicon.ico goes up beside them, which Chrome asks a real site for whatever icon its
 // page names: tools/favicon.mjs makes it from index.html's own tab icon, there and then, so it's always the icon that's going up.
@@ -20,7 +21,7 @@ import { favicon, iconOf } from './favicon.mjs';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const SITE = 'https://chunky.ms/', VERCEL = 'vercel@65.9.0', TEAM = 'team_ivvZR0r1i3i28k7gFppIlkzc', PROJECT = 'prj_v0aTWXr5ofi5Yzt0os3Lz04c9ntS';
-const GOES = ['index.html', 'src', 'data', 'audio'], STAYS = [/\.test\.js$/, /\.md$/, /^data\/raw\//];
+const GOES = ['index.html', 'wallet.html', 'src', 'data', 'audio'], STAYS = [/\.test\.js$/, /\.md$/, /^data\/raw\//];
 
 const arg = (name) => { const i = process.argv.indexOf(name); return i < 0 ? null : process.argv[i + 1]; };
 const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' }).trim();
@@ -29,7 +30,7 @@ const sha = git('rev-parse', `${arg('--ref') || 'origin/main'}^{commit}`), what 
 
 const dir = join(ROOT, 'data', 'raw', 'deploy', sha.slice(0, 12)), tar = `${dir}.tar`;
 rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true });
-git('archive', '-o', tar, sha, '--', ...GOES);
+git('archive', '-o', tar, sha, '--', ...git('ls-tree', '--name-only', sha, '--', ...GOES).split('\n').filter(Boolean));
 execFileSync('tar', ['-xf', tar, '-C', dir]); unlinkSync(tar);
 const files = [];
 (function walk(at, rel) {

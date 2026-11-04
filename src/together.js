@@ -13,6 +13,7 @@
 // driving nudges you aside and does you no harm.
 import * as THREE from 'three';
 import { connectNet, rollLook, makeKey, worldOf, townUrl, hereUrl, HOW, PHONE_KEY } from './net.js';
+import { walletUrl, walletOf, pageFor, openIn, WAIT_EVERY } from './wallet.js';
 import { checkName, NAME_MOST } from './names.js';
 import { inVehicle, settle, KINDS } from './vehicles.js';
 import { toScreen, drawLabel, nameBeside, COLORS as MAPC } from './mapview.js';
@@ -36,7 +37,16 @@ const CSS = `
 #join .look{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 10px;text-align:left;font-size:12px;letter-spacing:.06em;text-transform:uppercase;background:rgba(255,255,255,.05);border:1px solid var(--line)}
 #join .look i{flex:none;width:16px;height:16px;border:1px solid var(--ink)}
 #join .look[aria-pressed=true]{border-color:var(--rust);background:rgba(236,128,58,.14)}
+#join .yours{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;width:min(420px,88vw)}
+#join .yours[hidden]{display:none}
+#join .rekt{width:72px;height:72px;padding:3px;background:rgba(255,255,255,.05);border:2px solid var(--line)}
+#join .rekt img{display:block;width:100%;height:100%;object-fit:cover}
+#join .rekt[aria-pressed=true]{border-color:var(--rust)}
 #joinSay{min-height:1.6em;color:var(--cream)}
+#pair .letters{font-family:var(--f-display);font-size:clamp(44px,16vw,72px);letter-spacing:.12em;line-height:1;text-shadow:0 4px 0 var(--ink)}
+#pair .apps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:min(420px,88vw)}
+#pair #pairHere{grid-column:1/-1}
+#pair .apps a,#pair .apps button{display:flex;align-items:center;justify-content:center;min-height:48px;padding:8px 10px;font:inherit;font-size:12px;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;color:var(--cream);background:rgba(255,255,255,.05);border:1px solid var(--line)}
 .nettag{position:fixed;left:0;top:0;z-index:3;pointer-events:none;font-size:10px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;color:var(--cream);background:var(--panel);border:1px solid var(--line);padding:2px 6px;will-change:transform}
 .nettag[hidden]{display:none}
 #bW{position:absolute;right:9px;bottom:162px;width:54px;height:54px;font-size:10px;background:var(--panel);color:var(--cream);border-color:var(--cream);box-shadow:0 3px 0 var(--ink)}
@@ -60,7 +70,11 @@ export function together(G) {
   const secret = store.get(KEPT.hero + town) || undefined, build = { at: G.built ?? 0, world: worldOf(G.parked) };
   // the town on this machine, unless the address says where
   const url = townUrl(G.url, location);
-  let link = null, you = { id: 0, name: '', look: 0, hero: false }, picked = null;
+  let link = null, you = { id: 0, name: '', look: 0, hero: false, rekt: null }, picked = null;
+  // Wearing your own rektguy (CHUNKY-170): what their wallet holds, by handle, which the town says, and the one picked here, which
+  // is null for a look of the town's. They come in wearing it from what the town has, so it's told first.
+  const wallet = walletOf({ base: walletUrl(url), key });
+  let mine = { rekt: [], wearing: null }, pickedRekt = null, wearingNow = null;
   // started: let into town, and saying where they are; alone: let go of the town; going: on their way in from the title card's Play
   let started = false, alone = false, going = false;
   let swings = 0, waves = 0, swungAt = -9, wavedAt = -9, wasSwinging = false, keptWas = '';
@@ -72,16 +86,35 @@ export function together(G) {
   const panel = document.createElement('div'); panel.className = 'panel'; panel.id = 'join'; panel.hidden = true;
   panel.innerHTML = `<div class="pbox"><h2>Play with <span>others</span></h2><p>Who are you?</p>
     <input id="joinName" maxlength="${NAME_MOST}" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="go" placeholder="Your name" aria-label="Your name">
+    <div class="yours" role="group" aria-label="Yours" hidden></div>
     <div class="looks" role="group" aria-label="What you wear">${looks.map((l, i) => `<button class="look" data-i="${i}" aria-pressed="false"><i style="background:${swatch(l)}"></i>${words(l.id)}</button>`).join('')}</div>
     <p id="joinSay" role="status" aria-live="polite"></p>
     <button class="big" id="joinGo">Join</button><button class="forget" id="joinBack">Back</button></div>`;
   document.body.appendChild(panel);
   const nameBox = panel.querySelector('#joinName'), sayBox = panel.querySelector('#joinSay'), back = panel.querySelector('#joinBack'), lookButtons = [...panel.querySelectorAll('.look')];
+  const yours = panel.querySelector('.yours');
   const say = (text) => { sayBox.textContent = text; };
-  // the look they've picked, or the one that comes with the name until they do
+  // the look they've picked, or the one that comes with the name until they do; and one of theirs, over any of them
   const lookNow = () => picked ?? rollLook(nameBox.value, looks.length);
-  const showLook = () => { const l = lookNow(); lookButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(i === l))); };
-  lookButtons.forEach((b, i) => b.addEventListener('click', () => { picked = i; showLook(); }));
+  const showLook = () => {
+    const l = lookNow();
+    lookButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(pickedRekt === null && i === l)));
+    for (const b of yours.children) b.setAttribute('aria-pressed', String(b.dataset.h === pickedRekt));
+  };
+  lookButtons.forEach((b, i) => b.addEventListener('click', () => { picked = i; pickedRekt = null; showLook(); }));
+  // their own rektguys, by their pictures, above the town's looks
+  function showYours() {
+    yours.replaceChildren(...mine.rekt.map((h) => {
+      const b = document.createElement('button'), img = new Image();
+      b.className = 'rekt'; b.dataset.h = h; b.setAttribute('aria-label', 'Your rektguy');
+      // asked for as a page can read it from the start, since what they wear is drawn from it, and it's fetched once
+      img.crossOrigin = 'anonymous'; img.loading = 'lazy'; img.alt = ''; img.src = wallet.picture(h);
+      b.append(img); b.addEventListener('click', () => { pickedRekt = h; showLook(); });
+      return b;
+    }));
+    yours.hidden = !mine.rekt.length;
+    showLook();
+  }
   nameBox.addEventListener('input', showLook);
   // typing a name isn't playing: N would turn the sound off and E would act
   for (const kind of ['keydown', 'keyup']) nameBox.addEventListener(kind, (e) => { e.stopPropagation(); if (kind === 'keydown' && e.key === 'Enter') join(); });
@@ -104,12 +137,17 @@ export function together(G) {
     if (document.pointerLockElement) document.exitPointerLock();
     if (!nameBox.value) nameBox.focus();
   }
-  function join() {
+  async function join() {
     const named = checkName(nameBox.value);
     if (!named.ok) { say(named.why); return; }
     nameBox.value = named.name; you.name = named.name; you.look = lookNow();
     store.set(KEPT.name, named.name); if (picked !== null) store.set(KEPT.look, picked);
     say('Going into town…'); alone = false;
+    // which of theirs they're wearing, if it's changed, goes to the town before they say hello, since that's where it's told from
+    if (mine.rekt.length && pickedRekt !== mine.wearing) {
+      const r = await (wearingNow ??= wallet.wear(pickedRekt).finally(() => { wearingNow = null; }));
+      if (!r.no) mine.wearing = r.wearing;
+    }
     if (link) { link.again(); return; }
     link = connectNet({ url, hello: () => ({ key, name: you.name, look: you.look, hero: secret, build }), status, on: { welcome, car: park, bump } });
     requestAnimationFrame(pump);
@@ -123,6 +161,51 @@ export function together(G) {
     if ((s === 'lost' || s === 'full') && !panel.hidden) { say(why); return; }
     show(why);
   }
+
+  // ---------------- pairing with their wallet (CHUNKY-170)
+  // A phone's browser has no wallet, so the wallet app opens the game's own small page, wallet.html, which shows the same four
+  // letters as here and asks the wallet to sign. Meanwhile this asks the town every so often whether it's done. Done or not, backed
+  // out of or over, it ends at the looks, with theirs among them if they've any, and nothing said either way.
+  const pairing = document.createElement('div'); pairing.className = 'panel'; pairing.id = 'pair'; pairing.hidden = true;
+  pairing.innerHTML = `<div class="pbox"><h2>Wear your <span>rektguy</span></h2><p>Open your wallet app. It'll show</p>
+    <div class="letters" id="pairLetters"></div><div class="apps" id="pairApps"></div>
+    <button class="forget" id="pairCopy">Copy the link</button><button class="forget" id="pairBack">Back</button></div>`;
+  document.body.appendChild(pairing);
+  let pairingCode = null, pairTimer = null;
+  async function connectWallet() {
+    const p = await wallet.pair();
+    if (p.no) { show(''); return; }
+    document.getElementById('title').hidden = true;
+    pairingCode = p.code;
+    const page = pageFor(p.code, { origin: location.origin, town: url }), apps = pairing.querySelector('#pairApps');
+    pairing.querySelector('#pairLetters').textContent = p.letters;
+    // in a tab of their own, so that one that isn't on the phone goes to its download page without taking the game with it
+    apps.replaceChildren(...openIn(page).map(({ name, href }) => Object.assign(document.createElement('a'), { href, textContent: name, rel: 'noopener', target: '_blank' })));
+    // a browser with a wallet of its own, as on a laptop: the page in a tab beside this one
+    if (window.ethereum) {
+      const b = document.createElement('button'); b.id = 'pairHere'; b.textContent = 'This browser\'s wallet';
+      b.addEventListener('click', () => open(page, '_blank', 'noopener'));
+      apps.prepend(b);
+    }
+    pairing.querySelector('#pairCopy').onclick = async () => { try { await navigator.clipboard.writeText(page); } catch { /* nothing to copy to */ } };
+    pairing.hidden = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+    waitFor(p.until);
+  }
+  // A town that can't be reached for a moment, as when the phone comes back from the wallet app, is asked again while there's time
+  function waitFor(until) {
+    clearTimeout(pairTimer);
+    pairTimer = setTimeout(async () => {
+      if (pairing.hidden || !pairingCode) return;
+      const r = await wallet.waiting(pairingCode);
+      if (pairing.hidden) return;
+      if ((r.waiting || r.no === 'town' || r.no === 'busy') && Date.now() < until) { waitFor(until); return; }
+      if (r.done) { mine = { rekt: r.rekt, wearing: r.wearing }; pickedRekt = r.wearing; showYours(); }
+      endPairing();
+    }, WAIT_EVERY);
+  }
+  function endPairing() { clearTimeout(pairTimer); pairingCode = null; pairing.hidden = true; show(''); }
+  pairing.querySelector('#pairBack').addEventListener('click', endPairing);
 
   // ---------------- the title card: Play, how many are in town right now under it, and a way to change their look for anyone who's
   // been before, since Play takes them straight in (CHUNKY-169)
@@ -141,7 +224,7 @@ export function together(G) {
   // Everyone starts where Coop can see them, the owner too, and comes back there with what they had and not where they were standing,
   // which could be the middle of the river (CHUNKY-169). There's no opening in a town that's shared.
   function welcome(m) {
-    you = { ...you, id: m.id, name: m.name, look: m.look, hero: m.hero };
+    you = { ...you, id: m.id, name: m.name, look: m.look, hero: m.hero, rekt: m.rekt ?? null };
     for (const c of m.cars ?? []) park(c);
     panel.hidden = true;
     // back after the line dropped: nothing to start again
@@ -477,14 +560,17 @@ export function together(G) {
       }
       if (big) lastMap = { v, dpr, g };
     },
-    // The title card, given its Play: how many are in town under it, asked again every so often while it's up, and Change your look
-    // for anyone who's been before
+    // The title card, given its Play: how many are in town under it, asked again every so often while it's up, Connect a wallet,
+    // and Change your look for anyone who's been before. What their wallet holds is asked as it comes up, for the looks.
     title(play) {
       hereLine = document.createElement('p'); hereLine.id = 'here'; hereLine.hidden = true; hereLine.setAttribute('aria-live', 'polite');
+      const walletLink = document.createElement('button'); walletLink.className = 'forget'; walletLink.id = 'connectWallet'; walletLink.textContent = 'Connect a wallet';
+      walletLink.addEventListener('click', connectWallet);
       lookLink = document.createElement('button'); lookLink.className = 'forget'; lookLink.id = 'changeLook'; lookLink.textContent = 'Change your look';
       lookLink.hidden = !store.get(KEPT.name);
       lookLink.addEventListener('click', () => show(''));
-      play.after(hereLine, lookLink);
+      play.after(hereLine, walletLink, lookLink);
+      wallet.mine().then((m) => { if (Array.isArray(m.rekt) && !pairingCode) { mine = m; pickedRekt = m.wearing; showYours(); } });
       here();
       const asking = setInterval(() => { if (started) clearInterval(asking); else if (!document.hidden && !document.getElementById('title').hidden) here(); }, HERE_EVERY);
     },
@@ -503,6 +589,8 @@ export function together(G) {
   if (G.TEST) {
     window.__net = {
       get link() { return link; }, you: () => ({ ...you }), group,
+      // what their wallet holds and which is picked, and the pairing that's up, if one is
+      wallet: () => ({ ...mine, picked: pickedRekt, pairing: pairing.hidden ? null : pairingCode }),
       // how many are in town, asked now rather than at the title card's next turn
       here: () => here(),
       drawn() {

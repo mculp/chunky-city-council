@@ -388,6 +388,13 @@ test('who else is here comes by name and look', () => {
   assert.deepEqual(net.others().map((o) => [o.name, o.look]), [['Miss Bobby', 6]]);
 });
 
+test('someone wearing their own rektguy comes with its handle, and everyone else with none', () => {
+  const { net, socket } = joined(link());
+  socket().hear(say({ t: 'who', players: [{ id: 6, name: 'Junebug', look: 2, rekt: 'r'.repeat(22) }, { id: 5, name: 'Miss Bobby', look: 6 }] }));
+  socket().hear(encodeSnapshot([{ id: 6, pose: encodePose(100, 8, 1, 1, 0) }, { id: 5, pose: encodePose(100, 9, 1, 1, 0) }]));
+  assert.deepEqual(net.others().map((o) => [o.name, o.rekt]), [['Junebug', 'r'.repeat(22)], ['Miss Bobby', null]]);
+});
+
 test('the welcome, and vehicles left about or taken out from under him, go to the game as they are', () => {
   const heard = [];
   const l = link({ on: { welcome: (m) => heard.push(m), car: (m) => heard.push(m), bump: (m) => heard.push(m) } });

@@ -6,8 +6,10 @@
 //   from a phone:   hello { key, name, look, hero?, build? }, keep { beans, items, gas },
 //                   mind { who, said } or { who, note, about, at } or { who, visit: true } or { who, trust, fear }, for what the
 //                   cast remember of them and how they feel about them
-//   from the town:  welcome { id, name, look, hero, saved, minds, cars }, who { players: [{ id, name, look, hero }] },
+//   from the town:  welcome { id, name, look, hero, rekt?, saved, minds, cars }, who { players: [{ id, name, look, hero, rekt? }] },
 //                   car { v, x, y, z, yaw }, bump { ride }, no { why, say }
+// `rekt` is the handle of a rektguy of their own someone's wearing, which is all anyone's told of it, and there's none for the hero
+// (CHUNKY-170). Its picture is the town's, src/wallet.js says where, and pairing a wallet is beside the town, not on the socket.
 export const NET_RATE = 20, NET_MAX = 25, POSE_BYTES = 18;
 // where a town on this machine listens, for index.html?net
 export const NET_PORT = 8787;
@@ -102,7 +104,7 @@ const strideRate = (v) => Math.min(v, 4.4) * 2.4 + Math.max(0, v - 4.4) * 1.3;
 // and waves aren't smoothed: they take the newest pose's, so none goes missing between two.
 export function createWalkers({ delay = 100, ahead = 150, jump = 10 } = {}) {
   const all = new Map(), list = [], names = new Map();
-  const named = (w) => { const n = names.get(w.id); w.name = n?.name ?? ''; w.look = n?.look ?? 0; w.hero = !!n?.hero; };
+  const named = (w) => { const n = names.get(w.id); w.name = n?.name ?? ''; w.look = n?.look ?? 0; w.hero = !!n?.hero; w.rekt = n?.rekt ?? null; };
   const walkers = {
     // who's who, from the town's list of names and looks
     who(players) {

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>Chunky</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* The page a wallet app opens to wear your rektguy in Chunky (CHUNKY-170): the game's own colours and type, one thing at a time. */
+:root{
+  --night:#07050b; --ink:#120b14; --cream:#f1e6cf; --rust:#ec803a; --cyan:#6fd6c8; --dusk:#a99bc0;
+  --panel:rgba(12,8,16,.86); --line:rgba(241,230,207,.22);
+  --f-display:'Bungee','Impact','Arial Black',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{margin:0;display:grid;place-items:center;min-height:100vh;padding:24px max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px));
+  background:radial-gradient(ellipse at 50% 40%,rgba(30,14,34,.9),var(--night));color:var(--cream);font:14px var(--f-mono)}
+main{display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center;width:min(440px,100%)}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(28px,9vw,44px);line-height:.95;margin:0;text-wrap:balance}
+h1 span{color:var(--rust)}
+p{margin:0;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dusk);line-height:1.6}
+section{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%}
+section[hidden],button[hidden]{display:none}
+.letters{font-family:var(--f-display);font-size:clamp(44px,16vw,72px);letter-spacing:.12em;line-height:1;color:var(--cream);text-shadow:0 4px 0 var(--ink)}
+button,a.app{font:inherit;color:var(--cream);-webkit-tap-highlight-color:transparent}
+button:focus-visible,a.app:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.big{font-family:var(--f-display);font-size:18px;letter-spacing:.04em;background:var(--rust);color:var(--ink);border:3px solid var(--ink);box-shadow:0 5px 0 var(--ink);padding:12px 26px;cursor:pointer}
+.big:active{transform:translateY(3px);box-shadow:0 2px 0 var(--ink)}
+.big:disabled{opacity:.5}
+.apps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
+a.app{display:flex;align-items:center;justify-content:center;min-height:48px;padding:8px 10px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;background:rgba(255,255,255,.05);border:1px solid var(--line)}
+.quiet{background:none;border:0;padding:8px 12px;color:var(--dusk);font-size:12px;letter-spacing:.06em;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+#said{min-height:1.6em;color:var(--cream)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Wear your <span>rektguy</span></h1>
+  <!-- the wallet's here: the four letters to check against the phone, and signing -->
+  <section id="check" hidden>
+    <p>Your phone shows</p>
+    <div class="letters" id="letters"></div>
+    <button class="big" id="sign">Sign</button>
+    <p>It's only a signature: it costs nothing and moves nothing.</p>
+  </section>
+  <!-- no wallet here: open this page in one -->
+  <section id="open" hidden>
+    <p>Open this in your wallet app</p>
+    <div class="apps" id="apps"></div>
+    <button class="quiet" id="copy">Copy the link</button>
+  </section>
+  <!-- The loot, on Solana, will ask for a Solana address here in the same trip, once its ticket's in. It's off until then. -->
+  <section id="solana" hidden></section>
+  <p id="said" role="status" aria-live="polite"></p>
+</main>
+<script type="module">
+import { townUrl } from './src/net.js';
+import { walletUrl, openIn, seenOf, signIn } from './src/wallet.js';
+
+const SAY = {
+  done: 'Done. Go back to Chunky.',
+  declined: 'Nothing was signed.',
+  words: 'Something\'s not right, so nothing was signed.',
+  gone: 'This one\'s over. Start again in Chunky.',
+  signature: 'That didn\'t check out. Try again.',
+  chain: 'Couldn\'t look at your wallet just now. Try again.',
+  busy: 'Slow down a little, then try again.',
+};
+const $ = (id) => document.getElementById(id), said = (why) => { $('said').textContent = SAY[why] ?? 'Couldn\'t reach Chunky. Try again.'; };
+
+// The pairing's in the address the phone sent, which comes off it as soon as it's read, so it isn't passed on. It's kept for this
+// tab, in case the wallet's browser loads the page again.
+const q = new URLSearchParams(location.search), page = location.href;
+let code = q.get('pair'), town = location.protocol === 'https:' ? '' : q.get('net') ?? '';
+try {
+  if (code) sessionStorage.setItem('chunky.pair', JSON.stringify({ code, town }));
+  else ({ code, town } = JSON.parse(sessionStorage.getItem('chunky.pair') ?? '{}'));
+} catch { /* not kept */ }
+if (q.has('pair')) history.replaceState(null, '', location.pathname);
+const base = walletUrl(townUrl(town, location));
+
+const seen = code && base ? await seenOf({ base, code }) : { no: 'gone' };
+if (seen.no) said(seen.no);
+else if (!window.ethereum) {
+  // in a browser with no wallet: the wallet apps that can open this page in their own, and the link for any other
+  for (const { name, href } of openIn(page)) $('apps').insertAdjacentHTML('beforeend', `<a class="app" href="${href}" rel="noopener">${name}</a>`);
+  $('copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(page); $('said').textContent = 'Copied.'; } catch { $('said').textContent = page; } });
+  $('open').hidden = false;
+} else {
+  $('letters').textContent = seen.letters;
+  $('check').hidden = false;
+  $('sign').addEventListener('click', async () => {
+    $('sign').disabled = true; $('said').textContent = '';
+    const r = await signIn({ base, code, letters: seen.letters, origin: location.origin, ethereum: window.ethereum });
+    said(r.done ? 'done' : r.no);
+    if (r.done || r.no === 'gone') { $('sign').hidden = true; try { sessionStorage.removeItem('chunky.pair'); } catch { /* not kept */ } }
+    else $('sign').disabled = false;
+  });
+}
+</script>
+</body>
+</html>

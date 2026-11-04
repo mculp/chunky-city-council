@@ -13,9 +13,11 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
 
 // The game gets three.js from jsDelivr and its fonts from Google. Once a check has fetched one of those files, every
 // check after it gets the same bytes from data/raw/cdn/, so a dropped connection or a slow CDN can't fail a check, and
-// nothing that's drawn changes. A file that won't fetch is left to the browser, as it was.
-const CDN = /^https:\/\/(cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com)\//, CACHE = join(ROOT, 'data', 'raw', 'cdn');
-async function fromCache(route) {
+// nothing that's drawn changes. A file that won't fetch is left to the browser, as it was. A check that opens a browser of its own
+// beside the game's, as npm run wallet does for the wallet app's, routes CDN to fromCache too.
+export const CDN = /^https:\/\/(cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com)\//;
+const CACHE = join(ROOT, 'data', 'raw', 'cdn');
+export async function fromCache(route) {
   const req = route.request(), file = join(CACHE, createHash('sha1').update(`${req.url()}\n${req.headers()['user-agent'] || ''}`).digest('hex'));
   try {
     const [body, headers] = await Promise.all([readFile(file), readFile(file + '.json', 'utf8')]);
