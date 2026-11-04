@@ -5,6 +5,7 @@
 // A socket here is anything with send(data), close() once it's been told why, kill() when there's nothing to tell it, and `open`.
 // `buffered` is how much is still waiting to go to it, where its socket can say. What's heard is a string for words and bytes for a
 // pose. Keys and the hero's secret are hashed with Web Crypto, which Node and Workers both have, so it's the same here as there.
+// `mindsOf(keyHash)` is what the cast remember of someone, from wherever that's kept, and keeping it is up to whatever's around this.
 import { PHONE_KEY, decodeMessage, say } from '../src/net.js';
 
 const SLOW = 16384;   // bytes still waiting to go to a phone before it's skipped for a beat
@@ -15,7 +16,7 @@ const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0'))
 // as long whatever the secret, so how long it takes says nothing about how close it was
 const same = (a, b) => { let d = a.length ^ b.length; for (let i = 0; i < Math.min(a.length, b.length); i++) d |= a[i] ^ b[i]; return d === 0; };
 
-export function createHost({ town, heroHash = '', silence = 5000, helloWithin = 5000, clock = () => performance.now() }) {
+export function createHost({ town, heroHash = '', mindsOf = null, silence = 5000, helloWithin = 5000, clock = () => performance.now() }) {
   const sockets = new Map(), waiting = new Set();   // id → the socket of whoever's in town; and the ones that haven't said who they are
   const hero = /^[0-9a-f]{64}$/i.test(heroHash) ? Uint8Array.from(heroHash.match(/../g), (h) => parseInt(h, 16)) : null;
   if (heroHash && !hero) console.warn('CHUNKY_HERO isn\'t a sha256 in hex, so nobody\'s the hero.');
@@ -38,8 +39,11 @@ export function createHost({ town, heroHash = '', silence = 5000, helloWithin = 
     // the key's made on the phone and kept there, and only its hash is ever kept here
     const keyHash = typeof m.key === 'string' && PHONE_KEY.test(m.key) ? hex(await sha(m.key)) : '';
     const him = await isHero(m.hero);
+    // What the cast remember of them. If it can't be read they're let go and try again, rather than come in as a stranger and have
+    // it written over.
+    const minds = keyHash && mindsOf ? await mindsOf(keyHash) : null;
     if (ws.gone) return;   // it went while that was being worked out
-    const r = town.join({ keyHash, name: m.name, look: m.look, hero: him, build: m.build });
+    const r = town.join({ keyHash, name: m.name, look: m.look, hero: him, build: m.build, minds });
     if (!r.id) { deliver(r.out ?? []); ws.send(say(r.no)); ws.close(); return; }
     // Anything everyone's told before his welcome happened before he was here, and he'll find it in the welcome itself
     const at = r.out.findIndex((o) => o.to === r.id && o.msg.t === 'welcome');
@@ -54,8 +58,10 @@ export function createHost({ town, heroHash = '', silence = 5000, helloWithin = 
     heard(ws, data) {
       const words = typeof data === 'string';
       if (ws.id) {
-        if (!words) deliver(town.move(ws.id, data));
-        else if (decodeMessage(data)?.t === 'keep') deliver(town.keep(ws.id, JSON.parse(data)));
+        if (!words) { deliver(town.move(ws.id, data)); return; }
+        const m = decodeMessage(data);
+        if (m?.t === 'keep') deliver(town.keep(ws.id, m));
+        else if (m?.t === 'mind') deliver(town.mind(ws.id, m));
         return;
       }
       if (ws.said || !words) return;

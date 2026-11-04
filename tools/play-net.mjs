@@ -2,13 +2,14 @@
 // The title card's one thing, Play, with how many are in town right now under it and nothing of the story, over the gas station at
 // night from across US 80 (CHUNKY-169). Two newcomers press it, one on a keyboard and one on a phone: the first time it asks for a name
 // each and a look, and they're straight into town out front of the gas station, where Coop can see them, on dry ground and with
-// nothing in the objective box, and the other's title card says there's one in town. A twelfth can of beans ends nothing, since a
-// town that's shared has no chapters. Then each sees the other, by name and by look, walking, running, driving and swinging, and on
+// nothing in the objective box, and the other's title card says there's one in town. Coop says each line written for online once and
+// then nods, and with the model on says something new, asked about them by name and as "they". A twelfth can of beans ends nothing,
+// since a town that's shared has no chapters. Then each sees the other, by name and by look, walking, running, driving and swinging, and on
 // the map; a truck nudges someone aside and a swing goes through them, and nobody's hurt. A try that ends is the fever, with the other
 // seeing them lying where they went down, and they come to by the pumps. One goes into the river and comes back with Change your look,
-// out front of the gas station in a new look and with what they had, and the time after that Play takes them straight in. Then the
-// hero's link, who starts there too with no chapters: everyone sees the hero, and only one phone at a time is him. Fails on anything
-// out of place or a console error.
+// out front of the gas station in a new look and with what they had, and the time after that Play takes them straight in, with Coop
+// remembering them from what the town kept. Then the hero's link, who starts there too with no chapters and is known to the cast:
+// everyone sees the hero, and only one phone at a time is him. Fails on anything out of place or a console error.
 //
 //   npm i && npm run net -- [--shots dir]
 import { createHash } from 'node:crypto';
@@ -38,7 +39,7 @@ const pages = [a, b];
 const press = (p, sel) => (p === b ? p.page.tap(sel) : p.page.click(sel));
 const state = (p) => on(p, () => __game.state());
 // The cast's words, and a talk server a page can be given that plays a line at a time and keeps what it was asked
-const TALK = JSON.parse(readFileSync(new URL('../data/talk.json', import.meta.url), 'utf8'));
+const TALK = JSON.parse(readFileSync(new URL('../data/talk.json', import.meta.url), 'utf8')), CAST = JSON.parse(readFileSync(new URL('../data/cast.json', import.meta.url), 'utf8'));
 const scripted = async (p) => {
   p.heard = []; p.script = [];
   await p.page.route('http://localhost:65533/talk', async (route) => {
@@ -572,6 +573,14 @@ try {
     const straight = await cameIn(a);
     check(`and the time after that, Play takes A straight in as ${straight.name} in look ${straight.look}, without asking who they are`, !straight.asked && straight.name === 'Junebug' && straight.look === NEW_LOOK, straight);
     startsAtTheGasStation('A, straight in,', straight);
+    // and the cast remember them, which the town kept and the phone didn't: Coop's said everything written for them, so he nods
+    {
+      const nodded = await talkTo(a, 'coop', { box: false });
+      const dip = await until(async () => { const n = await on(a, () => __game.talk.nodding('coop')); return n > .05 ? n : null; }, 1500);
+      // and nothing of the game on its own's is touched: what the cast remember there, who's met them in the story, or how they feel about him
+      const onPhone = await on(a, ([t, c]) => ({ talk: localStorage.getItem(`chunky.talk.v${t}`), people: localStorage.getItem(`chunky.people.v${c}`) }), [TALK.version, CAST.version]);
+      check(`and Coop remembers A, from the town: with all he had written said, he nods, ${dip ? (dip * 57.3).toFixed(0) : 0}°, and none of it, nor the story's meeting him, is kept on A's phone`, !nodded && dip > .05 && !onPhone.talk && !onPhone.people, { nodded, dip, onPhone });
+    }
     // and back out on US 80, where there's room beside them for the hero
     await onRoad(a, spot.x, spot.z); await sleep(300); A = await me(a);
   }

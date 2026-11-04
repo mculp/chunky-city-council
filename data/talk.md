@@ -33,6 +33,8 @@ Online (CHUNKY-169, and the bible's section 19), there's nothing of the story to
 - **When there's nothing new.** With the model off, slow or turned down, it's a line from `online.lines`, each once to each player: `first` on their first visit, `back` on the next, then each of `any` in turn. The hero gets no `first`: Coop's `hero`, or the others' `back`, then their `any`. Each has only Later. after it. Once they've all been said, they don't go round again.
 - **The nod.** With none of those left, TALK opens nothing: they look at whoever it is and dip their head once, over 0.6 s. Answering them when nothing new comes in time, what they said last stays up with only Later. while they nod. TALK stays, so pressing it again gets another nod.
 - **The 988 Lifeline** is the same as anywhere.
+- **What they remember** of each player is the town's, under "What they remember". A town that doesn't say what they remember, as one from before this doesn't, leaves it on the phone as it was.
+- **How they feel** isn't kept online, and nothing there goes by it. Trust and fear, and who's met them, are the story's, in the game on its own, and talking online leaves them as they were.
 
 ## What every line is held to
 
@@ -70,7 +72,9 @@ It's kept in `localStorage` under `chunky.talk.v1`, for each of them:
 
 With each ask goes the last 10 of what they've said, their notes about him and how many times he's been by, along with what's going on: his beans, what he's carrying, what's happened (`happened`) and the crowd being out (`tonight`). If it's over the server's 6000 letters, what they've said goes first, the oldest first, then their notes, then the start of the visit.
 
-Each note says who it's about so that once the shared town keeps them, they can tell one of him what another did. That isn't built: for now it's all on this phone.
+In the town everyone shares (CHUNKY-169) it's the town's instead. It comes with the welcome, and each change goes to the town as it happens, a line said, a note kept or a visit over, and none of it goes onto the phone, whose own is the game on its own's. The town keeps as much as the phone does and no more, for each player by the hash of their phone's key, beside the town itself: in `data/raw/town.json` on this machine, and as an entry of its own, `mind:<hash>`, on Cloudflare. `docs/multiplayer.md` says why.
+
+Each note says who it's about so that they can one day tell one of them what another did. The town keeps each player's apart, so for now they only know what each did themselves.
 
 Forget everyone, on the title, wipes it with everything else, and keeps only what the phone calls itself.
 

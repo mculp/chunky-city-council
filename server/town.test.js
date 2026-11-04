@@ -17,7 +17,7 @@ test('everyone who joins gets an id of their own, and a welcome with their name 
   const t = createTown(), a = t.join(hello({ name: 'Miss Bobby', look: 5 })), b = t.join(hello());
   assert.notEqual(a.id, b.id);
   const [welcome] = to(a.out, a.id);
-  assert.deepEqual({ ...welcome, cars: undefined }, { t: 'welcome', id: a.id, name: 'Miss Bobby', look: 5, hero: false, saved: null, cars: undefined });
+  assert.deepEqual({ ...welcome, cars: undefined }, { t: 'welcome', id: a.id, name: 'Miss Bobby', look: 5, hero: false, saved: null, minds: {}, cars: undefined });
 });
 
 test('everyone hears who\'s here each time someone comes', () => {
@@ -151,6 +151,68 @@ test('what the town holds goes into a save and comes back out of it', () => {
   const back = u.join(me);
   assert.equal(to(back.out, back.id)[0].saved.x, 33);
   assert.equal(JSON.stringify(save).includes(me.keyHash), true, 'kept by the hash of their key, which is all the town ever sees');
+});
+
+// ---------------- what the cast remember of each of them (CHUNKY-169), kept apart from the town's one value, since there can be a lot of it
+const mindsIn = (out, id) => to(out, id)[0].minds;
+const blank = { notes: [], said: [], visits: 0 };
+
+test('what the cast remember of someone comes with their welcome, from wherever it was kept, and someone new has nothing', () => {
+  const t = createTown(), kept = { coop: { notes: [{ about: 'ab12', text: 'Comes back a lot.', at: 5 }], said: ['Hey.'], visits: 2 } };
+  const r = t.join({ ...hello(), minds: kept }), n = t.join(hello());
+  assert.deepEqual(mindsIn(r.out, r.id), kept);
+  assert.deepEqual(mindsIn(n.out, n.id), {});
+});
+
+test('each line one of them says, each thing they keep about someone and each visit over is kept, and handed over to be kept once', () => {
+  const t = createTown(), me = hello(), a = t.join(me).id;
+  t.dump();
+  t.mind(a, { t: 'mind', who: 'coop', said: 'Hey.' }); t.mind(a, { t: 'mind', who: 'coop', said: 'Hey.' });
+  t.mind(a, { t: 'mind', who: 'coop', note: 'Comes back a lot.', about: 'ab12', at: 7 });
+  t.mind(a, { t: 'mind', who: 'rocky', visit: true });
+  assert.equal(t.dirty, false, 'the town\'s own value isn\'t written again for it');
+  assert.deepEqual(t.keepMinds(), [[me.keyHash, { coop: { notes: [{ about: 'ab12', text: 'Comes back a lot.', at: 7 }], said: ['Hey.'], visits: 0 }, rocky: { ...blank, visits: 1 } }]]);
+  assert.deepEqual(t.keepMinds(), [], 'and not again until something changes');
+  assert.equal(JSON.stringify(t.dump()).includes('Comes back'), false, 'and it isn\'t in the town\'s own value');
+});
+
+test('they remember as much as the game does and no more, and only words, from one of eight of them at most', () => {
+  const t = createTown(), a = t.join(hello()).id;
+  for (let i = 0; i < 30; i++) t.mind(a, { who: 'coop', said: `Line ${i}.` });
+  for (let i = 0; i < 15; i++) t.mind(a, { who: 'coop', note: `Note ${i}.`, about: 'ab12', at: i });
+  for (const bad of [{ who: 'coop', said: 'x'.repeat(241) }, { who: 'coop', said: 5 }, { who: 'coop', said: '' }, { who: 'Coop!', said: 'Hey.' }, { who: 'coop', note: 'Hey.', about: 'x'.repeat(65) },
+    { who: 'coop', note: 'Hey.' }, { who: 'coop', visit: 'yes' }, { who: 'coop' }, { who: '__proto__', visit: true }, null, 'coop']) t.mind(a, bad);
+  assert.doesNotThrow(() => t.mind(a, { who: 'constructor', said: 'Hey.' }), 'a name every object has is only a name');
+  for (const who of 'abcdefghij') t.mind(a, { who: `kid${who}`, visit: true });
+  const [[, m]] = t.keepMinds();
+  assert.deepEqual(m.coop.said, Array.from({ length: 24 }, (_, i) => `Line ${i + 6}.`), 'the last 24 said');
+  assert.deepEqual(m.coop.notes.map((n) => n.text), Array.from({ length: 12 }, (_, i) => `Note ${i + 3}.`), 'and the newest 12 notes');
+  assert.equal(m.coop.visits, 0);
+  assert.equal(Object.keys(m).length, 8, 'and eight of them at most');
+  assert.equal(Object.getPrototypeOf(m), Object.prototype);
+});
+
+test('what was kept is tidied the same way as it comes back', () => {
+  const t = createTown(), r = t.join({ ...hello(), minds: { coop: { said: ['Hey.', 7, 'x'.repeat(300)], notes: [{ text: 'Ok.' }, { about: 'ab12', text: 'Ok.', at: 'then' }], visits: -2 }, 'Bad!': blank, rocky: 'no' } });
+  assert.deepEqual(mindsIn(r.out, r.id), { coop: { notes: [{ about: 'ab12', text: 'Ok.', at: 0 }], said: ['Hey.'], visits: 0 } });
+});
+
+test('the same phone back before it\'s been kept still has it, and once it\'s kept and gone, it\'s what was kept', () => {
+  const t = createTown(), me = hello(), a = t.join(me).id;
+  t.mind(a, { who: 'coop', said: 'Hey.' }); t.leave(a);
+  const b = t.join({ ...me, minds: {} });
+  assert.deepEqual(mindsIn(b.out, b.id).coop.said, ['Hey.']);
+  t.keepMinds(); t.leave(b.id); t.keepMinds();
+  const c = t.join({ ...me, minds: { coop: { ...blank, said: ['From where it was kept.'] } } });
+  assert.deepEqual(mindsIn(c.out, c.id).coop.said, ['From where it was kept.']);
+});
+
+test('memories that couldn\'t be kept are kept next time', () => {
+  const t = createTown(), a = t.join(hello()).id;
+  t.mind(a, { who: 'coop', visit: true });
+  const list = t.keepMinds();
+  t.notKept(list);
+  assert.deepEqual(t.keepMinds(), list);
 });
 
 // ---------------- the hero

@@ -33,7 +33,8 @@ export class Town extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.town = createTown();
-    this.host = createHost({ town: this.town, heroHash: env.CHUNKY_HERO ?? '' });
+    // what the cast remember of each of them is kept on its own, beside the town, since everyone's together would be too much for one
+    this.host = createHost({ town: this.town, heroHash: env.CHUNKY_HERO ?? '', mindsOf: (k) => ctx.storage.get(`mind:${k}`) });
     this.phones = new Map();   // Cloudflare's socket → what the host knows it as
     this.beating = null; this.keptAt = 0; this.unkept = false;
     ctx.blockConcurrencyWhile(async () => { const kept = await ctx.storage.get('town'); if (kept) this.town.load(kept); });
@@ -93,9 +94,15 @@ export class Town extends DurableObject {
   // without holding up what's going to the phones until it's written
   keep() {
     this.keptAt = Date.now();
+    const failed = (e) => console.error(`Couldn't keep the town: ${e.message}`), minds = this.town.keepMinds();
+    // whoever's memories changed, a hundred and twenty-eight to a put, which is as many as one takes, and any that don't go go next time
+    for (let i = 0; i < minds.length; i += 128) {
+      const some = minds.slice(i, i + 128), again = (e) => { this.town.notKept(some); failed(e); };
+      try { this.ctx.storage.put(Object.fromEntries(some.map(([k, m]) => [`mind:${k}`, m])), { allowUnconfirmed: true }).catch(again); }
+      catch (e) { again(e); }
+    }
     if (!this.town.dirty && !this.unkept) return;
     this.unkept = true;
-    const failed = (e) => console.error(`Couldn't keep the town: ${e.message}`);
     try { this.ctx.storage.put('town', this.town.dump(), { allowUnconfirmed: true }).then(() => { this.unkept = false; }, failed); }
     catch (e) { failed(e); }
   }

@@ -1,8 +1,8 @@
 // Plays the town everyone shares (CHUNKY-151) in Cloudflare's own runtime on this machine, with wrangler dev, the way it'll be hosted:
 // two phones let in, one of them on a page at online.chunky.ms, and each seeing the other twenty times a second, the title card told
 // how many are in town (CHUNKY-169), one going, the hero's link, a page on another site turned away, and someone coming back after the
-// Worker's been stopped and started again, to where they were and with what they had. What the town does is tested in
-// server/town.test.js and server/host.test.js, and npm run net plays it in the game.
+// Worker's been stopped and started again, to where they were, with what they had and with what the cast remember of them, which is
+// kept on its own. What the town does is tested in server/town.test.js and server/host.test.js, and npm run net plays it in the game.
 //
 //   npm run town:host
 import assert from 'node:assert/strict';
@@ -65,13 +65,14 @@ try {
   console.log('the title card is told how many are in town: nobody, then the two of them');
 
   a.ws.send(say({ t: 'keep', beans: 4, items: { bottle: 1 }, gas: 0 }));
+  a.ws.send(say({ t: 'mind', who: 'coop', said: 'Hey.' })); a.ws.send(say({ t: 'mind', who: 'coop', visit: true }));
   await sleep(100);
   a.ws.close();
   // sooner than the five seconds it takes the town to let go of anyone who's gone quiet, so it's the going that did it
   await until(() => b.snaps.length && !b.snaps.at(-1).some((q) => q.id === a.id), 'the one who went to be gone', 2000);
   console.log('one goes, and is gone from the next snapshot');
 
-  const h = phone(url, { key: 'h'.repeat(32), name: 'Matt', hero: HERO }), n = phone(url, { key: 'n'.repeat(32), name: 'Lou', hero: 'a-guess-at-it' });
+  const h = phone(url, { key: 'h'.repeat(32), name: 'River', hero: HERO }), n = phone(url, { key: 'n'.repeat(32), name: 'Lou', hero: 'a-guess-at-it' });
   await until(() => h.id && n.id, 'the hero and a guess to be let in');
   assert.equal(h.welcome().hero, true); assert.equal(n.welcome().hero, false);
   console.log('the hero is whoever has the hero\'s secret, and nobody else');
@@ -90,7 +91,9 @@ try {
   await until(() => back.id, 'someone coming back to be let in');
   const had = back.welcome().saved;
   assert.deepEqual([had?.x, had?.z, had?.beans, had?.items?.bottle], [5, 6, 4, 1]);
-  console.log('stopped and started again, someone coming back finds where they were and what they had');
+  assert.deepEqual(back.welcome().minds, { coop: { notes: [], said: ['Hey.'], visits: 1 } });
+  assert.deepEqual(n.welcome().minds, {});
+  console.log('stopped and started again, someone coming back finds where they were, what they had, and Coop remembering them');
   console.log('town host: all good');
 } finally {
   for (const p of phones) p.ws.terminate();

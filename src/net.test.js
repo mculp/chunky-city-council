@@ -408,6 +408,16 @@ test('what he carries goes when the game says, once he\'s let in', () => {
   assert.deepEqual(l.socket().words.at(-1), { t: 'keep', beans: 3, items: { bottle: 1 }, gas: 1 });
 });
 
+test('what the cast remember of him goes a change at a time, once he\'s let in', () => {
+  const l = link();
+  l.net.mind({ who: 'coop', said: 'Hey.' });
+  l.net.update(0, 0, 0, 0); l.socket().opened(); l.net.mind({ who: 'coop', said: 'Hey.' });
+  assert.deepEqual(l.socket().words.map((w) => w.t), ['hello']);
+  l.socket().hear(say({ t: 'welcome', id: 4 }));
+  l.net.mind({ who: 'coop', visit: true });
+  assert.deepEqual(l.socket().words.at(-1), { t: 'mind', who: 'coop', visit: true });
+});
+
 test('it counts what goes each way', () => {
   const { net, socket } = link();
   net.update(0, 0, 0, 0); socket().opened();

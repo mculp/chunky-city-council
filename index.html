@@ -6128,7 +6128,9 @@ function openDialog(id) {
   if (net && fresh && !node.say && !talk.ready()) { nod(who); return; }
   if (fresh) { convo = { who, turns: [], moved: {}, last: null, care: false }; comeBack.delete(who); }
   const own = id === who && !convo.care && (!!convo.last || (net ? wouldTalk(who) : wouldSayNew(who, node)));
-  people.meet(who); people.apply(node.do, played); SFX.play('ui.tap');
+  // who's met them and how they feel are the story's, and a town that's shared leaves them as they were
+  if (!net) { people.meet(who); people.apply(node.do, played); }
+  SFX.play('ui.tap');
   if (S.mode !== 'dialog') faceWhoever(NPCS[who]);
   S.mode = 'dialog'; HP.speed = 0; $('dialog').hidden = false; prompt(null);
   $('dWho').textContent = node.who; $('dHeard').hidden = true; $('dCare').hidden = true;
@@ -6179,7 +6181,7 @@ function took(who, r, heard = null) {
   if (r.remember) talk.note(who, r.remember);
   for (const e of r.do) {
     const m = e.meter.split('.')[1];
-    if (!convo.moved[m]) { convo.moved[m] = e.by; people.apply([e], played); }
+    if (!convo.moved[m]) { convo.moved[m] = e.by; if (!net) people.apply([e], played); }
   }
   convo.last = { say: r.say, replies: r.replies };
 }
@@ -8627,7 +8629,7 @@ const SHARED = location.hostname === 'online.chunky.ms' || new URLSearchParams(l
   // out of the opening, with nothing of his left on them
   const tidyOpening = () => { nooseRing.visible = knot.visible = false; S.removedNoose = true; ropeTop.visible = false; ropeTail.visible = false; lantern.visible = false; bottle.visible = false; };
   const game = {
-    url: town.get('net'), store: saveStore, parked, TEST, reduceMotion,
+    url: town.get('net'), store: saveStore, parked, TEST, reduceMotion, talk,
     S, HP, player, cam, camera, scene, heroRoot, vehicles: VEHICLES, map: MAP, water: WATER,
     // where everyone starts in a town that's shared: out front of the gas station between the pumps and the road, where Coop can see them
     start: (() => { const [x, z] = gasAt(53, 12.5); return { x, z, look: { x: NPCS.coop.spot.x, z: NPCS.coop.spot.z } }; })(),

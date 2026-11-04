@@ -137,6 +137,23 @@ test('someone coming back after the server\'s been stopped and started finds whe
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('and what the cast remember of them is kept beside the town, and comes back with them and nobody else', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'chunky-town-')), save = join(dir, 'town.json');
+  try {
+    const s = await startServer({ port: 0, quiet: true, save, saveEvery: 50 });
+    const a = client(s.port, { key: 'me-on-my-phone-0002' }); await a.in();
+    a.ws.send(say({ t: 'mind', who: 'coop', said: 'Hey.' })); a.ws.send(say({ t: 'mind', who: 'coop', visit: true }));
+    await sleep(200); a.ws.close(); await sleep(200); await s.close();
+    const again = await startServer({ port: 0, quiet: true, save });
+    try {
+      const back = client(again.port, { key: 'me-on-my-phone-0002' }), someone = client(again.port); await Promise.all([back.in(), someone.in()]);
+      assert.deepEqual(back.words.find((w) => w.t === 'welcome').minds, { coop: { notes: [], said: ['Hey.'], visits: 1 } });
+      assert.deepEqual(someone.words.find((w) => w.t === 'welcome').minds, {});
+      back.ws.close(); someone.ws.close();
+    } finally { await again.close(); }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('the hero is whoever has the hero\'s key, nobody else, and only one phone at a time', async () => {
   const s = await startServer({ port: 0, quiet: true, heroHash: createHash('sha256').update('the-owners-secret').digest('hex') });
   try {

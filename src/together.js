@@ -148,6 +148,9 @@ export function together(G) {
     if (started) return;
     started = true; G.trainsOff();
     if (m.saved) restore(m.saved);
+    // and what the cast remember of them is the town's, and goes to it a change at a time. A town from before it kept them doesn't
+    // say, and leaves it on the phone as it was.
+    if (m.minds) G.talk.share(m.minds, (change) => link.mind(change));
     G.toTown(startSpot());
   }
   function restore(had) {
@@ -186,8 +189,8 @@ export function together(G) {
     riding = d;
     if (!started) link.tend();
     else if (d) link.update(d.x, d.y, d.z, d.yaw, { ride: G.vehicles.indexOf(d) + 1, swings, waves, how: HOW.foot });
-    // down until they're halfway up, coming to
-    // rolling, out of something going, is down too: a pose has no room for which way over they are, so it's lying along the ground
+    // down until they're halfway up, coming to, and down rolling out of something going too: a pose has no room for which way over
+    // they are, so it's lying along the ground
     else link.update(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: HP.kind === 'swim' ? HOW.swim : HP.kind === 'roll' || (HP.kind === 'down' && HP.down > .5) ? HOW.down : HOW.foot });
     // what they carry goes whenever it changes
     const had = JSON.stringify({ beans: S.beans, items: S.items, gas: S.gas });

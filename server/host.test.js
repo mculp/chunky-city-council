@@ -71,6 +71,22 @@ test('someone quiet too long is let go and leaves, and someone saying what they 
   assert.equal(host.here, 1);
 });
 
+test('what the cast remember of someone is asked for by the hash of their key before they\'re let in, and what one of them says goes to the town', async () => {
+  const asked = [], kept = { coop: { notes: [], said: ['Hey.'], visits: 1 } };
+  const { town, host, phone, hello } = setup({ mindsOf: async (k) => { asked.push(k); return kept; } });
+  const a = phone(); await hello(a, { key: 'a'.repeat(32) });
+  assert.deepEqual(asked, [createHash('sha256').update('a'.repeat(32)).digest('hex')]);
+  assert.deepEqual(a.words().find((m) => m.t === 'welcome').minds, kept);
+  host.heard(a, say({ t: 'mind', who: 'coop', said: 'There you are.' }));
+  assert.deepEqual(town.keepMinds()[0][1].coop.said, ['Hey.', 'There you are.']);
+});
+
+test('where what the cast remember of someone can\'t be read, they\'re let go to try again, rather than come in as a stranger and have it written over', async () => {
+  const { host, phone, hello } = setup({ mindsOf: async () => { throw new Error('nothing there'); } });
+  const a = phone(); await hello(a, { key: 'a'.repeat(32) });
+  assert.equal(a.killed, true); assert.equal(host.here, 0);
+});
+
 test('one phone that\'s behind with what it\'s sent is skipped for a beat, and the rest still get theirs', async () => {
   const { host, phone, hello } = setup();
   const a = phone(), b = phone();

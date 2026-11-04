@@ -228,7 +228,7 @@ export function talkUrl(data, { search = '', origin = '' } = {}) {
 // won't keep anything just doesn't remember.
 export function createTalk({ data, store = null, fetch = globalThis.fetch, now = Date.now } = {}) {
   const KEY = `chunky.talk.v${data.version}`, PHONE = 'chunky.talk.phone';
-  let url = null, restUntil = 0, minds = {}, phone = null, asking = 0, waiting = [];
+  let url = null, restUntil = 0, minds = {}, phone = null, asking = 0, waiting = [], shared = null;
   const mind = (who) => (minds[who] ??= blankMind());
   // the longest wait it's been told of, so a quick answer to one ask doesn't cut short what another was told
   const rest = (why) => { restUntil = Math.max(restUntil, now() + (REST[why] ?? REST.off) * 1000); };
@@ -240,20 +240,21 @@ export function createTalk({ data, store = null, fetch = globalThis.fetch, now =
     if (!PHONE_KEY.test(phone ?? '')) { phone = makeKey(); try { store?.setItem(PHONE, phone); } catch { /* not kept */ } }
     return phone;
   }
-  function load() {
-    try {
-      const saved = JSON.parse(store.getItem(KEY));
-      for (const [who, m] of Object.entries(saved?.minds ?? {})) {
-        if (!data.people[who]) continue;
-        minds[who] = {
-          notes: (Array.isArray(m.notes) ? m.notes : []).filter((n) => typeof n?.text === 'string' && typeof n.about === 'string').slice(-LIMITS.notes),
-          said: (Array.isArray(m.said) ? m.said : []).filter((s) => typeof s === 'string').slice(-LIMITS.said),
-          visits: Number.isFinite(m.visits) ? m.visits : 0,
-        };
-      }
-    } catch { /* nothing saved */ }
+  // what they remember, from what was kept: only the ones that talk, and only what would be kept
+  function take(kept) {
+    for (const [who, m] of Object.entries(kept ?? {})) {
+      if (!Object.hasOwn(data.people, who) || !m || typeof m !== 'object') continue;
+      minds[who] = {
+        notes: (Array.isArray(m.notes) ? m.notes : []).filter((n) => typeof n?.text === 'string' && typeof n.about === 'string').slice(-LIMITS.notes),
+        said: (Array.isArray(m.said) ? m.said : []).filter((s) => typeof s === 'string').slice(-LIMITS.said),
+        visits: Number.isFinite(m.visits) ? m.visits : 0,
+      };
+    }
   }
+  function load() { try { take(JSON.parse(store.getItem(KEY))?.minds); } catch { /* nothing saved */ } }
   function save() { try { store.setItem(KEY, JSON.stringify({ minds })); } catch { /* not kept */ } }
+  // kept on the phone, or in a town that's shared, told to the town
+  const changed = (who, change) => (shared ? shared({ who, ...change }) : save());
   const keep = (list, most) => { if (list.length > most) list.splice(0, list.length - most); };
 
   const talk = {
@@ -266,9 +267,12 @@ export function createTalk({ data, store = null, fetch = globalThis.fetch, now =
     mind,
     // who a note's about: this phone, by a hash of its key, so that once there's more than one of him they can say which
     me: () => wordHash(phoneKey()),
-    visited(who) { mind(who).visits++; save(); },
-    said(who, text) { const m = mind(who); if (!m.said.includes(text)) { m.said.push(text); keep(m.said, LIMITS.said); save(); } },
-    note(who, text, about = talk.me()) { const m = mind(who); m.notes.push({ about, text, at: now() }); keep(m.notes, LIMITS.notes); save(); },
+    visited(who) { mind(who).visits++; changed(who, { visit: true }); },
+    said(who, text) { const m = mind(who); if (!m.said.includes(text)) { m.said.push(text); keep(m.said, LIMITS.said); changed(who, { said: text }); } },
+    note(who, text, about = talk.me()) { const m = mind(who), at = now(); m.notes.push({ about, text, at }); keep(m.notes, LIMITS.notes); changed(who, { note: text, about, at }); },
+    // In a town that's shared (CHUNKY-169) what they remember of whoever's playing is the town's, apart from the phone's own game's:
+    // it's what the town had, and each change is told to it with `tell`. share(null) has it the phone's own again.
+    share(kept, tell) { minds = {}; shared = kept ? tell : null; if (kept) take(kept); else load(); },
     forget() { minds = {}; try { store.removeItem(KEY); } catch { /* nothing to remove */ } },
     hasSave() { try { return !!store?.getItem(KEY); } catch { return false; } },
     // whatever's still being asked, for a test to wait on

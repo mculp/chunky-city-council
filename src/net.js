@@ -3,8 +3,9 @@
 //
 // Where everyone is goes as bytes, twenty times a second each way: a pose from each phone, and from the server a snapshot of
 // everyone's. Everything else goes now and then as words, a JSON object with its kind in `t`:
-//   from a phone:   hello { key, name, look, hero?, build? }, keep { beans, items, gas }
-//   from the town:  welcome { id, name, look, hero, saved, cars }, who { players: [{ id, name, look, hero }] },
+//   from a phone:   hello { key, name, look, hero?, build? }, keep { beans, items, gas },
+//                   mind { who, said } or { who, note, about, at } or { who, visit: true }, for what the cast remember of them
+//   from the town:  welcome { id, name, look, hero, saved, minds, cars }, who { players: [{ id, name, look, hero }] },
 //                   car { v, x, y, z, yaw }, bump { ride }, no { why, say }
 export const NET_RATE = 20, NET_MAX = 25, POSE_BYTES = 18;
 // where a town on this machine listens, for index.html?net
@@ -218,6 +219,8 @@ export function connectNet({ url, WS = globalThis.WebSocket, clock = () => perfo
     tend() { tend(clock()); },
     // what he's carrying, for the town to keep
     keep(state) { if (sock?.readyState === 1 && id) send(say({ t: 'keep', ...state })); },
+    // and what the cast remember of him, a change at a time
+    mind(change) { if (sock?.readyState === 1 && id) send(say({ t: 'mind', ...change })); },
     again() { stopped = false; openAt = 0; said = null; },
     // let go of the town, without a word, until again()
     close() { const was = sock; stopped = true; sock = null; id = 0; refused = null; walkers.clear(); sendAt = 0; was?.close(); },

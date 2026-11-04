@@ -304,3 +304,17 @@ test('what they remember of him, and what they have said, is kept between sessio
   assert.equal(talk.hasSave(), false);
   assert.deepEqual(createTalk({ data: DATA, store: kept, fetch: async () => ({}) }).mind('coop'), { notes: [], said: [], visits: 0 });
 });
+
+test('in a town that\'s shared what they remember is the town\'s: it starts as the town had it, and what changes goes to the town and not onto the phone', () => {
+  const kept = store(), sent = [], KEY = `chunky.talk.v${DATA.version}`;
+  const talk = createTalk({ data: DATA, store: kept, fetch: async () => ({}), now: () => 9 });
+  talk.said('coop', 'A line in the game on its own.');
+  talk.share({ coop: { notes: [], said: ['A line in town.'], visits: 2 }, nobody: { notes: [], said: ['Who?'], visits: 1 } }, (change) => sent.push(change));
+  assert.deepEqual(talk.mind('coop'), { notes: [], said: ['A line in town.'], visits: 2 });
+  assert.deepEqual(talk.mind('rocky'), { notes: [], said: [], visits: 0 });
+  talk.visited('coop'); talk.said('coop', 'Another.'); talk.said('coop', 'Another.'); talk.note('coop', 'Comes back a lot.', 'ab12');
+  assert.deepEqual(sent, [{ who: 'coop', visit: true }, { who: 'coop', said: 'Another.' }, { who: 'coop', note: 'Comes back a lot.', about: 'ab12', at: 9 }]);
+  assert.deepEqual(JSON.parse(kept.getItem(KEY)).minds.coop.said, ['A line in the game on its own.'], 'and the phone\'s own is as it was');
+  talk.share(null);
+  assert.deepEqual(talk.mind('coop').said, ['A line in the game on its own.'], 'and it\'s the phone\'s own again');
+});
