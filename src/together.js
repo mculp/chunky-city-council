@@ -448,12 +448,12 @@ export function together(G) {
       nameTags(list);
       shownList = list;
     },
-    // a dot for each of them on the map, cyan like everyone else on it and the hero in the orange of his own arrow, with their
-    // names on the big one
+    // a dot for each of them on the map, in blue so they aren't taken for the cast, who are cyan, and the hero in the orange of
+    // his own arrow, with their names on the big one
     onMap(g, v, dpr, big = false) {
       if (!started) return;
       for (const w of shownList) {
-        const [x, y] = toScreen(v, w.x, w.z), hue = w.hero ? MAPC.rust : MAPC.cyan;
+        const [x, y] = toScreen(v, w.x, w.z), hue = w.hero ? MAPC.rust : MAPC.blue;
         if (x < -10 || y < -10 || x > g.canvas.width / dpr + 10 || y > g.canvas.height / dpr + 10) continue;
         g.beginPath(); g.arc(x, y, big ? 5 : 3.5, 0, 7); g.fillStyle = hue; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.stroke(); g.fill();
         if (big && w.name) drawLabel(g, w.name, x + 11, y, '13px Bungee, Impact, sans-serif', hue, 0, 'left');

@@ -23,7 +23,7 @@ function client(port, hello = {}, { silent = false } = {}) {
   };
   ws.onclose = (e) => { c.closed = e.code; };
   c.ready = new Promise((r) => { ws.onopen = r; });
-  if (!silent) c.ready.then(() => ws.send(say({ t: 'hello', name: 'Tre', look: 1, ...hello, key: c.key })));
+  if (!silent) c.ready.then(() => ws.send(say({ t: 'hello', name: 'Junebug', look: 1, ...hello, key: c.key })));
   c.say = (x, y = 1, z = 2, extra) => { ws.send(encodePose(Math.round(performance.now()), x, y, z, 0, extra)); c.sent++; };
   c.in = () => until(() => c.id);
   return c;
@@ -39,7 +39,7 @@ test('it says who you are, and each sees the other where they said', async () =>
     const onA = a.snaps.at(-1).players.find((p) => p.id === b.id), onB = b.snaps.at(-1).players.find((p) => p.id === a.id);
     assert.equal(onA.x, -7); assert.equal(onB.x, 12.5);
     await until(() => a.words.some((w) => w.t === 'who' && w.players.length === 2));
-    assert.deepEqual(a.words.findLast((w) => w.t === 'who').players.map((p) => p.name).sort(), ['Miss Bobby', 'Tre']);
+    assert.deepEqual(a.words.findLast((w) => w.t === 'who').players.map((p) => p.name).sort(), ['Junebug', 'Miss Bobby']);
     a.ws.close(); b.ws.close();
   } finally { await s.close(); }
 });

@@ -6,7 +6,7 @@ import { encodePose, decodeMessage, decodePose, HOW } from '../src/net.js';
 const pose = (x = 1, y = 2, z = 3, extra) => encodePose(100, x, y, z, 0, extra);
 const key = (n) => n.toString(16).padStart(64, '0');
 let keys = 0;
-const hello = (over = {}) => ({ keyHash: key(++keys), name: 'Tre', look: 2, ...over });
+const hello = (over = {}) => ({ keyHash: key(++keys), name: 'Junebug', look: 2, ...over });
 // let in, and the id they were given
 const inTown = (t, over) => { const r = t.join(hello(over)); assert.ok(r.id, `turned away: ${JSON.stringify(r.no)}`); return r.id; };
 const to = (out, who) => out.filter((o) => o.to === who).map((o) => o.msg);
@@ -21,10 +21,10 @@ test('everyone who joins gets an id of their own, and a welcome with their name 
 });
 
 test('everyone hears who\'s here each time someone comes', () => {
-  const t = createTown(), a = inTown(t, { name: 'Tre' }), b = t.join(hello({ name: 'Miss Bobby', look: 6 }));
+  const t = createTown(), a = inTown(t, { name: 'Junebug' }), b = t.join(hello({ name: 'Miss Bobby', look: 6 }));
   const [who] = to(b.out, 'all');
   assert.equal(who.t, 'who');
-  assert.deepEqual(who.players, [{ id: a, name: 'Tre', look: 2, hero: false }, { id: b.id, name: 'Miss Bobby', look: 6, hero: false }]);
+  assert.deepEqual(who.players, [{ id: a, name: 'Junebug', look: 2, hero: false }, { id: b.id, name: 'Miss Bobby', look: 6, hero: false }]);
 });
 
 test('the town checks the name itself, and says why without letting them in', () => {
@@ -105,21 +105,21 @@ test('someone who\'s only saying what they carry isn\'t quiet, which is how a ne
 
 // ---------------- coming back
 test('someone coming back is welcomed with where they were and what they had', () => {
-  let now = 0; const t = createTown({ clock: () => now }), me = hello({ name: 'Tre' });
+  let now = 0; const t = createTown({ clock: () => now }), me = hello({ name: 'Junebug' });
   const a = t.join(me).id;
   t.move(a, encodePose(100, 120, 1.5, -40, 2));
   t.keep(a, { beans: 4, items: { bottle: 2, crackers: 1 }, gas: 1 });
   t.leave(a);
-  const back = t.join({ ...me, name: 'Tre Two' });
+  const back = t.join({ ...me, name: 'Junebug Two' });
   const { saved, name } = to(back.out, back.id)[0];
-  assert.equal(name, 'Tre Two', 'the name they come back with is the one they use');
+  assert.equal(name, 'Junebug Two', 'the name they come back with is the one they use');
   assert.equal(saved.x, 120); assert.equal(saved.z, -40); assert.ok(Math.abs(saved.yaw - 2) < .001); assert.ok(Math.abs(saved.y - 1.5) < .01);
   assert.deepEqual({ beans: saved.beans, items: saved.items, gas: saved.gas }, { beans: 4, items: { bottle: 2, crackers: 1 }, gas: 1 });
 });
 
 test('someone new has nothing saved, even with a name someone else used', () => {
-  const t = createTown(), a = t.join(hello({ name: 'Tre' })); t.move(a.id, pose()); t.leave(a.id);
-  const b = t.join(hello({ name: 'Tre' }));
+  const t = createTown(), a = t.join(hello({ name: 'Junebug' })); t.move(a.id, pose()); t.leave(a.id);
+  const b = t.join(hello({ name: 'Junebug' }));
   assert.equal(to(b.out, b.id)[0].saved, null);
 });
 

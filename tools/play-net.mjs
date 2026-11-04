@@ -51,9 +51,9 @@ try {
   const why = await on(a, () => ({ say: document.getElementById('joinSay').textContent, link: !!__net.link }));
   check(`no name is asked for again, without going anywhere: "${why.say}"`, /1 to 16 letters/.test(why.say) && !why.link, why);
 
-  await a.page.click('#joinName'); await a.page.keyboard.type('Tre');
+  await a.page.click('#joinName'); await a.page.keyboard.type('Junebug');
   const rolled = await on(a, () => [...document.querySelectorAll('#join .look')].findIndex((e) => e.getAttribute('aria-pressed') === 'true'));
-  check(`A's look is rolled from the name until one's picked: ${rolled}`, rolled === rollLook('Tre', LOOKS), rolled);
+  check(`A's look is rolled from the name until one's picked: ${rolled}`, rolled === rollLook('Junebug', LOOKS), rolled);
   await b.page.tap('#joinName'); await b.page.keyboard.type('Dee');
   await b.page.tap('#join .look:nth-child(4)');
   const picked = await on(b, () => [...document.querySelectorAll('#join .look')].findIndex((e) => e.getAttribute('aria-pressed') === 'true'));
@@ -110,7 +110,7 @@ try {
   const tags = await on(b, () => __net.tags());
   const tagA = tags.find((t) => t.id === A.id);
   const headA = await on(b, (id) => __net.headOnScreen(id), A.id);
-  check(`B sees A's name over A's head: "${tagA?.text}"`, tagA?.text === 'Tre' && headA && Math.abs(tagA.x - headA.x) < 3 && tagA.y < headA.y + 2 && tagA.y > headA.y - 30, { tagA, headA });
+  check(`B sees A's name over A's head: "${tagA?.text}"`, tagA?.text === 'Junebug' && headA && Math.abs(tagA.x - headA.x) < 3 && tagA.y < headA.y + 2 && tagA.y > headA.y - 30, { tagA, headA });
   await sleep(500);
   const still = (await on(b, () => __net.tags())).find((t) => t.id === A.id);
   check('and it stays put to the pixel while A does', still && Math.abs(still.x - tagA.x) < .5 && Math.abs(still.y - tagA.y) < .5, { tagA, still });
@@ -118,6 +118,8 @@ try {
   // and that's all they're given: the chapters are the hero's
   const inTown = await Promise.all(pages.map((p) => on(p, () => { const o = document.getElementById('obj'); return { arrived: __game.S.flags.arrived, says: o.hidden ? '' : o.textContent }; })));
   check(`once they're in town they're given nothing more: ${inTown.map((t) => `"${t.says}"`).join(' / ')}`, inTown.every((t) => t.arrived && t.says === ''), inTown);
+  const counted = await Promise.all(pages.map((p) => on(p, () => { const e = document.getElementById('beans'); return e.hidden ? null : e.textContent; })));
+  check(`and their beans are just a count, since the twelve are the chapters': ${counted.map((t) => `"${t}"`).join(' / ')}`, counted.every((t) => /^Beans \d+$/.test(t ?? '')), counted);
 
   // ---------------- walking and running, with real keys and a real thumb
   async function seenStop(watcher, who, end) {
@@ -253,7 +255,7 @@ try {
     await on(a, (at) => __game.mapCamTo({ x: at.x, z: at.z, scale: 1.5 }), B);
     await sleep(200);
     const dot = await on(a, (id) => __net.dotOnMap(id), B.id);
-    check(`B is a cyan dot on A's map, where B is: ${dot ? dot.rgb.join(',') : 'nothing'}`, dot && Math.abs(dot.rgb[0] - 0x6f) < 30 && Math.abs(dot.rgb[1] - 0xd6) < 30 && Math.abs(dot.rgb[2] - 0xc8) < 30, dot);
+    check(`B is a blue dot on A's map, where B is, and not the cast's cyan: ${dot ? dot.rgb.join(',') : 'nothing'}`, dot && Math.abs(dot.rgb[0] - 0x5b) < 30 && Math.abs(dot.rgb[1] - 0x8c) < 30 && Math.abs(dot.rgb[2] - 0xff) < 30, dot);
     await snap(a, '05-a-map');
     await a.page.keyboard.press('Escape');
     await until(() => on(a, () => !__game.mapState().open));
@@ -300,7 +302,7 @@ try {
     await on(a, () => __game.resume());
     await a.page.click('#together');
     const name = await until(() => on(a, () => { const j = document.getElementById('join'); return j && !j.hidden && document.getElementById('joinName').value; }));
-    check(`A comes back and is asked who they are with it filled in: "${name}"`, name === 'Tre', name);
+    check(`A comes back and is asked who they are with it filled in: "${name}"`, name === 'Junebug', name);
     await a.page.click('#joinGo');
     const modes = new Set(); let back = null;
     await until(async () => { const s = await on(a, () => ({ mode: __game.S.mode, joined: !!__net.link.id })); modes.add(s.mode); return s.joined && s.mode === 'town'; }, 8000);
@@ -349,6 +351,8 @@ try {
     await onRoad(c, spot.x + 3, await on(c, (x) => __game.map.zAt('us_80', x), spot.x + 3));
     const his = await until(() => on(c, () => { const o = document.getElementById('obj'); return __game.S.flags.arrived && !o.hidden ? o.textContent : null; }), 4000);
     check(`and the chapters are his: "${his}"`, /^Stock up on beans/.test(his ?? ''), his);
+    const count = await on(c, () => document.getElementById('beans').textContent);
+    check(`and so are the twelve beans: "${count}"`, /^Beans \d+\/12$/.test(count), count);
 
     const d = await serveAndOpen({ viewport: { width: 390, height: 844 }, query: `${query}#hero=${HERO}` });
     pages.push(d);

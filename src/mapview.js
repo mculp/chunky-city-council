@@ -1,6 +1,6 @@
 // The map: the world's own roads, railroad, river and buildings, drawn flat on a canvas. No image files, and nothing here knows about the game.
 
-export const COLORS = { grass: '#2a3a2c', dirt: '#b0602c', ground: '#0d0812', river: 'rgba(111,214,200,.42)', rail: '#ec803a', house: '#5f5570', houseEdge: '#120b14', road: '#f1e6cf', lane: '#b5a68e', ink: '#120b14', cream: '#f1e6cf', rust: '#ec803a', cyan: '#6fd6c8', hot: '#e3285c', dusk: '#a99bc0' };
+export const COLORS = { grass: '#2a3a2c', dirt: '#b0602c', ground: '#0d0812', river: 'rgba(111,214,200,.42)', rail: '#ec803a', house: '#5f5570', houseEdge: '#120b14', road: '#f1e6cf', lane: '#b5a68e', ink: '#120b14', cream: '#f1e6cf', rust: '#ec803a', cyan: '#6fd6c8', hot: '#e3285c', dusk: '#a99bc0', blue: '#5b8cff' };
 
 // Long lines cut into short pieces with boxes round them, so a small view only draws what it can see
 const PIECE = 12;

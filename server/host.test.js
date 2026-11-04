@@ -17,7 +17,7 @@ function setup(opts = {}) {
     s.snaps = () => s.got.filter((d) => typeof d !== 'string').map(decodeMessage);
     host.opened(s); return s;
   };
-  const hello = (s, extra = {}) => host.heard(s, say({ t: 'hello', key: 'k'.repeat(32), name: 'Tre', look: 1, ...extra }));
+  const hello = (s, extra = {}) => host.heard(s, say({ t: 'hello', key: 'k'.repeat(32), name: 'Junebug', look: 1, ...extra }));
   return { t, town, host, phone, hello };
 }
 
@@ -49,7 +49,7 @@ test('a phone that goes while its hello is being checked never comes in, and nob
   await said;
   host.beat();
   assert.equal(host.here, 1);
-  assert.ok(!watcher.words().some((m) => m.t === 'who' && m.players?.some((p) => p.name === 'Tre')), 'the others were told about it');
+  assert.ok(!watcher.words().some((m) => m.t === 'who' && m.players?.some((p) => p.name === 'Junebug')), 'the others were told about it');
 });
 
 test('the hero is whoever has the hero\'s secret, and nobody else', async () => {

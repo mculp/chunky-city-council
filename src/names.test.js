@@ -7,7 +7,7 @@ const rot13 = (s) => s.replace(/[a-z]/gi, (c) => { const a = c <= 'Z' ? 65 : 97;
 
 describe('what players are called', () => {
   test('ordinary names go through as they were typed', () => {
-    for (const name of ['Matt', 'Miss Bobby', 'Jo-Ann', "O'Neal", 'Zoë', 'rektguy 1386', 'J.R.', 'Tre']) assert.deepEqual(checkName(name), { ok: true, name });
+    for (const name of ['Matt', 'Miss Bobby', 'Jo-Ann', "O'Neal", 'Zoë', 'rektguy 1386', 'J.R.', 'Junebug']) assert.deepEqual(checkName(name), { ok: true, name });
   });
 
   test('spaces are run together and trimmed, and anything unprintable counts as a space', () => {

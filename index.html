@@ -5392,7 +5392,8 @@ function hudVitals() {
   setHidden('stam', S.mode === 'bitten' || S.mode === 'dream' || S.mode === 'wake' || (S.mode !== 'swim' && S.mode !== 'drive' && !player.ran)); $('stamFill').style.transform = `scaleX(${left.toFixed(2)})`;
   setHidden('mph', S.mode !== 'drive'); if (S.mode === 'drive') setHTML('mph', `${Math.round(speedOf(driving) * 2.237)} MPH`);
   const town = S.mode === 'town' || S.mode === 'drive' || S.mode === 'grabbed' || S.mode === 'dialog' || S.mode === 'sweep' || S.mode === 'end';
-  setHidden('beans', !town); setHTML('beans', `Beans ${S.beans}/12`); setHidden('rep', !town);
+  // the twelve are the hero's chapters, so anyone else just has their count
+  setHidden('beans', !town); setHTML('beans', net && !net.hero ? `Beans ${S.beans}` : `Beans ${S.beans}/12`); setHidden('rep', !town);
   const pockets = Object.keys(LOOT_NAMES).filter((k) => S.items[k] > 0).map((k) => `${LOOT_NAMES[k]} ${S.items[k]}`).join(' · ');
   setHidden('pockets', !town || !pockets); setHTML('pockets', pockets);
   if (town) drawPeople();

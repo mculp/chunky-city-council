@@ -63,7 +63,7 @@ test('messages read from an ArrayBuffer and from part of a bigger buffer alike',
 
 // ---------------- a look rolled from a name
 test('a look rolled from a name is always the same one for that name', () => {
-  for (const name of ['Matt', 'Miss Bobby', 'Tre', 'x']) { const l = rollLook(name, 7); assert.ok(Number.isInteger(l) && l >= 0 && l < 7, `${name} gets ${l}`); assert.equal(rollLook(name, 7), l); }
+  for (const name of ['Matt', 'Miss Bobby', 'Junebug', 'x']) { const l = rollLook(name, 7); assert.ok(Number.isInteger(l) && l >= 0 && l < 7, `${name} gets ${l}`); assert.equal(rollLook(name, 7), l); }
   assert.equal(rollLook('Matt', 7), rollLook('matt', 7), 'whatever the capitals');
 });
 
@@ -123,7 +123,7 @@ test('nobody is drawn until someone says where they are', () => {
 
 test('someone new appears where they are, with the name and look they picked', () => {
   const w = createWalkers();
-  w.who([{ id: 12, name: 'Miss Bobby', look: 3 }, { id: 13, name: 'Tre', look: 1, hero: true }]);
+  w.who([{ id: 12, name: 'Miss Bobby', look: 3 }, { id: 13, name: 'Junebug', look: 1, hero: true }]);
   w.take([{ id: 12, stamp: 500, x: 40, y: 2, z: -30, yaw: 1 }, { id: 13, stamp: 500, x: 0, y: 0, z: 0, yaw: 0 }], 1000);
   const [a, b] = w.at(1000);
   assert.equal(a.id, 12); assert.equal(a.name, 'Miss Bobby'); assert.equal(a.look, 3); assert.equal(a.hero, false);
@@ -135,8 +135,8 @@ test('someone whose name hasn\'t come yet is drawn nameless, and takes it when i
   const w = createWalkers();
   w.take([{ id: 12, stamp: 500, x: 0, y: 0, z: 0, yaw: 0 }], 1000);
   assert.equal(w.at(1000)[0].name, '');
-  w.who([{ id: 12, name: 'Tre', look: 2 }]);
-  assert.equal(w.at(1010)[0].name, 'Tre'); assert.equal(w.at(1010)[0].look, 2);
+  w.who([{ id: 12, name: 'Junebug', look: 2 }]);
+  assert.equal(w.at(1010)[0].name, 'Junebug'); assert.equal(w.at(1010)[0].look, 2);
 });
 
 test('their swings and waves are as of the newest pose, not smoothed, so none goes missing between two', () => {
@@ -303,7 +303,7 @@ class FakeSocket {
   get poses() { return this.sent.filter((s) => typeof s !== 'string'); }
   get words() { return this.sent.filter((s) => typeof s === 'string').map((s) => JSON.parse(s)); }
 }
-const ME = { key: 'a5'.repeat(16), name: 'Tre', look: 2 };
+const ME = { key: 'a5'.repeat(16), name: 'Junebug', look: 2 };
 const link = (over = {}) => { FakeSocket.made = []; const t = { now: 0 }; const net = connectNet({ url: 'ws://here', WS: FakeSocket, clock: () => t.now, hello: () => ME, ...over }); return { net, t, socket: () => FakeSocket.made[FakeSocket.made.length - 1] }; };
 // connected and let in
 const joined = (l, id = 4) => { l.net.update(0, 0, 0, 0); l.socket().opened(); l.socket().hear(say({ t: 'welcome', id })); return l; };
@@ -376,7 +376,7 @@ test('it knows who it is, and doesn\'t count itself among the others', () => {
 
 test('who else is here comes by name and look', () => {
   const { net, socket } = joined(link());
-  socket().hear(say({ t: 'who', players: [{ id: 4, name: 'Tre', look: 2 }, { id: 5, name: 'Miss Bobby', look: 6 }] }));
+  socket().hear(say({ t: 'who', players: [{ id: 4, name: 'Junebug', look: 2 }, { id: 5, name: 'Miss Bobby', look: 6 }] }));
   socket().hear(encodeSnapshot([{ id: 5, pose: encodePose(100, 8, 1, 1, 0) }]));
   assert.deepEqual(net.others().map((o) => [o.name, o.look]), [['Miss Bobby', 6]]);
 });

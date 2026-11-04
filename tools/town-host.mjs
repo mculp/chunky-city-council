@@ -46,7 +46,7 @@ function stop() {
 
 // A phone, on a page at chunky.ms unless it's said where: it says hello as soon as it's open
 const phones = [];
-function phone(url, { key, name = 'Tre', hero, origin = 'https://chunky.ms' }) {
+function phone(url, { key, name = 'Junebug', hero, origin = 'https://chunky.ms' }) {
   const ws = new WebSocket(url, { origin }), p = { ws, id: 0, snaps: [], words: [], refused: null, closed: null };
   phones.push(p);
   ws.on('unexpected-response', (req, res) => { p.refused = res.statusCode; res.resume(); });
