@@ -11,7 +11,9 @@
 // its outline drawn through him, both on the screen. It goes over away from him, along the line
 // from him through it, and lands 1.5 to 3 m off, or short of another of them, a parked pickup or a house's wall right behind it. One coming for him stops at arm's length. A
 // ring of cast iron goes over the thud, and the one it lands on jolts back as the picture holds. Two coming at him at once, one either side, go down in two taps, the second
-// swinging back the other way. With reduced motion the camera stays where it was from him.
+// swinging back the other way. With reduced motion the camera stays where it was from him. The bat (CHUNKY-172) lands on them the same way from 0.4 to 2.8 m off, with the
+// fat of it across their head or their chest, and between swings he carries whichever he's got: the skillet hanging at his right thigh, the bat over his right shoulder,
+// and neither in a pickup.
 //
 // Anyone of them within 4 m that he's in front of has their outline drawn through him: reaching for him, as the pan lands and lying there, and with reduced motion too. That
 // it's drawn is told by what it changes on the screen, the same moment drawn with it and without, and one 6 m off has nothing drawn through him, nor does anything else.
@@ -220,8 +222,8 @@ const skillet = () => {
   };
   // From a tap on, a step at a time with it drawn: whether it went down or got hold of him first, what could be seen of it the step before the pan landed on it, which way
   // he was facing then, where he was, where it stood and where it ended up, and whether anyone else went down. Where it's drawn as it goes over is the line from where it stood
-  // to where it lands. And how far the middle of the skillet's bottom was from the middle of its head and of its chest, as they were drawn where it stood, in the frame it
-  // landed in, and which of them the game says it landed on.
+  // to where it lands. And how far the middle of the skillet's bottom, or of the bat's barrel a hand's width from its end, was from the middle of its head and of its chest,
+  // as they were drawn where it stood, in the frame it landed in, and which of them the game says it landed on.
   window.swung = (s, others = []) => {
     const stood = { x: s.x, z: s.z }; let seen = null, faced = null, me = null, was = null, pan = null, t = 0;
     for (; t < 1.2 && !(s.flat > 0) && !H.grab; t += T) {
@@ -229,7 +231,7 @@ const skillet = () => {
       Object.assign(stood, { x: s.x, z: s.z });
       G.step(T, T);
     }
-    if (s.flat > 0 && was?.headAt) { const b = G.skillet.bottom(), off = (p) => +Math.hypot(b[0] - p[0], b[1] - p[1], b[2] - p[2]).toFixed(2); pan = { head: off(was.headAt), chest: off(was.chestAt), on: G.skillet.lands()?.part ?? null }; }
+    if (s.flat > 0 && was?.headAt) { const b = G.S.flags.bat ? G.skillet.barrel() : G.skillet.bottom(), off = (p) => +Math.hypot(b[0] - p[0], b[1] - p[1], b[2] - p[2]).toFixed(2); pan = { head: off(was.headAt), chest: off(was.chestAt), on: G.skillet.lands()?.part ?? null }; }
     return { down: s.flat > 0, grab: !!H.grab, t: +t.toFixed(2), seen, faced: faced && +faced.toFixed(3), me, stood, landed: { x: s.x, z: s.z }, pan, others: others.map((o) => o.flat > 0) };
   };
   window.heard = () => { const play = Snd.play, asked = []; Snd.play = function (name, o) { asked.push(name); return play.call(this, name, o); }; return () => { Snd.play = play; return asked; }; };
@@ -291,6 +293,46 @@ const PAN_ON = { head: .25, chest: .3 }, onIt = all.filter((r) => r.pan && (r.pa
 const panOff = (part) => all.filter((r) => r.pan?.on === part).map((r) => r.pan[part]), spread = (v) => (v.length ? `${Math.min(...v).toFixed(2)} to ${Math.max(...v).toFixed(2)} m` : 'never');
 console.log(`     as it lands, the middle of the skillet's bottom is ${spread(panOff('head'))} from the middle of their head the ${panOff('head').length} times it's on their head, and ${spread(panOff('chest'))} from their chest's the ${panOff('chest').length} times it's on that`);
 check(`the skillet lands on them: the middle of its bottom is within ${PAN_ON.head} m of the middle of their head or ${PAN_ON.chest} m of their chest's as it lands (${onIt.length} of ${all.length})`, onIt.length === all.length, all.filter((r) => !onIt.includes(r)).slice(0, 16).map((r) => `${r.kind} ${r.a.toFixed(1)} rad ${r.d}: ${JSON.stringify(r.pan)}`));
+
+// ---- and the bat lands on them the same way: the fat of it, a hand's width from its end, across their head or their chest, which is about 0.18 m from the middle of
+// either as they were drawn where they stood. He steps in to where it reaches as he winds up, from as far off as he can swing at them.
+const batted = [];
+for (const kind of ['up', 'scuttle']) for (const a of [0, 1.6, -2.4, Math.PI]) for (const d of [.4, 1.4, 2.8, 'reaching']) {
+  await g(([kind, a, d]) => {
+    clear(); G.S.flags.bat = true; const s = kinds[kind];
+    if (d === 'reaching') { put(s, a, 2.2, true); closeTo(s, 0, .1); } else put(s, a, d);
+    window.trial = [s]; G.sim(T, T);
+    if (d !== 'reaching') put(s, a, d);
+    drawn(s);
+  }, [kind, a, d]);
+  await tap();
+  batted.push({ kind, a, d, ...(await g(() => swung(trial[0]))) });
+}
+await g(() => { G.S.flags.bat = false; });
+const BAT_ON = { head: .3, chest: .35 }, batOn = batted.filter((r) => r.down && !r.grab && r.pan && (r.pan.head <= BAT_ON.head || r.pan.chest <= BAT_ON.chest));
+const batOff = (part) => batted.filter((r) => r.pan?.on === part).map((r) => r.pan[part]);
+console.log(`     with the bat, the middle of its barrel a hand from the end is ${spread(batOff('head'))} from the middle of their head the ${batOff('head').length} times it lands on their head, and ${spread(batOff('chest'))} from their chest's the ${batOff('chest').length} times it's on that`);
+check(`the bat lands on them every time too: the middle of its barrel a hand from its end is within ${BAT_ON.head} m of the middle of their head or ${BAT_ON.chest} m of their chest's as it lands (${batOn.length} of ${batted.length})`, batOn.length === batted.length, batted.filter((r) => !batOn.includes(r)).slice(0, 16).map((r) => `${r.kind} ${r.a.toFixed(1)} rad ${r.d}: ${JSON.stringify({ down: r.down, grab: r.grab, ...r.pan })}`));
+
+// ---- and between swings he carries it, so it's always there to see: hanging by the handle at his right thigh with its bottom out and turned a little back, which is what
+// the camera behind him sees. With the bat it's the bat, over his right shoulder, and in a pickup it's neither.
+const carried = await g(() => {
+  clear(); G.sim(1, T);
+  const [pan, bat] = G.skillet.tools, V = pan.position.constructor, H = G.player.pos, yaw = G.player.yaw, rx = -Math.cos(yaw), rz = Math.sin(yaw), fx = Math.sin(yaw), fz = Math.cos(yaw);
+  // where its fist is: how far out to his right and how far up off the ground
+  const at = (o) => { const w = o.getWorldPosition(new V()); return { right: +((w.x - H.x) * rx + (w.z - H.z) * rz).toFixed(2), up: +(w.y - H.y).toFixed(2) }; };
+  // and which way the pan's bottom faces: from the middle of its rim to the middle of its bottom, out to his right and back
+  const b = new V(...G.skillet.bottom()), m = pan.localToWorld(new V(0, G.skillet.SKILLET.at, 0)), n = b.clone().sub(m).normalize();
+  const out = { pan: pan.visible && !bat.visible, ...at(pan), out: +(n.x * rx + n.z * rz).toFixed(2), back: +(-(n.x * fx + n.z * fz)).toFixed(2) };
+  // he's drawn twelve times a second, so each of these waits for him to be drawn twice
+  G.S.flags.bat = true; G.sim(.2, T); out.bat = bat.visible && !pan.visible; out.batAt = at(bat); G.S.flags.bat = false; G.sim(.2, T);
+  const v = G.vehicles.find((q) => q.kind === 'pickup' && !q.ai && !q.kid && !q.wrecked && !q.drowned && !q.coast), was = [v.x, v.z, v.yaw];
+  G.getIn(v); G.sim(.2, T); out.driving = pan.visible || bat.visible; G.getOut(true); repark(v, ...was); G.sim(.2, T);
+  return out;
+});
+check(`between swings he carries it, hanging at his right thigh, ${carried.right} m out and ${carried.up} m up, with its bottom out (${carried.out}) and a little back (${carried.back})`, carried.pan && carried.right > .2 && carried.up > .3 && carried.up < .9 && carried.out > .4 && carried.back > .2, carried);
+check(`  and with the bat it's the bat, over his right shoulder, ${carried.batAt.up} m up`, carried.bat && carried.batAt.right > .1 && carried.batAt.up > 1.1, carried);
+check('  and in a pickup it\'s neither', !carried.driving, carried);
 
 // ---- through nothing: with another of them, a car or a wall right behind it, it doesn't go through, and with no room it drops where it stood
 // The pickup's side on 3.6 m ahead of him, so that its side is 1.2 m behind the one he swings at, and it goes back where it was after.

@@ -4584,6 +4584,10 @@ const castIron = new THREE.Group(); hero.body.add(castIron); castIron.visible = 
   wear(grip, () => .2); wear(hole, () => .55); wear(helper, () => .4);
   for (const [geo, px] of [[pan, 1.3], [grip, 1], [hole, 1], [helper, 1]]) castIron.add(outline(new THREE.Mesh(geo, iron), INK, px));
 }
+// How he carries it between swings: hanging by the handle at his right thigh with its bottom out, so its +y is down and its +z out to his right. That's turned back a
+// little, or from behind him, where the camera is, the pan would be edge-on and only a stick. The bat goes over his right shoulder, its barrel up and back the way BAT_REST points.
+const CARRY_HANG = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(.707, 0, -.707), new THREE.Vector3(0, -1, 0), new THREE.Vector3(-.707, 0, -.707))), BAT_REST = new THREE.Vector3(-.1, .55, -.83).normalize();
+const _carryQ = new THREE.Quaternion(), _carryG = new THREE.Vector3(), _carryX = new THREE.Vector3(1, 0, 0);
 const batTool = new THREE.Group(); hero.body.add(batTool); batTool.visible = false;
 { const wood = new THREE.Mesh(new THREE.CylinderGeometry(.046, .022, .92, 7), new THREE.MeshStandardMaterial({ color: '#a9793f', roughness: .7 })), tape = new THREE.Mesh(new THREE.CylinderGeometry(.027, .027, .22, 6), new THREE.MeshStandardMaterial({ color: '#a82a2a', roughness: .9 })); wood.position.y = .32; tape.position.y = -.02; batTool.add(outline(wood, INK, 1.1), outline(tape, INK, 1)); }
 const broom = new THREE.Group(); hero.body.add(broom); broom.visible = false;
@@ -4608,12 +4612,12 @@ marksHim(heroRoot);
 const HP = { kind: 'hang', phase: 0, speed: 0, cut: 0, lag: 0, t: 0 };
 // out of a truck at speed and rolling, then getting up (CHUNKY-168): which of those, how long it's been, and how far over he is
 let roll = null;
-// A swing, as drawings: up over his shoulder, and down through whatever's in front of him. [hand x, y, z, the handle's turn]. Once the skillet's landed, it goes on from
+// A swing, as drawings: up over his shoulder, and down through whatever's in front of him. [hand x, y, z, the handle's turn]. Once it's landed, it goes on from
 // the one after where it would have (SWING_AFTER).
 const SWING_POSES = [[.2, .34, -.2, -2.1], [.15, .5, -.08, -1], [.1, .16, .42, .85], [.08, -.26, .6, 1.75], [.08, -.36, .55, 2.15], [.2, -.46, .34, 2.5]], SWING_T = .46, SWING_AT = .2, SWING_AFTER = 4;
 // It turns him to the nearest one he can reach, whichever way he's facing on a phone, and close to where he's looking with a mouse. It lands on them where it's
 // best, at the end of his arms (SWING_ARM, nearest and furthest), which he steps in or back to as he winds up, up to this quick (SWING_LUNGE, m/s).
-const SWING_REACH = 2.8, SWING_CONE = { mouse: Math.cos(.5) }, SWING_ARM = { skillet: [.5, .7], bat: [.95, 1.75] }, SWING_LUNGE = 10;
+const SWING_REACH = 2.8, SWING_CONE = { mouse: Math.cos(.5) }, SWING_ARM = { skillet: [.5, .7], bat: [.8, 1.15] }, SWING_LUNGE = 10;
 // How long a hit keeps one of them down, getting up included: about ten seconds from the skillet or the bat, and longer the harder anything else hits. Nobody's ever worse off than down.
 // and the train's longer than any of them, 20 s being the most that anything else keeps them down: thrown off its side, and off its front
 const DOWN_FOR = { swing: 10, blast: 14, train: [30, 45] }, downByTruck = (speed) => Math.min(20, 8 + speed * .5);
@@ -4711,7 +4715,7 @@ function poseHero(tq) {
   // round behind him as he swings. As the skillet lands it's drawn on whatever it landed on, and held there a step.
   const tool = S.flags.bat ? batTool : castIron; (S.flags.bat ? castIron : batTool).visible = false;
   tool.visible = swingT >= 0 && (k === 'run' || k === 'air');
-  if (tool === castIron && tool.visible && swingLands?.draws > 0) { swingLands.draws--; landSkillet(R, swingLands); }
+  if (tool.visible && swingLands?.draws > 0) { swingLands.draws--; (swingLands.bat ? landBat : landSkillet)(R, swingLands); }
   else if (tool.visible) {
     // and back the other way, from over his other shoulder
     const n = Math.min(SWING_POSES.length - 1, Math.floor(swingT * 12)), [x0, y, z, turn] = SWING_POSES[swingLands ? Math.max(n, SWING_AFTER) : n], x = x0 * swingSide;
@@ -4727,6 +4731,20 @@ function poseHero(tq) {
     tool.quaternion.setFromEuler(new THREE.Euler(turn, 0, 0));
   } else if (throwT > 0 && k === 'run') R.arm(1, V3(.3, .28, .42), V3(.8, -.1, -.2));
   else if (bumpT > 0 && k === 'run') { R.arm(1, V3(.08, -.2, .46), V3(.7, -.3, -.25)); R.arm(0, V3(-.08, -.2, .46), V3(-.7, -.3, -.25)); }
+  // Between swings he carries it on foot, so it's always there to see: the skillet hanging at his right thigh and swinging a little behind his step, and the bat over his
+  // shoulder. Not while that hand's got Gerald in it or is bumping the ball, and not in the opening, which stays as it was.
+  if (!tool.visible && (k === 'run' || k === 'air') && (S.mode === 'town' || S.mode === 'dialog') && !S.items.gerald && !(bumpT > 0)) {
+    const a = k === 'air' ? .3 : Math.min(1, HP.speed / 4.2) + .5 * player.runK;
+    tool.visible = true;
+    if (tool === castIron) {
+      const hang = _carryQ.setFromAxisAngle(_carryX, Math.sin(ph - .7) * .3 * a).multiply(CARRY_HANG);
+      castIron.quaternion.copy(hang);
+      castIron.position.copy(R.arm(0, V3(-.37, -.6 + .04 * a, .05 - Math.sin(ph) * .16 * a), V3(-.7, -.35, -.25), _carryG.set(0, 1, 0).applyQuaternion(hang)));
+    } else {
+      batTool.quaternion.setFromUnitVectors(UP, BAT_REST);
+      batTool.position.copy(R.arm(0, V3(-.22, -.06 + Math.abs(Math.sin(ph)) * .02 * a, .2), V3(-.7, -.3, -.25), BAT_REST));
+    }
+  }
   // Gerald, in the hand he doesn't throw with, sat on top of it the way he sits on Toni's, whatever the rest of him's doing. It's held out by his side,
   // where the camera behind him can see him, and flat under him: closed round him, his fingers were a dark ring with a green spot in it, which read as a can.
   heroGerald.visible = !!S.items.gerald && (k === 'run' || k === 'air');
@@ -8107,11 +8125,11 @@ function updateSwing(dt) {
   if (throwT > 0) throwT -= dt;
   if (swingT < 0) return;
   // Winding up at someone, he keeps facing them, and steps in if they're past the end of what he's swinging, or back if they're right up against him, so that it lands on them
-  // at the end of his arms. Past the end is their middle for the bat, and their chest for the skillet, which it can always reach from there whichever way they're turned.
+  // at the end of his arms. Past the end is their chest, which it can always reach from there whichever way they're turned.
   const who = swingWho && !swingHit && !(swingWho.flat > 0) ? swingWho : null;
   if (who) {
     const P = player.pos, dx = who.x - P.x, dz = who.z - P.z, d = Math.hypot(dx, dz) || 1, [near, far] = S.flags.bat ? SWING_ARM.bat : SWING_ARM.skillet, close = nearestOf(who);
-    const past = S.flags.bat || who.chestX === undefined ? d : drawnAt(who, who.chestX, who.chestY, who.chestZ).setY(P.y).distanceTo(P);
+    const past = who.chestX === undefined ? d : drawnAt(who, who.chestX, who.chestY, who.chestZ).setY(P.y).distanceTo(P);
     player.yaw = Math.atan2(dx, dz);
     const want = past > far ? past - far : close < near ? close - near : 0, left = Math.max(dt, SWING_AT - swingT);
     if (want) { const k = Math.sign(want) * Math.min(Math.abs(want) * dt / left, SWING_LUNGE * dt); stepBy(dx / d * k, dz / d * k); }
@@ -8121,9 +8139,9 @@ function updateSwing(dt) {
     swingHit = true;
     const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), P = player.pos, bat = S.flags.bat, s = swingWho && canHit(swingWho) ? swingWho : null;
     if (s) {
-      // On someone, it's them and nobody else. A ring of cast iron over the thud, and the picture holds a frame and tears, like a drawing being hit, with the skillet drawn
+      // On someone, it's them and nobody else. A ring of cast iron over the thud, and the picture holds a frame and tears, like a drawing being hit, with what he swung drawn
       // on them in it, where they stood, whenever in the twelfth of a second it is.
-      if (!bat) { swingLands = { ...landingOf(s), draws: 2 }; poseHero(lastStepIdx / 12); }
+      swingLands = { ...landingOf(s, bat ? BAT_ON : PAN_ON), bat, draws: 2 }; poseHero(lastStepIdx / 12);
       horde.knockOne(s, P.x, P.z, DOWN_FOR.swing);
       SFX.play('hit.flesh'); SFX.play(bat ? 'hit.wood' : 'hit.metal');
       if (!reduceMotion) { triggerBurst(.45, .1, true, false); stepBurst(); cam.shake = Math.max(cam.shake, .22); }
@@ -8142,25 +8160,36 @@ function updateSwing(dt) {
 // What the skillet lands on: the middle of their head, coming down on it bottom first from over his shoulder, or of their chest if he can't reach their head, which the
 // step in as he winds up always lets him. How steeply it's coming down on each as it lands, below level, which is steeper on a head, so that it reaches further, how far
 // the outside of each is from its middle, how far short of that it stops, and how far his fist reaches from his shoulder, all in metres but the first, as he's built.
+// The bat lands the same way, the fat of it across them a hand's width from its end.
 const LANDS = { down: { head: .9, chest: .55 }, head: .12, chest: .13, gap: .01, reach: (HERO_BUILD.reach[0] + HERO_BUILD.reach[1] + .08 * HERO_BUILD.thick - .01) * HERO_SCALE };
 const _ka = new THREE.Vector3(), _kb = new THREE.Vector3(), _kc = new THREE.Vector3(), _kd = new THREE.Vector3(), _ke = new THREE.Vector3(), _kf = new THREE.Vector3(), _km = new THREE.Matrix4();
-// Where his fist and the skillet go for it to land on the head or chest whose middle is at a point in the world: the fist, the way the handle runs from it and the way
-// the bottom faces, in his body's own space, and how many metres short of it his arm leaves it.
-function skilletOn(at, part) {
+// For each: how far along it from his fist the middle of what lands is, how far back from what it lands on its middle line is, which hand's on it nearest that, and how
+// steeply it's coming down on a head and on a chest. The bat's top hand is his left, and it comes down flatter, so that it reaches further, near level on a head. If that
+// leaves it short of them, it comes down steeper until it isn't, as far as this, past straight down, onto the back of anyone folded over.
+const PAN_ON = { at: SKILLET.at, deep: SKILLET.deep, arm: 0, down: LANDS.down }, BAT_ON = { at: .6, deep: .046, arm: 1, down: { head: 1.25, chest: .9 }, steepest: 1.9 };
+const _kh = new THREE.Vector3();
+// Where his fist and what he swings go for it to land on the head or chest whose middle is at a point in the world: the fist, the way the handle runs from it and the way
+// what lands faces, in his body's own space, and how many metres short of it his arm leaves it.
+function swungOn(at, part, T = PAN_ON) {
   heroRoot.position.copy(player.pos); heroRoot.rotation.set(0, player.yaw, 0); heroRoot.updateMatrixWorld(true);
-  const k = 1 / hero.body.scale.x, S = hero.S[0], face = _kb.set(0, -Math.sin(LANDS.down[part]), Math.cos(LANDS.down[part]));
-  // the middle of the rim, which is the bottom's depth back from the middle of the bottom
-  const rim = hero.body.worldToLocal(_ka.copy(at)).addScaledVector(face, -(LANDS[part] + LANDS.gap) * k - SKILLET.deep);
-  // the handle runs back from there towards his shoulder, square to the way it faces, and his fist's on it as far back as he holds it
-  const run = _kc.subVectors(rim, S); run.addScaledVector(face, -run.dot(face)).normalize();
-  const fist = _kd.copy(rim).addScaledVector(run, -SKILLET.at), far = fist.distanceTo(S), most = LANDS.reach * k;
+  const k = 1 / hero.body.scale.x, S = hero.S[T.arm], most = LANDS.reach * k, there = hero.body.worldToLocal(_kh.copy(at)), face = _kb, rim = _ka, run = _kc, fist = _kd;
+  for (let down = T.down[part]; ; down += .1) {
+    face.set(0, -Math.sin(down), Math.cos(down));
+    // the middle of the rim, which is the bottom's depth back from the middle of the bottom, or the middle of the bat's barrel
+    rim.copy(there).addScaledVector(face, -(LANDS[part] + LANDS.gap) * k - T.deep);
+    // the handle runs back from there towards his shoulder, square to the way it faces, and his fist's on it as far back as he holds it
+    run.subVectors(rim, S); run.addScaledVector(face, -run.dot(face)).normalize();
+    fist.copy(rim).addScaledVector(run, -T.at);
+    if (fist.distanceTo(S) <= most || !(down < T.steepest)) break;
+  }
+  const far = fist.distanceTo(S);
   if (far > most) fist.sub(S).multiplyScalar(most / far).add(S);
   return { fist, run, face, short: Math.max(0, far - most) / k };
 }
-function landingOf(s) {
+function landingOf(s, T = PAN_ON) {
   if (s.headX === undefined) return { at: new THREE.Vector3(s.x, s.y + 1.2, s.z), part: 'chest' };
   const head = drawnAt(s, s.headX, s.headY, s.headZ).clone();
-  return skilletOn(head, 'head').short ? { at: drawnAt(s, s.chestX, s.chestY, s.chestZ).clone(), part: 'chest' } : { at: head, part: 'head' };
+  return swungOn(head, 'head', T).short ? { at: drawnAt(s, s.chestX, s.chestY, s.chestZ).clone(), part: 'chest' } : { at: head, part: 'head' };
 }
 // Where something of theirs is on the screen, from where it was when they were last drawn, which is a twelfth of a second ago at most. If they've gone further than
 // they could have in that, they've not been drawn since they came out, and it's moved with them.
@@ -8172,12 +8201,21 @@ function drawnAt(s, x, y, z) {
 // Him drawn with it landed: his fist on the handle where that puts it, and the other arm out to the side. His wrist's behind his fist along his forearm, which is
 // where the arm puts it, so it's put once near enough and then again by what that missed by.
 function landSkillet(R, { at, part }) {
-  const { fist, run, face } = skilletOn(at, part), hint = _kf.set(-.7, -.3, -.25);
+  const { fist, run, face } = swungOn(at, part), hint = _kf.set(-.7, -.3, -.25);
   const wrist = _ke.copy(fist).addScaledVector(_ka.subVectors(fist, R.S[0]).normalize(), -.08 * HERO_BUILD.thick); wrist.x += HERO_BUILD.out;
   wrist.add(_ka.subVectors(fist, R.arm(0, wrist, hint, run)));
   castIron.position.copy(R.arm(0, wrist, hint, run));
   castIron.quaternion.setFromRotationMatrix(_km.makeBasis(_kf.crossVectors(run, face), run, face));
   R.arm(1, _ke.set(.64, -.12, .02), _kf.set(.7, -.3, -.25));
+}
+// and with the bat: his left fist on the grip where that puts it, the way his right is on the skillet's handle, and his right hand below it on the grip
+function landBat(R, { at, part }) {
+  const { fist, run } = swungOn(at, part, BAT_ON), hint = _kf.set(.7, -.3, -.25);
+  const wrist = _ke.copy(fist).addScaledVector(_ka.subVectors(fist, R.S[1]).normalize(), -.08 * HERO_BUILD.thick); wrist.x -= HERO_BUILD.out;
+  wrist.add(_ka.subVectors(fist, R.arm(1, wrist, hint, run)));
+  batTool.position.copy(R.arm(1, wrist, hint, run));
+  batTool.quaternion.setFromUnitVectors(UP, run);
+  R.arm(0, _ke.copy(fist).addScaledVector(run, -.24).setX(_ke.x + HERO_BUILD.out), _kf.set(-.7, -.3, -.25), run);
 }
 // how near the nearest of them is to him, their middle or their head, which hangs out in front of anyone folded over
 function nearestOf(s) {
@@ -9346,7 +9384,7 @@ if (location.hash === '#signs') openSignBoard();
 if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, farm: FARM, dock: DOCK, onDock, sound: SFX, singers, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, church: { house: CHURCH_HOUSE, at: CF.at, door: () => wallsOf(CHURCH_HOUSE, Y0).doors[0], steeple: churchSteeple, steeplePos: STEEPLE, steepleShown: () => churchSteepleOn.visible, us80: US80_CHURCH, us80Shown: () => us80Steeple.visible, roundWindow, rope: ROPE, bellInReach, ring: ringBell, ringing: () => bellLeft > 0, strokes: () => bellStrokes, BELL, pantry, PANTRY, today, owes: pantryOwes, shown: () => pantryCans.count, shelf: PANTRY_SHELF }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
-    mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, skillet: { tools: [castIron, batTool], SKILLET, LANDS, ARM: SWING_ARM, bottom: () => castIron.localToWorld(new THREE.Vector3(0, SKILLET.at, SKILLET.deep)).toArray(), lands: () => swingLands && { at: swingLands.at.toArray(), part: swingLands.part }, side: () => swingSide, who: () => swingWho, through: () => throughWho.map((i) => crowdShown[i]), frame(off) { throughOff = !!off; renderFrame(0); throughOff = false; } }, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
+    mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, skillet: { tools: [castIron, batTool], SKILLET, LANDS, ARM: SWING_ARM, bottom: () => castIron.localToWorld(new THREE.Vector3(0, SKILLET.at, SKILLET.deep)).toArray(), barrel: () => batTool.localToWorld(new THREE.Vector3(0, BAT_ON.at, 0)).toArray(), lands: () => swingLands && { at: swingLands.at.toArray(), part: swingLands.part }, side: () => swingSide, who: () => swingWho, through: () => throughWho.map((i) => crowdShown[i]), frame(off) { throughOff = !!off; renderFrame(0); throughOff = false; } }, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
     // flung by what he's driving: the shoes that came off and how many are drawn, which way and how far each one's glow is drawn streaking, and the cast, where they are and whether anything can hit them
     fling: { shoes: () => shoeList.map((o) => ({ x: o.x, y: o.y, z: o.z, down: o.down, roll: o.roll })), drawnShoes: () => shoes.count, streak: (s) => { const i = crowdShown.indexOf(s), a = crowdAura.instanceMatrix.array; return i < 0 ? null : [a[i * 16 + 8], a[i * 16 + 9], a[i * 16 + 10]]; },
       cast: () => Object.entries(NPCS).filter(([, n]) => n.box).map(([id, n]) => ({ id, x: n.root.position.x, y: n.root.position.y, z: n.root.position.z, spot: [n.spot.x, n.spot.z], jumping: !!n.jump, solid: n.box[4] > -Infinity })), JUMP, loose },
