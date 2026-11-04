@@ -368,6 +368,22 @@ describe('grabbing', () => {
     const h = createHorde(field()), s = h.add(.5, 0); s.state = HUNTING; h.update(1 / 30, { ...still, canGrab: false });
     assert.equal(h.grab, null);
   });
+  test('the world hears of each of them once, as their hands go up, and not again when one has him', () => {
+    const told = [], h = createHorde(field({ reaching: (s) => told.push(s) })), a = h.add(.5, 0), b = h.add(-.5, .2); a.state = b.state = HUNTING;
+    run(h, still, TUNING.windUp * .6);
+    assert.deepEqual(told, [a, b], 'once each, not every step');
+    run(h, still, TUNING.windUp);
+    assert.ok(h.grab); assert.equal(told.length, 2, 'and not at the grab');
+  });
+  test('and again for each fresh go, but not for one who can\'t reach him or one who\'s hit', () => {
+    const told = [], h = createHorde(field({ reaching: (s) => told.push(s) })), s = h.add(.5, 0); s.state = HUNTING;
+    run(h, { ...still, canGrab: false }, 1); assert.equal(told.length, 0, 'nobody can be grabbed');
+    run(h, still, TUNING.windUp * .5); assert.equal(told.length, 1);
+    s.x = 6; run(h, still, .1); s.x = .5; run(h, still, TUNING.windUp * .5);
+    assert.equal(told.length, 2, 'out of reach and back is a fresh go');
+    h.knock(0, 0, 1.5, 10); run(h, still, .2);
+    assert.equal(s.reaching, 0); assert.equal(told.length, 2, 'and a hit stops it without another');
+  });
   test('held, you\'re dragged', () => {
     const { h } = caught(); run(h, still, .5);
     assert.ok(Math.hypot(h.grab.dx, h.grab.dz) > 0);

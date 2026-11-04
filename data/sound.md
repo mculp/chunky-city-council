@@ -14,7 +14,7 @@ There are two sheets, each saying what every sound and part of the score is and 
 
 To put one sound back, copy its line from `data/sound.json` over its line in `data/sound-new.json`. To put them all back, it's the line in `index.html` that picks the sheet.
 
-A sound that came after the old sheet stopped changing is only on the new one. So far that's `amb.flies`, the flies round Robby, the `jam.` sounds, for what's in the shed on Pine Forest Rd, `ball.bump`, `ball.land` and `tramp.spring`, for the yard off True Light Rd, `lure.bottle`, `lure.pop` and `vehicle.alarm`, for what he throws, `train.rumble`, `train.clatter`, `train.horn`, `train.blast` and `crossing.bell`, for the railroad, and `church.bell`, for the steeple on the church on Church St. They have no worked-out version to fall back on or to be levelled against, so `#old` plays without them, and without saying so. `tools/make-sound.test.js` checks that the new sheet has everything the old one has, and not the other way round.
+A sound that came after the old sheet stopped changing is only on the new one. So far that's `amb.flies`, the flies round Robby, the `jam.` sounds, for what's in the shed on Pine Forest Rd, `ball.bump`, `ball.land` and `tramp.spring`, for the yard off True Light Rd, `lure.bottle`, `lure.pop` and `vehicle.alarm`, for what he throws, `train.rumble`, `train.clatter`, `train.horn`, `train.blast` and `crossing.bell`, for the railroad, `church.bell`, for the steeple on the church on Church St, and `groan.reach`, for the moment their hands go up when one of them reaches for him. They have no worked-out version to fall back on or to be levelled against, so `#old` plays without them, and without saying so. `tools/make-sound.test.js` checks that the new sheet has everything the old one has, and not the other way round.
 
 ## Swapping a sound
 
@@ -36,10 +36,13 @@ Whatever the file's like, it comes out sitting with the rest. Its silence comes 
 | `bus` | `effects` or `ambience`. It's `effects` if it isn't given |
 | `reach` | How many metres away it can be heard, for anything played at a place |
 | `spread` | How far its pitch wanders from one play to the next |
+| `rate` | How fast its file plays, 1 if it isn't given: 1.4 is higher and shorter, 0.8 lower and longer. `spread` wanders around it, and it does nothing for a loop |
 | `max` | How many can play at once |
 | `gap` | The fewest seconds between one and the next |
 | `stereo` | Keeps both channels |
 | `loop` | Says it's a loop, for a new sound that has no worked-out one |
+
+Two sounds can share files and still be told apart, with `rate`. `groan.reach` is `groan.hunt`'s four takes at 1.4, so it comes out higher and shorter, once as their hands go up, when he can't see them for his hood. Each line loads its own copy of its files, so those four are asked for twice and held decoded twice, about 1 MB more.
 
 `defaults` fills in what a line leaves out. A phone plays 12 sounds at once and anything else 20.
 

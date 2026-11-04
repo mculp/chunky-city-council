@@ -292,7 +292,7 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
       workOnQueue(); runScore();
       for (const [name, l] of loops) if (l.level <= 0 && ctx.currentTime - l.since > 2) { l.src.stop(); l.src.disconnect(); l.gain.disconnect(); loops.delete(name); }
     },
-    // One sound, right now. With x and z it fades with distance and sits to one side. It says whether it played.
+    // One sound, right now. With x and z it fades with distance and sits to one side. A `rate` on its line plays it higher and shorter than its file is, or lower and longer, which is how two sounds can share takes. It says whether it played.
     play(name, { x, z, gain = 1, rate = 1 } = {}) {
       if (!live()) return false;
       const c = cueOf(name);
@@ -309,7 +309,7 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
       if (voices >= MAX_VOICES || n >= c.max || now - (last.get(name) ?? -9) < c.gap) return false;
       const takes = takesOf(name);
       if (!takes) return false;
-      const src = ctx.createBufferSource(), amp = ctx.createGain(); src.buffer = takes[Math.floor(rand() * takes.length)]; src.playbackRate.value = rate * (1 + (rand() * 2 - 1) * c.spread); amp.gain.value = g; src.connect(amp);
+      const src = ctx.createBufferSource(), amp = ctx.createGain(); src.buffer = takes[Math.floor(rand() * takes.length)]; src.playbackRate.value = rate * (c.rate ?? 1) * (1 + (rand() * 2 - 1) * c.spread); amp.gain.value = g; src.connect(amp);
       let end = amp, panner = null;
       if (pan && ctx.createStereoPanner) { panner = ctx.createStereoPanner(); panner.pan.value = pan; amp.connect(panner); end = panner; }
       end.connect(buses[c.bus]);

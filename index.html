@@ -4344,6 +4344,10 @@ const AURA_UP = .92, AURA_CELL = 256, auraMap = canvasFor(AURA_CELL * AURA_CELLS
 const auraGeo = new THREE.BufferGeometry();
 auraGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0, -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1], 3));
 auraGeo.setIndex([0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6]);
+// Reaching for him, their glow goes this far past that of anyone after him (1) by the time their hands are up. The camera's behind him, so one coming straight at him is hidden
+// by his hood, and this is what shows round the edges of him: the part facing you gets wider and hotter, with the colour stopping at RADIUM_HOT, and the ground glow already grows with it.
+// The strokes can't be more than all of them, or the black page they're drawn on would light up as a square. It's brightness and not movement, so reduced motion keeps it.
+const FLARE = .9;
 const crowdAuraZ = crowdAttr(CROWD_SHOWN, 3); auraGeo.setAttribute('iAura', crowdAuraZ);
 const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true,
@@ -4355,7 +4359,7 @@ const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
       vQ=position.xy; vA=iAura; vFlat=position.z;
       vec3 feet=(instanceMatrix*vec4(0.,0.,0.,1.)).xyz; float far=max(iAura.x,iAura.y*.55);
       vec4 mvPosition;
-      if(position.z<.5){ mvPosition=viewMatrix*vec4(feet+vec3(0.,${AURA_UP}*instanceMatrix[1].y,0.),1.); mvPosition.xy+=position.xy*vec2(1.25,1.45); }
+      if(position.z<.5){ mvPosition=viewMatrix*vec4(feet+vec3(0.,${AURA_UP}*instanceMatrix[1].y,0.),1.); mvPosition.xy+=position.xy*vec2(1.25,1.45)*(1.+max(0.,iAura.y-1.)*.7); }
       else mvPosition=viewMatrix*vec4(feet+vec3(position.x,0.,position.y)*(.7+far*1.2)+vec3(0.,.05,0.),1.);
       mvPosition.xyz+=viewMatrix[1].xyz*hillOver(feet.xz);
       gl_Position=projectionMatrix*mvPosition;
@@ -4367,11 +4371,11 @@ const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
     void main(){
       float far=max(vA.x,vA.y*.55), a; vec2 q=floor(gl_FragCoord.xy/(1.5*uPxScale))+uStep*13.;
       if(vFlat<.5){
-        float cell=mod(${STEP_HELD}+vA.z,${AURA_CELLS}.), t=texture2D(uAura,vec2((cell+vQ.x*.5+.5)/${AURA_CELLS}.,vQ.y*.5+.5)).r;
-        a=smoothstep(1.-far,1.-far+.1,t)*smoothstep(.22,.34,far)*(.75+vA.y*.35)*step(.1,h2(q));
+        float cell=mod(${STEP_HELD}+vA.z,${AURA_CELLS}.), t=texture2D(uAura,vec2((cell+vQ.x*.5+.5)/${AURA_CELLS}.,vQ.y*.5+.5)).r, shows=min(far,1.);
+        a=smoothstep(1.-shows,1.-shows+.1,t)*smoothstep(.22,.34,far)*(.75+vA.y*.35)*step(.1,h2(q));
       } else { float r=1.-length(vQ); if(r<=0.) discard; a=r*r*far*far*(.2+vA.y*.14)*(.85+.3*h2(q)); }
       if(a<.008) discard;
-      gl_FragColor=vec4(mix(${RADIUM},${RADIUM_HOT},vA.y*.75)*a,1.);
+      gl_FragColor=vec4(mix(${RADIUM},${RADIUM_HOT},min(vA.y*.75,1.))*a,1.);
       #ifdef USE_FOG
         gl_FragColor.rgb*=exp(-fogDensity*fogDensity*vFogDepth*vFogDepth);
       #endif
@@ -4518,7 +4522,7 @@ function poseCrowd(s, i, step) {
     // sore, from the train: slower, with more of a limp, and bent a little more
     const sore = s.sore > 0;
     s.gait += held ? 0 : GAIT[st] / 12 * (still ? .2 : 1) * (low ? 1.4 : 1) * (sore ? SORE.pace : 1);
-    // reaching for him, with their hands coming up over their heads, until they've got hold or something stops them
+    // reaching for him, with their hands coming up over their heads, until they've got hold or something stops them. What's coming off them flares as they do (FLARE), and only that, not their bodies.
     const grip = after && s.reaching > 0 ? Math.min(1, s.reaching / horde.T.windUp) : 0;
     // folded over as far as they stand, or coming up out of it some, a few steps at a time. The hips go back so they don't topple, which tips the legs, and that takes them down a little.
     const keep = after || away ? +low : st === CURIOUS || st === TRAILING ? (s.scuttle ? 1 : COME_UP) : st === SHAMBLE ? 1 : 0;
@@ -4568,7 +4572,7 @@ function poseCrowd(s, i, step) {
     // what's coming off them goes down with them, out of the middle of them as they lie, kneel or stand folded over, with the glow on the ground under that
     if (!seat) { _cp.set(0, AURA_UP / TOWN_SCALE - 1.43, 0).applyMatrix4(downed ? _cb : _cu); _cm.makeScale(1, Math.max(.1, (_cp.y - s.y) / AURA_UP), 1).setPosition(_cp.x, s.y, _cp.z); }
     else _cm.makeTranslation(px, seat.y, pz);
-    _cm.toArray(auras, i * 16); crowdAuraZ.setXYZ(i, far, hot, look);
+    _cm.toArray(auras, i * 16); crowdAuraZ.setXYZ(i, far, hot + grip * FLARE, look);
   }
 }
 
@@ -5441,6 +5445,8 @@ const horde = createHorde({
     const id = MAP.roadGrid.seg.owner.id, p = MAP.along(id, MAP.sOn(id, s.x, s.z) + (crowdRand() < .5 ? -1 : 1) * (6 + crowdRand() * 30));
     return [p.x + (crowdRand() - .5) * 8, p.z + (crowdRand() - .5) * 8];
   },
+  // the hands going up. The camera's behind him, so one coming straight at him is hidden by his hood by now, and this is the warning he can hear. Their glow flares too, in poseCrowd.
+  reaching(s) { playNew('groan.reach', { x: s.x, z: s.z }); },
 }, {}, {
   thrown(s, hit) { SFX.play('hit.flesh', { x: s.x, z: s.z }); spray(s.x, s.y + 1, s.z, hit.hard ? (FEW ? 6 : 12) : 3, .1, 5, .22, .95, .45, hit.vx * .05, hit.vz * .05); },
   splash(s) { addRipple(s.x, s.z, .4, 0); SFX.play('splash.small', { x: s.x, z: s.z }); },
@@ -7320,6 +7326,8 @@ if (TEST) {
       // where the snake is on the sleeve it hangs from, which doesn't change at all with reduced motion
       relative: (s) => { const i = crowdShown.indexOf(s); if (i < 0 || !(s.snake > 0) || s.snakeAt === undefined) return null; const a = (s.who ? s.who.id : s.look) % 2; return new THREE.Matrix4().fromArray(crowdArms.instanceMatrix.array, (i * 2 + a) * 16).invert().multiply(new THREE.Matrix4().fromArray(crowdSnakes.instanceMatrix.array, s.snakeAt * 16)).toArray(); } },
     downFor: { table: DOWN_FOR, truck: downByTruck }, castHips: (id) => 180 - THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(NPCS[id].rig.hm.quaternion.w)))),
+    // how hot what's coming off someone was last drawn: 1 for anyone after him, up to 1 + FLARE as their hands go up, or nothing if they weren't drawn
+    glow: (s) => { const i = crowdShown.indexOf(s); return i < 0 ? null : crowdAuraZ.getY(i); },
     mutters: () => mutterSlots.filter((m) => m.s && !m.e.hidden).map((m) => ({ says: m.e.textContent, id: m.s.who.id, opacity: +m.e.style.opacity, transform: m.e.style.transform, box: m.e.getBoundingClientRect().toJSON() })),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.
