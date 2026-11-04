@@ -233,11 +233,11 @@ import { loadSound } from './src/sound.js';
 import { randomFrom } from './src/soundbank.js';
 import { createPeople } from './src/people.js';
 import { drawPerson, drawRadiation, drawAura, degreeOf, farOf, PARTS, AURA_CELLS } from './src/looks.js';
-import { createHorde, SHAMBLE, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED, AVOIDING, TRAILING } from './src/horde.js';
+import { createHorde, SHAMBLE, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED, AVOIDING, TRAILING, ROUSED } from './src/horde.js';
 import { createRiver, surfacing } from './src/river.js';
 import { createFolks, burntDown, hipsOf, flickering, AFTER, HOW } from './src/agents.js';
 import { createTraffic } from './src/traffic.js';
-import { LURES, ALARM, SWARM as SWARMED, GRAVITY, inHand, nextUp, kindsHeld, rangeOf, throwOf, aimedAt, whoIsSwarmed } from './src/lures.js';
+import { LURES, ALARM, GRAVITY, inHand, nextUp, kindsHeld, rangeOf, throwOf, aimedAt } from './src/lures.js';
 import { keysFor, buttonsFor, actWord, fastWord, lookBy, edgeTurn, needsCursor, mouseLooks, MOUSE } from './src/controls.js';
 import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRim, drawArrow, drawLabel, labelSpace, clampCam, zoomAbout, fitScale, COLORS as MAPC } from './src/mapview.js';
 import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, wallsOf, Sheet, PATTERN, hash2 } from './src/structures.js';
@@ -2034,16 +2034,16 @@ const ropeGroup = new THREE.Group();
   const guide = new THREE.Mesh(boxGeo, pewMat); guide.scale.set(.34, .14, .34); guide.position.y = 4.65; outline(guide, INK, 1.1);
   ropeGroup.add(rope, sally, guide); ropeGroup.position.set(ROPE.x, Y0, ROPE.z); scene.add(ropeGroup); DISTANT.push({ obj: ropeGroup, x: ROPE.x, z: ROPE.z, r: 60 });
 }
-// Pulling it rings the bell, which is heard all over town. It's a lure like the others, so anyone in reach who isn't after him goes to see and anyone it's fooled
-// often enough stops coming, and while it rings the church isn't off limits to them: that's the bell in src/horde.js. It can't be rung again until it's stopped,
+// Pulling it rings the bell, which is heard all over town. It's only noise, like a crash or an alarm, so it rouses the burnt-down ones near enough to hear it and nobody walks
+// over to the church, and the church stays off limits to them while it rings. Everyone in Chunky has heard it all their lives. It can't be rung again until it's stopped,
 // and with the steeple down there's nothing to ring.
 const BELL = { reach: 160, seconds: 20, every: 2.8 };
 let bellLeft = 0, bellNext = 0, ropeTug = 0, bellStrokes = 0;
 const bellInReach = () => !churchSteeple.down && bellLeft <= 0 && Math.hypot(ROPE.x - player.pos.x, ROPE.z - player.pos.z) < 1.6;
 function ringBell() {
   if (bellLeft > 0 || churchSteeple.down) return;
-  bellLeft = BELL.seconds; bellNext = 0; horde.bell(STEEPLE.x, STEEPLE.z, BELL.reach, BELL.seconds);
-  toast("The bell's ringing. They'll come to it.");
+  bellLeft = BELL.seconds; bellNext = 0; if (folkOut) horde.noise(STEEPLE.x, STEEPLE.z, BELL.reach, BELL.seconds, 'bell');
+  toast("The bell's ringing.");
 }
 function stepBell(dt) {
   if (bellLeft > 0) {
@@ -2368,7 +2368,7 @@ const atGasDoor = () => !gasBarGone && Math.hypot(player.pos.x - GAS_DOOR.x, pla
 function barGasDoor() {
   gasBarred = !gasBarred; gasBar.visible = gasBarred; gasBarProp.down = !gasBarred; gasBarWall[4] = gasBarred ? Y0 + 2.6 : -1e9;
   SFX.play('vehicle.door', { x: GAS_DOOR.x, z: GAS_DOOR.z, rate: .75 }); toast(gasBarred ? 'Door barred' : 'Door unbarred');
-  if (folkOut) horde.noise(GAS_DOOR.x, GAS_DOOR.z, 12, 2);
+  if (folkOut) horde.noise(GAS_DOOR.x, GAS_DOOR.z, 12, 2, 'door');
   if (!gasBarred) return;
   // not left standing in the doorway
   const P = player.pos, inside = ((P.x - GAS_DOOR.x) * GAS_DOOR.nx + (P.z - GAS_DOOR.z) * GAS_DOOR.nz) * GAS_IN;
@@ -3333,7 +3333,7 @@ function playedJam(j) {
   const beat = j.sound === 'jam.drum' && time - jamLast < 1.4 ? 'jam.cymbal' : j.sound;
   jamLast = time;
   SFX.play(beat, { x: j.x, z: j.z });
-  if (folkOut) horde.noise(j.x, j.z, 40, 3);
+  if (folkOut) horde.noise(j.x, j.z, 40, 3, 'jam');
 }
 function jamInReach() {
   if (houseAt(player.pos.x, player.pos.z)?.id !== JAM_SHED) return null;
@@ -3460,7 +3460,7 @@ function hitBall() {
   const P = player.pos, n = bump(BALL, P.x, P.z, floorAt(P.x, P.z), ballRand);
   if (n === null) return;
   playNew('ball.bump', { x: P.x, z: P.z });
-  if (folkOut) horde.noise(P.x, P.z, 18, 1);
+  if (folkOut) horde.noise(P.x, P.z, 18, 1, 'bounce');
   if (n >= VOLLEY.goal) toast(`${n} in a row.`); else if (n > 1) toast(String(n));
   if (n >= VOLLEY.goal) S.flags.sixInARow = true;
 }
@@ -4491,6 +4491,10 @@ auraGeo.setIndex([0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6]);
 // by his hood, and this is what shows round the edges of him: the part facing you gets wider and hotter, with the colour stopping at RADIUM_HOT, and the ground glow already grows with it.
 // The strokes can't be more than all of them, or the black page they're drawn on would light up as a square. It's brightness and not movement, so reduced motion keeps it.
 const FLARE = .9;
+// and the second before one comes for him, when it has stopped and turned to him, the glow goes this far past that of anyone after him (1): not as far as when its hands go up, which is the one
+// that's meant to be seen round the edges of him. It's brightness and not movement, so reduced motion keeps it, and it holds for the whole second and drops once it's on him. One that's only
+// looking up, because there are three after him already, doesn't flare at all.
+const ROUSE_FLARE = .6;
 const crowdAuraZ = crowdAttr(CROWD_SHOWN, 3); auraGeo.setAttribute('iAura', crowdAuraZ);
 const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true,
@@ -4619,6 +4623,13 @@ function drawMutters() {
     m.e.style.transform = `translate(${x.toFixed(1)}px,${((-_mut.y * .5 + .5) * innerHeight - up).toFixed(1)}px) translate(-50%,-100%)`;
   }
 }
+// The second before one comes for him (ROUSED in src/horde.js) it has stopped and turned to him, which is how someone following him stands, and so that's how it's drawn, by poseCrowd,
+// the one place that works out how anyone stands. The glow is the difference: past that of anyone after him by ROUSE_FLARE for the whole second, and not at all for one that's only looking up.
+function poseRoused(s, i, step) {
+  if (s.state !== ROUSED) { poseCrowd(s, i, step); return; }
+  s.state = TRAILING; poseCrowd(s, i, step); s.state = ROUSED;
+  if (!s.rouse?.over) crowdAuraZ.setY(i, 1 + ROUSE_FLARE);
+}
 // Redrawn on the 12 fps step like everyone else, and they move on it too, which is also why it's cheap
 function drawCrowd(step) {
   // who's drawn, nearest first, four times a second
@@ -4630,7 +4641,7 @@ function drawCrowd(step) {
     crowdShown.sort((a, b) => a.seen - b.seen); if (crowdShown.length > CROWD_SHOWN) crowdShown.length = CROWD_SHOWN;
   }
   snakeN = 0;
-  crowdShown.forEach((s, i) => { poseCrowd(s, i, step); });
+  crowdShown.forEach((s, i) => { poseRoused(s, i, step); });
   for (const m of crowdParts) m.count = crowdShown.length * (m.instanceMatrix.count / CROWD_SHOWN);
   drawFallen();
   crowdSnakes.count = crowdSnakeLine.count = snakeN; crowdSnakes.visible = crowdSnakeLine.visible = snakeN > 0; crowdSnakes.instanceMatrix.needsUpdate = true;
@@ -5578,7 +5589,7 @@ const crowdRand = (() => { let s = 20260214; return () => (s = (s * 16807) % 214
 // A step asks for the floor it's on three times, and that's the most expensive thing they do
 let floorX = NaN, floorZ = NaN, floorY = 0;
 const floorOnce = (x, z) => { if (x !== floorX || z !== floorZ) { floorX = x; floorZ = z; floorY = floorAt(x, z); } return floorY; };
-// Nobody dies of the river. The cottonmouths have whoever goes in after a lure, or is thrown in by the train, and the current takes them, and src/river.js says where
+// Nobody dies of the river. The cottonmouths have whoever the train throws in, and nobody goes in after anything, and the current takes them, and src/river.js says where
 // they come up: downstream, on the bank they can walk home from, and not in a pond or against a fence. The water here is the same as the horde's.
 const RIVER = createRiver(MAP.river);
 const comeUp = surfacing(RIVER, {
@@ -5591,8 +5602,18 @@ const comeUp = surfacing(RIVER, {
 // Who each of them is and what they remember of him is in src/agents.js and data/folks.json
 const folks = createFolks(await (await fetch('data/folks.json')).json(), { store: saveStore, looks: LOOKS.crowd });
 addEventListener('pagehide', () => folks.save());
+// ---------------- never for no reason: before one comes for him it stops, turns to him and flares for a second, and that's all the screen says of it. Nothing says why. What woke each of them is only
+// kept, the last 64, for the tests to read.
+const rousedLog = [];
 const horde = createHorde({
   folks,
+  // Round a corner, behind a wall or a building, he can't be seen. His head's at the height of theirs, which is what the wall has to be higher than, and the last metre short of him
+  // is left out, so that a wall he's standing against doesn't hide him from what's right in front of it.
+  sees(s, p) {
+    const dx = p.x - s.x, dz = p.z - s.z, d = Math.hypot(dx, dz), y = Math.max(s.y, p.y) + 1.5, n = Math.ceil((d - .8) / .5);
+    for (let i = 1; i <= n; i++) { const k = Math.min(i * .5, d - .8) / (d || 1); if (blocked(s.x + dx * k, s.z + dz * k, y)) return false; }
+    return true;
+  },
   // Most of them have gone quiet, and the ones who've burnt down haven't: more of those the further out of town they came out, which is in src/agents.js
   quiet: (s) => !burntDown(s.who, Math.hypot(...MAP.toGame(s.x, s.z))),
   // and how far over they stand goes with it
@@ -5613,6 +5634,8 @@ const horde = createHorde({
   // the hands going up. The camera's behind him, so one coming straight at him is hidden by his hood by now, and this is the warning he can hear. Their glow flares too, in poseCrowd.
   reaching(s) { playNew('groan.reach', { x: s.x, z: s.z }); },
 }, {}, {
+  // one of them has stopped, turned to him and started to flare, and it groans, in crowdVoices. Nothing's written on the screen.
+  roused(s, why) { rousedLog.push({ at: time, kind: why.kind }); if (rousedLog.length > 64) rousedLog.shift(); },
   thrown(s, hit) { SFX.play('hit.flesh', { x: s.x, z: s.z }); spray(s.x, s.y + 1, s.z, hit.hard ? (FEW ? 6 : 12) : 3, .1, 5, .22, .95, .45, hit.vx * .05, hit.vz * .05); },
   splash(s) { addRipple(s.x, s.z, .4, 0); SFX.play('splash.small', { x: s.x, z: s.z }); },
   spotted(s) { susFlash = s; susFlashUntil = time + .9; toast('One of them sees through it.'); SFX.play('groan.hunt', { x: s.x, z: s.z }); glitch(.3, .15); },
@@ -5623,9 +5646,7 @@ const horde = createHorde({
     if (S.hp <= 0) { fail('They dragged you off.', `Keep moving. Mash ${press('FREE')} to break free.`); return; }
     if (S.beans > 0) { S.beans -= 1; toast('-1 beans · they got a can'); } else toast('Keep moving');
   },
-  // the cottonmouths have got someone who went into the water after something
-  bitten(s) { addRipple(s.x, s.z, .6, 1); spray(s.x, WATER.level(s.x, s.z) + .1, s.z, FEW ? 4 : 8, .07, 2.6, .55, .8, .85); SFX.play('snake.strike', { x: s.x, z: s.z, gain: .8 }); SFX.play('splash.small', { x: s.x, z: s.z }); },
-  // and the river's done with them, a little way downstream: up out of the water, soaked, with a snake on a sleeve
+  // the river's done with whoever the train threw in, a little way downstream: up out of the water, soaked, with a snake on a sleeve
   surfaced(s) { addRipple(s.x, s.z, .5, 0); if (!reduceMotion) spray(s.x, WATER.level(s.x, s.z) + .1, s.z, FEW ? 4 : 8, .07, 2.6, .55, .8, .85); SFX.play('splash.small', { x: s.x, z: s.z, gain: .9 }); },
   // and the snake lets go of the sleeve
   drop(s) { dropSnake(s); },
@@ -5658,12 +5679,20 @@ function bringOutCrowd() {
 const SET_ASIDE = [[...atTrue(880, 580), ...atTrue(1075, 740)], [...atTrue(-1600, -830), ...atTrue(-1490, -745)], [...atTrue(-730, 1630), ...atTrue(-440, 1780)]];
 // ---------------- people at home, at most of the houses and two at some. They come out as he gets near them, since working out where a door is takes a moment.
 // Nobody's at the places that are set aside, somebody's own, the trailer with the computer in it, or anywhere near Stuckey's Bridge.
-const HOME_ID = 1000, HOME_SEE = 190, HOME_SHARE = .8, HOME_TWO = .3, KEPT_EMPTY = new Set([75414843, 75057300, CRT_TRAILER, 75411012, 76094199]);
+const HOME_ID = 1000, HOME_SEE = 190, HOME_PUT = 300, HOME_SHARE = .8, HOME_TWO = .3, KEPT_EMPTY = new Set([75414843, 75057300, CRT_TRAILER, 75411012, 76094199]);
 const HOMES = STRUCTURES.filter((s) => (s.use === 'house' || s.use === 'mobile') && !s.open && s.condition !== 'ruin' && !KEPT_EMPTY.has(s.id) && hash2(s.id | 0, 81) < HOME_SHARE && Math.hypot(s.pts[0][0], s.pts[0][1]) > 400 && !SET_ASIDE.some(([x0, z0, x1, z1]) => s.pts[0][0] > x0 && s.pts[0][0] < x1 && s.pts[0][1] > z0 && s.pts[0][1] < z1)).flatMap((s) => (hash2(s.id | 0, 83) < HOME_TWO ? [s, s] : [s])).map((s, i) => ({ s, id: HOME_ID + i, out: false }));
 let townFull = !new URLSearchParams(location.search).has('test'), homesLook = 0;
+// Only the ones nearby are out. Once he's about 300 m from someone who lives somewhere, or who got out of a car, they're put back, just as they were: the same body, in the same state and the
+// same place, with everything they remember, which was never theirs to lose. They come out again as he gets back within 190 m. A long drive leaves nobody standing about the county.
+const putBack = [];
+function tidyFolk(P) {
+  for (let i = horde.all.length - 1; i >= 0; i--) { const s = horde.all[i]; if (s.who?.calm && Math.hypot(s.x - P.x, s.z - P.z) > HOME_PUT) putBack.push(horde.remove(s)); }
+  for (let i = putBack.length - 1; i >= 0; i--) { const s = putBack[i]; if (Math.hypot(s.x - P.x, s.z - P.z) < HOME_SEE) { putBack.splice(i, 1); horde.restore(s); } }
+}
 function fillHomes(dt) {
   if ((homesLook -= dt) > 0) return; homesLook = 1;
   const P = player.pos;
+  tidyFolk(P);
   for (const h of HOMES) {
     if (h.out || Math.hypot(h.s.pts[0][0] - P.x, h.s.pts[0][1] - P.z) > HOME_SEE) continue;
     h.out = true;
@@ -6336,7 +6365,7 @@ function shock(x, y, z, r, power, skip, fire) {
     if (hurtVehicle(v, power * k * 20)) wreckVehicle(v); else if (v.fuse > 0) v.fuse = Math.min(v.fuse, .25);
     toss(v, dx / d * k * 9, dz / d * k * 9, 2 + k * 6); vehDirty = true;
   }
-  if (folkOut) { horde.knock(x, z, r, DOWN_FOR.blast, 'blast'); horde.noise(x, z, r * 9, 6); }
+  if (folkOut) { horde.knock(x, z, r, DOWN_FOR.blast, 'blast'); horde.noise(x, z, r * 9, 6, 'blast'); }
   const P = player.pos, d = Math.hypot(P.x - x, P.z - z), reach = r * .8;
   if (S.mode === 'town' && d < reach && Math.abs(P.y - y) < r) { const k = 1 - d / reach; player.vy = Math.max(player.vy, 2.5 + 5 * k); player.grounded = false; hurtBy(fire ? 'blast' : 'hit', P.x - x, P.z - z, 8 + 20 * k); }
 }
@@ -6674,17 +6703,17 @@ function updateSwing(dt) {
     if (car) { SFX.play('hit.metal'); spray(x, P.y + 1.1, z, FEW ? 2 : 4, .05, 2.4, .8, .75, .65); soundAlarm(car); if (car.ai && !car.kid) traffic.letGo(car.ai, 'hit'); }
     if (r && !r.gone) SFX.play(r.house ? (r.house.walls === 'metal' || r.house.walls === 'mobile' ? 'hit.metal' : 'hit.wood') : METAL_PROPS.has(r.thing.kind) ? 'hit.metal' : 'hit.wood');
     if ((r || n || car) && !reduceMotion) cam.shake = Math.max(cam.shake, .22);
-    if (folkOut) horde.noise(P.x, P.z, 14, 1);
+    if (folkOut) horde.noise(P.x, P.z, 14, 1, 'swing');
   }
   if (swingT >= SWING_T) swingT = -1;
 }
-// ---------------- what he can throw to move the crowd without fighting it. What each one does is in src/lures.js, and what they make of it is in src/horde.js.
+// ---------------- what he can throw to slip past the ones who've burnt down. What each one does is in src/lures.js, and what they make of it is in src/horde.js.
 // Near him, what's lying around is drawn with whatever's in the air, one mesh and an outline for each kind that's there to be seen.
 const LURE_SEE = 44, LURES_FLYING = 4, LURE_GLOWS = 6;
 // an empty beer bottle in brown glass, with what's left of its paper label. It's nothing like his.
 const bottleGeo = new THREE.LatheGeometry([[.001, 0], [.038, 0], [.04, .018], [.04, .055], [.04, .135], [.04, .165], [.028, .205], [.015, .24], [.014, .315], [.018, .32], [.018, .335], [.001, .335]].map(([r, y]) => new THREE.Vector2(r, y)), 8).translate(0, -.17, 0);
 const bottleMat = new THREE.MeshStandardMaterial({ map: textTex([''], 8, 64, '#8c5a22', '#000', '12px sans-serif', { after: (g) => { g.fillStyle = '#d9cfb4'; g.fillRect(0, 41, 8, 6); } }), emissive: '#3a2410', roughness: .22, metalness: .1, side: THREE.DoubleSide });
-const lureMeshes = Object.fromEntries(Object.entries({ bottle: [bottleGeo, bottleMat, 36], crackers: [...LOOT_LOOKS.crackers, 16], fluid: [...LOOT_LOOKS.fluid, LURES_FLYING], can: [...LOOT_LOOKS.beans, LURES_FLYING + 3] }).map(([kind, [geo, mat, cap]]) => {
+const lureMeshes = Object.fromEntries(Object.entries({ bottle: [bottleGeo, bottleMat, 36], crackers: [...LOOT_LOOKS.crackers, 16], fluid: [...LOOT_LOOKS.fluid, LURES_FLYING] }).map(([kind, [geo, mat, cap]]) => {
   const m = new THREE.InstancedMesh(geo, mat, cap), line = new THREE.InstancedMesh(geo, outlineMat(kind === 'bottle' ? CHALK_WHITE : INK, 1.2, 0), cap);
   line.instanceMatrix = m.instanceMatrix;
   for (const o of [m, line]) { o.frustumCulled = false; o.count = 0; o.visible = false; o.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(o); }
@@ -6697,8 +6726,8 @@ const glintGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.B
 const glints = new THREE.Points(glintGeo, new THREE.PointsMaterial({ map: radialTex, color: '#ffdca6', size: .5, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: .5, fog: false }));
 glints.frustumCulled = false; glintGeo.setDrawRange(0, 0); scene.add(glints);
 const LYING = [], flying = Array.from({ length: LURES_FLYING }, () => ({ on: false, kind: null, x: 0, y: 0, z: 0, px: 0, pz: 0, vx: 0, vy: 0, vz: 0, turn: 0 }));
-const popping = [], opened = [], ALARMS = [], lureSpots = [], swarmedAt = {}, lyingNear = [];
-let lureDirty = true, lyingX = Infinity, lyingZ = Infinity, swarmLook = 0;
+const popping = [], ALARMS = [], lyingNear = [];
+let lureDirty = true, lyingX = Infinity, lyingZ = Infinity;
 function layOutLying() {
   // near the end of about one drive in three, off to the side of it
   for (const r of MAP.lanes) {
@@ -6722,8 +6751,8 @@ function layOutLying() {
   }
 }
 layOutLying();
-// How many he has of each, and what he'd throw now. Beans only count once there's someone to throw them at, so that nothing changes in Chapter 1.
-const haveNow = () => ({ gas: S.gas, bottle: S.items.bottle ?? 0, crackers: S.items.crackers ?? 0, fluid: S.items.fluid ?? 0, can: folkOut ? S.beans : 0 });
+// How many he has of each, and what he'd throw now. His beans aren't in it: a can set out is supper, and that isn't here yet.
+const haveNow = () => ({ gas: S.gas, bottle: S.items.bottle ?? 0, crackers: S.items.crackers ?? 0, fluid: S.items.fluid ?? 0 });
 function thrownNow() {
   const have = haveNow(), kind = inHand(have, S.hand);
   return kind ? { kind, name: LURES[kind].name, word: LURES[kind].word, n: have[kind], more: kindsHeld(have) > 1 } : null;
@@ -6742,16 +6771,16 @@ function throwLure(kind) {
   lureDirty = true;
   return true;
 }
-// It's come down. It's the same wherever it does, except that in the water all it does is splash, and whoever goes in after it goes under, and comes up again downstream.
-function landLure(kind, x, y, z) {
+// It's come down. It's the same wherever it does, except that in the water all it does is splash, and nobody follows it in. On the ground, anyone near enough who's burnt down turns
+// to look at it for a few seconds, or as long as the fire burns, and nobody walks over. struck is when it came down on someone, which is him hitting them and not him slipping past:
+// they come for him, and so does anyone who saw it, instead of looking at where it landed.
+function landLure(kind, x, y, z, struck = false) {
   const L = LURES[kind], fl = floorAt(x, z), level = WATER.level(x, z), wet = fl < level - .1;
-  if (folkOut) horde.lure(x, z, L.reach, L.seconds, wet, kind);
-  lureSpots.push({ x, z, until: time + SWARMED.remember });
   if (wet) { addRipple(x, z, .45, 0); SFX.play('splash.small', { x, z }); return; }
+  if (folkOut && !struck) horde.look(x, z, L.reach, L.look, kind);
   if (kind === 'bottle') { spray(x, Math.max(y, fl + .1), z, FEW ? 5 : 10, .055, 3, .62, .4, .16); playNew('lure.bottle', { x, z }); }
   else if (kind === 'crackers') { popping.push({ x, y: fl + .08, z, until: time + L.seconds, next: time }); }
   else if (kind === 'fluid') { spray(x, fl + .1, z, FEW ? 3 : 6, .05, 2.2, 1, .7, .25); burnAt(x, fl + .05, z, .58, L.seconds); }
-  else if (kind === 'can') { opened.push({ x, y: fl + .11, z, yaw: wreckRand() * 6.28, until: time + L.seconds, next: time }); SFX.play('can.clink', { x, z }); lureDirty = true; }
 }
 const canAlarm = (v) => ALARM.kinds.has(v.kind) && !v.ai && !v.alarmed && !v.wrecked && !v.drowned && !v.exploded && v.fuse === undefined && v !== driving;
 function parkedAt(x, z, y) {
@@ -6759,11 +6788,12 @@ function parkedAt(x, z, y) {
   if (near) for (const v of near) if (y < v.y + 1.8 && inVehicle(v, x, z, .3)) return v;
   return looseAt(x, z, y);
 }
+// A car alarm draws nobody, since everyone in Chunky has heard one every day for years. It's noise, like a crash, and it rouses the burnt-down ones near enough to hear it, who come
+// for him and not for the car.
 function soundAlarm(v) {
   if (!canAlarm(v)) return;
   v.alarmed = true; ALARMS.push({ v, until: time + ALARM.seconds, hush: time + ALARM.sounds });
-  if (folkOut) horde.lure(v.x, v.z, ALARM.reach, ALARM.seconds, false, 'alarm');
-  lureSpots.push({ x: v.x, z: v.z, until: time + SWARMED.remember });
+  if (folkOut) horde.noise(v.x, v.z, ALARM.reach, ALARM.sounds, 'alarm');
 }
 function glowAt(x, y, z, size, r, g, b, a) {
   const o = lureGlows[lureGlowsOn++]; if (!o) return;
@@ -6778,7 +6808,7 @@ function updateLures(dt) {
     else if (f.y <= Math.max(fl, WATER.level(f.x, f.z)) + .06 || hitSomeone) {
       // and whoever it hit takes it as him starting something
       if (hitSomeone) horde.provoke(hitSomeone, 'thrown');
-      f.on = false; landLure(f.kind, f.x, f.y, f.z);
+      f.on = false; landLure(f.kind, f.x, f.y, f.z, !!hitSomeone);
     }
   }
   // firecrackers go off in fits
@@ -6787,11 +6817,6 @@ function updateLures(dt) {
     const p = popping[i]; if (time >= p.until) { popping.splice(i, 1); continue; }
     if (time >= p.next) { p.next = time + .1 + wreckRand() * wreckRand() * .7; p.lit = time + 1 / 12; spray(p.x, p.y + .05, p.z, FEW ? 3 : 5, .045, 3.4, 1, .82, .35); playNew('lure.pop', { x: p.x, z: p.z }); }
     if (flash && time < p.lit) glowAt(p.x, p.y + .25, p.z, 1.5, 1, .78, .38, .9);
-  }
-  // the smell comes off an open can
-  for (let i = opened.length - 1; i >= 0; i--) {
-    const c = opened[i]; if (time >= c.until) { opened.splice(i, 1); lureDirty = true; continue; }
-    if (time >= c.next) { c.next = time + .55; puff(c.x, c.y + .12, c.z, .22, 1.3, .7, .3, .27, .13); }
   }
   // and a car alarm goes on until it stops, or the car does. It's only heard for the first few seconds of it, while all there is to play for it is a siren.
   let loudest = 0;
@@ -6807,16 +6832,6 @@ function updateLures(dt) {
   }
   SFX.loop('vehicle.alarm', loudest);
   for (let i = lureGlowsOn; i < was; i++) lureGlows[i].visible = false;
-  // anyone who ends up with them all around because of something he threw isn't going to thank him for it
-  if (crowdOut && lureSpots.length && time >= swarmLook) {
-    swarmLook = time + 1;
-    for (let i = lureSpots.length - 1; i >= 0; i--) if (time >= lureSpots[i].until) lureSpots.splice(i, 1);
-    const cast = people.data.cast.filter((c) => c.id !== 'robby').map((c) => ({ id: c.id, x: NPCS[c.id].root.position.x, z: NPCS[c.id].root.position.z }));
-    for (const id of whoIsSwarmed(lureSpots, cast, horde.active)) {
-      if (time - (swarmedAt[id] ?? -1e9) < SWARMED.again) continue;
-      swarmedAt[id] = time; people.change(id, 'trust', -1); toast(`${NPCS[id].name} trusts you less`);
-    }
-  }
 }
 function drawLures() {
   const P = player.pos;
@@ -6832,7 +6847,6 @@ function drawLures() {
   for (const k in lureMeshes) lureMeshes[k].n = 0;
   const put = (kind) => { const k = lureMeshes[kind]; if (k.n >= k.cap) return; k.m.setMatrixAt(k.n++, _m); };
   for (const f of flying) if (f.on) { _m.compose(_v.set(f.x, f.y, f.z), _q.setFromEuler(_we.set(f.turn, f.turn * .6, 0)), _s.set(1, 1, 1)); put(f.kind); lureDirty = true; }
-  for (const c of opened) { _m.compose(_v.set(c.x, c.y, c.z), _q.setFromAxisAngle(UP, c.yaw), _s.set(1, 1, 1)); put('can'); }
   const glint = glintGeo.attributes.position; let shining = 0;
   for (const c of lyingNear) {
     if (c.got) continue;
@@ -6857,7 +6871,7 @@ function throwOne() {
   aimWithCamera();
   if (kind === 'gas' ? !throwCan() : !throwLure(kind)) return;
   S.hand = kind;
-  if (kind === 'gas') S.gas--; else if (kind === 'can') { S.beans--; townObjective(); } else S.items[kind]--;
+  if (kind === 'gas') S.gas--; else S.items[kind]--;
   throwT = .25; SFX.play('swing', { rate: 1.4 });
 }
 function switchThrown() {
@@ -7040,10 +7054,10 @@ function crowdVoices() {
   let hunters = 0;
   const P = player.pos, list = horde.active;
   for (const s of list) {
-    const hunting = s.state === HUNTING || s.state === SWARM;
+    const hunting = s.state === HUNTING || s.state === SWARM, noticed = hunting || (s.state === ROUSED && !s.rouse?.over);
     if (hunting && Math.hypot(s.x - P.x, s.z - P.z) < 45) hunters++;
-    // one that's just noticed him says so
-    if (hunting && !s.heard) { s.heard = true; SFX.play('groan.hunt', { x: s.x, z: s.z }); } else if (!hunting) s.heard = false;
+    // one that's just noticed him says so, as it stops and turns to him, and not again when it comes
+    if (noticed && !s.heard) { s.heard = true; SFX.play('groan.hunt', { x: s.x, z: s.z }); } else if (!noticed) s.heard = false;
   }
   if (hunters) huntedUntil = time + 6;
   groanT -= .25;
@@ -7226,7 +7240,7 @@ function tick(dt, draw = true) {
     const f2 = floorAt(player.pos.x, player.pos.z);
     if (player.grounded && f2 < player.pos.y - .5) player.grounded = false;
     if (player.grounded) { player.pos.y += (f2 - player.pos.y) * Math.min(1, dt * 18); player.vy = 0; }
-    else { const was = player.pos.y; player.vy -= 15 * dt; player.pos.y += player.vy * dt; if (!onTrampoline(was) && player.pos.y <= f2 && player.vy <= 0) { player.pos.y = f2; player.grounded = true; footstep(1.5); if (folkOut) horde.noise(player.pos.x, player.pos.z, 16, .6); } }
+    else { const was = player.pos.y; player.vy -= 15 * dt; player.pos.y += player.vy * dt; if (!onTrampoline(was) && player.pos.y <= f2 && player.vy <= 0) { player.pos.y = f2; player.grounded = true; footstep(1.5); if (folkOut) horde.noise(player.pos.x, player.pos.z, 16, .6, 'bounce'); } }
     HP.kind = player.grounded ? 'run' : 'air'; HP.speed = sp * (player.grounded ? 1 : 0); HP.phase += dt * (Math.min(sp, 4.4) * 2.4 + Math.max(0, sp - 4.4) * 1.3);
     // into the water from the bank or bridge
     const lv = WATER.level(player.pos.x, player.pos.z);
@@ -7483,8 +7497,8 @@ if (TEST) {
     stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead },
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },
     compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach },
-    lures: { LYING, lyingNear, flying, popping, opened, ALARMS, lureSpots, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
-    horde, folks, traffic, homes: HOMES, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, horns: hornLog, blasts: () => blastsBlown, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf,
+    lures: { LYING, lyingNear, flying, popping, ALARMS, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
+    horde, folks, traffic, homes: HOMES, putBack, HOME: { SEE: HOME_SEE, PUT: HOME_PUT }, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, horns: hornLog, blasts: () => blastsBlown, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, kept: putBack.length, roused: horde.active.filter((s) => s.state === ROUSED).length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf,
     // the river's, for the tests: which way it flows and where it brings someone up, and what's drawn of someone soaked: how soaked the graphics card has them, the snakes on sleeves and the ones falling
     river: { path: RIVER, comeUp, wetOn: (s) => { const i = crowdShown.indexOf(s); return i < 0 ? null : crowdWet.getX(i); }, snakes: () => ({ drawn: crowdSnakes.count, shown: crowdSnakes.visible && crowdGroup.visible, falling: fallen.length, geometry: crowdSnakeGeo.attributes.position.count, calls: [crowdSnakes, crowdSnakeLine].filter((m) => m.count > 0).length }), arm: (s) => (s.who ? s.who.id : s.look) % 2,
       // where the snake is on the sleeve it hangs from, which doesn't change at all with reduced motion
@@ -7492,6 +7506,8 @@ if (TEST) {
     downFor: { table: DOWN_FOR, truck: downByTruck }, castHips: (id) => 180 - THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(NPCS[id].rig.hm.quaternion.w)))),
     // how hot what's coming off someone was last drawn: 1 for anyone after him, up to 1 + FLARE as their hands go up, or nothing if they weren't drawn
     glow: (s) => { const i = crowdShown.indexOf(s); return i < 0 ? null : crowdAuraZ.getY(i); },
+    // each one that has stopped, turned to him and flared, with what woke it (the last 64, and the tests empty it), and how much hotter the flare is than the glow of anyone after him
+    roused: { log: rousedLog, FLARE: ROUSE_FLARE },
     mutters: () => mutterSlots.filter((m) => m.s && !m.e.hidden).map((m) => ({ says: m.e.textContent, id: m.s.who.id, opacity: +m.e.style.opacity, transform: m.e.style.transform, box: m.e.getBoundingClientRect().toJSON() })),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.

@@ -1,6 +1,6 @@
 // Gets through the crowd on US 80 by passing for one of them, on a phone-sized page with real taps: SHAMBLE, the stick pushed all the way and him going no quicker than they do,
 // nobody coming for him while the act holds, how close each of them is to seeing through it over their heads, one right up against him seeing through it, running, a swing and a light
-// each giving him away to everyone close, beans making it harder, someone with a grudge not taken in, and the C key on a laptop.
+// each giving him away to everyone close (the nearest three come for him and the rest look up and go back), beans making it harder, someone with a grudge not taken in, and the C key on a laptop.
 //
 //   npm i && npm run blend [-- --shots dir]
 import { mkdirSync } from 'node:fs';
@@ -107,12 +107,13 @@ await tap('#bR');
 let says = await said();
 await g(() => { G.stick(0, 0); });
 const ran = await after();
-check(`running gives him away: ${ran.turned} of the ${near} within 14 m turn on him at once, and it says so`, !ran.on && ran.turned === near && /gave you away/.test(says), { near, ran, says });
+// No more than three come for him, however many are close: the nearest three, and the rest look up and go back
+check(`running gives him away: ${ran.turned} of the ${near} within 14 m turn on him, no more than three, and it says so`, !ran.on && ran.turned === Math.min(near, 3) && /gave you away/.test(says), { near, ran, says });
 near = await ring();
 await tap('#bA');
 says = await said();
 const swung = await after();
-check(`and so does a swing, standing still: ${swung.turned} of ${near}, and ${swung.closer} of them are on him in a second and a half`, !swung.on && swung.turned === near && swung.closer >= Math.min(near, 3) && /gave you away/.test(says), { near, swung, says });
+check(`and so does a swing, standing still: ${swung.turned} of ${near}, and ${swung.closer} of them are on him in a second and a half`, !swung.on && swung.turned === Math.min(near, 3) && swung.closer >= Math.min(near, 3) && /gave you away/.test(says), { near, swung, says });
 const lit = await g(() => {
   const spot = G.station.spot; crowdOnRoad(30); land(); G.place(spot.x + 30, spot.z); if (!G.shambling()) { G.key('c', true); G.sim(T, T); G.key('c', false); }
   const was = G.shambling(); G.place(spot.x + 2, spot.z); G.sim(.3, T);

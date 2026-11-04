@@ -1,16 +1,31 @@
 // What he can throw. How the crowd takes it is in src/horde.test.js, and tools/play-lures.mjs plays it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ALARM, GRAVITY, LURES, SWARM, aimedAt, inHand, kindsHeld, nextUp, rangeOf, throwOf, whoIsSwarmed } from './lures.js';
+import { ALARM, GRAVITY, LURES, aimedAt, inHand, kindsHeld, nextUp, rangeOf, throwOf } from './lures.js';
+import * as lures from './lures.js';
 
-test('each lure says how far off it\'s heard and for how long, and how it\'s thrown', () => {
+test('each thing says how near a burnt-down one has to be to look at it, how long it\'s there and how long they look, and how it\'s thrown', () => {
   for (const [k, L] of Object.entries(LURES)) {
     assert.ok(L.name && L.word, k);
     if (k === 'gas') continue;
-    assert.ok(L.reach > 0 && L.seconds > 0 && L.speed > 0 && L.up > 0, k);
+    assert.ok(L.reach > 0 && L.seconds > 0 && L.look > 0 && L.speed > 0 && L.up > 0, k);
+    assert.ok(L.look <= L.seconds, `${k} is looked at while it's there`);
   }
   assert.ok(ALARM.reach > LURES.crackers.reach, 'a car alarm\'s the loudest thing in town');
-  assert.ok(LURES.bottle.reach < LURES.crackers.reach && LURES.bottle.seconds < LURES.crackers.seconds);
+  assert.ok(ALARM.sounds > 0 && ALARM.sounds < ALARM.seconds, 'but it\'s only heard for the first few of its seconds, which is how long it rouses anyone');
+  assert.ok(LURES.bottle.reach < LURES.crackers.reach && LURES.bottle.look < LURES.fluid.look);
+});
+
+test('a few seconds is what a bottle gets, firecrackers get as long as they go off and a fire as long as it burns', () => {
+  assert.ok(LURES.bottle.look >= 5 && LURES.bottle.look <= 8, 'a bottle');
+  assert.equal(LURES.crackers.look, LURES.crackers.seconds);
+  assert.equal(LURES.fluid.look, LURES.fluid.seconds);
+});
+
+test('and it\'s long enough to walk by one stood at the roadside at full pace, from outside earshot to well past it', () => {
+  // the stick's pace, a burnt-down one 3 m off the road, and it can hear him at 14 m. From a dozen metres short of it to a dozen past it is about 24 m of road.
+  const walk = 4.4, there = 12, past = 12;
+  assert.ok(LURES.bottle.look >= (there + past) / walk, `${LURES.bottle.look} s against ${((there + past) / walk).toFixed(1)}`);
 });
 
 test('the phone\'s button has room for the word', () => {
@@ -24,16 +39,21 @@ test('what\'s in his hand stays there until it runs out', () => {
   assert.equal(inHand({ bottle: 1, gas: 1 }, null), 'bottle');
 });
 
-test('he\'d throw his beans last', () => {
+test('a can of beans is supper, not something to throw: it\'s not in his hand, however many he has', () => {
+  assert.equal(LURES.can, undefined);
   assert.equal(inHand({ can: 5, gas: 1 }, null), 'gas');
-  assert.equal(inHand({ can: 5 }, null), 'can');
+  assert.equal(inHand({ can: 5 }, null), null);
+  assert.equal(inHand({ can: 5, gas: 1 }, 'can'), 'gas');
+  assert.equal(kindsHeld({ can: 5 }), 0);
+  assert.equal(lures.SWARM, undefined, 'and nobody is swarmed by a lure, since there are none');
+  assert.equal(lures.whoIsSwarmed, undefined);
 });
 
 test('switching goes round what he has', () => {
-  const have = { bottle: 1, fluid: 2, can: 1 };
+  const have = { bottle: 1, fluid: 2, gas: 1 };
   assert.equal(nextUp(have, 'bottle'), 'fluid');
-  assert.equal(nextUp(have, 'fluid'), 'can');
-  assert.equal(nextUp(have, 'can'), 'bottle');
+  assert.equal(nextUp(have, 'fluid'), 'gas');
+  assert.equal(nextUp(have, 'gas'), 'bottle');
   assert.equal(nextUp({ gas: 1 }, 'gas'), 'gas');
   assert.equal(nextUp({}, 'gas'), null);
   assert.equal(kindsHeld(have), 3);
@@ -58,13 +78,4 @@ test('it goes to something close to where he\'s facing, and the nearest of them'
   assert.equal(aimedAt(0, 0, 1, 0, [far, near, wide, behind, right], 21), near);
   assert.equal(aimedAt(0, 0, 1, 0, [wide, behind, right], 21), null);
   assert.equal(aimedAt(0, 0, 1, 0, [far], 15), null, 'not if it can\'t get there');
-});
-
-test('someone\'s only swarmed if it came down near them and the crowd\'s around them now', () => {
-  const coop = { id: 'coop', x: 0, z: 0 }, rocky = { id: 'rocky', x: 200, z: 0 }, crowd = [...Array(SWARM.count)].map((_, i) => ({ x: i, z: 1 }));
-  const spot = { x: 5, z: 5 };
-  assert.deepEqual(whoIsSwarmed([spot], [coop, rocky], crowd), ['coop']);
-  assert.deepEqual(whoIsSwarmed([], [coop], crowd), [], 'nothing thrown');
-  assert.deepEqual(whoIsSwarmed([{ x: 100, z: 0 }], [coop], crowd), [], 'thrown somewhere else');
-  assert.deepEqual(whoIsSwarmed([spot], [coop], crowd.slice(1)), [], 'not enough of them');
 });

@@ -120,12 +120,16 @@ r = await g(() => {
   // the furthest gone of the ones who've burnt down who'd come for him, then the ones who've gone quiet who would nearest to 40°, just under 90° and just over it, 20 m off
   const pick = (list, h) => list.filter(bold).sort((a, b) => Math.abs(a.hips - h) - Math.abs(b.hips - h))[0];
   const list = [pick(burnt, 0), pick(quiet, 40), pick(quiet.filter((s) => s.hips < 90), 90), pick(quiet.filter((s) => s.hips > 90), 90)];
-  row(list, { d: 20, gap: 2 }); for (const s of list) H.provoke(s, 'took');
-  G.step(.6, T);
-  const have = list.map(() => ({ arms: [], legs: [], hands: Infinity, head: Infinity, feet: Infinity }));
-  for (let k = 0; k < 45; k++) { G.step(T, T); list.forEach((s, i) => { const st = G.stance(s); if (st) { have[i].arms.push(s.arm); have[i].legs.push(st.step); have[i].hands = Math.min(have[i].hands, st.hands); have[i].head = Math.min(have[i].head, st.head); have[i].feet = Math.min(have[i].feet, st.feet); } }); }
-  const range = (a) => Math.max(...a) - Math.min(...a);
-  return list.map((s, i) => ({ number: +s.hips.toFixed(1), state: s.state, low: !!s.scuttle, lean: +s.lean.toFixed(2), arms: range(have[i].arms), legs: range(have[i].legs), hands: +have[i].hands.toFixed(3), head: +have[i].head.toFixed(3), feet: +have[i].feet.toFixed(3) }));
+  // two at a time, since no more than three come for him at once, and the second they stand there flaring first is let go by before they're measured coming
+  const go = (group) => {
+    row(group, { d: 20, gap: 2 }); G.step(.1, T); for (const s of group) H.provoke(s, 'took');
+    G.step(1.1, T);
+    const have = group.map(() => ({ arms: [], legs: [], hands: Infinity, head: Infinity, feet: Infinity }));
+    for (let k = 0; k < 45; k++) { G.step(T, T); group.forEach((s, i) => { const st = G.stance(s); if (st) { have[i].arms.push(s.arm); have[i].legs.push(st.step); have[i].hands = Math.min(have[i].hands, st.hands); have[i].head = Math.min(have[i].head, st.head); have[i].feet = Math.min(have[i].feet, st.feet); } }); }
+    const range = (a) => Math.max(...a) - Math.min(...a);
+    return group.map((s, i) => ({ number: +s.hips.toFixed(1), state: s.state, low: !!s.scuttle, lean: +s.lean.toFixed(2), arms: range(have[i].arms), legs: range(have[i].legs), hands: +have[i].hands.toFixed(3), head: +have[i].head.toFixed(3), feet: +have[i].feet.toFixed(3) }));
+  };
+  return [...go(list.slice(0, 2)), ...go(list.slice(2))];
 });
 await snap('3-coming-for-him');
 const [deep, mid, under, over] = r, scuttlers = [deep, mid, under];
@@ -165,9 +169,11 @@ check(`and Robby, who's a ghost, isn't on it`, Math.abs(r.robby - 180) < .5, r);
 
 // ---- someone at their door
 r = await g(() => {
-  const s = H.all.filter((o) => o.home).sort((a, b) => a.hips - b.hips)[0], [x, z] = s.home.door, nx = s.home.nx, nz = s.home.nz;
+  // the people at home were put back when he went 600 m off, so this one's brought out again by standing at their door
+  const s = [...H.all, ...G.putBack].filter((o) => o.home).sort((a, b) => a.hips - b.hips)[0], [x, z] = s.home.door, nx = s.home.nx, nz = s.home.nz;
   Object.assign(s, { x, z, tx: x, tz: z, state: 0, inside: false, moving: 0, timer: 99 });
   land(); G.place(x + nx * 2.6 - nz * 1.8, z + nz * 2.6 + nx * 1.8); const yaw = Math.atan2(-nx, -nz); G.player.yaw = yaw; G.look(yaw + Math.PI, .3);
+  G.step(1.2, T);
   for (let k = 0; k < 12; k++) { Object.assign(s, { x, z, tx: x, tz: z, state: 0, moving: 0, timer: 99, yaw: Math.atan2(-nz, nx) }); G.step(T, T); }
   return { number: +s.hips.toFixed(1), ...G.stance(s), name: s.who.name };
 });

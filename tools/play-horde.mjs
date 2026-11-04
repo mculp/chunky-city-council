@@ -89,25 +89,28 @@ r = await g(() => {
 check('running at one: it hears him, gets curious, then hunts', r.seen.includes(1) && r.seen.includes(2), r);
 check('and grabs him once he stands still', r.mode === 'grabbed', r);
 await g(() => { clearCrowd(); __game.S.mode = 'town'; __game.HP.kind = 'run'; });
+// beans: nobody smells him at all with five cans or fewer, and a dozen reaches about 3 m at night, which is when it matters
 r = await g(() => {
-  const G = __game, H = G.horde, P = G.player.pos, one = H.add(P.x + 8, P.z, { quiet: false });
-  G.S.beans = 0; G.sim(3, 1 / 30); const none = one.state;
-  one.state = 0; one.alert = 0; G.S.beans = 40; G.sim(1.5, 1 / 30);
-  return { none, beans: one.state };
+  const G = __game, H = G.horde, P = G.player.pos;
+  // stood where they are, since wandering up to him isn't smelling him
+  const smelt = (beans, d) => { clearCrowd(); G.S.beans = beans; const one = H.add(P.x + d, P.z, { quiet: false }); let noticed = false; for (let i = 0; i < 90; i++) { one.x = P.x + d; one.z = P.z; one.tx = one.x; one.tz = one.z; G.sim(1 / 30, 1 / 30); noticed ||= one.state !== 0 || one.alert > 0; } G.S.beans = 0; return noticed; };
+  return { five: smelt(5, 2.5), twelveNear: smelt(12, 2.8), twelveFar: smelt(12, 3.6), twelveAway: smelt(12, 8) };
 });
-check('he can be smelled at 8 m carrying a lot of beans, and not without them', r.none === 0 && r.beans >= 1, r);
+check('he can be smelled from about 3 m carrying a dozen cans of beans, and not from 8 m, and not at all with five or fewer', !r.five && r.twelveNear && !r.twelveFar && !r.twelveAway, r);
 
 // ---------------- a pack
 await g(() => { clearCrowd(); __game.S.beans = 0; __game.S.mode = 'town'; __game.player.inv = 0; __game.place(...__game.map.fromTrue(-64.5, -15)); crowdRing(7, 13); });
 await snap('01-ring');
 r = await g(() => {
-  const G = __game, P = G.player.pos, seen = new Set(), x = P.x, z = P.z;
-  // back and forth, so there's something to hear, until he's caught
-  for (let i = 0; i < 20 && G.S.mode !== 'grabbed'; i++) { run(x + (i % 2 ? 3 : -3), z, .8, () => { for (const s of G.horde.all) seen.add(s.state); return G.S.mode === 'grabbed'; }); }
-  return { seen: [...seen], mode: G.S.mode, near: nearest(), states: states() };
+  const G = __game, P = G.player.pos, seen = new Set(), x = P.x, z = P.z; let most = 0;
+  // back and forth, so there's something to hear, and then standing still, until he's caught. Backing off cancels the second they stand there for, so it takes standing still.
+  const note = () => { for (const s of G.horde.all) seen.add(s.state); most = Math.max(most, G.horde.all.filter((s) => s.state === 2 || s.state === 4 || (s.state === 8 && !s.rouse.over)).length); return G.S.mode === 'grabbed'; };
+  for (let i = 0; i < 8 && G.S.mode !== 'grabbed'; i++) run(x + (i % 2 ? 3 : -3), z, .8, note);
+  for (let t = 0; t < 14 && G.S.mode !== 'grabbed'; t += 1 / 30) { G.sim(1 / 30, 1 / 30); note(); }
+  return { seen: [...seen], most, mode: G.S.mode, near: nearest(), states: states() };
 });
-check('together they become a swarm', r.seen.includes(3), r);
-check('and catch him', r.mode === 'grabbed', r);
+check('seven of them and all that noise, and no more than three come for him at once, each of them stopping and turning to him first', r.most === 3 && r.seen.includes(8) && !r.seen.includes(3), r);
+check('and they catch him', r.mode === 'grabbed', r);
 
 // ---------------- held
 await snap('02-grabbed');
@@ -131,7 +134,7 @@ r = await g(() => ({ inv: __game.player.inv, stunned: states()[5], prompt: docum
 check(`they're thrown off and stunned (${r.stunned}), and he gets a moment`, r.stunned >= 1 && r.inv > 0 && r.prompt, r);
 await snap('04-free');
 r = await g(() => {
-  // back onto the road, where there's nothing in his way. The ones who scuttle, folded over, swarm at 4 m/s to his 4.4, so it takes a while to put much road between them.
+  // back onto the road, where there's nothing in his way. The ones who scuttle, folded over, come at 3.2 m/s to his 4.4, so it takes a while to put much road between them.
   const G = __game, P = G.player.pos, x = P.x - 80, z = G.map.zAt('us_80', x);
   let caught = false; run(x, z, 15, () => { caught = caught || G.S.mode === 'grabbed'; return caught; });
   return { caught, near: nearest(), mode: G.S.mode };
@@ -170,14 +173,14 @@ r = await g(() => {
   // he's making all the noise he can inside
   for (let t = 0; t < 25; t += 1) { run(Z.x + (t % 2 ? 4 : -4), Z.z + 7, 1); res.noticed += H.all.filter((z) => z.state >= 2).length; res.inside += H.all.filter((z) => Math.hypot(z.x - Z.x, z.z - Z.z) < Z.r).length; }
   res.sanctuary = H.inSanctuary(P.x, P.z);
-  H.bell(Z.x, Z.z, 80, 14); G.sim(13, 1 / 30);
-  res.bell = H.all.filter((z) => Math.hypot(z.x - Z.x, z.z - Z.z) < Z.r).length;
-  G.sim(25, 1 / 30);
+  // the bell is only noise, and the church stays off limits to them while it rings
+  H.noise(Z.x, Z.z, 80, 14, 'bell'); res.bell = 0;
+  for (let t = 0; t < 16; t += 1) { G.sim(1, 1 / 30); res.bell = Math.max(res.bell, H.all.filter((z) => Math.hypot(z.x - Z.x, z.z - Z.z) < Z.r).length); }
   res.after = H.all.filter((z) => Math.hypot(z.x - Z.x, z.z - Z.z) < Z.r).length;
   return res;
 });
 check('inside the church they don\'t notice him and won\'t come in', r.sanctuary && r.noticed === 0 && r.inside === 0, r);
-check(`the bell brings them in anyway: ${r.bell} of 10`, r.bell >= 5, r);
+check(`and the bell doesn't bring them in: ${r.bell} of 10 get in while it rings, ${r.after} after`, r.bell === 0 && r.after === 0, r);
 
 // ---------------- what it costs: thirty and more on screen
 await g(() => { const G = __game; clearCrowd(); G.S.mode = 'town'; G.S.beans = 0; G.player.inv = 0; G.horde.T.grabReach = 0; G.place(...G.map.fromTrue(-64.5, -15)); crowdRing(48, 9, G.player.pos, {}); for (let i = 0; i < 48; i++) { const z = G.horde.all[i], d = 3 + i * .8; z.x = G.player.pos.x + ((i * 7) % 11 / 5 - 1) * .2 * (d + 5.4); z.z = G.player.pos.z - d; z.y = G.floorAt(z.x, z.z); z.yaw = 0; } G.look(0, .28); G.step(.5, 1 / 30); });   // down a portrait phone's narrow view

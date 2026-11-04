@@ -148,12 +148,18 @@ const rising = await g(() => { const s = kinds.up; go(.6); return { since: +sinc
 check(`and at ${rising.since} s it's coming up off its knees, still folded over`, rising.state === 5 && rising.kneel > .3 && rising.kneel < .8 && rising.lean > 1, rising);
 const up = await g(() => {
   const s = kinds.up;
+  // what's on the screen as it gets up, to see that nothing new goes on it when it stops and turns to him
+  window.before = screenText(); G.roused.log.length = 0;
   while (since < 12 && H.down(s) > 0 && !H.grab) go(T);
   return { since: +since.toFixed(2), grab: !!H.grab, state: s.state, down: H.down(s) };
 });
 await snap('4-up-again');
 check(`it was down ${up.since} s, getting up included, and never got hold of him stood over it`, Math.abs(up.since - 10) < .2 && !lying.grab && !kneeling.grab && !up.grab && up.down === 0, { up, lying, kneeling });
-check('and it\'s back up and after him: nobody\'s ever worse off than down', up.state >= 2 && up.state <= 4, up);
+// it's up, and it isn't coming yet: it stops, turns to him and flares for a second, because he hit it, and nothing on the screen says so
+const turned = await g(() => { const s = kinds.up; G.step(T, T); return { state: s.state, glow: G.glow(s), noted: G.roused.log.map((r) => r.kind), added: screenText().filter((l) => !before.includes(l)), whyBox: !!document.getElementById('why'), faces: Math.abs(Math.sin((s.yaw - Math.atan2(P().x - s.x, P().z - s.z)) / 2)) }; });
+check(`and it's back up, but it stops and turns to him for a second first, flaring (${turned.glow?.toFixed(2)}), because he hit it, and nothing on the screen says why`, up.state === 8 && turned.state === 8 && turned.glow > 1.4 && turned.noted.join() === 'hit' && turned.added.length === 0 && !turned.whyBox, { up, turned });
+const comes = await g(() => { const s = kinds.up; go(1.1); return { state: s.state, glow: G.glow(s) }; });
+check('and then it\'s after him: nobody\'s ever worse off than down', comes.state >= 2 && comes.state <= 4, comes);
 check('no console errors on the phone', errors.length === 0, errors.slice(0, 5));
 await phone.close();
 

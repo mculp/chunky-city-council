@@ -261,7 +261,8 @@ check(`a pickup's heard from 45 m, and a golf cart isn't`, hears.pickup.alert > 
 // sitting still, they get at it
 const claw = await g(() => {
   const G = __game, H = G.horde, v = G.driving(); H.calm(); H.all.length = 0; v.hp = v.K.hp; v.f = v.s = 0;
-  for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; H.add(v.x + Math.sin(a) * 4, v.z + Math.cos(a) * 4, { state: 3, alert: 1 }); }
+  // hunting him, which is all a swarm was: there's no state of their own for it any more, and nothing calls the rest over, but eight of them put there at once is what's wanted here
+  for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; H.add(v.x + Math.sin(a) * 4, v.z + Math.cos(a) * 4, { state: 2, alert: 1 }); }
   // until they've done it some harm, and not so long that it's wrecked and he's out of it before the rest of this
   const hp0 = v.hp; for (let t = 0; t < 10 && v.hp > hp0 / 2; t += 1 / 30) G.sim(1 / 30, 1 / 30);
   const inside = H.all.filter((s) => { const dx = s.x - v.x, dz = s.z - v.z, a = dx * Math.sin(v.yaw) + dz * Math.cos(v.yaw), c = dx * Math.cos(v.yaw) - dz * Math.sin(v.yaw); return Math.abs(a) < v.K.length / 2 && Math.abs(c) < v.K.width / 2; }).length;

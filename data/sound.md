@@ -123,7 +123,7 @@ Check all of this again before the game's sold, or if it outgrows those figures.
 The owner found the night noise, the train and the car alarm too much, so until CHUNKY-137 has better ones:
 - `amb.wind` is off, at a gain of 0, and a loop at 0 never starts. `amb.crickets` is at a fifth of what it was. Those two were the static under everything.
 - `train.horn` carries 1 km instead of 3.2, and `train.blast` 500 m instead of 700, so they fade the way they should. Both are at 0.5 instead of 0.8. When they're blown is in `data/railroad.md`.
-- `vehicle.alarm` is only heard for the first 5 seconds of an alarm (`ALARM.sounds` in `src/lures.js`), since its file is a siren. The crowd still comes to it for all 15.
+- `vehicle.alarm` is only heard for the first 5 seconds of an alarm (`ALARM.sounds` in `src/lures.js`), since its file is a siren. It's noise for those 5 seconds and nothing else, so it rouses the burnt-down ones near enough to hear it and draws nobody, and its lights go on and off for all 15.
 
 `npm run sound:level` sets the levels to match the old sheet's, which would bring the two loops back up. If it's run before they're replaced, turn them back down after.
 

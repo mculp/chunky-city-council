@@ -1,7 +1,7 @@
 // Goes among the ones who've gone quiet, on a phone-sized page with the stick and real taps: how many have burnt down and how far gone those look, walking through
-// 30 of them on US 80 with only the burnt ones coming for him, the rest folded over at the waist with their arms hanging straight down, a swing bringing the one he hit and
-// everyone close by and nobody further off, a bottle thrown at one, a can picked up from at one's feet and one that isn't, the ones who come for him stood up and the ones
-// who stay folded over and scuttle, quicker, what they mutter when he's close, the same again with reduced motion, and what 30 of them cost.
+// 30 of them on US 80 with only the burnt ones coming for him, the rest folded over at the waist with their arms hanging straight down, a swing bringing the one he hit and the nearest
+// of the ones close by, no more than three after him, each stopping and turning to him first with nothing on the screen to say why, and nobody further off, a bottle thrown at one, a can picked up from at one's feet and one that
+// isn't, the ones who come for him stood up and the ones who stay folded over and scuttle, quicker, what they mutter when he's close, the same again with reduced motion, and what 30 of them cost.
 //
 //   npm i && npm run quiet [-- --shots dir]
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -36,7 +36,7 @@ const helpers = () => {
   // halfway along the road and facing along it, nobody near him and nobody remembering anything
   window.mid = () => { const p = us80(.5), q = us80(.51); return { x: p.x, z: p.z, yaw: Math.atan2(q.x - p.x, q.z - p.z) }; };
   window.clear = ({ x, z, yaw } = mid()) => {
-    F.forget(); H.calm(); H.noises.length = 0; G.S.beans = 0;
+    F.forget(); H.calm(); H.noises.length = 0; G.S.beans = 0; G.roused.log.length = 0;
     const far = us80(0); H.all.forEach((s, i) => put(s, far.x + (i % 2 ? 1 : -1) * (900 + i), far.z + 500 + i));
     land(); G.place(x, z); G.player.yaw = yaw; G.look(yaw + Math.PI, .3); G.stick(0, 0); G.sim(T, T);
   };
@@ -123,32 +123,45 @@ const swing = await g(() => {
   window.timid = ahead(pick((s) => boldness(s) < .2), 6, 1.3);
   window.further = [[22, 0], [26, .15], [30, -.15]].map(([d, a]) => ahead(pick(() => true), d, a));
   G.step(.3, T);
+  window.before = screenText();
   return { near: near.map((s) => dist(s, hit.x, hit.z).toFixed(1)), further: further.map((s) => dist(s, hit.x, hit.z).toFixed(1)) };
 });
 await tap('#bA');
-let r = await g(() => { G.sim(.5, T); G.step(.4, T); return { hit: hit.state, down: hit.flat > 0, near: near.map((s) => s.state), timid: timid.state, further: further.map((s) => s.state), leans: near.map((s) => ({ low: !!s.scuttle, lean: s.lean })) }; });
+// the moment it lands, with the picture drawn: the ones who saw it have stopped and turned to him, and haven't come yet
+let r = await g(() => { G.sim(.5, T); G.step(.2, T); return { hit: hit.state, down: hit.flat > 0, stopped: near.map((s) => s.state), timid: timid.state, further: further.map((s) => s.state), glow: near.map((s) => G.glow(s)), added: screenText().filter((l) => !before.includes(l)), whyBox: !!document.getElementById('why') }; });
 await snap('4-swing');
 check(`a swing puts the one he hit down`, r.down && r.hit === 5, r);
-check(`and the ${r.near.length} who've gone quiet within 10 m of it come for him (${swing.near.join(', ')} m off)`, r.near.every((st) => st >= 2 && st <= 4), { ...r, ...swing });
+// No more than three come for him: the nearest three of the four who've gone quiet within 10 m of it, and the fourth looks up and goes back
+check(`and the nearest three of the ${r.stopped.length} who've gone quiet within 10 m of it stop and turn to him first (${swing.near.join(', ')} m off), flaring`, r.stopped.slice(0, 3).every((st) => st === 8) && r.glow.slice(0, 3).every((v) => v > 1.4), { ...r, ...swing });
 check('except someone the kind to keep out of his way, who does', r.timid === 6, r);
 check(`and nobody further off (${swing.further.join(', ')} m) comes for him`, r.further.every((st) => st <= 1), { ...r, ...swing });
-const lows = r.leans.filter((l) => l.low).map((l) => l.lean), ups = r.leans.filter((l) => !l.low).map((l) => l.lean);
-check(`some come for him stood up, leaning ${ups.map((l) => l.toFixed(2)).join(' and ')}, and some stay folded over to scuttle, leaning ${lows.map((l) => l.toFixed(2)).join(' and ')}`, ups.every((l) => l < .5) && lows.every((l) => l > .6), r.leans);
-r = await g(() => { const was = dist(hit); while (H.down(hit) > 0) G.sim(T, T); G.sim(1, T); return { state: hit.state, was, now: dist(hit) }; });
-check(`the one he hit gets up and comes for him: from ${r.was.toFixed(1)} m to ${r.now.toFixed(1)} m`, r.state >= 2 && r.state <= 4 && r.now < r.was, r);
+const stoppedAndTurned = r;
+r = await g(() => {
+  G.sim(.8, T); G.step(.2, T);
+  return { hit: hit.state, near: near.map((s) => s.state), noted: G.roused.log.map((l) => l.kind), leans: near.map((s) => ({ low: !!s.scuttle, lean: s.lean })), after: [...near, hit].filter((s) => s.state >= 2 && s.state <= 4).length };
+});
+check(`then three come for him and the fourth, ${swing.near.at(-1)} m off, looked up and went back (${r.near.join(', ')})`, r.near.slice(0, 3).every((st) => st >= 2 && st <= 4) && r.near[3] <= 1 && r.after === 3, r);
+check('and each was woken by him hitting someone, and nothing on the screen says why: no new line when they stopped, and nothing in the page to write one in', r.noted.length === 3 && r.noted.every((k) => k === 'hit') && stoppedAndTurned.added.filter((l) => !LINES.includes(l)).length === 0 && !stoppedAndTurned.whyBox, { ...r, stoppedAndTurned });
+const lows = r.leans.slice(0, 3).filter((l) => l.low).map((l) => l.lean), ups = r.leans.slice(0, 3).filter((l) => !l.low).map((l) => l.lean);
+check(`some come for him stood up, leaning ${ups.map((l) => l.toFixed(2)).join(' and ')}, and some stay folded over to scuttle, leaning ${lows.map((l) => l.toFixed(2)).join(' and ')}`, ups.length && lows.length && ups.every((l) => l < .5) && lows.every((l) => l > .6), r.leans);
+// and the one he hit, when it gets up, is one of the three, which sends the furthest of the rest back
+r = await g(() => { const was = dist(hit); let most = 0; while (H.down(hit) > 0) { G.sim(T, T); most = Math.max(most, [...near, hit].filter((s) => s.state >= 2 && s.state <= 4 || s.state === 8 && !s.rouse.over).length); } G.sim(2.5, T); return { state: hit.state, was, now: dist(hit), most, after: [...near, hit].filter((s) => s.state >= 2 && s.state <= 4).length }; });
+check(`the one he hit gets up and comes for him: from ${r.was.toFixed(1)} m to ${r.now.toFixed(1)} m, still no more than three after him`, r.state >= 2 && r.state <= 4 && r.now < r.was && r.after === 3 && r.most <= 3, r);
 
 // ---- folded over and quick
+// Three at a time, since that's all that come for him at once: three who scuttle, folded over, and then three who stand up, set off the way they would if he'd picked up what was at their feet
 r = await g(() => {
-  clear();
-  const lows = quiet.filter((s) => s.scuttle).slice(0, 3), ups = quiet.filter((s) => !s.scuttle).slice(0, 3), all = [...lows, ...ups];
-  all.forEach((s, i) => ahead(s, 26, (i - 2.5) * .1));
-  // set off the way they would if he'd picked up what was at their feet. Six of them together come for him as a swarm, the ones who scuttle and the others alike.
-  for (const s of all) H.provoke(s, 'took');
-  G.step(1, T);
-  const from = all.map((s) => dist(s));
-  G.step(1.5, T);
-  const pace = all.map((s, i) => (from[i] - dist(s)) / 1.5), mean = (a) => a.reduce((n, v) => n + v, 0) / a.length;
-  return { low: mean(pace.slice(0, 3)), up: mean(pace.slice(3)), states: all.map((s) => s.state), leans: all.map((s) => +s.lean.toFixed(2)) };
+  const mean = (a) => a.reduce((n, v) => n + v, 0) / a.length;
+  const goes = (group) => {
+    clear(); group.forEach((s, i) => ahead(s, 26, (i - 1) * .1)); G.sim(T, T);
+    for (const s of group) H.provoke(s, 'took');
+    G.step(1.1, T);
+    const from = group.map((s) => dist(s));
+    G.step(1.5, T);
+    return { pace: mean(group.map((s, i) => (from[i] - dist(s)) / 1.5)), states: group.map((s) => s.state), leans: group.map((s) => +s.lean.toFixed(2)) };
+  };
+  const low = goes(quiet.filter((s) => s.scuttle).slice(0, 3)), up = goes(quiet.filter((s) => !s.scuttle).slice(0, 3));
+  return { low: low.pace, up: up.pace, states: [...low.states, ...up.states], leans: [...low.leans, ...up.leans] };
 });
 await snap('5-scuttling');
 check(`and the ones who scuttle, folded over, come quicker: ${r.low.toFixed(2)} m/s against ${r.up.toFixed(2)} m/s, which is still slower than he runs`, r.low > r.up * 1.04 && r.low < 4.4 && r.states.every((st) => st === r.states[0] && comes(st)), r);
@@ -179,8 +192,9 @@ r = await g((p) => {
   return { from: dist(target) };
 }, path);
 await tap('#bC');
-r = await g(() => { G.sim(1.5, T); return { target: target.state, mood: F.mood(target.who), by: by.state, off: off.state, gone: dist(target) }; });
-check(`a bottle thrown at one who's gone quiet brings them, and someone close by who saw it, and nobody further off`, comes(r.target) && comes(r.by) && r.off <= 1, r);
+r = await g(() => { const before = screenText(); for (let t = 0; t < 4 && !G.roused.log.length; t += T) G.sim(T, T); G.sim(.2, T); const early = { target: target.state, by: by.state }, added = screenText().filter((l) => !before.includes(l)); G.sim(1.3, T); return { early, target: target.state, mood: F.mood(target.who), by: by.state, off: off.state, gone: dist(target), noted: G.roused.log.map((l) => l.kind), added, whyBox: !!document.getElementById('why') }; });
+// it hits one, so it's him hitting them and not a lure: they stop and turn to him, and so does anyone who saw it, and then they come
+check(`a bottle thrown at one who's gone quiet brings them, and someone close by who saw it, and nobody further off, each of them stopping and turning to him first, because he hit one of them, and nothing on the screen says why`, r.early.target === 8 && r.early.by === 8 && comes(r.target) && comes(r.by) && r.off <= 1 && r.noted.length === 2 && r.noted.every((k) => k === 'hit') && r.added.filter((l) => !LINES.includes(l)).length === 0 && !r.whyBox, r);
 }
 
 // ---- a can at their feet
@@ -194,13 +208,14 @@ const can = await g(() => {
   setCan(); window.near1 = byCan(3);
   return !!can;
 });
-r = await g(() => ({ ...walkOn(), state: near1.state }));
+r = await g(() => { const before = screenText(), got = walkOn(); window.ownText = screenText().filter((l) => !before.includes(l)); return { ...got, state: near1.state, ownText }; });
 check('picking up a can that\'s three metres from one of them starts nothing', r.got && r.state <= 1, r);
 r = await g(() => { clear(); setCan(); window.atFeet = hold(byCan(.8)); window.off = ahead(quiet.find((o) => o !== atFeet), 24, .4); return true; });
-await g(() => { G.step(.3, T); });
+await g(() => { G.step(.3, T); window.before = screenText(); });
 await snap('6-at-their-feet');
-r = await g(() => ({ ...walkOn(), state: atFeet.state, off: off.state }));
-check('picking one up from right at their feet brings them, and nobody further off', r.got && comes(r.state) && r.off <= 1, r);
+r = await g(() => { const got = walkOn(), early = atFeet.state, added = screenText().filter((l) => !before.includes(l) && !ownText.includes(l)), noted = G.roused.log.map((l) => l.kind); G.sim(1.2, T); return { ...got, early, noted, added, whyBox: !!document.getElementById('why'), state: atFeet.state, off: off.state }; });
+// picking up a can writes what it writes whoever's near, so what's new on the screen once they've stopped is measured against that
+check('picking one up from right at their feet brings them, after they stop and turn to him, and nobody further off, and nothing on the screen says why', r.got && r.early === 8 && comes(r.state) && r.off <= 1 && r.noted[0] === 'took' && r.added.filter((l) => !LINES.includes(l)).length === 0 && !r.whyBox, r);
 
 // ---- muttering
 // a picture taken while it's being said

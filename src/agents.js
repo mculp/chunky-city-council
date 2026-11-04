@@ -22,7 +22,7 @@ export const HOW = {
   news: 90,              // seconds it's still worth telling anyone
   thereEvery: 3,         // one fight's all one thing to whoever's there
   shunReach: 20,         // metres they keep off where they were hurt
-  wiseAfter: [2, 5],     // how many of the same lure it takes, from the nosiest to the least
+  wiseAfter: [2, 5],     // how many of the same thrown thing it takes, from the nosiest to the least
   saveEvery: 10,
   // Out of the crowd, the furthest gone have burnt down, and they're the ones who come for him on sight. The rest have gone quiet.
   burnt: [1 / 15, 1 / 5],     // how many have burnt down in town, and from out past...
@@ -58,7 +58,7 @@ export const roll = (id, salt) => {
 // What they're like and what they look like, from their number alone. looks is data/looks.json's crowd.
 export function personOf(id, data, looks = []) {
   const look = Math.floor(roll(id, 1) * 1000), dressed = data.dressed[looks[look % looks.length]?.id];
-  const firsts = data[dressed ?? (roll(id, 2) < .5 ? 'women' : 'men')];
+  const kind = dressed ?? (roll(id, 2) < .5 ? 'women' : 'men'), firsts = data[kind];
   // Taking turns through the names means nobody in a family shares one until they've all been used
   const first = firsts[(Math.floor(id / 4) * 17 + (id % 4) * 5) % firsts.length];
   // Half of everybody's an Alexander or a Clark, and an eighth are Gressetts, out of the other half
@@ -66,7 +66,8 @@ export function personOf(id, data, looks = []) {
   // what they mutter, if they've gone quiet: one of data/folks.json's, by their number
   const says = data.mutters?.length ? data.mutters[Math.floor(roll(id, 13) * data.mutters.length)] : '';
   return {
-    id, first, family, name: `${first} ${family}`, says,
+    // her is which list the name came from, which is all the game knows of who a man or a woman is. It goes with what woke someone, in src/horde.js's why, when what did was him hitting them.
+    id, first, family, name: `${first} ${family}`, says, her: kind === 'women',
     temper: roll(id, 5), nerve: roll(id, 6), nosy: roll(id, 7), homebody: roll(id, 8), tagalong: roll(id, 9),
     looks: { look, phase: roll(id, 10) * 6.28, limp: roll(id, 11) < .5 ? 0 : 1, size: .94 + roll(id, 12) * .12 },
     hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, fooled: {}, when: 0, seen: 0, met: false, shun: null, where: null,
@@ -147,8 +148,6 @@ export function createFolks(data, { store = null, looks = [] } = {}) {
     word: (w) => (w.calm && moodOf(w) === BE ? 'leaves you be' : WORDS[moodOf(w)]),
     // How far off they can make him out. It averages out at what the crowd's tuning says, and someone with a grudge can tell from further.
     senses: (w, mood) => (.85 + w.temper * .3) * (mood === AFTER ? 1 + Math.min(1.5, shock(w)) : 1),
-    // How much longer they'll keep going after they've lost him
-    holdsOn: (w, mood) => (mood === AFTER ? 5 + w.temper * 20 : 0),
     roam: (w) => 40 + (1 - w.homebody) ** 2 * 400,
     wise: (w, kind) => (w.fooled[kind] ?? 0) >= HOW.wiseAfter[0] + Math.round((1 - w.nosy) * (HOW.wiseAfter[1] - HOW.wiseAfter[0])),
     shuns: (w, x, z) => !!w.shun && Math.hypot(x - w.shun[0], z - w.shun[1]) < HOW.shunReach,

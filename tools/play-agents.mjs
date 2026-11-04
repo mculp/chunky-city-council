@@ -1,10 +1,10 @@
 // Treats people differently, on a phone-sized page with real taps and the game's own movement, and checks they behave differently afterwards, and still do after a reload:
-// the same blow leaves one person keeping away and another coming for him, someone who was there hears about it, a lure stops working on someone it's fooled too often,
+// the same blow leaves one person keeping away and another coming for him, someone who was there hears about it, a thrown bottle stops holding the eye of someone it's fooled too often,
 // someone nosy follows him about, and the families go around together. What it costs is at the end.
 //
 //   npm i && npm run agents [-- --shots dir]
 import { mkdirSync } from 'node:fs';
-import { serveAndOpen } from './browser.mjs';
+import { serveAndOpen, screenLines, newLines, hasWhyBox } from './browser.mjs';
 
 const at = process.argv.indexOf('--shots'), shots = at > 0 ? process.argv[at + 1] : null;
 if (shots) mkdirSync(shots, { recursive: true });
@@ -14,7 +14,7 @@ const check = (name, ok, got) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}$
 const g = (fn, arg) => page.evaluate(fn, arg);
 const snap = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.jpg`, type: 'jpeg', quality: 82 }); };
 
-const AWAY = 2, AFTER = 1, TAILING = 3, SHAMBLE = 0, HUNTING = 2, SWARM = 3, AVOIDING = 6, TRAILING = 7;
+const AWAY = 2, AFTER = 1, TAILING = 3, SHAMBLE = 0, HUNTING = 2, AVOIDING = 6, TRAILING = 7, ROUSED = 8;
 const start = () => g(() => {
   const G = __game; G.pause(); G.jump('town'); G.S.flags.town = true; G.S.flags.ended = G.S.flags.arrived = true; G.step(.1);
   document.getElementById('card').style.display = 'none';
@@ -73,10 +73,15 @@ check(`and when they get up they get away from him, ${ran.d.toFixed(1)} m off`, 
 await swingAt('bold');
 const hit2 = await g(() => ({ hurt: bold.who.hurt, flat: bold.flat, mood: moodOf(bold) }));
 check('the same blow on someone bolder', hit2.hurt === 1 && hit2.flat > 0 && hit2.mood === AFTER, hit2);
-await g(() => { const G = __game; while (G.horde.down(bold) > 0) G.sim(1 / 30, 1 / 30); G.sim(.5, 1 / 30); G.step(.1); });
-const came = await g(() => ({ state: bold.state, d: dist(bold), grab: !!__game.horde.grab }));
-check('and they get up and come for him', came.grab || came.state === HUNTING || came.state === SWARM, came);
+// what's on the screen while they're down, to see that nothing new goes up when they get up
+const down = await screenLines(page);
+await g(() => { const G = __game; G.roused.log.length = 0; while (G.horde.down(bold) > 0) G.sim(1 / 30, 1 / 30); G.sim(.5, 1 / 30); G.step(.1); });
+const stood = await g(() => ({ state: bold.state, d: dist(bold), noted: __game.roused.log.map((r) => r.kind) }));
+const added = newLines(down, await screenLines(page));
+check('and they get up, and stop and turn to him for a second first, because he hit them, and nothing on the screen says why', stood.state === ROUSED && stood.noted.join() === 'hit' && !(await hasWhyBox(page)) && added.length === 0, { ...stood, added });
 await snap('2-after-you');
+const came = await g(() => { __game.sim(1.2, 1 / 30); __game.step(.1); return { state: bold.state, d: dist(bold), grab: !!__game.horde.grab }; });
+check('and then they come for him', came.grab || came.state === HUNTING, came);
 
 // Walking towards the three of them, side by side, from far enough off that nobody should care
 const towards = () => g(() => {
@@ -86,7 +91,7 @@ const towards = () => g(() => {
 });
 const w1 = await towards();
 check(`walking towards the three, ${w1.walked.toFixed(1)} m: the one who keeps away is already going`, w1.timid.state === AVOIDING, w1);
-check('the one with a grudge is already coming', w1.bold.state === HUNTING || w1.bold.state === SWARM, w1);
+check('the one with a grudge is already coming', w1.bold.state === HUNTING || w1.bold.state === ROUSED, w1);
 check('and the one he left alone hasn\'t noticed yet', w1.plain.state === SHAMBLE, w1);
 
 // ---- the panel, and the name over their head
@@ -119,22 +124,25 @@ check('someone who was there when it happened keeps away, without being touched'
 check('further off they didn\'t notice', heard.farThere === 0, heard);
 check('and word gets around their family, and nobody else', heard.told === 1 && heard.stranger === 0, heard);
 
-// ---- fooled once too often
+// ---- fooled once too often. A bottle comes down past a burnt-down one and it looks at that. When the same sort of thing has done it often enough it stops looking, but it still looks at a
+// different sort, and someone it hasn't fooled still looks.
 const wise = await g(() => {
   const G = __game; clear();
   const slow = who((w) => w.nosy > .6 && w.nerve > .3 && w.nerve < .8), fresh = who((w) => w.nerve > .3 && w.nerve < .8);
+  slow.quiet = fresh.quiet = false;
   const times = []; put(slow, 20); put(fresh, 900); stand(-40);
-  const lure = () => { const [x, z] = road(26); G.horde.lure(x, z, 40, 4, false, 'bottle'); G.sim(1, 1 / 30); const drawn = slow.drawn; G.sim(3.5, 1 / 30); return drawn; };
-  for (let i = 0; i < 6; i++) { times.push(lure()); put(slow, 20); }
-  put(fresh, 20, 2); const [x, z] = road(26); G.horde.lure(x, z, 40, 4, false, 'bottle'); G.sim(.6, 1 / 30);
-  const out = { times, count: slow.who.fooled.bottle, fresh: fresh.drawn, slowNow: slow.drawn };
+  const [x, z] = road(26);
+  const look = (kind) => { G.horde.look(x, z, 40, 4, kind); G.sim(.4, 1 / 30); const looked = !!slow.gaze; G.sim(4.5, 1 / 30); return looked; };
+  for (let i = 0; i < 6; i++) { times.push(look('bottle')); put(slow, 20); }
+  put(fresh, 20, 2); G.horde.look(x, z, 40, 4, 'bottle'); G.sim(.6, 1 / 30);
+  const out = { times, count: slow.who.fooled.bottle, fresh: !!fresh.gaze, slowNow: !!slow.gaze };
   G.sim(4, 1 / 30); put(slow, 20); put(fresh, 900);
-  G.horde.lure(x, z, 40, 4, false, 'crackers'); G.sim(.6, 1 / 30); out.other = slow.drawn;
+  G.horde.look(x, z, 40, 4, 'crackers'); G.sim(.6, 1 / 30); out.other = !!slow.gaze;
   return out;
 });
-check(`the same lure works on someone ${wise.times.filter(Boolean).length} times, then it doesn't`, wise.times[0] && !wise.times[5] && wise.count >= 2, wise);
-check('it still works on someone it hasn\'t fooled', wise.fresh && !wise.slowNow, wise);
-check('and a different lure still works on them', wise.other, wise);
+check(`the same bottle gets someone to look ${wise.times.filter(Boolean).length} times, then it doesn't`, wise.times[0] && !wise.times[5] && wise.count >= 2, wise);
+check('it still gets someone it hasn\'t fooled to look', wise.fresh && !wise.slowNow, wise);
+check('and a different sort of thing still gets them to look', wise.other, wise);
 
 // ---- someone nosy
 const nosy = await g(() => {
@@ -180,7 +188,7 @@ check('and remember what he did', after.timid.hurt === 1 && after.bold.hurt >= 1
 check('and they\'re where he left them', Math.hypot(after.timid.x - before.timid.x, after.timid.z - before.timid.z) < 1.5, { before, after });
 const w2 = await towards();
 check('and it still goes the same way: one\'s going', w2.timid.state === AVOIDING, w2);
-check('one\'s coming', w2.bold.state === HUNTING || w2.bold.state === SWARM, w2);
+check('one\'s coming', w2.bold.state === HUNTING || w2.bold.state === ROUSED, w2);
 check('and one hasn\'t noticed', w2.plain.state === SHAMBLE, w2);
 check('and the title has a way to forget them', forget, forget);
 

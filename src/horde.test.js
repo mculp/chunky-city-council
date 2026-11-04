@@ -1,13 +1,19 @@
 // How the crowd senses, hunts and grabs, on an empty field.
-import { test, describe } from 'node:test';
+import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHorde, SHAMBLE, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED, TUNING } from './horde.js';
+import { createHorde, SHAMBLE, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED, AVOIDING, ROUSED, TUNING, RUN_SPEED } from './horde.js';
 
 let seed = 1;
+// each test starts from the same place, so that what one of them asks the random numbers for doesn't change what the next one sees
+beforeEach(() => { seed = 1; });
 const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 const field = (extra = {}) => ({ blocked: () => false, water: () => false, floorAt: () => 0, wander: (s) => [s.x, s.z], rand, ...extra });
 const still = { x: 0, z: 0, y: 0, noise: 0, light: 0, beans: 0, night: 1, hidden: false, canGrab: true };
 const run = (h, p, seconds, dt = 1 / 30) => { for (let t = 0; t < seconds; t += dt) h.update(dt, p); };
+// after him: coming, or about to be
+const after = (s) => s.state === HUNTING || s.state === SWARM || s.state === GRABBING;
+// and the second it's stood there first, before that, which is long enough for anything that follows to have happened
+const ROUSE = TUNING.rouseFor + .3;
 
 describe('knocked over', () => {
   test('anyone in reach goes flat, thrown clear, and it says how many', () => {
@@ -25,20 +31,22 @@ describe('knocked over', () => {
 
   test('a wall stops them being thrown through it', () => {
     const h = createHorde(field({ blocked: (x) => x > 2 })), s = h.add(1, 0);
-    run(h, still, .05); h.knock(0, 0, 3, 2);
+    run(h, { ...still, x: 40 }, .05); h.knock(0, 0, 3, 2);
     assert.equal(s.x, 1); assert.ok(s.flat > 0);
   });
 
-  test('they get up and come for you', () => {
+  test('they get up, stand there for a second, and come for you', () => {
     const h = createHorde(field()), s = h.add(1, 0);
     run(h, still, .05); h.knock(0, 0, 3, 1);
-    run(h, still, 1.5);
-    assert.ok(!(s.flat > 0)); assert.ok(s.state === HUNTING || s.state === SWARM || s.state === GRABBING, `state ${s.state}`);
+    run(h, { ...still, canGrab: false }, 1.3);
+    assert.ok(!(s.flat > 0)); assert.equal(s.state, ROUSED, `state ${s.state}`);
+    run(h, { ...still, canGrab: false }, ROUSE);
+    assert.ok(after(s), `state ${s.state}`);
   });
 
   test('down as long as the hit says, getting up included, and anything can ask how long that is or keep them there', () => {
     const h = createHorde(field()), s = h.add(1, 0), up = h.add(30, 0);
-    run(h, still, .05); s.state = HUNTING; h.knock(0, 0, 3, 10);
+    run(h, { ...still, x: 40 }, .05); s.state = HUNTING; h.knock(0, 0, 3, 10);
     assert.equal(s.hitAs, HUNTING); assert.equal(s.fromX, 1); assert.ok(s.x > 1.5, 'and drawn going over from where they were');
     assert.equal(h.down(s), 10); assert.equal(h.down(up), 0); assert.equal(h.keepDown(up, 5), false);
     run(h, { ...still, canGrab: false }, 5);
@@ -72,11 +80,13 @@ describe('senses', () => {
     assert.ok(a.state >= CURIOUS); assert.equal(b.state, SHAMBLE);
   });
 
-  test('the more beans you carry, the further they smell you', () => {
-    const none = createHorde(field()), lots = createHorde(field());
-    const a = none.add(9, 0), b = lots.add(9, 0);
-    run(none, { ...still, beans: 0 }, 1.5); run(lots, { ...still, beans: 12 }, 1.5);
-    assert.equal(a.state, SHAMBLE); assert.ok(b.state >= CURIOUS);
+  test('beans: nobody smells five cans or fewer at all, and the more past that the further they smell you, a dozen reaching about 3 m at night', () => {
+    const smelt = (beans, at) => { const h = createHorde(field()), s = h.add(at, 0); run(h, { ...still, beans }, 3); return s.state !== SHAMBLE || s.alert > 0; };
+    // right next to him, but not so close that they'd feel him anyway (T.touch is 2 m)
+    for (const beans of [0, 3, 5]) assert.ok(!smelt(beans, TUNING.touch + .5), `${beans} cans`);
+    assert.ok(smelt(12, 2.8), 'twelve at 2.8 m'); assert.ok(!smelt(12, 3.4), 'and not at 3.4 m');
+    assert.ok(smelt(11, 2.3) && !smelt(11, 2.8), 'eleven cans reach less than that');
+    assert.equal(TUNING.smellFrom, 5); assert.ok(Math.abs(TUNING.smellPerBean * 7 * TUNING.nightSense - 3) < 1e-9);
   });
 
   test('a light gives you away', () => {
@@ -96,49 +106,102 @@ describe('senses', () => {
     assert.equal(q.state, SHAMBLE);
   });
 
-  test('a loud noise draws them away to look', () => {
-    const h = createHorde(field()), s = h.add(20, 0);
-    h.noise(40, 0, 30, 5); run(h, { ...still, x: -20 }, 1);
-    assert.equal(s.state, CURIOUS); assert.equal(s.tx, 40);
-    assert.ok(s.x > 20, 'and walk towards it');
+  test('a crash rouses the ones near enough to hear it, and they come for him and not for where it was', () => {
+    const told = [], h = createHorde(field(), {}, { roused: (s, why) => told.push(why.kind) }), near = h.add(20, 0), far = h.add(-60, 0), p = { ...still, x: -20, canGrab: false };
+    run(h, p, .05);
+    assert.equal(h.noise(40, 0, 30, 5), 1);
+    assert.equal(near.state, ROUSED); assert.equal(far.state, SHAMBLE, 'out of earshot'); assert.deepEqual(told, ['crash']);
+    const x = near.x; run(h, p, ROUSE);
+    assert.equal(near.state, HUNTING); assert.ok(near.tx < x, 'it\'s him it comes for'); run(h, p, 2);
+    assert.ok(near.x < x - 3, `and not the crash, which was the other way: ${near.x}`);
   });
 
-  test('a lure takes hunters off him, and they go to it quicker than they\'d go to look', () => {
-    const h = createHorde(field()), s = h.add(10, 0), p = { ...still, noise: 20 };
-    run(h, p, 1.5); assert.ok(s.state === HUNTING || s.state === SWARM, `it's ${s.state}`);
-    const x = s.x;
-    h.lure(30, 0, 40, 6); run(h, p, .4);
-    assert.equal(s.state, CURIOUS); assert.equal(s.tx, 30);
-    run(h, p, 2);
-    assert.ok(s.x - x > 2.5, `only got to ${s.x}`);
-    assert.ok(s.moving > TUNING.speed[CURIOUS]);
+  test('anyone who walks into earshot while it\'s going is roused too, once, and the nearest three of a crowd are, however loud it is', () => {
+    const h = createHorde(field()), crowd = Array.from({ length: 8 }, (_, i) => h.add(10 + i * 2, i % 2 ? 3 : -3)), late = h.add(150, 0), p = { ...still, x: -20, canGrab: false };
+    run(h, p, .05);
+    assert.equal(h.noise(10, 0, 60, 6, 'alarm'), 3);
+    assert.equal(crowd.filter((s) => s.state === ROUSED && !s.rouse.over).length, 3); assert.equal(crowd.filter((s) => s.state === ROUSED && s.rouse.over).length, 5, 'the rest look up');
+    const d = (s) => Math.hypot(s.x - 10, s.z); assert.ok([...crowd].sort((a, b) => d(a) - d(b)).slice(0, 3).every((s) => s.state === ROUSED && !s.rouse.over), 'the nearest three to it');
+    // one who wanders into earshot while the alarm goes on hears it then
+    late.x = 60; late.z = 0; run(h, p, .5);
+    assert.equal(late.state, ROUSED);
   });
 
-  test('a plain noise doesn\'t take a hunter off someone it can still hear', () => {
-    const h = createHorde(field()), s = h.add(10, 0), p = { ...still, noise: 20 };
-    run(h, p, 1.5);
+  test('a noise made while he can\'t be found, in the church, rouses nobody then, and the nearest three of them once he can be found while it\'s still going', () => {
+    const h = createHorde(field()), crowd = Array.from({ length: 8 }, (_, i) => h.add(10 + i * 5, i % 2 ? 3 : -3)), p = { ...still, x: -20, hidden: true, canGrab: false };
+    run(h, p, .05);
+    assert.equal(h.noise(10, 0, 80, 20, 'bell'), 0, 'they can\'t find him in there');
+    run(h, p, 2); assert.equal(crowd.filter((s) => s.state === ROUSED).length, 0);
+    p.hidden = false; run(h, p, .25);
+    const roused = crowd.filter((s) => s.state === ROUSED && !s.rouse.over), d = (s) => Math.hypot(s.x - 10, s.z);
+    assert.equal(roused.length, 3);
+    assert.ok([...crowd].sort((a, b) => d(a) - d(b)).slice(0, 3).every((s) => roused.includes(s)), 'the nearest three, and not whichever happens to look round first');
+    assert.equal(crowd.filter((s) => s.state === ROUSED && s.rouse.over).length, 5, 'and the rest look up');
+  });
+
+  test('one that has just been sent back isn\'t roused again by the next noise, until it has had time to settle', () => {
+    const h = createHorde(field()), s = h.add(10, 0), p = { ...still, x: -20, canGrab: false };
+    run(h, p, .05);
+    assert.equal(h.noise(30, 0, 40, 5), 1); assert.equal(s.state, ROUSED);
+    p.x -= 3; run(h, p, .1);
+    assert.equal(s.state, SHAMBLE, 'he backed off in that second');
+    assert.equal(h.noise(30, 0, 40, 5), 0, 'and a second racket straight after is the same moment'); assert.equal(s.state, SHAMBLE);
+    run(h, p, TUNING.coolFor + .2);
+    assert.equal(h.noise(30, 0, 40, 5), 1, 'but later it is not'); assert.equal(s.state, ROUSED);
+  });
+
+  test('a plain noise doesn\'t take a hunter off someone it can still see', () => {
+    const h = createHorde(field()), s = h.add(10, 0), p = { ...still, noise: 20, canGrab: false };
+    run(h, p, 3);
     h.noise(30, 0, 40, 6); run(h, p, .4);
-    assert.ok(s.state === HUNTING || s.state === SWARM);
+    assert.ok(after(s));
   });
 
-  test('but one still comes for him if he\'s right on top of it', () => {
-    const h = createHorde(field()), s = h.add(2, 0), p = { ...still, noise: 20 };
-    run(h, p, 1.2);
-    h.lure(30, 0, 40, 6); run(h, p, .4);
-    assert.ok(s.state === HUNTING || s.state === SWARM || s.state === GRABBING, `it's ${s.state}`);
+  test('a thrown bottle makes one near enough turn and look at it for a few seconds, which is long enough to slip past, and nobody walks over', () => {
+    const h = createHorde(field(), {}, {}), s = h.add(8, 0), far = h.add(40, 0), hunter = h.add(0, 12), spot = [14, 0];
+    hunter.state = HUNTING; hunter.tx = 0; hunter.tz = 0;
+    const p = { ...still, noise: 14, canGrab: false };
+    run(h, p, .05);
+    assert.equal(h.look(spot[0], spot[1], 14, 4, 'bottle'), 1, 'one of them');
+    assert.equal(s.state, CURIOUS); assert.ok(s.gaze); assert.equal(far.state, SHAMBLE, 'too far to care'); assert.equal(hunter.state, HUNTING, 'and nobody already after him turns');
+    const at = [s.x, s.z];
+    // he walks right past it, making all the noise he can, and it doesn't so much as get curious about him
+    for (let t = 0; t < 3.6; t += 1 / 30) { p.x += 4.4 / 30 * (t < 1.5 ? 1 : 0); h.update(1 / 30, p); assert.deepEqual([s.x, s.z], at, 'it didn\'t walk over, or anywhere'); assert.ok(s.alert < TUNING.curiousAt + .01); }
+    assert.ok(Math.abs(Math.sin((s.yaw - Math.atan2(spot[0] - s.x, spot[1] - s.z)) / 2)) < .1, 'it\'s turned to look at it');
+    // a few seconds on it's back to what it was doing, and can make him out again, with him standing right there
+    run(h, p, .7);
+    assert.equal(s.gaze, null);
+    run(h, p, 3); assert.ok(s.state === ROUSED || after(s), `and then it has him: ${s.state}`);
   });
 
-  test('a lure wins over a noise that\'s nearer', () => {
-    const h = createHorde(field()), s = h.add(0, 40);
-    h.noise(0, 45, 20, 6); h.lure(0, 20, 40, 6); run(h, { ...still, x: 100 }, .3);
-    assert.equal(s.tz, 20);
+  test('firecrackers reach further, and lighter fluid is looked at for as long as it burns, by whoever comes near enough while it does', () => {
+    const h = createHorde(field(), {}, {}), a = h.add(20, 0), b = h.add(-20, 0), p = { ...still, x: 0, z: 90, canGrab: false };
+    run(h, p, .05);
+    assert.equal(h.look(0, 0, 25, 6, 'crackers'), 2);
+    assert.ok(a.gaze && b.gaze);
+    const g = createHorde(field()), late = g.add(50, 0);
+    g.look(0, 0, 14, 18, 'fluid'); run(g, p, 1); assert.equal(late.state, SHAMBLE, 'too far');
+    late.x = 10; run(g, p, .5); assert.equal(late.state, CURIOUS); assert.ok(late.gaze, 'but it comes near it');
+    run(g, p, 12); assert.ok(late.gaze, 'and looks while it burns');
+    run(g, p, 7); assert.equal(late.gaze, null);
   });
 
-  test('once it stops they can make him out again', () => {
-    const h = createHorde(field()), s = h.add(10, 0);
-    h.lure(30, 0, 40, 1); run(h, { ...still, noise: 20 }, 4);
-    assert.ok(s.alert > 0, 'it\'s heard him');
-    assert.ok(!s.drawn);
+  test('the ones who\'ve gone quiet, and everyone at home, don\'t care about any of it', () => {
+    const h = createHorde(field({ quiet: () => true })), a = h.add(5, 0), p = { ...still, x: -30, noise: 14, canGrab: false };
+    run(h, p, .05);
+    assert.equal(h.noise(5, 0, 30, 5), 0); assert.equal(h.look(5, 0, 30, 5), 0); run(h, p, 5);
+    assert.equal(a.state, SHAMBLE); assert.equal(a.alert, 0);
+    const F = { mood: () => 0, senses: () => 1, close() {}, hasNews: () => false, fooled() {}, wise: () => false, tick() {}, next: () => ({ looks: {}, calm: true, nosy: .5, nerve: .5, temper: .5, tagalong: 0, homebody: .5 }) };
+    const g = createHorde({ ...field(), folks: F }), home = g.add(5, 0);
+    run(g, p, .05);
+    assert.equal(g.noise(5, 0, 30, 5), 0); assert.equal(g.look(5, 0, 30, 5), 0);
+  });
+
+  test('nothing draws a crowd: there is no lure to call, and with nothing to hear or see they stay where they were', () => {
+    const h = createHorde(field({ quiet: () => true }), {}, {}), q = h.add(20, 0), b = h.add(-20, 0, { quiet: false }), p = { ...still, x: 0, z: 200 };
+    assert.equal(h.lure, undefined);
+    run(h, p, 10);
+    assert.equal(q.state, SHAMBLE); assert.equal(b.state, SHAMBLE); assert.deepEqual([q.x, q.z, b.x, b.z], [20, 0, -20, 0]);
   });
 
   test('anywhere else they keep out of the water, however loud it is', () => {
@@ -147,28 +210,22 @@ describe('senses', () => {
     assert.ok(!wet(s.x), `it's at ${s.x}`);
   });
 
-  test('a lure in the water takes them in after it, and the cottonmouths have them', () => {
-    const wet = (x) => x > 15, bitten = [], h = createHorde(field({ water: wet }), {}, { bitten: (o) => bitten.push(o) }), s = h.add(10, 0), far = h.add(-40, 0);
-    h.lure(25, 0, 40, 8, true);
+  test('nobody follows anything into the water: not a bottle, not a fire, not a noise, and nobody is bitten for it', () => {
+    const wet = (x) => x > 15, bitten = [], h = createHorde(field({ water: wet }), {}, { bitten: (o) => bitten.push(o) }), s = h.add(10, 0), t = h.add(12, 3);
+    h.look(25, 0, 40, 8, 'bottle'); h.look(25, 0, 40, 30, 'fluid'); h.noise(25, 0, 40, 30);
     const p = { ...still, x: -100 }; let went = false;
-    for (let t = 0; t < 30 && !bitten.length; t += 1 / 30) { h.update(1 / 30, p); if (wet(s.x)) went = true; }
-    assert.ok(went, 'it went in');
-    assert.deepEqual(bitten, [s]);
-    assert.equal(far.wading, undefined, 'and whoever couldn\'t hear it stays out');
-    const y = s.y; run(h, p, TUNING.goesUnder / 2);
-    assert.ok(s.y < y, 'it goes down');
-    run(h, p, TUNING.goesUnder);
-    assert.ok(s.under > 0, 'and stays down a while'); assert.ok(h.all.includes(s), 'but not gone');
-    assert.deepEqual(bitten, [s], 'only the once');
+    for (let k = 0; k < 40 * 30; k++) { h.update(1 / 30, p); if (wet(s.x) || wet(t.x)) went = true; }
+    assert.ok(!went); assert.equal(bitten.length, 0); assert.equal(s.under, undefined);
   });
 
   describe('the river brings them up', () => {
     // the water is east of x = 15 everywhere, and downstream is south, so a place to come up is just in it with a bank just out of it
     const world = (extra = {}) => field({ water: (x) => x > 15, level: () => 0, floorAt: (x) => (x > 15 ? -2 : 0), comeUp: (s, how) => ({ x: 16, z: s.z + how.metres, bank: [13, s.z + how.metres] }), ...extra });
     const p = { ...still, x: -100 };
-    // lures one into the water and runs until the cottonmouths have them. It says what they were like as they came up.
+    // The train throws one into the water, and it runs until the cottonmouths have them and the current has taken them and they're up. It says what they were like as they came up.
     const wade = (h, s, up) => {
-      s.wading = true; h.lure(25, 0, 40, 8, true);
+      h.update(1 / 30, p);
+      h.runOver((x) => (x < 12 ? { x: 20, z: 0, vx: 0, vz: 0, vy: 0, seconds: 3 } : null));
       for (let t = 0; t < 40 && !(s.under > 0); t += 1 / 30) h.update(1 / 30, p);
       const was = { x: s.x, z: s.z, swept: s.swept };
       for (let t = 0; t < 40 && s.under !== undefined; t += 1 / 30) h.update(1 / 30, p);
@@ -189,19 +246,19 @@ describe('senses', () => {
     });
 
     test('they wade out first and nothing takes them back in, then walk home to dry off', () => {
-      const up = [], bitten = [], h = createHorde(world(), {}, { bitten: (o) => bitten.push(o), surfaced: (o) => up.push(seen(o)) }), s = h.add(10, 0);
+      const up = [], h = createHorde(world(), {}, { surfaced: (o) => up.push(seen(o)) }), s = h.add(10, 0);
       s.homeX = 0; s.homeZ = 400;
       wade(h, s, up);
-      // another into the water while they're still getting out of it doesn't take them back
-      h.lure(25, s.z, 40, 1.5, true);
+      // nothing in the water, a thrown bottle included, takes them back in
+      h.look(25, s.z, 40, 1.5, 'bottle');
       run(h, p, 12);
       assert.ok(s.x < 15 && !s.climbing && !s.wading, `on the bank at ${s.x}`);
-      assert.equal(bitten.length, 1, 'bitten the once');
       // and with him a way off, keeping up, a long walk
       const q = { ...still, x: 80, z: 0 }, z = s.z;
       for (let t = 0; t < 40; t += 5) { q.z = s.z; run(h, q, 5); }
       assert.ok(s.z > z + 5, 'and off home');
-      for (let t = 0; t < 400 / TUNING.speed[SHAMBLE]; t += 5) { q.z = s.z; run(h, q, 5); }
+      // sore from the train, so slower than they'd go about
+      for (let t = 0; t < 400 / (TUNING.speed[SHAMBLE] * TUNING.soreSpeed) + 20; t += 5) { q.z = s.z; run(h, q, 5); }
       assert.ok(Math.hypot(s.x, s.z - 400) < TUNING.homeIs + 3, `at ${s.x}, ${s.z}`); assert.ok(!s.homeward);
     });
 
@@ -217,7 +274,8 @@ describe('senses', () => {
     test('nobody is asked for a random number to bring them up, which would change what everyone else does', () => {
       let n = 0;
       const h = createHorde({ ...world(), rand: () => { n++; return rand(); } }, {}, {}), s = h.add(10, 0);
-      s.wading = true; h.lure(25, 0, 40, 8, true);
+      h.update(1 / 30, p);
+      h.runOver((x) => (x < 12 ? { x: 20, z: 0, vx: 0, vz: 0, vy: 0, seconds: 3 } : null));
       for (let t = 0; t < 40 && !(s.under > 0); t += 1 / 30) h.update(1 / 30, p);
       while (s.under > 1 / 30) h.update(1 / 30, p);
       n = 0; h.update(1 / 30, p);
@@ -234,26 +292,13 @@ describe('senses', () => {
 
   test('nobody new wanders in to take anyone\'s place, and the town is never asked for anyone', () => {
     let asked = 0;
-    const wet = (x) => x > 15, h = createHorde(field({ water: wet, comeFrom: () => { asked++; return [500, 500]; } }), {}, {}), s = h.add(14, 0), p = { ...still, x: -100 };
-    h.lure(25, 0, 40, 30, true);
+    const wet = (x) => x > 15, h = createHorde(field({ water: wet, level: () => 0, floorAt: (x) => (x > 15 ? -2 : 0), comeUp: (s) => ({ x: 16, z: s.z + 30, bank: [13, s.z + 30] }), comeFrom: () => { asked++; return [500, 500]; } }), {}, {}), s = h.add(14, 0), p = { ...still, x: -100 };
+    h.update(1 / 30, p);
+    h.runOver((x) => (x < 16 ? { x: 20, z: 0, vx: 0, vz: 0, vy: 0, seconds: 3 } : null));
     run(h, p, 20);
     run(h, p, 600);
     assert.equal(h.all.length, 1, 'one, as there always was');
     assert.equal(h.all[0], s); assert.equal(asked, 0);
-  });
-
-  test('it only takes a moment of hearing it, and they go all the way', () => {
-    const wet = (x) => x > 15, h = createHorde(field({ water: wet })), s = h.add(0, 0);
-    h.lure(25, 0, 40, .5, true); run(h, { ...still, x: -100 }, 25);
-    assert.ok(wet(s.x) || !h.all.includes(s), `it's at ${s.x}`);
-  });
-
-  test('anyone who\'s called off before they get there stays out', () => {
-    const wet = (x) => x > 15, h = createHorde(field({ water: wet, wander: (o) => [o.x - 5, o.z] })), s = h.add(-20, 0);
-    h.lure(25, 0, 50, .5, true); run(h, { ...still, x: -100 }, .4);
-    assert.equal(s.wading, true);
-    run(h, { ...still, x: -100 }, .4); h.calm(); run(h, { ...still, x: -100 }, 1);
-    assert.ok(!s.wading);
   });
 
   test('they\'re drawn to a light at night', () => {
@@ -266,23 +311,36 @@ describe('senses', () => {
 describe('hunting', () => {
   test('they run you down, slower than you run', () => {
     const h = createHorde(field()), s = h.add(8, 0);
-    run(h, { ...still, noise: 12 }, 1.2);
-    assert.ok(s.state >= HUNTING);
-    assert.ok(TUNING.speed[SWARM] < 4.4);
+    run(h, { ...still, noise: 12 }, 1.2 + ROUSE);
+    assert.ok(after(s), `state ${s.state}`);
+    assert.ok(Math.max(...TUNING.speed) < RUN_SPEED);
   });
 
-  test('three or more hunting together become a swarm, and pull in others', () => {
-    const h = createHorde(field()), a = [h.add(9, 0), h.add(9, 2), h.add(9, -2)], other = h.add(9, 18);
-    run(h, { ...still, noise: 13 }, 1.4);
-    assert.ok(a.some((s) => s.state === SWARM), a.map((s) => s.state).join());
-    assert.ok(other.state >= CURIOUS, 'called over');
+  test('none of them is as quick as he is: the quickest, one coming after him folded over, tops out at about three quarters of his run', () => {
+    const fastest = Math.max(...TUNING.speed) * TUNING.scuttle;
+    assert.ok(fastest < RUN_SPEED * .75 + .01 && fastest > RUN_SPEED * .7, `${fastest} against ${RUN_SPEED}`);
+    // and seen from a run: three low and quick, from 6 m, fall further behind every second
+    const h = createHorde(field()), lot = [0, 1, 2].map((i) => h.add(6, i - 1, { scuttle: true })), p = { ...still, x: 0, z: 0, noise: 14, canGrab: false };
+    run(h, p, 3);
+    assert.ok(lot.every((s) => s.state === HUNTING), lot.map((s) => s.state).join());
+    let gap = Math.hypot(lot[1].x - p.x, lot[1].z - p.z);
+    for (let t = 0; t < 8; t += 1) {
+      for (let k = 0; k < 30; k++) { p.x -= RUN_SPEED / 30; h.update(1 / 30, p); }
+      const now = Math.hypot(lot[1].x - p.x, lot[1].z - p.z);
+      assert.ok(now > gap + 1, `${gap} to ${now}`); gap = now;
+    }
   });
 
-  test('they give up when they lose you', () => {
-    const h = createHorde(field()), s = h.add(8, 0);
-    run(h, { ...still, noise: 12 }, 1.2);
-    run(h, { ...still, x: 100, z: 0 }, TUNING.lostAfter + 1);
-    assert.ok(s.state <= CURIOUS, `state ${s.state}`);
+  test('there\'s no swarm: three hunting together are only three hunting, no quicker, and call nobody else over', () => {
+    const h = createHorde(field()), a = [h.add(9, 0), h.add(9, 2), h.add(9, -2)], other = h.add(9, 19);
+    run(h, { ...still, noise: 13, canGrab: false }, 1.4 + ROUSE);
+    assert.ok(a.every((s) => s.state === HUNTING), a.map((s) => s.state).join());
+    assert.equal(other.state, SHAMBLE, 'nobody called over');
+    // not even with room for more
+    const g = createHorde(field(), { afterMost: 6 }), b = [g.add(9, 0), g.add(9, 2), g.add(9, -2)], also = g.add(9, 19);
+    run(g, { ...still, noise: 13, canGrab: false }, 1.4 + ROUSE);
+    assert.ok(b.every((s) => s.state === HUNTING) && also.state === SHAMBLE);
+    assert.equal(SWARM, 3, 'the number is kept for what still names it'); assert.equal(TUNING.speed[SWARM], 0);
   });
 
   test('walls stop them, and they go around', () => {
@@ -319,20 +377,17 @@ describe('the church', () => {
     run(h, { ...still, noise: 20, beans: 12, hidden: true }, 3);
     assert.equal(s.state, SHAMBLE);
   });
-  test('the bell brings them in anyway', () => {
-    const h = createHorde(field()); h.zones.push(zone); const s = h.add(14, 0);
-    h.bell(0, 0, 40, 12); run(h, { ...still, x: 100, hidden: true }, 8);
-    assert.ok(Math.hypot(s.x, s.z) < 7, `at ${s.x},${s.z}`);
+  test('the bell is only noise, and the church stays off limits to them while it rings, and nobody comes to it', () => {
+    const h = createHorde(field()); h.zones.push(zone); const s = h.add(14, 0), q = h.add(-14, 0), p = { ...still, x: 100, hidden: true };
+    run(h, p, .05);
+    h.noise(0, 0, 40, 12, 'bell');
+    let inside = false; for (let t = 0; t < 20; t += 1 / 30) { h.update(1 / 30, p); if (Math.hypot(s.x, s.z) < 10 || Math.hypot(q.x, q.z) < 10) inside = true; }
+    assert.ok(!inside, 'never inside, ringing or not');
+    // and it doesn't bring them for him, who they can't find in there
+    assert.ok(!after(s) && !after(q));
   });
-  test('it draws them the way a lure does, quicker than a noise would', () => {
-    const a = createHorde(field()), s = a.add(30, 0); a.noise(0, 0, 60, 6); run(a, { ...still, x: 100, hidden: true }, 4);
-    const b = createHorde(field()), t = b.add(30, 0); b.bell(0, 0, 60, 6); run(b, { ...still, x: 100, hidden: true }, 4);
-    assert.ok(Math.hypot(t.x, t.z) < Math.hypot(s.x, s.z) - 2, `a noise left them ${Math.hypot(s.x, s.z).toFixed(1)} m off, the bell ${Math.hypot(t.x, t.z).toFixed(1)}`);
-  });
-  test('and when it stops, they walk back out', () => {
-    const h = createHorde(field()); h.zones.push(zone); const s = h.add(14, 0);
-    h.bell(0, 0, 40, 8); run(h, { ...still, x: 100, hidden: true }, 8.1);
-    assert.ok(Math.hypot(s.x, s.z) < 10, 'inside when it stopped');
+  test('and something in there when the church goes up around it walks out', () => {
+    const h = createHorde(field()); const s = h.add(2, 0); h.zones.push(zone);
     run(h, { ...still, x: 100, hidden: true }, 20);
     assert.ok(Math.hypot(s.x, s.z) >= 10, `still in there at ${s.x},${s.z}`);
   });
@@ -448,8 +503,10 @@ describe('shambling with them', () => {
     const h = createHorde(field(), {}, { spotted: () => spotted++ }), s = h.add(1, 0);
     run(h, act(), 3);
     assert.equal(s.state, SHAMBLE, 'not yet'); assert.ok(s.sus > .4);
-    run(h, act(), 3);
-    assert.equal(spotted, 1); assert.ok(s.state === HUNTING || s.state === SWARM || s.state === GRABBING, `state ${s.state}`);
+    for (let t = 0; t < 9 && !spotted; t += 1 / 30) h.update(1 / 30, act());
+    assert.equal(spotted, 1); assert.equal(s.state, ROUSED, 'it stops and turns to him first');
+    run(h, act(), ROUSE);
+    assert.ok(after(s), `state ${s.state}`);
   });
 
   test('beans make it quicker, since they can smell them', () => {
@@ -477,12 +534,28 @@ describe('shambling with them', () => {
     const h = createHorde(field()), near = [h.add(3, 0), h.add(-6, 4), h.add(0, -9)], far = h.add(30, 0);
     run(h, act(), .3);
     assert.equal(h.unmask(act()), 3);
-    assert.ok(near.every((s) => s.state === HUNTING)); assert.equal(far.state, SHAMBLE);
+    assert.ok(near.every((s) => s.state === ROUSED), 'they stop and turn to him first'); assert.equal(far.state, SHAMBLE);
     // standing still and quiet, out of reach of their senses, with a noise of his own going: they still know where he is, for a while
     h.noise(0, 0, 14, 1);
-    run(h, { ...still, canGrab: false }, 2);
+    run(h, { ...still, canGrab: false }, ROUSE + .5);
     assert.ok(near.every((s) => s.state === HUNTING || s.state === SWARM), near.map((s) => s.state).join());
+    run(h, { ...still, canGrab: false }, 3);
     assert.ok(near.every((s) => Math.hypot(s.x, s.z) < 3), 'and they come right to him');
+  });
+
+  test('and no more than three come, however many are close; the rest look up and go back', () => {
+    const h = createHorde(field()), near = Array.from({ length: 8 }, (_, i) => h.add(Math.sin(i) * (3 + i), Math.cos(i) * (3 + i)));
+    run(h, act(), .3);
+    assert.equal(h.unmask(act()), 3);
+    const roused = near.filter((s) => s.state === ROUSED && !s.rouse.over), looking = near.filter((s) => s.state === ROUSED && s.rouse.over);
+    assert.equal(roused.length, 3); assert.equal(looking.length, 5);
+    // the three are the nearest three
+    const d = (s) => Math.hypot(s.x, s.z), sorted = [...near].sort((a, b) => d(a) - d(b));
+    assert.ok(sorted.slice(0, 3).every((s) => roused.includes(s)));
+    run(h, { ...still, canGrab: false }, TUNING.lookFor + .2);
+    assert.ok(looking.every((s) => s.state === SHAMBLE), looking.map((s) => s.state).join());
+    run(h, { ...still, canGrab: false }, ROUSE);
+    assert.equal(near.filter(after).length, 3);
   });
 });
 
@@ -509,22 +582,23 @@ describe('gone quiet', () => {
     assert.equal(s.state, SHAMBLE); assert.ok(!s.sus);
   });
 
-  test('hit one and it comes for him, and so does anyone close by who saw it, and not anyone further off', () => {
+  test('hit one and it comes for him, and so does anyone close by who saw it, and not anyone further off, each after a second of standing there', () => {
     const h = createHorde(quiet()), hit = h.add(1, 0), near = [h.add(4, 3), h.add(-5, -6)], far = h.add(14, 0);
     run(h, still, .05);
     h.knock(.5, 0, 1.2, 1);
     assert.equal(hit.state, STUNNED);
-    assert.ok(near.every((s) => s.state === HUNTING), near.map((s) => s.state).join()); assert.equal(far.state, SHAMBLE);
-    run(h, { ...still, canGrab: false }, 2.5);
-    assert.ok(hit.state === HUNTING || hit.state === SWARM, `and it's up and after him: ${hit.state}`);
+    assert.ok(near.every((s) => s.state === ROUSED), near.map((s) => s.state).join()); assert.equal(far.state, SHAMBLE);
+    run(h, { ...still, canGrab: false }, 2.5 + ROUSE);
+    assert.ok(after(hit), `and it's up and after him: ${hit.state}`);
+    run(h, { ...still, canGrab: false }, 3);
     assert.ok(near.every((s) => Math.hypot(s.x, s.z) < 3), 'and they come right to him, though he\'s made no sound');
   });
 
   test('once they\'ve lost him they leave him be again', () => {
     const h = createHorde(quiet()), hit = h.add(.5, 0), s = h.add(6, 0);
     run(h, still, .05); h.knock(0, 0, 1, 1);
-    assert.equal(s.state, HUNTING);
-    run(h, { ...still, x: 100, canGrab: false }, TUNING.lostAfter + 8);
+    assert.equal(s.state, ROUSED);
+    run(h, { ...still, x: 100, canGrab: false }, TUNING.giveUp + 8);
     assert.ok([hit, s].every((o) => o.state === SHAMBLE || o.state === CURIOUS), `${hit.state} ${s.state}`);
     run(h, { ...still, x: s.x + 3, z: s.z, noise: 20, canGrab: false }, 3);
     assert.ok([hit, s].every((o) => o.state === SHAMBLE || o.state === CURIOUS), 'even with him right there making all the noise he can');
@@ -534,10 +608,12 @@ describe('gone quiet', () => {
     const a = createHorde(quiet()), s = a.add(5, 0), by = a.add(9, 2), off = a.add(30, 0);
     run(a, still, .05);
     assert.equal(a.provoke(s), 2);
-    assert.equal(s.state, HUNTING); assert.equal(by.state, HUNTING); assert.equal(off.state, SHAMBLE);
+    assert.equal(s.state, ROUSED); assert.equal(by.state, ROUSED); assert.equal(off.state, SHAMBLE);
+    run(a, { ...still, canGrab: false }, ROUSE);
+    assert.ok(after(s) && after(by));
     const b = createHorde(quiet()), t = b.add(5, 0), u = b.add(20, 0);
     run(b, still, .05);
-    assert.equal(b.took(5.5, .5), 1); assert.equal(t.state, HUNTING); assert.equal(u.state, SHAMBLE);
+    assert.equal(b.took(5.5, .5), 1); assert.equal(t.state, ROUSED); assert.equal(u.state, SHAMBLE);
     assert.equal(b.took(12, 0), 0, 'and from where nobody\'s standing it\'s nothing');
   });
 
@@ -550,32 +626,31 @@ describe('gone quiet', () => {
     assert.equal(s.state, SHAMBLE); assert.equal(s.alert, 0);
   });
 
-  test('a lure, a noise and a light still bring them', () => {
-    const h = createHorde(quiet()), s = h.add(20, 0); h.lure(40, 0, 40, 5); run(h, { ...still, x: -20 }, 1);
-    assert.equal(s.state, CURIOUS); assert.equal(s.tx, 40); assert.ok(s.drawn);
-    const n = createHorde(quiet()), t = n.add(20, 0); n.noise(40, 0, 30, 5); run(n, { ...still, x: -20 }, 1);
-    assert.equal(t.state, CURIOUS); assert.equal(t.tx, 40);
+  test('a light still brings them, and a noise or a thrown bottle doesn\'t, which are for the ones who\'ve burnt down', () => {
+    const n = createHorde(quiet()), t = n.add(20, 0); run(n, { ...still, x: -20 }, .05); n.noise(40, 0, 30, 5); run(n, { ...still, x: -20 }, 1);
+    assert.equal(t.state, SHAMBLE, 'a crash, a swing or a blast leaves them where they are');
+    const k = createHorde(quiet()), v = k.add(20, 0); run(k, { ...still, x: -20 }, .05); assert.equal(k.look(30, 0, 40, 5), 0); run(k, { ...still, x: -20 }, 1);
+    assert.equal(v.state, SHAMBLE, 'and so does something thrown');
+    const b = createHorde(field()), u0 = b.add(20, 0, { quiet: false }); run(b, { ...still, x: -20 }, .05); b.noise(40, 0, 30, 5); run(b, { ...still, x: -20 }, .1);
+    assert.equal(u0.state, ROUSED, 'but one who has burnt down is roused');
     const l = createHorde(quiet({ wander: (o) => [o.x, o.z] }), { lightPull: 1 }), u = l.add(10, 0); l.lights.push({ x: 20, z: 0, r: 30 });
     run(l, { ...still, x: -100 }, 20);
     assert.ok(Math.hypot(u.x - 20, u.z) < 12, `at ${u.x},${u.z}`);
   });
 
-  test('giving himself away doesn\'t turn them, and a swarm going by doesn\'t call them over', () => {
+  test('giving himself away doesn\'t turn them', () => {
     const h = createHorde(quiet()), s = h.add(3, 0), burnt = h.add(-3, 0, { quiet: false });
     run(h, { ...still, acting: true }, .3);
     assert.equal(h.unmask({ ...still, acting: true }), 1);
-    assert.equal(s.state, SHAMBLE); assert.equal(burnt.state, HUNTING);
-    const w = createHorde(quiet()), q = w.add(9, 18), pack = [w.add(9, 0, { quiet: false }), w.add(9, 2, { quiet: false }), w.add(9, -2, { quiet: false })];
-    run(w, { ...still, noise: 13 }, 1.4);
-    assert.ok(pack.some((o) => o.state === SWARM), pack.map((o) => o.state).join()); assert.equal(q.state, SHAMBLE);
+    assert.equal(s.state, SHAMBLE); assert.equal(burnt.state, ROUSED);
   });
 
   test('the ones who come after him folded over are quicker, and still slower than he runs', () => {
     const h = createHorde(field()), up = h.add(10, 0), low = h.add(10, 1, { scuttle: true });
-    run(h, { ...still, noise: 14, canGrab: false }, .8);
+    run(h, { ...still, noise: 14, canGrab: false }, .8 + ROUSE);
     assert.ok(up.state === HUNTING && low.state === HUNTING, `${up.state} ${low.state}`);
     assert.ok(low.moving > up.moving, `${low.moving} against ${up.moving}`);
-    assert.ok(TUNING.speed[SWARM] * TUNING.scuttle < 4.4);
+    // and how much quicker is bounded where it's asked, with the quickest of them: hunting times the scuttle is about three quarters of his run
   });
 });
 
@@ -682,6 +757,274 @@ describe('run over', () => {
     run(h, { ...still, y: 0 }, .4 + TUNING.windUp);
     assert.ok(h.grab, 'he\'s held');
     h.runOver(() => hit());
+    assert.equal(h.grab, null); assert.equal(freed, 1);
+  });
+});
+
+// ---- CHUNKY-136: the crowd never comes for him for no reason, and there's always a way out
+describe('never for no reason', () => {
+  const walking = (extra = {}) => ({ ...still, noise: 14, canGrab: false, ...extra });
+  // until it's stopped to look at him
+  const toRoused = (h, s, p) => { for (let t = 0; t < 10 && s.state !== ROUSED; t += 1 / 30) h.update(1 / 30, p); };
+  const faces = (s, p) => Math.abs(Math.sin((s.yaw - Math.atan2(p.x - s.x, p.z - s.z)) / 2)) < .03;
+
+  test('one that has made him out stops, turns to him and flares for a second, and the cause is noted, and then it comes for him', () => {
+    const told = [], h = createHorde(field(), {}, { roused: (s, why) => told.push(why) }), s = h.add(10, 0), p = walking();
+    toRoused(h, s, p);
+    assert.equal(s.state, ROUSED); assert.deepEqual(told, [{ kind: 'steps' }], 'once, and it was his footsteps');
+    let stood = 0; const at = [s.x, s.z];
+    while (s.state === ROUSED) { h.update(1 / 30, p); stood += 1 / 30; if (s.state === ROUSED) { assert.equal(s.moving, 0); assert.deepEqual([s.x, s.z], at, 'it didn\'t move'); } }
+    assert.ok(Math.abs(stood - TUNING.rouseFor) < .1, `${stood} s`);
+    assert.ok(faces(s, p), 'turned to him'); assert.equal(s.state, HUNTING); assert.equal(told.length, 1);
+    run(h, p, 2); assert.ok(s.x < at[0] - 3, 'and now it comes');
+  });
+
+  test('what\'s noted is what woke it: his engine, his light, the beans, a crash or a blast that drew it to him', () => {
+    const kinds = (p, noise) => {
+      const told = [], h = createHorde(field(), {}, { roused: (s, why) => told.push(why.kind) });
+      h.add(12, 0);
+      if (noise) h.noise(...noise);
+      for (let t = 0; t < 14 && !told.length; t += 1 / 30) h.update(1 / 30, p);
+      return told[0];
+    };
+    assert.equal(kinds(walking({ driving: true, noise: 30 })), 'engine');
+    assert.equal(kinds({ ...still, light: 12, canGrab: false }), 'light');
+    assert.equal(kinds({ ...still, beans: 12, canGrab: false, x: 12 - 2.6 }), 'beans');
+    assert.equal(kinds({ ...still, canGrab: false, x: 12 - 1.5 }), 'close');
+    assert.equal(kinds({ ...still, canGrab: false, x: 12 - 1.5 }, [12, 0, 26, 3]), 'crash', 'a crash that drew it');
+    assert.equal(kinds({ ...still, canGrab: false, x: 12 - 1.5 }, [12, 0, 26, 3, 'blast']), 'blast');
+  });
+
+  test('if he backs off in that second it goes back to what it was doing, and doesn\'t come for him', () => {
+    const h = createHorde(field(), {}, {}), s = h.add(10, 0), p = walking();
+    toRoused(h, s, p);
+    assert.equal(s.state, ROUSED);
+    for (let t = 0; t < .6; t += 1 / 30) { p.x -= 4.4 / 30; h.update(1 / 30, p); }
+    assert.ok(s.state === CURIOUS || s.state === SHAMBLE, `${s.state}`); assert.equal(s.rouse, null);
+    // and a second later it's not on him, with him quiet and gone
+    run(h, { ...still, x: p.x, canGrab: false }, 4);
+    assert.ok(!after(s) && s.state !== ROUSED, `${s.state}`);
+  });
+
+  test('so does going quiet and out of its reach, if it was his footsteps that woke it, but a crash can\'t be taken back by standing still', () => {
+    const h = createHorde(field(), {}, {}), s = h.add(10, 0), p = walking();
+    toRoused(h, s, p);
+    h.update(1 / 30, { ...p, noise: 0 }); h.update(1 / 30, { ...p, noise: 0 });
+    assert.notEqual(s.state, ROUSED);
+    const g = createHorde(field(), {}, {}), t = g.add(10, 0); g.noise(10, 0, 20, 2);
+    for (let k = 0; k < 400 && t.state !== ROUSED; k++) g.update(1 / 30, { ...still, x: 8.8, canGrab: false });
+    assert.equal(t.state, ROUSED); run(g, { ...still, x: 8.8, canGrab: false }, .8);
+    assert.equal(t.state, ROUSED, 'it\'s still looking at him'); run(g, { ...still, x: 8.8, canGrab: false }, .5);
+    assert.equal(t.state, HUNTING);
+  });
+
+  test('hiding in the church in that second sends it back too', () => {
+    const h = createHorde(field()), s = h.add(10, 0), p = walking();
+    toRoused(h, s, p);
+    h.update(1 / 30, { ...p, hidden: true });
+    assert.notEqual(s.state, ROUSED);
+  });
+
+  test('someone with a hurt of their own is on him for that, whatever it was they heard', () => {
+    const told = [], F = { mood: () => 1, senses: () => 1, close() {}, hasNews: () => false, fooled() {}, wise: () => false, tick() {}, hurt() {}, wasThere() {}, next: () => ({ looks: {}, hurt: 1, her: true, temper: .5 }) };
+    const h = createHorde({ ...field(), folks: F }, {}, { roused: (o, why) => told.push(why) }), t = h.add(10, 0);
+    toRoused(h, t, walking());
+    assert.deepEqual(told.at(-1), { kind: 'hit', her: true });
+  });
+});
+
+describe('no more than three after him at once', () => {
+  const ring = (h, n, r = 9) => Array.from({ length: n }, (_, i) => h.add(Math.sin(i * 6.28 / n) * r, Math.cos(i * 6.28 / n) * r));
+  const count = (list) => list.filter((s) => after(s) || (s.state === ROUSED && !s.rouse.over)).length;
+
+  test('however much noise he makes, never more than three, and the rest look up and go back', () => {
+    const told = [], h = createHorde(field(), {}, { roused: (s) => told.push(s) }), crowd = ring(h, 12), p = { ...still, noise: 14, canGrab: false };
+    let most = 0; const looked = new Set();
+    for (let t = 0; t < 20; t += 1 / 30) { h.update(1 / 30, p); most = Math.max(most, count(crowd)); for (const s of crowd) if (s.state === ROUSED && s.rouse.over) looked.add(s); }
+    assert.equal(most, 3); assert.equal(count(crowd), 3);
+    assert.ok(looked.size >= 4, `${looked.size} looked up`);
+    assert.equal(new Set(told).size, 3, 'and only three of them stood there flaring');
+    assert.ok(crowd.filter((s) => !after(s)).every((s) => s.state === SHAMBLE || s.state === CURIOUS || (s.state === ROUSED && s.rouse.over)));
+  });
+
+  test('when one of the three gives up the next can take its place', () => {
+    const h = createHorde(field(), {}, {}), crowd = ring(h, 6, 6), p = { ...still, noise: 14, canGrab: false };
+    run(h, p, 3);
+    const first = crowd.filter(after); assert.equal(first.length, 3);
+    first[0].state = SHAMBLE; first[0].alert = 0; first[0].cool = 1e9;
+    run(h, p, 3);
+    assert.equal(count(crowd), 3); assert.ok(crowd.filter(after).some((s) => !first.includes(s)), 'somebody new');
+  });
+
+  test('anyone he has hurt gets in ahead of the rest, and that\'s still three', () => {
+    const h = createHorde(field({ quiet: () => false }), {}, {}), crowd = ring(h, 6, 6), p = { ...still, noise: 14, canGrab: false };
+    run(h, p, 3);
+    assert.equal(count(crowd), 3);
+    const victim = h.add(1, 1);
+    run(h, p, .05);
+    h.provoke(victim);
+    assert.equal(count([...crowd, victim]), 3); assert.equal(victim.state, ROUSED, 'it\'s one of them'); assert.equal(victim.rank, 1);
+  });
+
+  test('a lot of them seeing him hit someone: the nearest three come', () => {
+    const h = createHorde(field({ quiet: () => true })), crowd = Array.from({ length: 8 }, (_, i) => h.add(2 + i, -3));
+    h.add(0, 2);
+    run(h, { ...still, z: -30 }, .05);
+    h.knock(0, 2, 1, 5);
+    assert.equal(count(crowd), 3);
+    const d = (s) => Math.hypot(s.x, s.z - 2), nearest = [...crowd].sort((a, b) => d(a) - d(b)).slice(0, 3);
+    assert.ok(nearest.every((s) => s.state === ROUSED && !s.rouse.over));
+  });
+});
+
+describe('they give up', () => {
+  // hunting him from where it stood, with him standing at the origin
+  const hunting = (extra, tuning) => { const h = createHorde(field(extra), tuning), s = h.add(10, 0), p = { ...still, noise: 14, canGrab: false }; run(h, p, 3); assert.ok(after(s), `${s.state}`); return { h, s, p }; };
+
+  test('one that loses him for about eight seconds stops, folds back down and wanders home', () => {
+    const { h, s } = hunting();
+    const far = { ...still, x: -100, canGrab: false }; let gave = null;
+    for (let t = 0; t < 14 && gave === null; t += 1 / 30) { h.update(1 / 30, far); if (!after(s)) gave = t; }
+    assert.ok(gave > TUNING.giveUp - .5 && gave < TUNING.giveUp + .6, `gave up after ${gave} s`);
+    assert.equal(s.state, SHAMBLE); assert.ok(s.homeward, 'on its way home');
+    run(h, far, 120);
+    assert.ok(Math.hypot(s.x - 10, s.z) < TUNING.homeIs + .5, `home at ${s.x}`); assert.ok(!after(s));
+  });
+
+  test('round a corner counts as losing him, however near he is', () => {
+    const wall = (x, z) => x > 4 && x < 5 && Math.abs(z) < 12;
+    const h = createHorde(field({ blocked: wall })), s = h.add(10, 0), p = { ...still, noise: 14, canGrab: false };
+    let gave = null;
+    for (let t = 0; t < 20 && gave === null; t += 1 / 30) { h.update(1 / 30, p); if (t > 3 && !after(s) && s.state !== ROUSED) gave = t; }
+    assert.ok(gave !== null && gave < TUNING.giveUp + 4, `${gave}`);
+    assert.ok(s.homeward);
+  });
+
+  test('and further off than about 25 m does, though it can still hear him, which running from it gets him to in a few seconds', () => {
+    const { h, s, p } = hunting();
+    const loud = { ...p, noise: 60 }; let farAt = null, gave = null;
+    for (let t = 0; t < 30 && gave === null; t += 1 / 30) {
+      loud.x -= RUN_SPEED / 30; h.update(1 / 30, loud);
+      if (farAt === null && Math.hypot(s.x - loud.x, s.z - loud.z) > TUNING.sight) farAt = t;
+      if (!after(s)) gave = t;
+    }
+    assert.ok(farAt !== null && farAt > 1 && farAt < 20, `${farAt}`);
+    assert.ok(gave - farAt > TUNING.giveUp - .5 && gave - farAt < TUNING.giveUp + .8, `${gave - farAt} s after it lost him`);
+  });
+
+  test('but one that can see him within 25 m stays on him as long as he stays', () => {
+    const { h, s, p } = hunting();
+    run(h, p, 60); assert.ok(after(s), `${s.state}`);
+  });
+
+  test('nobody stays on him for good, whatever they have against him', () => {
+    const F = { mood: () => 1, senses: () => 1, close() {}, hasNews: () => false, fooled() {}, wise: () => false, tick() {}, hurt() {}, wasThere() {}, next: () => ({ looks: {}, hurt: 3, temper: 1, nerve: 1 }) };
+    const h = createHorde({ ...field(), folks: F }), s = h.add(10, 0), p = { ...still, noise: 14, canGrab: false };
+    run(h, p, 3.5);
+    assert.ok(after(s));
+    run(h, { ...p, x: -100 }, TUNING.giveUp + 1);
+    assert.ok(!after(s));
+  });
+
+  test('what\'s out of reach when he goes isn\'t after him when he\'s back', () => {
+    const h = createHorde(field()), s = h.add(10, 0), p = { ...still, noise: 14, canGrab: false };
+    run(h, p, 3); assert.ok(after(s));
+    run(h, { ...p, x: -400 }, .1);
+    assert.ok(!after(s) && s.state !== ROUSED); assert.ok(s.homeward);
+  });
+});
+
+describe('knocked over by something that isn\'t him', () => {
+  const p = { ...still, noise: 14, canGrab: false };
+  // after him already, without waiting for the second
+  const hunting = (list) => { for (const s of list) { s.state = HUNTING; s.alert = 1; s.tx = 0; s.tz = 0; } };
+
+  test('whoever was after him is straight back at him when they\'re up, with no second of standing there first, and nobody is sent back for it', () => {
+    const h = createHorde(field(), {}, {}), s = h.add(14, 0), keep = [h.add(14, 3), h.add(14, -3)];
+    hunting([s, ...keep]); run(h, still, .05);
+    h.knock(s.x, s.z, 1.5, 2, 'fire');
+    assert.equal(s.state, STUNNED); assert.ok(s.resumes, 'they never stopped');
+    let stood = false; for (let t = 0; t < 4; t += 1 / 30) { h.update(1 / 30, p); if (s.state === ROUSED) stood = true; }
+    assert.ok(!stood, 'no second of standing there'); assert.equal(s.state, HUNTING);
+    assert.ok(keep.every((o) => o.state === HUNTING), 'and nobody was sent back to make room');
+  });
+
+  test('and if there\'s no room for them by the time they\'re up, they give up instead', () => {
+    const h = createHorde(field(), {}, {}), s = h.add(14, 0), keep = [h.add(14, 3), h.add(14, -3)];
+    hunting([s, ...keep]); run(h, still, .05);
+    h.knock(s.x, s.z, 1.5, 2, 'train');
+    const more = h.add(10, 8); hunting([more]);
+    run(h, { ...still, canGrab: false }, 3);
+    assert.equal(s.state, SHAMBLE, 'folded back down, and it never stood there for its second'); assert.ok(!after(s)); assert.ok([...keep, more].every((o) => o.state === HUNTING));
+  });
+
+  test('a burnt-down bystander it knocks over goes back to what it was doing when it\'s up, and doesn\'t take a hunter\'s place', () => {
+    const told = [], h = createHorde(field(), {}, { roused: (s, why) => told.push(why.kind) }), hunters = [h.add(14, 0), h.add(14, 3), h.add(14, -3)], by = h.add(-40, 0);
+    hunting(hunters); run(h, still, .05);
+    h.knock(by.x, by.z, 1.5, 2, 'fire');
+    assert.equal(by.state, STUNNED); assert.ok(!by.started && !by.resumes);
+    run(h, still, 4);
+    assert.equal(by.state, SHAMBLE); assert.deepEqual(told, []);
+    assert.ok(hunters.every((o) => o.state === HUNTING), 'and not one of them was sent back to make room');
+  });
+
+  test('knocked over by him, they still stand there for a second before they come, and take a place ahead of the rest', () => {
+    const h = createHorde(field(), {}, {}), hunters = [h.add(14, 0), h.add(14, 3), h.add(14, -3)], by = h.add(-40, 0);
+    hunting(hunters); run(h, still, .05);
+    h.knock(by.x, by.z, 1.5, 2, 'hit');
+    assert.ok(by.started && !by.resumes);
+    let stood = false; for (let t = 0; t < 3.5; t += 1 / 30) { h.update(1 / 30, { ...p, x: -30 }); if (by.state === ROUSED && !by.rouse.over) stood = true; }
+    assert.ok(stood, 'it stopped and flared'); assert.equal(hunters.filter((o) => o.state === HUNTING).length, 2, 'and the furthest of the others went back');
+  });
+});
+
+describe('one that\'s already hunting him', () => {
+  test('is left alone: a bottle that hits it, or him giving himself away, doesn\'t rouse it again, count it, or send another back', () => {
+    const told = [], h = createHorde(field(), {}, { roused: (s, why) => told.push(why.kind) }), a = [h.add(6, 0), h.add(6, 2), h.add(6, -2)], p = { ...still, canGrab: false };
+    for (const s of a) { s.state = HUNTING; s.alert = 1; }
+    run(h, p, .05);
+    h.provoke(a[0], 'thrown');
+    assert.ok(a.every((s) => s.state === HUNTING), 'still after him, all three'); assert.deepEqual(told, []);
+    assert.equal(h.unmask(p), 0, 'only the ones it roused are counted');
+    assert.ok(a.every((s) => s.state === HUNTING)); assert.deepEqual(told, []);
+  });
+});
+
+describe('only the ones nearby are out', () => {
+  test('someone put back is brought out just as they were, and the random numbers are never asked', () => {
+    let asked = 0;
+    const h = createHorde(field({ rand: () => { asked++; return rand(); } })), s = h.add(5, 0), other = h.add(-5, 0);
+    run(h, { ...still, x: 40 }, 1);
+    s.state = CURIOUS; s.timer = 2.5; s.tx = 12; s.tz = 3; s.alert = .4; s.homeward = true; s.sore = 7; s.wet = 30; s.inside = true;
+    const was = { ...s }, n = asked;
+    h.remove(s);
+    assert.ok(!h.all.includes(s) && !h.active.includes(s)); assert.ok(h.all.includes(other));
+    run(h, { ...still, x: 40 }, 20);
+    assert.deepEqual({ ...s }, was, 'nothing about them has changed while they were away');
+    h.restore(s); h.restore(s);
+    assert.equal(h.all.filter((o) => o === s).length, 1, 'once');
+    assert.deepEqual({ ...s }, was);
+    assert.ok(asked >= n);
+  });
+
+  test('someone put back who was after him, or about to be, gives up first, so they aren\'t hunting him with no warning when they come back', () => {
+    const h = createHorde(field(), {}, {}), a = h.add(8, 0), b = h.add(-8, 0), p = { ...still, canGrab: false };
+    run(h, p, .05);
+    a.state = HUNTING; a.alert = 1;
+    h.noise(-8, 0, 5, 3); assert.equal(b.state, ROUSED, 'one of them is mid-second');
+    h.remove(a); h.remove(b);
+    assert.equal(a.state, SHAMBLE); assert.ok(a.homeward); assert.equal(b.state, SHAMBLE); assert.equal(b.rouse, null);
+    run(h, { ...p, x: 40 }, 2); h.restore(a); h.restore(b);
+    run(h, p, 3);
+    assert.ok(!after(a) && !after(b) && a.state !== ROUSED && b.state !== ROUSED, `${a.state} ${b.state}`);
+  });
+
+  test('putting back someone who has hold of him lets him go', () => {
+    let freed = 0;
+    const h = createHorde(field(), {}, { free: () => freed++, grab() {} }), s = h.add(.3, 0);
+    s.state = HUNTING;
+    run(h, { ...still, y: 0 }, .4 + TUNING.windUp);
+    assert.ok(h.grab); h.remove(s);
     assert.equal(h.grab, null); assert.equal(freed, 1);
   });
 });

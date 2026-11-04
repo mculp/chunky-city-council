@@ -259,8 +259,9 @@ check('and it turns them over as it throws them', crowd.turned > 1 && crowd.spin
 await g(() => { done(); G.horde.calm(); });
 const chased = await g(() => {
   const H = G.horde, t = R.TRESTLES[2]; stand(t.s - 6, 0);
-  const [x, z] = along(t.s - 36), s = H.add(x, z);
-  G.sim(.3, T); H.lure(P().x, P().z, 60, 12, false, 'test');
+  // one who has burnt down hears a noise he makes, stops and turns to him for a second, and comes: nothing draws it out there, it's him it's coming for
+  const [x, z] = along(t.s - 36), s = H.add(x, z, { quiet: false });
+  G.sim(.3, T); H.noise(P().x, P().z, 60, 3, 'test');
   G.sim(7, T);
   const out = { onDeck: R.onTrestle(s.x, s.z), y: s.y, d: Math.hypot(s.x - P().x, s.z - P().z) };
   return out;

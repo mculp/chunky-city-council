@@ -2,8 +2,9 @@
 // out of the way while he's inside, up the aisle, across the pews and not getting anywhere, through the door in the wing's wall to the pantry and what's on its shelf. Then Miss Bobby,
 // out front of her house by the town hall with the van she drives for Chunky Baptist, and her steps, swept for three in Chapter 1 however bare the church's shelf, and once a day after it, paid for out
 // of the shelf, over a week of days, and still the same after a reload. Then the bell: the rope
-// inside the door, a tap, the crowd coming to it from all over and into the church while it rings, out again after, and on a laptop the E key. Last, the steeple coming down with
-// the church, and with it the bell.
+// inside the door, a tap, and it's only noise. Rung from in there it stirs nobody, since they can't find him in the church, and once he's out again while it's still going the burnt-down ones
+// near enough to hear it stop, turn to him and flare, the nearest three, and come for him and not for the church, with nothing on the screen to say why. Nobody who has gone quiet stirs, and nobody
+// goes into the church, while it rings or after. Then the E key on a laptop. Last, the steeple coming down with the church, and with it the bell.
 //
 //   npm i && npm run church [-- --shots dir]
 import { mkdirSync } from 'node:fs';
@@ -122,16 +123,17 @@ check('after a reload, the shelf\'s as it was and the steps are still swept', r.
 r = await g(() => { document.getElementById('forget').click(); return { shown: C.shown(), swept: C.pantry.sweptOn(C.today()) }; });
 check('and Forget everyone fills it again', r.shown === 9 && !r.swept, r);
 
-// ---- the bell
+// ---- the bell. It's noise and nothing else: once he's out where they can find him, it rouses the burnt-down ones near enough to hear it, who come for him and not for the church, and nobody
+// else stirs. The church stays off limits while it rings.
 await page.keyboard.press('x');
 await page.waitForFunction(() => __game.sound.state().ctx === 'running', null, { timeout: 5000 });
 await page.waitForFunction(() => __game.sound.state().files.some((f) => /church\.bell/.test(f)), null, { timeout: 60000, polling: 250 });
 r = await g(() => {
   // they only move within 150 m of him, so he's at the church first
-  land(); G.S.flags.ended = true; G.place(...C.at(-4.67, 24)); G.step(.1); G.bringOutCrowd(); const H = G.horde; H.calm();
-  // forty of them all round, from 40 to 110 m off, minding their own business
+  land(); G.S.flags.ended = true; G.place(...C.at(-4.67, 24)); G.step(.1); G.bringOutCrowd(); const H = G.horde; H.calm(); H.noises.length = 0; G.folks.forget(); G.roused.log.length = 0;
+  // forty of them all round, from 40 to 110 m off, minding their own business, every other one of them burnt down and the rest gone quiet
   const [cx, cz] = C.at(-4.4, 15.6);
-  H.all.forEach((s, i) => { const a = i * 2.39996, d = i < 40 ? 40 + (i % 8) * 10 : 900 + i, x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d; Object.assign(s, { x, z, tx: x, tz: z, homeX: x, homeZ: z, y: G.floorAt(x, z), state: 0, alert: 0, timer: 2, lead: null }); });
+  H.all.forEach((s, i) => { const a = i * 2.39996, d = i < 40 ? 40 + (i % 8) * 10 : 900 + i, x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d; Object.assign(s, { x, z, tx: x, tz: z, homeX: x, homeZ: z, y: G.floorAt(x, z), state: 0, alert: 0, timer: 2, lead: null, quiet: i % 2 === 1, rouse: null, gaze: null }); });
   G.sim(.5, T);
   window.was = new Map(H.active.filter((s) => Math.hypot(s.x - cx, s.z - cz) < 120).map((s) => [s, Math.hypot(s.x - cx, s.z - cz)]));
   walkTo(-4.67, 15.5); walkTo(-3.65, 16.2); G.step(.1);
@@ -141,24 +143,47 @@ check(`inside the door, by the rope, the button rings the bell: "${r.prompt}"`, 
 await g(() => G.sound.forget());
 await tap('#bA');
 r = await g(() => { G.sim(.3, T); return { ringing: C.ringing(), toast: toastSays(), heard: !!G.sound.lastHeard('church.bell'), again: C.bellInReach(), prompt: prompted() }; });
-check('a tap and it rings, and it says they\'ll come', r.ringing && r.heard && /bell's ringing/.test(r.toast), r);
+check('a tap and it rings, and that is all it says', r.ringing && r.heard && /The bell's ringing\.$/.test(r.toast) && !/come/.test(r.toast), r);
 check('and it can\'t be rung again while it\'s going', !r.again && !/Ring the bell/.test(r.prompt), r);
+// in there they can't find him, so it's no use to them: a couple of seconds of it and nobody has stirred
+r = await g(() => { G.player.inv = .85; G.sim(2, T); return { roused: G.horde.all.filter((s) => s.state === 8 || s.state === 2).length, noted: G.roused.log.length }; });
+check('rung from inside the church it stirs nobody: they can\'t find him in there', r.roused === 0 && r.noted === 0, r);
 r = await g(() => {
-  // he gets out of the way, down Church St, and they can't lay hands on him while it's measured
-  walkTo(-4.67, 24); G.place(...C.at(-4.67, 45)); G.step(.1);
-  const H = G.horde, [cx, cz] = C.at(-4.4, 15.6), out = { in: 0, closer: 0 };
-  for (let t = 0; t < 19.5; t += .5) { G.player.inv = .85; G.sim(.5, T); out.in = Math.max(out.in, H.active.filter((s) => H.inSanctuary(s.x, s.z)).length); }
+  // then he steps out, a good way down Church St, while it's still going, and they can't lay hands on him while it's measured. The ones near enough to have heard it stop and turn to him, the
+  // nearest three of the burnt-down ones, and come.
+  const H = G.horde, [cx, cz] = C.at(-4.4, 15.6), burnt = [...was.keys()].filter((s) => s.quiet === false), quiet = [...was.keys()].filter((s) => s.quiet === true), st = C.steeplePos;
+  // what's on the screen before he steps out, which is only any use if none of them has stopped yet, and what's new on it once the nearest three have
+  const before = screenText(), clean = burnt.every((s) => s.state !== 8 && s.state !== 2);
+  G.place(...C.at(-4.67, 45)); G.step(.1);
+  const nearest = burnt.slice().sort((a, b) => Math.hypot(a.x - st.x, a.z - st.z) - Math.hypot(b.x - st.x, b.z - st.z)).slice(0, 3);
+  const stood = new Set(), after = new Set(), out = { in: 0, peak: 0, odd: 0 };
+  const inChurch = () => H.active.filter((s) => H.inSanctuary(s.x, s.z)).length;
+  out.added = null; out.clean = clean;
+  for (let t = 0; t < 17.5; t += .1) {
+    G.player.inv = .85; G.sim(.1, T);
+    if (!out.added && burnt.some((s) => s.state === 8 && !s.rouse.over)) { G.step(.05); out.added = screenText().filter((l) => !before.includes(l)); }
+    out.in = Math.max(out.in, inChurch());
+    let n = 0; for (const s of burnt) { if (s.state === 2 || s.state === 4 || (s.state === 8 && !s.rouse.over)) { n++; after.add(s); } if (s.state === 8 && !s.rouse.over) stood.add(s); }
+    out.peak = Math.max(out.peak, n);
+    for (const s of quiet) if (s.state !== 0 || s.gaze) out.odd++;
+  }
   out.tolls = C.strokes();
-  for (const [s, d] of was) if (Math.hypot(s.x - cx, s.z - cz) < d - 20) out.closer++;
+  out.theNearest = nearest.every((s) => stood.has(s)); out.stood = stood.size; out.burnt = burnt.length; out.quiet = quiet.length;
+  out.noted = G.roused.log.map((l) => l.kind); out.whyBox = !!document.getElementById('why');
+  // nobody walked over to it: not one that wasn't after him got 20 m closer in the time, which is further than they wander in it
+  out.closer = 0; for (const [s, d] of was) if (!after.has(s) && Math.hypot(s.x - cx, s.z - cz) < d - 20) out.closer++;
+  out.after = after.size;
+  for (let t = 0; t < 30; t += .5) { G.player.inv = .85; G.sim(.5, T); out.in = Math.max(out.in, inChurch()); }
   out.stopped = !C.ringing();
-  for (let t = 0; t < 30; t += .5) { G.player.inv = .85; G.sim(.5, T); }
-  out.after = H.active.filter((s) => H.inSanctuary(s.x, s.z)).length;
   return out;
 });
-console.log(`     ${r.closer} of ${await g(() => was.size)} came closer, ${r.in} were round the church at once, ${r.tolls} strokes`);
+console.log(`     ${r.stood} of the ${r.burnt} burnt-down ones within earshot stopped and turned to him, and ${r.after} came for him, ${r.peak} at most at once; ${r.closer} of the others got 20 m closer to the church, ${r.in} went in; ${r.tolls} strokes`);
 check('it tolls every few seconds while it rings, and then stops', r.tolls >= 4 && r.stopped, r);
-check('they come to it from all over, and into the church while it rings', r.closer >= 20 && r.in >= 3, r);
-check('and once it\'s stopped they don\'t stay in it', r.after <= 1, r);
+check('once he\'s out, it rouses the nearest three of the burnt-down ones who can hear it, and they stop and turn to him', r.stood === 3 && r.theNearest, r);
+check('and nothing on the screen says why: it was the bell, three of them, and the screen has no new line for it and nothing to write one in', r.noted.length === 3 && r.noted.every((k) => k === 'bell') && !r.whyBox && r.clean && r.added?.length === 0, r);
+check('no more than three come for him at once, however loud the bell', r.peak === 3 && r.after === 3, r);
+check('and nobody walks over to the church for it, and nobody who has gone quiet stirs', r.closer === 0 && r.odd === 0, r);
+check('nobody goes into the church, while it rings or after, not even the three who are after him', r.in === 0, r);
 await g(() => { G.place(...C.at(-4.67, 34)); G.look(Math.atan2(-(C.at(-4.67, 18)[0] - P().x), -(C.at(-4.67, 18)[1] - P().z)), .15); G.step(.2); });
 await snap('4-after-the-bell');
 

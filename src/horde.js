@@ -4,25 +4,41 @@
 // sharper at night. What they are is in docs/lore.md. Most of them have gone quiet and leave him be until he starts
 // something, and only the ones who've burnt down come for him on sight, which is the top of how far gone they are.
 // What each of them is like and what they remember of him is in src/agents.js.
+//
+// Nobody comes for him for no reason, and there's always a way out. Before one does, it stops, turns to him and flares for a second (ROUSED), and nothing on screen says why.
+// If he backs off in that second it goes back to what it was doing. No more than three are after him at once, and the rest look up and go back. None of them is as quick
+// as he is, and one that loses him for about eight seconds gives up and wanders home.
+//
+// Nothing draws a crowd but supper, and supper isn't here yet. A noise he makes, a crash or an alarm or a swing, rouses the ones who've burnt down and are near enough to hear it,
+// and they come for him and not for wherever it was. A thrown bottle or firecrackers make one near enough turn and look at them for a few seconds, which is enough to slip past it,
+// and a fire of lighter fluid is looked at while it burns, and nobody walks over to any of it. The ones who've gone quiet, and everyone at home, don't care about any of it.
 
 import { AFTER, AWAY, TAILING, HOW, roll } from './agents.js';
 
-export const SHAMBLE = 0, CURIOUS = 1, HUNTING = 2, SWARM = 3, GRABBING = 4, STUNNED = 5, AVOIDING = 6, TRAILING = 7;
-export const STATE_NAMES = ['shamble', 'curious', 'hunting', 'swarm', 'grabbing', 'stunned', 'avoiding', 'trailing'];
+// 3 was the swarm, three of them together going quicker and calling the rest over. Nothing draws a crowd, so nothing's in it any more; the number's kept so that nothing else moves.
+export const SHAMBLE = 0, CURIOUS = 1, HUNTING = 2, SWARM = 3, GRABBING = 4, STUNNED = 5, AVOIDING = 6, TRAILING = 7, ROUSED = 8;
+export const STATE_NAMES = ['shamble', 'curious', 'hunting', 'swarm', 'grabbing', 'stunned', 'avoiding', 'trailing', 'roused'];
 
 export const TUNING = {
   active: 150,                     // further from the player than this, they wait
-  speed: [.75, 1.15, 3, 3.7, 0, 0, 2.8, 1.5],   // m/s by state. The player runs at 4.4, so the open ground is always an escape.
+  // m/s by state. The player runs at 4.4, and the quickest of them, one coming after him folded over, tops out at three quarters of that, so the open ground is always an escape.
+  speed: [.75, 1.15, 3, 0, 0, 0, 2.8, 1.5, 0],
   thinkEvery: .2,                  // seconds between looks around
-  smellBase: 1.5, smellPerBean: .45,  // metres. A full twelve reaches about ten at night, so standing still among them still means something.
+  // Smell. With five cans of beans or fewer nobody smells him at all, and a dozen reaches 2 m, or about 3 at night, which is when it matters.
+  smellFrom: 5, smellPerBean: 2 / 7,
   touch: 2,                        // metres, for someone standing dead still with nothing on them
   nightSense: 1.5,                 // how much further they reach at full night
   alertRate: [.5, 2],              // alert per second, at the edge of a sense and right on top of it
   alertFade: .3,
   curiousAt: .25,
   lookAround: 3,                   // seconds spent looking around where something was
-  lostAfter: 5,                    // seconds a hunter keeps going after losing you
-  swarmSize: 3, swarmReach: 10, callReach: 20,
+  lostAfter: 5,                    // seconds someone who's just seen him for what he is knows where he is, without being able to see him
+  // Never for no reason: before one comes for him it stops, turns to him and flares for this long, and backing off by this much in that time sends it back to what it was doing
+  rouseFor: 1, rouseBack: 1.5, faceRate: 8, coolFor: 3,
+  afterMost: 3,                    // no more than this many after him at once, however much noise he makes. The rest look up, for this long, and go back.
+  lookFor: .7,
+  // They give up. One that can't see him, round a corner or further off than this, for this long, stops, folds back down and wanders home.
+  sight: 25, sightStep: .5, giveUp: 8, stops: 1,
   grabReach: .95, grabbers: 3, dragSpeed: .7,
   windUp: .5,                      // seconds it takes them to get hold of him once they're close enough, and a hit in that time stops it
   mash: .17, mashFade: .12, grabHold: 7,   // one press, how fast it slips back, and how long you've got
@@ -30,13 +46,10 @@ export const TUNING = {
   personalSpace: .95,
   feelAlong: 8,                    // seconds along a wall before trying the other way
   lightPull: .35,                  // the chance a shambler heads for a light it's near, at full night
-  drowned: 3.5,                    // metres. While a lure's going they can't make out anything further off than this
-  lured: 2,                        // m/s, going to one, which is quicker than going to look
-  wading: .55,                     // how much of that they keep in the water
-  bite: [3, 7],                    // seconds in the water before the cottonmouths have them
-  goesUnder: 1.2,                  // seconds to go down after that
+  wading: .55,                     // how much of their pace they keep in the water, wading out of it. Nobody goes in after anything.
+  goesUnder: 1.2,                  // seconds to go down, for anyone the train throws in
   thrownFalls: 15,                 // m/s², for anyone thrown
-  // Nobody dies. The cottonmouths have them and the current takes them, and they come up a little way downstream, on the bank, soaked, with a snake hanging off a sleeve, and walk home.
+  // Nobody dies. The cottonmouths have whoever the train throws in and the current takes them, and they come up a little way downstream, on the bank, soaked, with a snake hanging off a sleeve, and walk home.
   below: [10, 18],                 // seconds under before they come up, by their number
   current: 3.5,                    // metres a second it takes them, which is how far downstream they come up: 35 to 63 m
   dries: 80,                       // seconds they stay soaked once they're up
@@ -60,7 +73,7 @@ export const TUNING = {
   actPace: 1.3,                    // m/s. No quicker than one of them going to look at something
   susReach: 5,                     // metres. Further off than this, nobody looks twice at him
   susRate: .18,                    // how much of the way to seeing through him they get in a second, right up against him with nothing on him
-  susPerBean: .15,                 // and how much quicker for each can of beans he's carrying, since they can smell those
+  susPerBean: .257,                // and how much quicker for each can of beans he's carrying past what they can smell (smellFrom), so twelve is a bit under three times as quick
   susFade: .1,                     // a second, once he's out of their reach
   unmask: 14,                      // metres. Giving himself away gives him away to everyone this close
   // Anyone who's gone quiet leaves him be until he starts something: hits one, throws something at one, runs one down, or picks something up from right at one's feet
@@ -68,6 +81,8 @@ export const TUNING = {
   snatch: 1.6,                     // metres. What's this close to one of them is at its feet.
   scuttle: 1.08,                   // how much quicker the ones who come after him folded over go than the ones who stand up. Running, he still gets away.
 };
+// He runs at 4.4, and the quickest of them tops out at about three quarters of that
+export const RUN_SPEED = 4.4;
 
 const hypot = Math.hypot, TRY = [0, .8, 1.6, 2.4, 3.1];
 function turn(from, to, k) { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return from + d * k; }
@@ -75,16 +90,17 @@ function turn(from, to, k) { let d = (to - from) % (Math.PI * 2); if (d > Math.P
 // world: { blocked(x, z, y), water(x, z), floorAt(x, z), wander(s) -> [x, z], rand(), folks: src/agents.js's, or nothing and they're nobody,
 //          quiet(s) whether someone just come out has gone quiet, or nothing and nobody has, reaching(s) as one of them starts to reach for him, once for each time,
 //          comeUp(s, { metres, side, home }) -> { x, z, bank: [x, z] } where the river brings someone up, which is src/river.js's, or nothing and it's where they went under }
-// on: { grab(grab), free(), overrun(), spotted(s) when one of them sees through his act, thrown(s, hit), splash(s) into the water, bitten(s) by the cottonmouths,
-//       surfaced(s) up again downstream, drop(s) when the snake lets go }
+//          sees(s, p) whether one of them can see him from where it stands, or nothing and it's walls from world.blocked,
+// on: { grab(grab), free(), overrun(), spotted(s) when one of them sees through his act, roused(s, why) as one stops and turns to him before it comes, thrown(s, hit),
+//       splash(s) into the water, surfaced(s) up again downstream, drop(s) when the snake lets go }
 export function createHorde(world, tuning = {}, on = {}) {
-  const T = { ...TUNING, ...tuning }, all = [], active = [], noises = [], lights = [], zones = [], F = world.folks;
-  let clock = 0, bellUntil = -1, mercy = 0;
-  const h = { all, active, noises, lights, zones, T, grab: null, on };
+  const T = { ...TUNING, ...tuning }, all = [], active = [], noises = [], looks = [], lights = [], zones = [], F = world.folks;
+  let clock = 0, mercy = 0, hearAt = 0, watch = { x: 0, z: 0 };
+  const h = { all, active, noises, looks, lights, zones, T, grab: null, on };
 
   h.inSanctuary = (x, z) => zones.some((a) => hypot(x - a.x, z - a.z) < a.r);
-  // Off limits unless the bell's ringing, to anyone outside. Anyone caught inside when it stops is on their way out, and can go round whatever's in the way.
-  const offLimits = (s, x, z) => clock >= bellUntil && zones.some((a) => hypot(x - a.x, z - a.z) < a.r && hypot(s.x - a.x, s.z - a.z) >= a.r);
+  // Off limits, to anyone outside, always, and the bell doesn't change that. Anyone caught inside is on their way out, and can go round whatever's in the way.
+  const offLimits = (s, x, z) => zones.some((a) => hypot(x - a.x, z - a.z) < a.r && hypot(s.x - a.x, s.z - a.z) >= a.r);
   const open = (s, x, z) => !world.blocked(x, z, s.y) && (s.wading || !world.water(x, z)) && !offLimits(s, x, z);
 
   h.add = (x, z, extra = {}) => {
@@ -98,71 +114,171 @@ export function createHorde(world, tuning = {}, on = {}) {
     s.scuttle ??= s.hips < HOW.hips.scuttles;
     all.push(s); return s;
   };
+  // After him: hunting or holding on to him
+  const isAfter = (s) => s.state === HUNTING || s.state === GRABBING;
   // Whether they'd leave him be just now: anyone at home, and anyone who's gone quiet and isn't already after him, unless they've got something against him
-  const leaves = (s, mood) => mood !== AFTER && mood !== AWAY && (!!s.who?.calm || (!!s.quiet && s.state !== HUNTING && s.state !== SWARM && s.state !== GRABBING));
+  const leaves = (s, mood) => mood !== AFTER && mood !== AWAY && (!!s.who?.calm || (!!s.quiet && !isAfter(s)));
   const moodOf = (s) => (s.who ? F.mood(s.who) : 0);
-  // He's started something there. Anyone gone quiet who's close enough to have seen it comes for him, or gets out of his way if they're the kind. It says how many.
-  function rile(x, z) {
-    let n = 0;
+  // How many are after him, and how many are about to be. A roused one that's only looking up isn't.
+  function afterCount() { let n = 0; for (const o of active) if (isAfter(o) || (o.state === ROUSED && !o.rouse.over)) n++; return n; }
+
+  // ---- Never for no reason. One that's about to come for him stops, turns to him and flares for a second first, and that's all anyone's told of it: nothing on screen says why. why is
+  // { kind, her }: kind is what woke it ('crash', 'beans', 'light', 'hit', 'cornered' and so on) and her is whether whoever he hit is a woman. It's what has to still be true by the end of the second
+  // for one that was woken by something about him (SENSES), and what the page keeps a log of for the tests.
+  // rank is 1 for someone he's hurt, who gets in ahead of the rest if that's three already. It says whether it's roused: no, when it's three already, and it only looks up and goes back. One that's
+  // already hunting him is coming for him, and is left alone, so it says yes and nothing changes: it isn't roused again, which would end its chase, and it doesn't send anyone else back.
+  function rouse(s, why, rank = 0) {
+    if (s.state === HUNTING) return true;
+    if (s.state === ROUSED || s.state === GRABBING || s.under !== undefined || s.thrown) return false;
+    const p = watch, d = hypot(s.x - p.x, s.z - p.z);
+    let full = afterCount() >= T.afterMost;
+    if (full && rank > 0 && evict(rank)) full = false;
+    s.rouse = { why, at: clock, until: clock + (full ? T.lookFor : T.rouseFor), d0: d, over: full, rank, back: { state: s.state, tx: s.tx, tz: s.tz, timer: s.timer } };
+    s.state = ROUSED; s.moving = 0; s.alert = 1; s.reaching = 0; s.rank = rank;
+    if (!full) h.on.roused?.(s, why);
+    return !full;
+  }
+  // and to what it was doing, if he backs off in that second, or it was only looking up, or there's nothing there any more to have woken it
+  function unrouse(s) {
+    const r = s.rouse; s.rouse = null; s.rank = 0;
+    const was = r?.back.state;
+    s.state = was === CURIOUS || was === TRAILING || was === AVOIDING ? was : SHAMBLE;
+    s.tx = r ? r.back.tx : s.x; s.tz = r ? r.back.tz : s.z; s.timer = r ? r.back.timer : 0;
+    s.alert = Math.min(s.alert, T.curiousAt); s.lost = 0; s.reaching = 0; s.cool = clock + T.coolFor;
+  }
+  // and the second's up, and it's him it comes for. Anyone who'd sooner keep away from him does that, unless they were backed into a corner: then they turn on him for a few seconds, and it's
+  // after that, and not before, that they go back to keeping away.
+  function hunt(s, p) {
+    const w = s.who, mood = w ? F.mood(w) : 0, rank = s.rouse?.rank ?? 0, cornered = s.rouse?.why.kind === 'cornered';
+    s.rouse = null; s.lost = 0; s.alert = 1; s.timer = 0; s.rank = rank; s.tx = p.x; s.tz = p.z; s.knows = clock + T.lostAfter;
+    s.state = !cornered && (mood === AWAY || (w?.truck > 0 && p.driving)) ? AVOIDING : HUNTING;
+    if (cornered) s.turned = T.turnsFor;
+  }
+  // They give up: stops, folds back down and wanders home
+  function giveUp(s) {
+    s.rouse = null; s.rank = 0; s.state = SHAMBLE; s.alert = 0; s.lost = 0; s.knows = 0; s.reaching = 0; s.moving = 0; s.sus = 0; s.tx = s.x; s.tz = s.z; s.timer = T.stops; s.cool = clock + T.coolFor;
+    goHome(s);
+  }
+  // Room for someone he's hurt: whoever's furthest off of the rest, who isn't on him for a hurt of their own, looks up and goes back
+  function evict(rank) {
+    let worst = null, far = -1;
     for (const o of active) {
-      if (!o.quiet || o.flat > 0 || o.under !== undefined || o.thrown || (o.state >= HUNTING && o.state <= STUNNED) || o.state === AVOIDING || hypot(o.x - x, o.z - z) > T.riled) continue;
-      turnOn(o, x, z); n++;
+      if (!(o.state === HUNTING || (o.state === ROUSED && !o.rouse.over)) || (o.rank ?? 0) >= rank) continue;
+      const d = hypot(o.x - watch.x, o.z - watch.z); if (d > far) { far = d; worst = o; }
     }
+    if (!worst) return false;
+    if (worst.state === ROUSED) unrouse(worst); else giveUp(worst);
+    return true;
+  }
+  // He's started something there. Anyone gone quiet who's close enough to have seen it comes for him, or gets out of his way if they're the kind, the nearest first and no more than
+  // three after him. victim is whoever he did it to, whose sex is kept with the cause (her), and kind is what he did. It says how many.
+  function rile(x, z, victim, kind = 'hit') {
+    const near = [];
+    for (const o of active) {
+      if (!o.quiet || o.flat > 0 || o.under !== undefined || o.thrown || (o.state >= HUNTING && o.state <= STUNNED) || o.state === AVOIDING || o.state === ROUSED || hypot(o.x - x, o.z - z) > T.riled) continue;
+      near.push(o);
+    }
+    near.sort((a, b) => hypot(a.x - x, a.z - z) - hypot(b.x - x, b.z - z));
+    let n = 0;
+    for (const o of near) if (turnOn(o, x, z, victim, 0, kind)) n++;
     return n;
   }
-  // and it's him they come for: they know where he is for a while, the same as when he gives himself away
-  function turnOn(s, x, z) {
-    if (moodOf(s) === AWAY) s.state = AVOIDING;
-    else { s.state = HUNTING; s.alert = 1; s.sus = 0; s.tx = x; s.tz = z; s.knows = clock + T.lostAfter; }
-    s.lost = 0;
+  // and it's him they come for: they know where he is for a while, the same as when he gives himself away. It says whether they did, and not whether they were only looking up.
+  function turnOn(s, x, z, victim = s, rank = 0, kind = 'hit') {
+    s.lost = 0; s.sus = 0;
+    if (moodOf(s) === AWAY) { s.state = AVOIDING; return true; }
+    return rouse(s, { kind, her: victim?.who?.her }, rank);
   }
   // He's started something with someone without knocking them down: hit them with something he threw, or picked up what was at their feet. They come for him,
   // and so does anyone gone quiet close by who saw it. Being hit is remembered like any other, by them and whoever was there. It says how many came.
   h.provoke = (s, by = 'thrown') => {
     if (s.under !== undefined || s.thrown || s.state === GRABBING) return 0;
     if (s.who && by === 'thrown') { F.hurt(s.who, s.x, s.z, by); for (const o of active) if (o !== s && o.who && !(o.flat > 0) && hypot(o.x - s.x, o.z - s.z) < T.witness) F.wasThere(o.who); }
-    if (s.state === STUNNED || s.flat > 0) s.started = true; else if (!(s.who?.calm && leaves(s, moodOf(s)))) turnOn(s, s.x, s.z);
-    return 1 + rile(s.x, s.z);
+    const kind = by === 'took' ? 'took' : 'hit';
+    let n = 0;
+    if (s.state === STUNNED || s.flat > 0) s.started = true;
+    else if (!(s.who?.calm && leaves(s, moodOf(s)))) { if (s.state === ROUSED) unrouse(s); if (turnOn(s, s.x, s.z, s, 1, kind)) n++; }
+    return n + rile(s.x, s.z, s, kind);
   };
   // Picking up what's right at the feet of one who's gone quiet counts as starting something with them. It says how many came for him over it.
   h.took = (x, z) => { let n = 0; for (const s of active) if (s.quiet && !(s.flat > 0) && hypot(s.x - x, s.z - z) < T.snatch) n += h.provoke(s, 'took'); return n; };
-  // Something loud: anyone in reach goes to look
-  h.noise = (x, z, r, seconds) => { noises.push({ x, z, r, until: clock + seconds }); };
-  // The church bell draws them the way a lure does, and anyone it's fooled often enough stops coming. While it rings they forget the church is off limits.
-  h.bell = (x, z, r, seconds) => { h.lure(x, z, r, seconds, false, 'bell'); bellUntil = clock + seconds; };
-  // He's given himself away, running or fighting or in the light: anyone close who'd have noticed him turns on him, or away from him if they're scared of him. It says how many.
+  // Who a noise or a thrown bottle can move: one who hasn't gone quiet and isn't at home, who isn't after him or roused or down, and who isn't scared of him. A noise doesn't give him away
+  // if he's passing for one of them, since it isn't him they'd be listening for, and it's no use in the church, where they can't find him.
+  const stirs = (s) => {
+    if (s.under !== undefined || s.thrown || s.climbing || !(s.state === SHAMBLE || s.state === CURIOUS || s.state === TRAILING)) return false;
+    const mood = moodOf(s);
+    return !leaves(s, mood) && mood !== AWAY;
+  };
+  const heardIn = (s, ev) => stirs(s) && !ev.heard.has(s) && !(watch.acting && moodOf(s) !== AFTER && ev.noise) && !(watch.hidden && ev.noise) && hypot(s.x - ev.x, s.z - ev.z) < ev.r;
+  // Something loud, a crash or a swing or a blast or an alarm that he's set off: anyone near enough to hear it who hasn't gone quiet is roused, the nearest first and no more than three
+  // after him, and comes for him, and not for wherever it was. Nobody walks over to it. kind is what it was, and what's said if it's what rouses one of them. It says how many it roused.
+  h.noise = (x, z, r, seconds, kind = 'crash') => {
+    const ev = { x, z, r, until: clock + seconds, kind, heard: new Set(), noise: true };
+    noises.push(ev);
+    const near = active.filter((s) => heardIn(s, ev)).sort((a, b) => hypot(a.x - x, a.z - z) - hypot(b.x - x, b.z - z));
+    let n = 0; for (const s of near) if (hear(s, ev)) n++;
+    return n;
+  };
+  // and one that has just been sent back, or has just given up, doesn't take it up again for the same racket: a swing is a blow and a noise, and it's one moment
+  function hear(s, ev) { ev.heard.add(s); if (clock < (s.cool ?? 0)) return false; return rouse(s, { kind: ev.kind }); }
+  // A thrown bottle or firecrackers, or a fire of lighter fluid that's burning: anyone near enough who hasn't gone quiet turns to it and looks at it for a few seconds, or as long as the fire
+  // burns, and can't make out anything else while they do, which is long enough to slip past. Nobody walks over to it, and the ones after him aren't interested. A kind of thing stops doing it
+  // to anyone it has done it to often enough. It says how many looked.
+  h.look = (x, z, r, seconds, kind = 'bottle') => {
+    const ev = { x, z, r, until: clock + seconds, kind, heard: new Set() };
+    looks.push(ev);
+    const near = active.filter((s) => heardIn(s, ev)).sort((a, b) => hypot(a.x - x, a.z - z) - hypot(b.x - x, b.z - z));
+    let n = 0; for (const s of near) if (gawk(s, ev)) n++;
+    return n;
+  };
+  function gawk(s, ev) {
+    ev.heard.add(s);
+    if (s.who && F.wise(s.who, ev.kind)) return false;
+    if (s.who) F.fooled(s.who, ev.kind);
+    s.state = CURIOUS; s.alert = Math.min(s.alert, T.curiousAt); s.lost = 0; s.tx = s.x; s.tz = s.z; s.moving = 0; s.timer = ev.until - clock; s.gaze = { x: ev.x, z: ev.z, until: ev.until };
+    return true;
+  }
+  // He's given himself away, running or fighting or in the light: anyone close who'd have noticed him turns on him, or away from him if they're scared of him, the nearest first and
+  // no more than three after him. Anyone already hunting him is after him anyway. It says how many it roused.
   h.unmask = (p, r = T.unmask) => {
-    let n = 0;
+    const near = [];
     for (const s of active) {
-      if (s.under !== undefined || s.thrown || s.state === GRABBING || s.state === STUNNED || hypot(s.x - p.x, s.z - p.z) > r) continue;
-      const mood = moodOf(s);
-      if (leaves(s, mood)) continue;
-      s.sus = 0; s.alert = 1; s.lost = 0; s.tx = p.x; s.tz = p.z; s.knows = clock + T.lostAfter;
-      s.state = mood === AWAY ? AVOIDING : HUNTING; n++;
+      if (s.under !== undefined || s.thrown || s.state === HUNTING || s.state === GRABBING || s.state === STUNNED || s.state === ROUSED || hypot(s.x - p.x, s.z - p.z) > r || leaves(s, moodOf(s))) continue;
+      near.push(s);
+    }
+    near.sort((a, b) => hypot(a.x - p.x, a.z - p.z) - hypot(b.x - p.x, b.z - p.z));
+    let n = 0;
+    for (const s of near) {
+      s.sus = 0; s.lost = 0;
+      if (moodOf(s) === AWAY) { s.alert = 1; s.state = AVOIDING; n++; } else if (rouse(s, { kind: 'gave' })) n++;
     }
     return n;
   };
-  // Something thrown to draw them. While it's going it's all they can make out, unless he's right on top of them, and they go to it quicker than they'd go to look.
-  // One that's landed in the water takes them in after it, and the cottonmouths have them, and the river brings them up again downstream.
-  h.lure = (x, z, r, seconds, wet = false, kind = 'lure') => { noises.push({ x, z, r, until: clock + seconds, lure: true, wet, kind }); };
+  // There's no lure. Nothing draws a crowd, not a train and not an alarm and not a bell, since everyone in Chunky has heard all of them every day for years, and nobody follows anything
+  // into the water: a noise rouses the ones near enough to hear it, and a bottle makes them look. The one real lure is supper, which isn't here yet.
   // Knocked flat: anyone within r goes over, thrown clear, and lies there a while. It says how many. They remember it, and so does whoever was there.
   h.knock = (x, z, r, seconds, by = 'hit') => {
     let n = 0;
     // nobody thinks of a fire or the train as something he did
     const his = by !== 'fire' && by !== 'train';
+    let victim = null, nearest = Infinity;
     for (const s of active) {
       const dx = s.x - x, dz = s.z - z, d = hypot(dx, dz);
       if (d >= r || s.flat > 0 || s.under !== undefined) continue;
-      s.started = his || (s.started ?? false) || s.state === HUNTING || s.state === SWARM;
+      // whoever was after him and is knocked over by something that isn't him, a fire or the train, never stopped: they're straight back at him when they're up. It's checked before the state changes.
+      if (!his && isAfter(s)) s.resumes = true;
+      s.started = his || (s.started ?? false);
       // and what they were doing and where they were, which is how they're drawn for a moment before they go over
-      s.hitAs = s.state; s.fromX = s.x; s.fromZ = s.z; s.reaching = 0;
+      s.hitAs = s.state === ROUSED ? SHAMBLE : s.state; s.fromX = s.x; s.fromZ = s.z; s.reaching = 0; s.rouse = null; s.rank = 0;
       s.state = STUNNED; s.timer = seconds; s.alert = 1; s.moving = 0; s.flat = s.flatFor = seconds; n++;
       const k = 1 + (1 - d / r) * 2.4, nx = s.x + dx / (d || 1) * k, nz = s.z + dz / (d || 1) * k;
       if (open(s, nx, nz)) { s.x = nx; s.z = nz; s.y = world.floorAt(nx, nz); }
       if (s.who) F.hurt(s.who, s.x, s.z, by);
+      if (d < nearest) { nearest = d; victim = s; }
     }
     if (n && F && by !== 'fire') for (const o of active) if (o.who && !(o.flat > 0) && hypot(o.x - x, o.z - z) < T.witness) F.wasThere(o.who);
-    if (n && his) rile(x, z);
+    // and whoever saw him do it comes for him, with whoever was nearest as the one he hit
+    if (n && his) rile(x, z, victim);
     return n;
   };
   // How much longer someone's down for, getting up included. It's nothing for anyone on their feet.
@@ -184,9 +300,9 @@ export function createHorde(world, tuning = {}, on = {}) {
       const hit = at(s.x, s.z, s.y);
       if (!hit) continue;
       if (h.grab?.who.includes(s)) { h.grab.who.splice(h.grab.who.indexOf(s), 1); if (!h.grab.who.length) { h.grab = null; mercy = T.mercy; h.on.free?.(); } }
-      s.x = hit.x; s.z = hit.z; s.thrown = { vx: hit.vx, vz: hit.vz, vy: hit.vy, spin: hit.spin ?? 0 }; s.tumble = 0; s.hitAs = undefined; s.reaching = 0;
+      s.x = hit.x; s.z = hit.z; s.thrown = { vx: hit.vx, vz: hit.vz, vy: hit.vy, spin: hit.spin ?? 0 }; s.tumble = 0; s.hitAs = undefined; s.reaching = 0; s.rouse = null; s.rank = 0;
       // whatever they were up to, they've had enough of it
-      s.started = false; s.sent = true;
+      s.started = false; s.sent = true; s.resumes = false;
       s.state = STUNNED; s.timer = hit.seconds; s.alert = 1; s.moving = 0; s.flat = s.flatFor = hit.seconds + 1;
       if (s.who) F.hurt(s.who, s.x, s.z, by);
       h.on.thrown?.(s, hit);
@@ -210,13 +326,11 @@ export function createHorde(world, tuning = {}, on = {}) {
   const homeOf = (s) => (s.home ? s.home.door : [s.homeX, s.homeZ]);
   // What's random about someone comes from their number, and not world.rand(), which would change what everyone does after it
   const luckOf = (s, salt) => roll(s.who ? s.who.id : 1e6 + s.look, salt);
-  // Nobody dies of the river. The cottonmouths have them and they go under, and the current takes them, and a little later they come up downstream.
+  // Nobody dies of the river. Whoever the train throws in goes under, the cottonmouths have them and the current takes them, and a little later they come up downstream.
   function dive(s) {
     const below = T.below[0] + luckOf(s, 20) * (T.below[1] - T.below[0]);
     s.under = T.goesUnder + below; s.sinking = T.goesUnder; s.swept = below * T.current;
-    s.wading = false; s.climbing = false; s.soaked = 0;
-    // and whatever lure took them in has had its way with them, so they don't go straight back in after it
-    s.spent = s.lureSeen;
+    s.wading = false; s.climbing = false; s.gaze = null;
     if (s.who) F.hurt(s.who, s.x, s.z, 'river');
   }
   // and up on the bank, wading out of it, with the water pouring off them and a cottonmouth hanging off a sleeve, and then home
@@ -247,16 +361,47 @@ export function createHorde(world, tuning = {}, on = {}) {
   }
   h.calm = () => {
     if (h.grab) h.grab = null;
-    for (const s of all) { s.state = SHAMBLE; s.alert = 0; s.timer = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; s.moving = 0; s.sent = false; }
+    for (const s of all) { s.state = SHAMBLE; s.alert = 0; s.timer = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; s.moving = 0; s.sent = false; s.rouse = null; s.rank = 0; s.cool = 0; s.reaching = 0; }
   };
+  // Only the ones nearby are out. Someone put back isn't thought about or looked for while they're away, and is brought out again just as they were: their state, where they were, and
+  // everything they remember, which is src/agents.js's and has nothing to do with whether they're out. It's the same body, so nothing is asked of anyone's random numbers.
+  h.remove = (s) => {
+    // whoever was after him, or about to be, gives up first, so that whoever's brought back isn't hunting him with no warning
+    if (isAfter(s) || s.state === ROUSED) giveUp(s);
+    const i = all.indexOf(s); if (i >= 0) all.splice(i, 1);
+    const j = active.indexOf(s); if (j >= 0) active.splice(j, 1);
+    if (h.grab?.who.includes(s)) { h.grab.who.splice(h.grab.who.indexOf(s), 1); if (!h.grab.who.length) { h.grab = null; mercy = T.mercy; h.on.free?.(); } }
+    return s;
+  };
+  h.restore = (s) => { if (!all.includes(s)) all.push(s); return s; };
   // A press of the button while held
   h.mash = () => { if (!h.grab) return; h.grab.progress += T.mash / (1 + .5 * (h.grab.who.length - 1)); if (h.grab.progress >= 1) release(true); };
 
-  function nearestNoise(s) {
-    let best = null, bd = Infinity;
-    // the nearest, and a lure over anything that isn't one
-    for (const n of noises) { if (n === s.spent || (n.lure && s.who && (F.wise(s.who, n.kind) || (n.kind === 'train' && s.who.calm)))) continue; const d = hypot(n.x - s.x, n.z - s.z), k = n.lure ? d - 1e4 : d; if (d < n.r && k < bd) { bd = k; best = n; } }
-    return best;
+  // How far off they can smell him, before the night and who they are: nothing at all with five cans of beans or fewer
+  const smellOf = (beans) => Math.max(0, beans - T.smellFrom) * T.smellPerBean;
+  // What he can be made out by at the moment, and how far, with what's said if that's what brings one for him. The furthest reach is what did it.
+  function senseOf(p, sharp) {
+    let kind = 'close', reach = T.touch;
+    const hear = p.noise * sharp, smell = smellOf(p.beans) * sharp, see = p.light * sharp;
+    if (hear > reach) { reach = hear; kind = p.driving ? 'engine' : 'steps'; }
+    if (smell > reach) { reach = smell; kind = 'beans'; }
+    if (see > reach) { reach = see; kind = 'light'; }
+    return { kind, reach };
+  }
+  // and what woke one that was nothing but something about him, and not a crash or a hit, which has been and gone
+  const SENSES = new Set(['steps', 'engine', 'beans', 'light', 'close']);
+  // Whether there's anything between them and him: walls and the like at head height, a couple of metres apart along the way. The page can do better, and say so.
+  function lineClear(s, p) {
+    const dx = p.x - s.x, dz = p.z - s.z, d = hypot(dx, dz), n = Math.ceil((d - .8) / T.sightStep);
+    for (let i = 1; i <= n; i++) { const k = Math.min(i * T.sightStep, d - .8) / (d || 1); if (world.blocked(s.x + dx * k, s.z + dz * k, s.y + 1.5)) return false; }
+    return true;
+  }
+  const sees = (s, p) => hypot(s.x - p.x, s.z - p.z) <= T.sight && (world.sees ? world.sees(s, p) : lineClear(s, p));
+  // what woke one that's made him out by itself: the sense that did it. Someone with a grudge for a hurt of their own is here because of that, whatever it was they heard.
+  function whyOf(s, p, sharp, mood) {
+    const w = s.who;
+    if (w && mood === AFTER && w.hurt > 0) return { kind: 'hit', her: w.her };
+    return { kind: senseOf(p, sharp).kind };
   }
   // Someone at home goes between the house, the door and the yard and stays a while, and if they're the kind, goes off down the road and comes back
   function homeStop(s) {
@@ -292,33 +437,39 @@ export function createHorde(world, tuning = {}, on = {}) {
   }
   function think(s, p) {
     const w = s.who, mood = w ? (s.mood = F.mood(w)) : 0, quiet = leaves(s, mood);
-    // getting out of the river, nothing draws them back in
-    const d = hypot(s.x - p.x, s.z - p.z), sharp = 1 + (T.nightSense - 1) * p.night, loud = s.climbing ? null : nearestNoise(s);
+    const d = hypot(s.x - p.x, s.z - p.z), sharp = 1 + (T.nightSense - 1) * p.night;
     const scared = mood === AWAY || (w?.truck > 0 && p.driving);
+    // Looking at something he threw, for as long as it lasts: turned to it, and not on him
+    if (s.gaze) { if (s.state !== CURIOUS || clock >= s.gaze.until) s.gaze = null; else s.yaw = turn(s.yaw, Math.atan2(s.gaze.x - s.x, s.gaze.z - s.z), .5); }
     // Shambling, he's one of them to anyone who isn't already after him. Someone with a grudge knows him too well to be taken in, and anyone who'd leave him be doesn't look.
-    const taken = !!p.acting && !p.hidden && mood !== AFTER && s.state !== HUNTING && s.state !== SWARM && s.state !== GRABBING && !quiet;
+    const taken = !!p.acting && !p.hidden && mood !== AFTER && !isAfter(s) && s.state !== ROUSED && !quiet;
     if (taken) {
-      const near = loud?.lure ? Math.min(T.susReach, T.drowned) : T.susReach;
-      if (d < near) s.sus = Math.min(1, (s.sus ?? 0) + T.thinkEvery * T.susRate * (1 - d / near) * sharp * (1 + T.susPerBean * p.beans) * (w ? .6 + .8 * w.nosy : 1));
+      if (d < T.susReach && !s.gaze) s.sus = Math.min(1, (s.sus ?? 0) + T.thinkEvery * T.susRate * (1 - d / T.susReach) * sharp * (1 + T.susPerBean * Math.max(0, p.beans - T.smellFrom)) * (w ? .6 + .8 * w.nosy : 1));
       else if (s.sus) s.sus = Math.max(0, s.sus - T.thinkEvery * T.susFade);
       // and that's it: they've seen through him
-      if (s.sus >= 1) { s.sus = 0; s.alert = 1; s.state = scared ? AVOIDING : HUNTING; s.lost = 0; s.tx = p.x; s.tz = p.z; s.timer = 0; s.knows = clock + T.lostAfter; h.on.spotted?.(s); return; }
+      if (s.sus >= 1) {
+        s.sus = 0; s.lost = 0;
+        if (scared) { s.alert = 1; s.state = AVOIDING; s.tx = p.x; s.tz = p.z; s.timer = 0; h.on.spotted?.(s); } else if (rouse(s, { kind: 'saw' })) h.on.spotted?.(s);
+        return;
+      }
     } else if (s.sus) s.sus = Math.max(0, s.sus - T.thinkEvery * T.susFade);
     const hid = p.hidden || taken;
-    // the people who live here, and the ones who've gone quiet, have got nothing against him until he gives them something
-    const reach = hid || quiet ? 0 : Math.min(Math.max(p.noise * sharp, (T.smellBase + T.smellPerBean * p.beans) * sharp, p.light * sharp, T.touch) * (w ? F.senses(w, mood) : 1), loud?.lure ? T.drowned : Infinity);
+    // the people who live here, and the ones who've gone quiet, have got nothing against him until he gives them something. And looking at something he threw, it's all anyone sees.
+    const sense = senseOf(p, sharp), reach = hid || quiet || s.gaze ? 0 : sense.reach * (w ? F.senses(w, mood) : 1);
     const sensed = d < reach;
     if (sensed) s.alert = Math.min(1, s.alert + T.thinkEvery * (T.alertRate[0] + (T.alertRate[1] - T.alertRate[0]) * (1 - d / reach)) * (mood === AFTER ? 2 : 1));
     else s.alert = Math.max(0, s.alert - T.thinkEvery * T.alertFade);
-    s.drawn = !!loud?.lure;
     if (w) {
       if (d < T.meet) F.close(w, T.thinkEvery);
-      if (loud?.lure && s.lureSeen !== loud) { s.lureSeen = loud; F.fooled(w, loud.kind); }
       // and it gets around, one of them at a time, among their own people
       if (F.hasNews(w)) { const o = active[Math.floor(world.rand() * active.length)]; if (o?.who && hypot(o.x - s.x, o.z - s.z) < T.tell) F.tell(w, o.who); }
     }
-    // once they've set off after one in the water they go all the way, and anyone who hasn't got there by the time something else comes up stays out
-    if (loud?.wet) s.wading = true; else if (s.wading && s.state !== CURIOUS && !world.water(s.x, s.z)) s.wading = false;
+    // out of the water, they're not wading any more
+    if (s.wading && s.state !== CURIOUS && !world.water(s.x, s.z)) s.wading = false;
+    // Something he threw makes anyone who has just come into earshot of it look. Nobody walks over to it. (A noise is h.update's, which does it nearest first.)
+    if (stirs(s)) for (const ev of looks) if (heardIn(s, ev) && gawk(s, ev)) return;
+    // Roused, it's for the second to see whether he backs off, which is every frame in rousing() and not here, except that he can hide
+    if (s.state === ROUSED) { if (p.hidden) unrouse(s); return; }
 
     if (s.state === STUNNED) {
       s.timer -= T.thinkEvery;
@@ -326,33 +477,38 @@ export function createHorde(world, tuning = {}, on = {}) {
       if (s.timer > 0 || s.flat > 0) return;
       // run down by the train, they've had enough of whatever they were at: up, sore, and off home
       if (s.sent) { sore(s); goHome(s); s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; return; }
-      // up again, and after him if it was him. Anyone who'd leave him be and has no reason not to goes back to it.
-      if (!scared && !s.started && (s.quiet || w?.calm) && mood !== AFTER) { s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.tx = s.x; s.tz = s.z; }
-      else { s.state = scared ? AVOIDING : HUNTING; s.lost = 0; s.tx = p.x; s.tz = p.z; }
-      s.started = false;
+      // up again. Anyone who'd keep away from him does. Whoever was after him and was thrown off him, or knocked over by something that wasn't him, goes straight back if there's room for them,
+      // and gives up if there isn't: they never stopped. Whoever he hurt comes for him, which takes a second of standing there first like anyone else coming for him. And anyone else goes back
+      // to what they were doing: it wasn't him, and it's nothing to them.
+      const resumes = s.resumes, started = s.started; s.resumes = false; s.started = false;
+      if (scared) { s.state = AVOIDING; s.lost = 0; s.tx = p.x; s.tz = p.z; }
+      else if (resumes) { s.lost = 0; s.tx = p.x; s.tz = p.z; s.knows = clock + T.lostAfter; if (afterCount() < T.afterMost) s.state = HUNTING; else giveUp(s); }
+      else if (started) { s.lost = 0; rouse(s, { kind: 'hit', her: w?.her }, 1); }
+      else { s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.tx = s.x; s.tz = s.z; }
       return;
     }
-    // caught inside the church when the bell stopped: out they go
-    if (clock >= bellUntil) for (const a of zones) {
+    // caught inside the church: out they go
+    for (const a of zones) {
       const d = hypot(s.x - a.x, s.z - a.z);
       if (d < a.r) { s.state = SHAMBLE; s.timer = 4; s.tx = a.x + (s.x - a.x) / (d || 1) * (a.r + 3); s.tz = a.z + (s.z - a.z) / (d || 1) * (a.r + 3); return; }
     }
     const startled = Math.max(reach * 1.5, T.startle);
     if (s.turned > 0) s.turned -= T.thinkEvery;
     else if (scared && !hid && d < startled && s.state !== AVOIDING && s.state !== GRABBING) { s.state = AVOIDING; s.lost = 0; }
-    if (mood === TAILING && s.state <= CURIOUS && !loud && !hid && d < T.trail) s.state = TRAILING;
+    if (mood === TAILING && s.state <= CURIOUS && !s.gaze && !hid && d < T.trail) s.state = TRAILING;
     if (s.state === AVOIDING) {
       if (!scared || hid || d > startled + T.backOff) { s.state = SHAMBLE; s.timer = 0; return; }
-      if (d < T.cornered && s.stuck > 1) { s.state = HUNTING; s.lost = 0; s.tx = p.x; s.tz = p.z; s.turned = T.turnsFor; return; }
+      // backed into a corner with him right there, even they turn on him, and that's like anyone coming for him: it stops and flares for its second first, backing off sends it back to keeping away,
+      // and it's one of the three. Left alone for a few seconds if it's been sent back.
+      if (d < T.cornered && s.stuck > 1 && clock >= (s.cool ?? 0)) { s.lost = 0; rouse(s, { kind: 'cornered', her: w?.her }); return; }
       const k = 14 / (d || 1); s.tx = s.x + (s.x - p.x) * k; s.tz = s.z + (s.z - p.z) * k;
     } else if (s.state === TRAILING) {
-      if (mood !== TAILING || loud || hid || d > T.trail + 10) { s.state = SHAMBLE; s.timer = 0; return; }
+      if (mood !== TAILING || s.gaze || hid || d > T.trail + 10) { s.state = SHAMBLE; s.timer = 0; return; }
       // it's always the same distance for the same person, and when they're there they stop and face him
       const gap = T.trailGap[0] + (T.trailGap[1] - T.trailGap[0]) * w.temper;
       if (d > gap + 1.5 || d < gap - 2) { const k = gap / (d || 1); s.tx = p.x + (s.x - p.x) * k; s.tz = p.z + (s.z - p.z) * k; }
       else { s.tx = s.x; s.tz = s.z; s.yaw = turn(s.yaw, Math.atan2(p.x - s.x, p.z - s.z), .35); }
     } else if (s.state === SHAMBLE) {
-      if (loud) { s.state = CURIOUS; s.tx = loud.x; s.tz = loud.z; s.timer = T.lookAround; return; }
       if (s.alert >= T.curiousAt) { s.state = CURIOUS; s.tx = p.x; s.tz = p.z; s.timer = T.lookAround; return; }
       s.timer -= T.thinkEvery;
       if (s.timer <= 0 || (!s.home && hypot(s.tx - s.x, s.tz - s.z) < .6) || s.stuck > 1) {
@@ -366,28 +522,39 @@ export function createHorde(world, tuning = {}, on = {}) {
         else nextStop(s, p);
       }
     } else if (s.state === CURIOUS) {
-      if (s.alert >= 1) { s.state = scared ? AVOIDING : HUNTING; s.lost = 0; return; }
-      if (loud) { s.tx = loud.x; s.tz = loud.z; s.timer = T.lookAround; }
-      else if (sensed) { s.tx = p.x; s.tz = p.z; s.timer = T.lookAround; }
+      // it has been long enough, and it's him it has found. It stops, turns to him and flares first, unless it's the kind to keep away, or it's only just been sent off.
+      if (s.alert >= 1) {
+        if (scared) { s.state = AVOIDING; s.lost = 0; return; }
+        if (clock >= (s.cool ?? 0)) { rouse(s, whyOf(s, p, sharp, mood)); return; }
+        s.alert = .9;
+      }
+      if (sensed) { s.tx = p.x; s.tz = p.z; s.timer = T.lookAround; }
       if (s.stuck > T.feelAlong) { s.stuck = 0; s.state = SHAMBLE; s.timer = 0; }   // can't get there
-      else if (hypot(s.tx - s.x, s.tz - s.z) < 1.2) { s.timer -= T.thinkEvery; if (s.timer <= 0) { s.state = SHAMBLE; s.timer = 0; } }
-    } else if (s.state === HUNTING || s.state === SWARM) {
-      // a noise only pulls a hunter off you if it's lost you already, and someone who's just seen him for what he is knows where he is for a while
-      if (sensed || clock < (s.knows ?? 0)) { s.lost = 0; s.tx = p.x; s.tz = p.z; }
+      else if (hypot(s.tx - s.x, s.tz - s.z) < 1.2) { s.timer -= T.thinkEvery; if (s.timer <= 0) { s.state = SHAMBLE; s.timer = 0; s.gaze = null; } }
+    } else if (s.state === HUNTING) {
+      // They give up. It's him it can see, and round a corner or further off than it can see he's lost for as long as that goes on, whatever it can still hear of him.
+      // Someone who's just seen him for what he is knows where he is for a while, and goes there.
+      if (!hid && sees(s, p)) { s.lost = 0; s.tx = p.x; s.tz = p.z; }
       else {
         s.lost += T.thinkEvery;
-        if (loud) { s.state = CURIOUS; s.alert = T.curiousAt; s.tx = loud.x; s.tz = loud.z; s.timer = T.lookAround; return; }
-        if (s.lost >= T.lostAfter + (w ? F.holdsOn(w, mood) : 0)) { s.state = CURIOUS; s.alert = T.curiousAt; s.timer = T.lookAround; return; }
+        if (sensed || clock < (s.knows ?? 0)) { s.tx = p.x; s.tz = p.z; }
+        if (s.lost >= T.giveUp) { giveUp(s); return; }
       }
-      let pack = 1;
-      for (const o of active) if (o !== s && (o.state === HUNTING || o.state === SWARM) && hypot(o.x - s.x, o.z - s.z) < T.swarmReach) pack++;
-      s.state = pack >= T.swarmSize ? SWARM : HUNTING;
-      // and nobody who'd leave him be answers it
-      if (s.state === SWARM) for (const o of active) if ((o.state === SHAMBLE || o.state === CURIOUS) && hypot(o.x - s.x, o.z - s.z) < T.callReach && !(o.who && (o.who.calm || F.mood(o.who) >= AWAY)) && !leaves(o, moodOf(o))) { o.alert = Math.min(1, o.alert + T.thinkEvery); if (o.state === SHAMBLE) { o.state = CURIOUS; o.timer = T.lookAround; } o.tx = s.tx; o.tz = s.tz; }
     }
   }
+  // Every frame of the second it's roused: turned to him, and gone back to what it was doing if he's backed off, or he's gone quiet and out of its reach if it was something about him
+  // that woke it, or he's hidden
+  function rousing(s, dt, p) {
+    const r = s.rouse, d = hypot(s.x - p.x, s.z - p.z);
+    s.yaw = turn(s.yaw, Math.atan2(p.x - s.x, p.z - s.z), Math.min(1, dt * T.faceRate));
+    s.moving = 0;
+    let held = true;
+    if (SENSES.has(r.why.kind) && !r.over) { const w = s.who; held = d < senseOf(p, 1 + (T.nightSense - 1) * p.night).reach * (w ? F.senses(w, F.mood(w)) : 1); }
+    if (p.hidden || d > r.d0 + T.rouseBack || !held) { unrouse(s); return; }
+    if (clock >= r.until) { if (r.over) unrouse(s); else hunt(s, p); }
+  }
   function walk(s, dt) {
-    const sp = (s.drawn && s.state === CURIOUS ? T.lured : T.speed[s.state]) * (s.wading && world.water(s.x, s.z) ? T.wading : 1) * (s.sore > 0 ? T.soreSpeed : 1) * (s.scuttle && (s.state === HUNTING || s.state === SWARM) ? T.scuttle : 1);
+    const sp = T.speed[s.state] * (s.wading && world.water(s.x, s.z) ? T.wading : 1) * (s.sore > 0 ? T.soreSpeed : 1) * (s.scuttle && s.state === HUNTING ? T.scuttle : 1);
     s.moving = 0; if (!sp) return;
     let dx = s.tx - s.x, dz = s.tz - s.z, l = hypot(dx, dz);
     if (l < .35) return;
@@ -416,7 +583,7 @@ export function createHorde(world, tuning = {}, on = {}) {
   function holdOn(dt, p) {
     const g = h.grab;
     g.time += dt; g.progress = Math.max(0, g.progress - T.mashFade * dt);
-    if (g.who.length < T.grabbers) for (const s of active) if ((s.state === HUNTING || s.state === SWARM) && hypot(s.x - p.x, s.z - p.z) < T.grabReach + .3) { s.state = GRABBING; g.who.push(s); if (g.who.length >= T.grabbers) break; }
+    if (g.who.length < T.grabbers) for (const s of active) if (s.state === HUNTING && hypot(s.x - p.x, s.z - p.z) < T.grabReach + .3) { s.state = GRABBING; g.who.push(s); if (g.who.length >= T.grabbers) break; }
     // they stand around you and pull the way the first of them came from
     g.who.forEach((s, i) => {
       const a = g.at + i * 2.2, k = Math.min(1, dt * 6), nx = s.x + (p.x + Math.sin(a) * .72 - s.x) * k, nz = s.z + (p.z + Math.cos(a) * .72 - s.z) * k;
@@ -434,8 +601,8 @@ export function createHorde(world, tuning = {}, on = {}) {
     for (const s of active) {
       const dx = s.x - g.x, dz = s.z - g.z, d = hypot(dx, dz) || 1;
       if (!g.who.includes(s) && d > T.shove) continue;
-      // whoever was after him still is when they're up again
-      s.started = g.who.includes(s) || s.state === HUNTING || s.state === SWARM; s.sent = false;
+      // whoever was after him still is when they're up again, and straight back at him: they never stopped
+      s.started = g.who.includes(s) || s.state === HUNTING; s.sent = false; s.resumes = s.started; s.rouse = null; s.rank = 0;
       s.state = STUNNED; s.timer = T.stun; s.alert = 1; s.moving = 0;
       const nx = s.x + dx / d * T.shove, nz = s.z + dz / d * T.shove;
       if (open(s, nx, nz)) { s.x = nx; s.z = nz; }
@@ -445,10 +612,21 @@ export function createHorde(world, tuning = {}, on = {}) {
 
   // p: { x, z, y, noise, light, beans, night, hidden, canGrab, driving, acting }, and acting is him shambling along with them
   h.update = (dt, p) => {
-    clock += dt; mercy = Math.max(0, mercy - dt); F?.tick(dt);
+    clock += dt; watch = p; mercy = Math.max(0, mercy - dt); F?.tick(dt);
     for (let i = noises.length - 1; i >= 0; i--) if (noises[i].until < clock) noises.splice(i, 1);
+    for (let i = looks.length - 1; i >= 0; i--) if (looks[i].until < clock) looks.splice(i, 1);
     active.length = 0;
-    for (const s of all) if (hypot(s.x - p.x, s.z - p.z) < T.active) active.push(s);
+    for (const s of all) {
+      if (hypot(s.x - p.x, s.z - p.z) < T.active) active.push(s);
+      // what's not looked at isn't thinking about him either: one that was on his way out of reach when he went doesn't take it up again when he's back
+      else if (s.state === CURIOUS || s.state === ROUSED || s.state === HUNTING) { if (s.state === CURIOUS) { s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.tx = s.x; s.tz = s.z; s.gaze = null; } else giveUp(s); }
+    }
+    // A noise that's still going rouses whoever has come into earshot of it since, or couldn't be found when it started, the nearest to it first, so that the ones who come for him
+    // are the nearest three whenever they hear it
+    if (noises.length && (hearAt -= dt) <= 0) {
+      hearAt = T.thinkEvery;
+      for (const ev of noises) for (const s of active.filter((o) => heardIn(o, ev)).sort((a, b) => hypot(a.x - ev.x, a.z - ev.z) - hypot(b.x - ev.x, b.z - ev.z))) hear(s, ev);
+    }
     for (const s of active) {
       // under the water, and the current's taking them. When it's done with them they come up.
       if (s.under !== undefined) {
@@ -462,12 +640,9 @@ export function createHorde(world, tuning = {}, on = {}) {
       // and up the moment the time they're down for is over, rather than whenever they next look around
       if (s.flat > 0 && (s.flat -= dt) <= 0 && s.state === STUNNED) { s.timer = 0; s.next = 0; }
       if (s.next <= 0) { s.next += T.thinkEvery; think(s, p); }
+      if (s.state === ROUSED) rousing(s, dt, p);
       walk(s, dt);
-      // in the water after a lure, and the cottonmouths have them. Not on their way out of it again.
-      if (s.wading && !s.climbing && s.state !== GRABBING && world.water(s.x, s.z)) {
-        s.soaked = (s.soaked ?? 0) + dt; s.biteAt ??= T.bite[0] + world.rand() * (T.bite[1] - T.bite[0]);
-        if (s.soaked >= s.biteAt) { dive(s); h.on.bitten?.(s); }
-      } else if (s.soaked) s.soaked = 0;
+      // wading out of the river, they're out of it when they're on the bank
       if (s.climbing && !world.water(s.x, s.z)) s.climbing = false;
       // soaked for a while, and the snake lets go of the sleeve sooner than that. Sore till they're home, and for a bit after.
       if (s.wet > 0) s.wet -= dt;
@@ -480,7 +655,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     const can = mercy <= 0 && p.canGrab;
     let first = null;
     for (const s of active) {
-      if (can && (s.state === HUNTING || s.state === SWARM) && hypot(s.x - p.x, s.z - p.z) < T.grabReach) { const was = s.reaching ?? 0; s.reaching = was + dt; if (!was && s.reaching > 0) world.reaching?.(s); if (s.reaching >= T.windUp && (!first || s.reaching > first.reaching)) first = s; }
+      if (can && s.state === HUNTING && hypot(s.x - p.x, s.z - p.z) < T.grabReach) { const was = s.reaching ?? 0; s.reaching = was + dt; if (!was && s.reaching > 0) world.reaching?.(s); if (s.reaching >= T.windUp && (!first || s.reaching > first.reaching)) first = s; }
       else if (s.reaching) s.reaching = 0;
     }
     if (!first) return;

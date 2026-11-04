@@ -3,7 +3,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createFolks, personOf, burntDown, hipsOf, flickering, BE, AFTER, AWAY, TAILING, HOW, WORDS } from './agents.js';
-import { createHorde, SHAMBLE, HUNTING, SWARM, GRABBING, AVOIDING, TRAILING, STUNNED, TUNING } from './horde.js';
+import { createHorde, SHAMBLE, CURIOUS, HUNTING, SWARM, GRABBING, AVOIDING, TRAILING, STUNNED, ROUSED, TUNING } from './horde.js';
 
 const data = JSON.parse(readFileSync(new URL('../data/folks.json', import.meta.url)));
 const looks = JSON.parse(readFileSync(new URL('../data/looks.json', import.meta.url))).crowd;
@@ -285,7 +285,9 @@ describe('what it does in the crowd', () => {
     h.knock(0, 0, 3, .5);
     assert.equal(bold.hurt, 1); assert.equal(timid.hurt, 1);
     run(h, still, 1.2);
-    assert.equal(s(timid).state, AVOIDING); assert.ok(s(bold).state === HUNTING || s(bold).state === SWARM || s(bold).state === GRABBING, `state ${s(bold).state}`);
+    assert.equal(s(timid).state, AVOIDING); assert.equal(s(bold).state, ROUSED, 'the bold one is up, and stands there a moment first');
+    run(h, still, 1.2);
+    assert.ok(s(bold).state === HUNTING || s(bold).state === SWARM || s(bold).state === GRABBING, `state ${s(bold).state}`);
     run(h, { ...still, canGrab: false }, 3);
     assert.ok(Math.hypot(s(timid).x, s(timid).z) > 6, 'the timid one got away from him');
     assert.ok(Math.hypot(s(bold).x, s(bold).z) < 3, 'the bold one came at him');
@@ -315,11 +317,15 @@ describe('what it does in the crowd', () => {
   test('shambling along with them fools anyone but someone with a grudge', () => {
     const F = folks(), hit = someone(F, (w) => w.nerve > .7 && w.temper > .3 && w.temper < .7), not = someone(F, (w) => w.nosy < .5, hit.id), order = hit.id < not.id ? [hit, not] : [not, hit];
     const h = createHorde(field(F)), ss = order.map((w, i) => bring(h, F, w, 2, i ? 30 : -30)), s = (w) => ss[order.indexOf(w)];
+    // the one without a grudge at one end and the one with at the other, whichever order they came in
+    s(not).x = s(not).tx = 2; s(not).z = s(not).tz = -30; s(hit).x = s(hit).tx = 2; s(hit).z = s(hit).tz = 30;
     F.hurt(hit, 0, 0, 'hit');
     run(h, { ...still, canGrab: false, acting: true, x: 0, z: -30 }, 1);
-    run(h, { ...still, canGrab: false, acting: true, x: 0, z: 30 }, 1);
-    assert.ok(s(hit).state === HUNTING || s(hit).state === SWARM, `state ${s(hit).state}`);
     assert.equal(s(not).state, SHAMBLE); assert.ok(s(not).sus > 0, 'though they looked twice');
+    run(h, { ...still, canGrab: false, acting: true, x: 0, z: 30 }, 1);
+    assert.equal(s(hit).state, ROUSED, 'the one with a grudge stops and turns to him first'); assert.equal(s(not).state, SHAMBLE);
+    run(h, { ...still, canGrab: false, acting: true, x: 0, z: 30 }, TUNING.rouseFor);
+    assert.ok(s(hit).state === HUNTING || s(hit).state === SWARM, `state ${s(hit).state}`);
   });
 
   test('someone who keeps away doesn\'t answer the swarm\'s call', () => {
@@ -330,13 +336,46 @@ describe('what it does in the crowd', () => {
     assert.ok(others.length); assert.equal(s.state, SHAMBLE);
   });
 
-  test('backed into a wall with him right there, even they\'ll turn on him, and then go back to keeping away', () => {
-    const F = folks(), timid = someone(F, (w) => w.nerve < .15), h = createHorde(field(F, { blocked: (x, z) => x > 2 || Math.abs(z) > .6 })), s = bring(h, F, timid, 1.5, 0);
+  test('backed into a wall with him right there, even they\'ll turn on him, stopping and flaring for a second first, and then go back to keeping away', () => {
+    const F = folks(), timid = someone(F, (w) => w.nerve < .15), told = [], wall = { blocked: (x, z) => x > 2 || Math.abs(z) > .6 };
+    const h = createHorde(field(F, wall), {}, { roused: (s, why) => told.push(why.kind) }), s = bring(h, F, timid, 1.5, 0);
     F.hurt(timid, 0, 0, 'hit');
-    run(h, { ...still, canGrab: false }, 2.2);
-    assert.equal(s.state, HUNTING);
-    run(h, { ...still, x: -2, canGrab: false }, TUNING.turnsFor + 1);
+    const p = { ...still, canGrab: false };
+    let t = 0; while (s.state !== ROUSED && t < 6) { run(h, p, 1 / 30); t += 1 / 30; }
+    assert.equal(s.state, ROUSED, 'it stops first'); assert.deepEqual(told, ['cornered']); assert.ok(!s.rouse.over);
+    run(h, p, TUNING.rouseFor + .1);
+    assert.equal(s.state, HUNTING, 'and then it turns on him, though it\'s the kind that keeps away'); assert.ok(s.turned > 0);
+    run(h, { ...p, x: -2 }, TUNING.turnsFor + 1);
     assert.equal(s.state, AVOIDING);
+  });
+
+  test('and backing off in that second sends it back to keeping away, and it\'s left alone a few seconds before it tries it again', () => {
+    const F = folks(), timid = someone(F, (w) => w.nerve < .15), told = [], wall = { blocked: (x, z) => x > 2 || Math.abs(z) > .6 };
+    const h = createHorde(field(F, wall), {}, { roused: (s, why) => told.push(why.kind) }), s = bring(h, F, timid, 1.5, 0);
+    F.hurt(timid, 0, 0, 'hit');
+    const p = { ...still, canGrab: false };
+    let t = 0; while (s.state !== ROUSED && t < 6) { run(h, p, 1 / 30); t += 1 / 30; }
+    assert.equal(s.state, ROUSED);
+    run(h, { ...p, x: -2 }, .1);
+    assert.equal(s.state, AVOIDING); assert.deepEqual(told, ['cornered']);
+    // standing right there again, it's still against the wall, and it doesn't stop for him again till it's been left alone for its time
+    run(h, p, TUNING.coolFor - .5); assert.notEqual(s.state, ROUSED); assert.deepEqual(told, ['cornered']);
+  });
+
+  test('however many are cornered, no more than three are after him: the rest only look up', () => {
+    const F = folks(), timid = someone(F, (w) => w.nerve < .15), wall = { blocked: (x, z) => x > 2 || Math.abs(z) > .6 };
+    const h = createHorde(field(F, wall)), s = bring(h, F, timid, 1.5, 0);
+    F.hurt(timid, 0, 0, 'hit');
+    // three already after him, a long way up the wall
+    const hunters = [0, 1, 2].map((i) => { const o = h.add(-30, 40 + i); o.state = HUNTING; o.who.calm = false; return o; });
+    let hunted = false, looked = false;
+    for (let k = 0; k < 30 * 8; k++) {
+      for (const o of hunters) { o.state = HUNTING; o.lost = 0; }
+      h.update(1 / 30, { ...still, canGrab: false });
+      if (s.state === HUNTING || (s.state === ROUSED && !s.rouse.over)) hunted = true;
+      if (s.state === ROUSED && s.rouse.over) looked = true;
+    }
+    assert.ok(!hunted, 'it didn\'t come for him'); assert.ok(looked, 'it only looked up');
   });
 
   test('anyone a truck has hit gets out of the way of a truck, even if they\'d come at him on foot', () => {
@@ -366,23 +405,23 @@ describe('what it does in the crowd', () => {
     assert.equal(F.mood(nosy), AWAY); assert.notEqual(s.state, TRAILING);
   });
 
-  test('wise to a lure, they stay on him', () => {
+  test('wise to a thrown bottle, it no longer turns them to look, and a different kind of thing still does', () => {
     const F = folks(), wise = someone(F, (w) => w.nosy > .95 && w.nerve > .4 && w.nerve < .6), fresh = someone(F, (w) => w.nosy > .95, wise.id), order = wise.id < fresh.id ? [wise, fresh] : [fresh, wise];
     const h = createHorde(field(F)), ss = order.map((w) => bring(h, F, w, 40, 0)), s = (w) => ss[order.indexOf(w)];
     F.fooled(wise, 'bottle'); F.fooled(wise, 'bottle');
-    h.lure(45, 0, 30, 10, false, 'bottle');
-    run(h, { ...still, canGrab: false }, .4);
-    assert.ok(s(fresh).drawn); assert.equal(fresh.fooled.bottle, 1); assert.ok(!s(wise).drawn); assert.equal(wise.fooled.bottle, 2);
+    run(h, { ...still, x: -60, canGrab: false }, .05);
+    h.look(45, 0, 30, 10, 'bottle');
+    assert.ok(s(fresh).gaze); assert.equal(fresh.fooled.bottle, 1); assert.ok(!s(wise).gaze); assert.equal(wise.fooled.bottle, 2);
+    run(h, { ...still, x: -60, canGrab: false }, 11);
+    h.look(45, 0, 30, 10, 'crackers');
+    assert.ok(s(wise).gaze, 'and firecrackers still work on them'); assert.equal(wise.fooled.crackers, 1);
   });
 
-  test('the church bell is a lure of its own, and wears off the same way', () => {
-    const F = folks(), wise = someone(F, (w) => w.nosy > .95), fresh = someone(F, (w) => w.nosy > .95, wise.id), order = wise.id < fresh.id ? [wise, fresh] : [fresh, wise];
-    const h = createHorde(field(F)), ss = order.map((w) => bring(h, F, w, 40, 0)), s = (w) => ss[order.indexOf(w)];
-    F.fooled(wise, 'bell'); F.fooled(wise, 'bell');
-    h.bell(45, 0, 160, 10);
-    run(h, { ...still, canGrab: false }, .4);
-    assert.ok(s(fresh).drawn); assert.equal(fresh.fooled.bell, 1); assert.ok(!s(wise).drawn);
-    assert.ok(!F.wise(fresh, 'bottle'), 'and a bottle still works on them');
+  test('the church bell is only noise, and nobody gets used to it, since nobody comes to it', () => {
+    const F = folks(), w = someone(F, (x) => x.nosy > .95), h = createHorde(field(F)), s = bring(h, F, w, 40, 0, { quiet: false });
+    run(h, { ...still, x: -60, canGrab: false }, .05);
+    for (let i = 0; i < 6; i++) { h.noise(45, 0, 160, 10, 'bell'); run(h, { ...still, x: -60, canGrab: false }, 12); }
+    assert.deepEqual(w.fooled, {}, 'nothing has fooled them');
   });
 
   test('they go along with their own people', () => {
@@ -420,9 +459,11 @@ describe('what it does in the crowd', () => {
 
   describe('the river gives them back', () => {
     // water everywhere to start with, and downstream is south: dry just above where they come up
+    // and the train throws them in
     const wade = (F, w, extra = {}) => {
-      const h = createHorde(field(F, { water: (x, z) => z < 20, level: () => 0, floorAt: (x, z) => (z < 20 ? -2 : 0), comeUp: (s, how) => ({ x: s.x, z: 19, bank: [s.x, 21] }), ...extra }), { bite: [.1, .1] }), s = bring(h, F, w, 1, 0);
-      s.wading = true; h.lure(2, 0, 10, 5, true, 'bottle');
+      const h = createHorde(field(F, { water: (x, z) => z < 20, level: () => 0, floorAt: (x, z) => (z < 20 ? -2 : 0), comeUp: (s, how) => ({ x: s.x, z: 19, bank: [s.x, 21] }), ...extra })), s = bring(h, F, w, 1, 0);
+      h.update(1 / 30, { ...still, x: 50, canGrab: false });
+      h.runOver(() => ({ x: 1, z: 0, vx: 0, vz: 0, vy: 0, seconds: 3 }));
       return { h, s };
     };
 
@@ -466,7 +507,7 @@ describe('what it does in the crowd', () => {
     assert.equal(s.who.hurt, 1);
   });
 
-  test('STUNNED stays what it was, for what the page checks', () => { assert.equal(STUNNED, 5); assert.equal(TUNING.speed.length, 8); });
+  test('STUNNED stays what it was, for what the page checks, and every state has a speed, ROUSED at the end of them', () => { assert.equal(STUNNED, 5); assert.equal(ROUSED, 8); assert.equal(TUNING.speed.length, 9); assert.equal(TUNING.speed[ROUSED], 0); });
 
   test('thinking about it all stays cheap', () => {
     const F = folks(), h = createHorde(field(F));
@@ -487,17 +528,63 @@ describe('the train', () => {
     assert.ok(F.shuns(w, 11, 21));
   });
 
-  test('its horn draws the crowd to a crossing, but not someone who\'s lived with it, and not forever', () => {
+  test('its horn draws nobody, since everyone in Chunky has heard it every day for years: there is nothing for it to call, and nothing is got used to', () => {
     const F = folks(), h = createHorde(field(F));
     const a = h.add(10, 0), b = h.add(-10, 0);
     b.who.calm = true;
-    run(h, still, .3);
-    h.lure(30, 0, 95, 20, false, 'train');
-    const bWas = b.x;
-    run(h, still, 2.5);
-    assert.ok(a.x > 11, `one came, to ${a.x}`);
-    assert.ok(Math.abs(b.x - bWas) < 1.5, `the other's still where they were, ${b.x}`);
-    assert.ok(a.who.fooled.train >= 1, 'and it counts');
-    assert.ok(!b.who.fooled?.train, 'and nothing to the other');
+    assert.equal(h.lure, undefined);
+    run(h, { ...still, z: 200 }, .3);
+    run(h, { ...still, z: 200 }, 10);
+    assert.ok(Math.hypot(a.x - 10, a.z) < 1.5 && Math.hypot(b.x + 10, b.z) < 1.5, `they're where they were: ${a.x}, ${b.x}`);
+    assert.deepEqual(a.who.fooled, {}); assert.deepEqual(b.who.fooled, {});
+  });
+});
+
+describe('why one comes for him', () => {
+  // Nothing on screen says why, and nothing's written for it: no lines in data/folks.json and no element in the page. The cause is only kept, as { kind, her }, for what has to still be true by
+  // the end of the second for someone woken by something about him, and for the tests.
+  test('nothing says why: there are no lines for it, and no element in the page to put them in', () => {
+    assert.equal(data.why, undefined);
+    const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    assert.ok(!/id="why"/.test(html) && !/#why\b/.test(html) && !/\$\('why'\)/.test(html));
+  });
+
+  test('what the game knows of who\'s a woman is which list their name came from', () => {
+    const list = Array.from({ length: 400 }, (_, i) => personOf(i, data, looks));
+    assert.ok(data.women.every((n) => !data.men.includes(n)), 'no name is on both lists');
+    assert.ok(list.every((w) => w.her === data.women.includes(w.first)));
+    assert.ok(list.filter((w) => w.her).length > 150 && list.filter((w) => !w.her).length > 150);
+  });
+
+  test('hitting a woman is her, to her and to everyone gone quiet who saw it, and a man is him', () => {
+    for (const her of [true, false]) {
+      const F = folks(), victim = someone(F, (w) => w.her === her), by = someone(F, (w) => w.id !== victim.id), told = [];
+      const order = victim.id < by.id ? [victim, by] : [by, victim], h = createHorde(field(F, { quiet: () => true }), {}, { roused: (s, why) => told.push({ who: s.who.id, kind: why.kind, her: why.her }) });
+      const ss = order.map((w, i) => bring(h, F, w, 1 + i * 3, 0)), s = (w) => ss[order.indexOf(w)];
+      run(h, still, .05);
+      h.knock(s(victim).x, 0, 1, 1);
+      assert.deepEqual(told, [{ who: by.id, kind: 'hit', her }], 'the one who saw it, straight away');
+      run(h, { ...still, canGrab: false }, 1.5);
+      assert.deepEqual(told.map((t) => [t.kind, t.her]), [['hit', her], ['hit', her]], 'and the one he hit, as it gets up'); assert.equal(told[1].who, victim.id);
+    }
+  });
+
+  test('someone with a grudge is woken by that, whatever it was they heard, and it\'s the grudge that\'s theirs', () => {
+    const F = folks(), w = someone(F, (x) => x.nerve > .8 && x.temper > .5 && x.her), told = [], h = createHorde(field(F), {}, { roused: (s, why) => told.push({ kind: why.kind, her: why.her }) });
+    F.hurt(w, 0, 0, 'hit'); assert.equal(F.mood(w), AFTER);
+    const s = bring(h, F, w, 9, 0);
+    run(h, { ...still, noise: 14, canGrab: false }, 4);
+    assert.deepEqual(told, [{ kind: 'hit', her: true }]);
+    assert.ok(s.state === HUNTING || s.state === SWARM);
+  });
+
+  test('nobody stays on him for good, even with a grudge: lost for eight seconds, they go home', () => {
+    const F = folks(), w = someone(F, (x) => x.nerve > .8 && x.temper > .9), h = createHorde(field(F), {});
+    F.hurt(w, 0, 0, 'hit'); F.hurt(w, 0, 0, 'hit');
+    const s = bring(h, F, w, 9, 0);
+    run(h, { ...still, noise: 14, canGrab: false }, 4);
+    assert.ok(s.state === HUNTING || s.state === SWARM, `${s.state}`);
+    run(h, { ...still, x: -200, canGrab: false }, TUNING.giveUp + 1);
+    assert.equal(s.state, SHAMBLE); assert.ok(s.homeward);
   });
 });
