@@ -2610,9 +2610,9 @@ around(LOT, () => {
   wall(true, -1, 0, SIDE, 2.25, .06);
   wall(true, 1, 0, SIDE, 1.4, .25);
   fallen(true, 1, -SIDE, 0, 2.2);
-  // the roof's in: two sheets of it down across the frame
-  addBeam([2, FLOOR + 2, -6], [-.8, Y0 + .95, -5.6], 2.6, .04, steelMat, 1.1);
-  addBeam([-2, FLOOR + 1.7, 6.2], [.8, Y0 + .9, 6.6], 2, .04, steelMat, 1.1);
+  // the roof's in: two sheets of it down across the frame, burned black. Bare steel that big would shine like a mirror at dusk.
+  addBeam([2, FLOOR + 2, -6], [-.8, Y0 + .95, -5.6], 2.6, .04, scorchMat, 1.1);
+  addBeam([-2, FLOOR + 1.7, 6.2], [.8, Y0 + .9, 6.6], 2, .04, scorchMat, 1.1);
   // what doesn't burn: the stove, gone through the floor onto its side between the rails, and the tub at the far end
   breakable('stove', 3, () => { addBox(steelMat, .2, Y0 + .4, -3.8, .76, .92, .68, 1.2, tilt(.2, .3, .35)); solid(-.2, .6, -4.2, -3.4, Y0 + .9); }, { rigid: true, chip: '#3a2a22' });
   addBox(new THREE.MeshStandardMaterial({ color: '#8f897d', roughness: .9 }), -.35, Y0 + .3, 7, .75, .5, 1.5, 1.1, tilt(0, .08, .06));
