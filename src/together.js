@@ -12,7 +12,7 @@
 // link of their own, and only one phone at a time. Nobody hurts anybody: a swing goes through people, and a vehicle someone else is
 // driving nudges you aside and does you no harm.
 import * as THREE from 'three';
-import { connectNet, rollLook, makeKey, worldOf, HOW, PHONE_KEY, NET_PORT } from './net.js';
+import { connectNet, rollLook, makeKey, worldOf, townUrl, HOW, PHONE_KEY } from './net.js';
 import { checkName, NAME_MOST } from './names.js';
 import { inVehicle, settle, KINDS } from './vehicles.js';
 import { toScreen, drawLabel, COLORS as MAPC } from './mapview.js';
@@ -59,7 +59,7 @@ export function together(G) {
   if (!PHONE_KEY.test(key ?? '')) { key = makeKey(); store.set(KEPT.key + town, key); }
   const secret = store.get(KEPT.hero + town) || undefined, build = { at: G.built ?? 0, world: worldOf(G.parked) };
   // the town on this machine, unless the address says where
-  const url = G.url || `ws://${location.hostname || 'localhost'}:${NET_PORT}`;
+  const url = townUrl(G.url, location);
   let link = null, you = { id: 0, name: '', look: 0, hero: false }, picked = null;
   // started: let into town the first time; watching: the opening; arrived: somewhere in town, and saying where; alone: let go of the town
   let started = false, watching = false, arrived = false, alone = false, fadeT = -1;

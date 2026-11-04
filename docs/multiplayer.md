@@ -9,7 +9,7 @@ npm run net:server
 python3 -m http.server
 ```
 
-Open http://localhost:8000/?net in two windows and press Play with others in each. From a phone on the same network it's `http://<this machine's address>:8000/?net`, since the town is looked for on the same host as the page. `?net=ws://…` points at a town somewhere else.
+Open http://localhost:8000/?net in two windows and press Play with others in each. From a phone on the same network it's `http://<this machine's address>:8000/?net`, since the town is looked for on the same host as the page. `?net=ws://…` points at a town somewhere else. On the game's own site, which is https, `?net` alone is the town everyone shares on Cloudflare, `TOWN_URL` in `src/net.js`, since a page on https can't open a plain ws:// socket.
 
 The owner's link is `#hero=<secret>` on the end of the address, for a town started with `CHUNKY_HERO` set to the secret's sha256 in hex:
 

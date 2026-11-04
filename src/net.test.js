@@ -1,8 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { encodePose, decodePose, encodeSnapshot, decodeMessage, say, rollLook, createWalkers, connectNet, makeKey, worldOf, POSE_BYTES, NET_RATE, HOW, PHONE_KEY } from './net.js';
+import { encodePose, decodePose, encodeSnapshot, decodeMessage, say, rollLook, createWalkers, connectNet, makeKey, worldOf, townUrl, POSE_BYTES, NET_RATE, HOW, PHONE_KEY } from './net.js';
 
 const near = (a, b, within, what) => assert.ok(Math.abs(a - b) <= within, `${what ?? 'value'}: ${a} is not within ${within} of ${b}`);
+
+// ---------------- which town
+test('Play with others goes to the town it\'s given, the shared one on the game\'s own site, or one on the same machine', () => {
+  assert.equal(townUrl('ws://192.168.1.20:8787', { protocol: 'https:', hostname: 'chunky.ms' }), 'ws://192.168.1.20:8787');
+  assert.equal(townUrl('', { protocol: 'https:', hostname: 'chunky.ms' }), 'wss://chunky.chunkymetro.workers.dev/town');
+  assert.equal(townUrl(null, { protocol: 'https:', hostname: 'www.chunky.ms' }), 'wss://chunky.chunkymetro.workers.dev/town');
+  assert.equal(townUrl('', { protocol: 'http:', hostname: 'localhost' }), 'ws://localhost:8787');
+  assert.equal(townUrl('', { protocol: 'http:', hostname: '192.168.1.20' }), 'ws://192.168.1.20:8787', 'a phone on the same network');
+  assert.equal(townUrl('', { protocol: 'file:', hostname: '' }), 'ws://localhost:8787');
+});
 
 // ---------------- what goes over the wire
 test('a pose survives the wire to the millimetre and the centimetre, at the far end of the map', () => {

@@ -11,6 +11,11 @@ export const NET_RATE = 20, NET_MAX = 25, POSE_BYTES = 18;
 export const NET_PORT = 8787;
 // where the characters' words are asked for: the talk server on Cloudflare, server/worker.js
 export const TALK_URL = 'https://chunky.chunkymetro.workers.dev/talk';
+// and the town everyone shares, beside it
+export const TOWN_URL = 'wss://chunky.chunkymetro.workers.dev/town';
+// Where Play with others goes: the town it's given with ?net=…, and with ?net alone the one everyone shares on the game's own site,
+// which is https, or one on the same machine as the page anywhere else, which a phone on the same network finds by the page's address
+export const townUrl = (given, { protocol, hostname }) => given || (protocol === 'https:' ? TOWN_URL : `ws://${hostname || 'localhost'}:${NET_PORT}`);
 // who a phone is: a key it makes the first time it's needed and keeps, for the town and for the characters' words
 export const PHONE_KEY = /^[\w-]{16,128}$/;
 // how someone is, besides where: on their feet (walking, running, standing), swimming, or knocked down
