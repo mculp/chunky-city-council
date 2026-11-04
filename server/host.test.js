@@ -9,7 +9,7 @@ import { encodePose, decodeMessage, say } from '../src/net.js';
 
 const HERO = 'only-the-owner-has-this-one-1386', heroHash = createHash('sha256').update(HERO).digest('hex');
 function setup(opts = {}) {
-  const t = { now: 0 }, clock = () => t.now, town = createTown({ clock });
+  const t = { now: 0, wall: 1e12 }, clock = () => t.now, town = createTown({ clock, wall: () => t.wall });
   const host = createHost({ town, clock, heroHash, ...opts });
   const phone = () => {
     const s = { open: true, got: [], killed: false, closed: false, send(d) { this.got.push(d); }, close() { this.closed = true; this.open = false; }, kill() { this.killed = true; this.open = false; } };
@@ -115,4 +115,40 @@ test('one phone that\'s behind with what it\'s sent is skipped for a beat, and t
   const before = [a.snaps().length, b.snaps().length];
   host.beat();
   assert.deepEqual([a.snaps().length, b.snaps().length], [before[0], before[1] + 1]);
+});
+
+// ---------------- what's broken (CHUNKY-152)
+const fence = { k: 'pfence:1:0', x: .1, z: 0, d: 9 };
+test('what one phone says is broken goes to everyone else in town, and not back to it', async () => {
+  const { host, phone, hello } = setup();
+  const a = phone(), b = phone();
+  await hello(a, { key: 'a'.repeat(32) }); await hello(b, { key: 'b'.repeat(32), name: 'Dee' });
+  host.heard(a, say({ t: 'wreck', w: [fence] }));
+  assert.deepEqual(b.words().filter((m) => m.t === 'wreck'), [{ t: 'wreck', w: [fence] }]);
+  assert.deepEqual(a.words().filter((m) => m.t === 'wreck'), []);
+});
+
+test('every ten seconds the town looks for what\'s due to heal, and everyone\'s told', async () => {
+  const { t, host, phone, hello } = setup({ silence: 60000 });
+  const a = phone(), b = phone();
+  await hello(a, { key: 'a'.repeat(32) }); await hello(b, { key: 'b'.repeat(32), name: 'Dee' });
+  host.heard(a, say({ t: 'wreck', w: [fence] }));
+  t.wall += 864e5;
+  t.now = 4000; host.beat();
+  t.now = 9999; host.beat();
+  assert.deepEqual(b.words().filter((m) => m.t === 'heal'), [], 'not before it looks');
+  t.now = 10000; host.beat();
+  for (const s of [a, b]) assert.deepEqual(s.words().filter((m) => m.t === 'heal'), [{ t: 'heal', k: ['pfence:1:0'] }]);
+});
+
+test('whatever came due while nobody was about heals as someone comes in, before they\'re told what\'s broken', async () => {
+  const { t, host, phone, hello } = setup();
+  const a = phone();
+  await hello(a, { key: 'a'.repeat(32) });
+  host.heard(a, say({ t: 'wreck', w: [fence] }));
+  host.closed(a);
+  t.wall += 864e5;
+  const b = phone();
+  await hello(b, { key: 'b'.repeat(32), name: 'Dee' });
+  assert.deepEqual(b.words().find((m) => m.t === 'welcome').wrecks, []);
 });

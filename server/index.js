@@ -18,6 +18,10 @@ import { createTalk } from './talk.js';
 import { createMemoryStore, createWalletRoutes, walletKey } from './wallet.js';
 import { createChain } from './chain.js';
 import { NET_PORT, NET_RATE } from '../src/net.js';
+import { createAside } from '../src/aside.js';
+
+// the farm's own outlines, for where nothing's kept broken (src/aside.js)
+const farm = JSON.parse(readFileSync(new URL('../data/farm.json', import.meta.url), 'utf8'));
 
 // The characters' words, for trying the game's side of them without spending anything: the talk server's own rules, from server/talk.js,
 // with a stand-in for the model that says `line` every time, and only for pages on this machine. `quiet` has it answer the way it
@@ -36,18 +40,19 @@ function cannedTalk({ line = LINE, quiet = null } = {}) {
 }
 
 // `chain` is what's asked whose signature it is and what a wallet holds (server/chain.js), and with none, a wallet can't be checked
-export async function startServer({ port = NET_PORT, rate = NET_RATE, max, keeps, silence = 5000, helloWithin = 5000, save = null, saveEvery = 5000, heroHash = '', talk = false, chain = null, quiet = false } = {}) {
+// `wall` is the time of day as the town has it, for what's broken, which a test can move on to tomorrow
+export async function startServer({ port = NET_PORT, rate = NET_RATE, max, keeps, silence = 5000, helloWithin = 5000, save = null, saveEvery = 5000, heroHash = '', talk = false, chain = null, quiet = false, wall = () => Date.now() } = {}) {
   // what the cast remember of everyone, by the hash of their key: in the same file as the town here, beside what it keeps itself,
   // as the town for everyone keeps them each on their own
   let minds = {}, kept = null;
-  const town = createTown({ max, keeps });
+  const town = createTown({ max, keeps, wall, aside: createAside(farm) });
   const words = talk ? cannedTalk(talk === true ? {} : talk) : null;
 
   // A town that's been kept is taken back out. One that can't be read is left as it is for someone to look at, not written over.
   if (save) {
     mkdirSync(dirname(save), { recursive: true });
     if (existsSync(save)) {
-      try { kept = JSON.parse(readFileSync(save, 'utf8')); town.load(kept); if (kept?.minds && typeof kept.minds === 'object') minds = kept.minds; }
+      try { kept = JSON.parse(readFileSync(save, 'utf8')); town.load(kept); town.loadWrecks(kept?.wrecks); if (kept?.minds && typeof kept.minds === 'object') minds = kept.minds; }
       catch (e) { throw new Error(`The town kept in ${save} can't be read, so it's been left as it is: ${e.message}`); }
     }
   }
@@ -64,8 +69,8 @@ export async function startServer({ port = NET_PORT, rate = NET_RATE, max, keeps
     for (const k of gone) delete minds[k];
     wallets.delete(gone.map(walletKey));
     const walletsNow = wallets.entries().filter((e) => !forNow(e)), walletsSaid = JSON.stringify(walletsNow);
-    if (!(town.dirty || unsaved || changed.length || walletsSaid !== walletsKept)) return;
-    try { writeFileSync(`${save}.tmp`, JSON.stringify({ ...town.dump(), minds, wallets: walletsNow })); renameSync(`${save}.tmp`, save); unsaved = false; walletsKept = walletsSaid; }
+    if (!(town.dirty || town.wrecksDirty || unsaved || changed.length || walletsSaid !== walletsKept)) return;
+    try { writeFileSync(`${save}.tmp`, JSON.stringify({ ...town.dump(), wrecks: town.dumpWrecks(), minds, wallets: walletsNow })); renameSync(`${save}.tmp`, save); unsaved = false; walletsKept = walletsSaid; }
     catch (e) { unsaved = true; console.error(`Couldn't keep the town in ${save}: ${e.message}`); }
   }
 

@@ -15,6 +15,9 @@ import { createHost, MOST } from './host.js';
 import { createChain, GATEWAY, RPCS } from './chain.js';
 import { createWalletRoutes, walletKey } from './wallet.js';
 import { NET_RATE } from '../src/net.js';
+import { createAside } from '../src/aside.js';
+// the farm's own outlines, for where nothing's kept broken, which wrangler puts in with the rest
+import farm from '../data/farm.json';
 
 const KEEP_EVERY = 5000;   // ms between the town being kept while anyone's in it
 // the pages the town and the words answer, which are the game's own; and the nodes the chain's asked of
@@ -40,14 +43,19 @@ export class Bill extends DurableObject {
 export class Town extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    this.town = createTown();
+    this.town = createTown({ aside: createAside(farm) });
     const chain = createChain({ rpc: listOf(env.ETH_RPC_URL).length ? listOf(env.ETH_RPC_URL) : RPCS, gateway: env.IPFS_GATEWAY || GATEWAY });
     this.wallet = createWalletRoutes({ store: ctx.storage, chain, pages: pagesOf(env) });
     // what the cast remember of each of them is kept on its own, beside the town, since everyone's together would be too much for one
     this.host = createHost({ town: this.town, heroHash: env.CHUNKY_HERO ?? '', mindsOf: (k) => ctx.storage.get(`mind:${k}`), rektOf: (k) => this.wallet.wearing(k) });
     this.phones = new Map();   // Cloudflare's socket → what the host knows it as
-    this.beating = null; this.keptAt = 0; this.unkept = false;
-    ctx.blockConcurrencyWhile(async () => { const kept = await ctx.storage.get('town'); if (kept) this.town.load(kept); });
+    this.beating = null; this.keptAt = 0; this.unkept = false; this.wrecksUnkept = false;
+    // and what's broken, in a value of its own beside it
+    ctx.blockConcurrencyWhile(async () => {
+      const [kept, wrecks] = await Promise.all([ctx.storage.get('town'), ctx.storage.get('wrecks')]);
+      if (kept) this.town.load(kept);
+      if (wrecks) this.town.loadWrecks(wrecks);
+    });
   }
 
   // the wallet's side of the town and the pictures, and otherwise a phone coming in over a WebSocket
@@ -120,6 +128,11 @@ export class Town extends DurableObject {
       const some = minds.slice(i, i + 128), again = (e) => { this.town.notKept(some); failed(e); };
       try { this.ctx.storage.put(Object.fromEntries(some.map(([k, m]) => [`mind:${k}`, m])), { allowUnconfirmed: true }).catch(again); }
       catch (e) { again(e); }
+    }
+    if (this.town.wrecksDirty || this.wrecksUnkept) {
+      this.wrecksUnkept = true;
+      try { this.ctx.storage.put('wrecks', this.town.dumpWrecks(), { allowUnconfirmed: true }).then(() => { this.wrecksUnkept = false; }, failed); }
+      catch (e) { failed(e); }
     }
     if (!this.town.dirty && !this.unkept) return;
     this.unkept = true;

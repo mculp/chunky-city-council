@@ -140,6 +140,26 @@ test('someone coming back after the server\'s been stopped and started finds whe
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('what\'s broken is kept beside the town and still broken after it\'s been stopped and started, until it heals, and nothing\'s kept at the places set aside', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'chunky-town-')), save = join(dir, 'town.json'), day = 864e5;
+  const fence = { k: 'pfence:1:0', x: .1, z: 0, d: 9 }, atTheLot = { k: 'pfence:2:0', x: -254.5 - 6843.067, z: 200 - 7797.433, d: 9 };
+  try {
+    const s = await startServer({ port: 0, quiet: true, save, saveEvery: 50 });
+    const a = client(s.port); await a.in();
+    a.ws.send(say({ t: 'wreck', w: [fence, atTheLot] }));
+    await sleep(200); await s.close();
+    assert.deepEqual(JSON.parse(readFileSync(save, 'utf8')).wrecks.map((w) => w.k), ['pfence:1:0']);
+    for (const [later, broken] of [[0, [fence]], [day, []]]) {
+      const again = await startServer({ port: 0, quiet: true, save, wall: () => Date.now() + later });
+      try {
+        const b = client(again.port); await b.in();
+        assert.deepEqual(b.words.find((w) => w.t === 'welcome').wrecks, broken);
+        b.ws.close();
+      } finally { await again.close(); }
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('and what the cast remember of them is kept beside the town, and comes back with them and nobody else', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'chunky-town-')), save = join(dir, 'town.json');
   try {

@@ -7,6 +7,8 @@
 // chain: a phone pairing with a wallet and coming in wearing its rektguy, seen by its handle and its picture had by it, whoever wears
 // the owner's own being the hero, that kept after the stop and the start, and gone with them once the town's let them go. What the
 // town does is tested in server/town.test.js, server/host.test.js and server/wallet.test.js, and npm run net plays it in the game.
+// And what's broken (CHUNKY-152): a fence knocked down on one phone is down on the other, something at a place set aside isn't kept,
+// and the fence is still down after the stop and the start.
 //
 //   npm run town:host
 import assert from 'node:assert/strict';
@@ -18,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import WebSocket from 'ws';
 import { encodePose, decodeMessage, say } from '../src/net.js';
+import { BRIDGE } from '../src/aside.js';
 import { chainStandIn } from './chain-stand-in.mjs';
 import { wranglerDev } from './wrangler-dev.mjs';
 
@@ -90,6 +93,12 @@ try {
 
   a.ws.send(say({ t: 'keep', beans: 4, items: { bottle: 1 }, gas: 0 }));
   a.ws.send(say({ t: 'mind', who: 'coop', said: 'Hey.' })); a.ws.send(say({ t: 'mind', who: 'coop', visit: true }));
+  // a fence knocked down, and something at Robby's lot, where nothing's kept broken
+  const fence = { k: 'pfence:1:0', x: .1, z: 0, d: 9 }, atTheLot = { k: 'pfence:2:0', x: -254.5 - BRIDGE[0], z: 200 - BRIDGE[1], d: 9 };
+  a.ws.send(say({ t: 'wreck', w: [fence, atTheLot] }));
+  await until(() => b.words.some((m) => m.t === 'wreck'), 'the other to be told what\'s broken');
+  assert.deepEqual(b.words.filter((m) => m.t === 'wreck'), [{ t: 'wreck', w: [fence] }]);
+  console.log('a fence knocked down on one phone is down on the other, and nothing at a place set aside is kept broken');
   await sleep(100);
   a.ws.close();
   // sooner than the five seconds it takes the town to let go of anyone who's gone quiet, so it's the going that did it
@@ -135,7 +144,8 @@ try {
   assert.deepEqual(back.welcome().minds, { coop: { notes: [], said: ['Hey.'], visits: 1 } });
   assert.deepEqual(n.welcome().minds, {});
   assert.deepEqual(await askWallet(url, 'mine', { key: 'w'.repeat(32) }), { rekt: told.rekt, wearing: told.wearing });
-  console.log('stopped and started again, someone coming back finds where they were, what they had, Coop remembering them, and what they wear of their own');
+  assert.deepEqual(back.welcome().wrecks, [fence]);
+  console.log('stopped and started again, someone coming back finds where they were, what they had, Coop remembering them, what they wear of their own, and the fence still down');
 
   // a thousand more come and go, twenty at a time, so that they're the thousand the town keeps
   back.ws.close();

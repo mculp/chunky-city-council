@@ -11,8 +11,13 @@
 // It keeps the thousand who've been here last, and only vehicles the game could have, so that however many come and whatever their
 // phones say, it's all one value Cloudflare can keep. Whoever's been away longest is let go of first, and forgotten() says who, so
 // that what the cast remember of them goes too.
+//
+// And what's broken, as src/wrecks.js has it (CHUNKY-152), in a value of its own: the same for everyone, anyone who comes in finds it,
+// and it heals by itself. That's a real day after it first broke, once nobody's within 200 m of it, so nobody sees it stand back up,
+// and after two days once nobody's within 60 m, since everyone comes in by the pumps. Nothing's kept at the places `aside` says.
 import { NET_MAX, POSE_BYTES, encodeSnapshot, decodePose } from '../src/net.js';
 import { checkName } from '../src/names.js';
+import { tidy, merge, lasting, partsIn, kindOf } from '../src/wrecks.js';
 
 const EDGE = 40000;   // metres from Stuckey's Bridge, well past anything on the map
 const KINDS_MOST = 32, EACH_MOST = 999, KEY = /^[0-9a-f]{64}$/, ITEM = /^[a-z][a-z0-9_]{0,23}$/i;
@@ -21,6 +26,8 @@ const HANDLE = /^[\w-]{16,64}$/;
 // About 1.1 KB each at most, as Cloudflare keeps them, and a few bytes for each place a vehicle's left, against its 2 MB for a
 // value. The game parks at most one vehicle by each building, which is far fewer than that.
 const KEEPS = 1000, VEHICLES_MOST = 4096;
+// How long what's broken stays broken, and who's near enough that it waits. Past as much as it keeps, whatever broke first heals first.
+const DAY = 864e5, NEAR = 200, BUSY_NEAR = 60, WRECKS_MOST = 2000, WRECK_PARTS_MOST = 30000, WRECKS_AT_ONCE = 64;
 const SAY = {
   key: 'Something went wrong. Reload the page to play.',
   full: 'Chunky\'s full right now. Trying again in a bit.',
@@ -66,13 +73,47 @@ function tidyMinds(kept) {
   return minds;
 }
 
-export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => performance.now() } = {}) {
+// `wall` is the time of day, for what's broken, which has to mean the same after the town's been put away and taken out again. `aside`
+// is src/aside.js's, for where nothing's kept broken.
+export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => performance.now(), wall = () => Date.now(), aside = null } = {}) {
   const here = new Map(), riders = new Map();   // id → who's in town; a vehicle's place in the list + 1 → who's in it
   // key hash → what's kept for them, the longest away first; a vehicle's place in the list → where it was left
   let saved = new Map(), cars = new Map();
   const minds = new Map(), unkept = new Set();   // key hash → what the cast remember of them, while they're about; and whose has changed
   const letGoOf = new Set();                     // and who's been let go of, whose memories are to go too
   let build = { at: 0, world: '' }, next = 1, dirty = false;
+  // what's broken → { w, the wreck as it's kept, and at, when it first broke }, the first to break first; and how many building parts
+  let wrecks = new Map(), wreckParts = 0, wrecksDirty = false;
+
+  // Nobody who's anywhere is within r of it. Someone watching the opening isn't anywhere yet.
+  function nobodyWithin(x, z, r) {
+    for (const p of here.values()) { if (!p.placed) continue; const s = saved.get(p.keyHash); if (Math.hypot(s.x - x, s.z - z) < r) return false; }
+    return true;
+  }
+  // A vehicle's wherever it was left since, or wherever someone has it now, and nobody puts one back with someone in it
+  const vehicleOf = (k) => (kindOf(k) === 'v' ? +k.slice(1) : -1);
+  const ridden = (k) => vehicleOf(k) >= 0 && riders.has(vehicleOf(k) + 1);
+  const whereIs = (k, w) => cars.get(vehicleOf(k)) ?? w;
+  // healed, and everyone's told: a vehicle's back where it was parked
+  function heal(keys) {
+    for (const k of keys) {
+      wreckParts -= partsIn(wrecks.get(k).w); wrecks.delete(k); wrecksDirty = true;
+      if (cars.delete(vehicleOf(k))) dirty = true;
+    }
+    return keys.length ? [{ to: 'all', msg: { t: 'heal', k: keys } }] : [];
+  }
+  // whether there's room for so many more things and parts for `key`, once whatever broke first that nobody's near has healed
+  function roomFor(key, things, parts) {
+    let n = wrecks.size + things, q = wreckParts + parts;
+    const go = [];
+    for (const [k, e] of wrecks) {
+      if (n <= WRECKS_MOST && q <= WRECK_PARTS_MOST) break;
+      const at = whereIs(k, e.w);
+      if (k === key || ridden(k) || !nobodyWithin(at.x, at.z, NEAR)) continue;
+      go.push(k); n--; q -= partsIn(e.w);
+    }
+    return n <= WRECKS_MOST && q <= WRECK_PARTS_MOST ? heal(go) : null;
+  }
 
   // someone's here, or has just gone, so they're the last to be let go of
   const seen = (k) => { const s = saved.get(k); if (s) { saved.delete(k); saved.set(k, s); } };
@@ -120,7 +161,11 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
       if (mine.world !== build.world) {
         if (here.size && mine.at < build.at) return { no: no('reload') };
         for (const p of [...here.values()]) { out.push({ to: p.id, msg: no('reload'), close: true }); here.delete(p.id); }
-        riders.clear(); if (build.world) { cars = new Map(); dirty = true; }
+        riders.clear();
+        if (build.world) {
+          cars = new Map(); dirty = true;
+          for (const k of [...wrecks.keys()]) if (vehicleOf(k) >= 0) { wrecks.delete(k); wrecksDirty = true; }
+        }
         build = mine;
       } else build = { ...build, at: Math.max(build.at, mine.at) };
       // the same phone again, or the hero on another one: the newest wins
@@ -139,7 +184,7 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
       makeRoom();
       const back = before && 'x' in before ? { x: before.x, y: before.y, z: before.z, yaw: before.yaw, beans: before.beans, items: before.items, gas: before.gas } : null;
       if (!minds.has(keyHash)) minds.set(keyHash, tidyMinds(kept));
-      out.push({ to: id, msg: { t: 'welcome', id, name: p.name, look: p.look, hero: p.hero, ...(p.rekt && { rekt: p.rekt }), saved: back, minds: minds.get(keyHash), cars: carList() } });
+      out.push({ to: id, msg: { t: 'welcome', id, name: p.name, look: p.look, hero: p.hero, ...(p.rekt && { rekt: p.rekt }), saved: back, minds: minds.get(keyHash), cars: carList(), wrecks: [...wrecks.values()].map((e) => e.w) } });
       out.push({ to: 'all', msg: roster() });
       return { id, out };
     },
@@ -195,6 +240,54 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
     notKept(list) { for (const [k, m] of list) { if (!minds.has(k)) minds.set(k, m); unkept.add(k); } },
     // whoever's been let go of since this was last asked, by key hash, whose memories are to be forgotten wherever they're kept
     forgotten() { const out = [...letGoOf]; letGoOf.clear(); return out; },
+    // Something's broken on their phone, as src/wrecks.js says it, a few at a time: everyone else is told what's new in it. One that's
+    // new past as much as the town keeps makes room by healing whatever broke first that nobody's near, or isn't kept. A vehicle with
+    // nobody in it lies wherever it ended up, for everyone.
+    wreck(id, list) {
+      const p = here.get(id), healed = [], told = [], parked = [];
+      if (!p || !Array.isArray(list)) return [];
+      p.heard = clock();
+      const now = wall();
+      for (const said of list.slice(0, WRECKS_AT_ONCE)) {
+        const w = tidy(said);
+        if (!w || aside?.world(w.x, w.z)) continue;
+        const had = wrecks.get(w.k), r = merge(had?.w ?? null, w);
+        if (!r.changed) continue;
+        const grows = partsIn(r.kept) - (had ? partsIn(had.w) : 0);
+        if (!had || grows > 0) { const made = roomFor(w.k, had ? 0 : 1, Math.max(0, grows)); if (!made) continue; healed.push(...made); }
+        // a building written in a different number of parts, by another version of the game, is broken from now
+        const at = had && had.w.n === r.kept.n ? had.at : now;
+        wreckParts += partsIn(r.kept) - (had ? partsIn(had.w) : 0);
+        wrecks.set(w.k, { w: r.kept, at }); wrecksDirty = true;
+        told.push(r.told);
+        if (vehicleOf(w.k) >= 0 && !ridden(w.k)) {
+          const v = vehicleOf(w.k), car = { x: r.kept.x, y: r.kept.y, z: r.kept.z, yaw: r.kept.yaw };
+          cars.set(v, car); dirty = true;
+          parked.push({ to: 'all', except: id, msg: { t: 'car', v, ...car } });
+        }
+      }
+      return [...healed, ...(told.length ? [{ to: 'all', except: id, msg: { t: 'wreck', w: told } }] : []), ...parked];
+    },
+    // whatever's due to heal by now, with everyone told
+    heal(now = wall()) {
+      const go = [];
+      for (const [k, e] of wrecks) {
+        const age = now - e.at, at = whereIs(k, e.w);
+        if (!ridden(k) && (age >= 2 * DAY ? nobodyWithin(at.x, at.z, BUSY_NEAR) : age >= DAY && nobodyWithin(at.x, at.z, NEAR))) go.push(k);
+      }
+      return heal(go);
+    },
+    get wrecksDirty() { return wrecksDirty; },
+    // what's broken, kept apart from the rest since there can be a lot of it, with when each thing first broke
+    dumpWrecks() { wrecksDirty = false; return [...wrecks.values()].map(({ w, at }) => ({ ...w, at })); },
+    loadWrecks(list) {
+      wrecks = new Map(); wreckParts = 0;
+      for (const kept of Array.isArray(list) ? list : []) {
+        const w = tidy(kept);
+        if (!w || !Number.isFinite(kept.at) || aside?.world(w.x, w.z) || wrecks.size >= WRECKS_MOST || wreckParts + partsIn(w) > WRECK_PARTS_MOST) continue;
+        wrecks.set(w.k, { w: lasting(w), at: kept.at }); wreckParts += partsIn(w);
+      }
+    },
     leave(id) { return here.has(id) ? drop(id) : []; },
     // nobody's in it until they've said where they are, or they'd be standing on Stuckey's Bridge
     snapshot() { return encodeSnapshot([...here.values()].filter((p) => p.placed)); },

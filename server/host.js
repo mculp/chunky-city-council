@@ -12,6 +12,7 @@ import { HERO_TOKEN } from './wallet.js';
 
 const SLOW = 16384;   // bytes still waiting to go to a phone before it's skipped for a beat
 export const MOST = 2048;   // the most a phone can say at once: a hello, or what he's carrying, is well under it
+const HEAL_EVERY = 10000;   // how often the town looks for what's due to heal, in ms
 
 const sha = async (s) => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
 const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
@@ -23,15 +24,15 @@ export function createHost({ town, heroHash = '', mindsOf = null, rektOf = null,
   const hero = /^[0-9a-f]{64}$/i.test(heroHash) ? Uint8Array.from(heroHash.match(/../g), (h) => parseInt(h, 16)) : null;
   if (heroHash && !hero) console.warn('CHUNKY_HERO isn\'t a sha256 in hex, so nobody\'s the hero.');
   const isHero = async (secret) => !!hero && typeof secret === 'string' && secret.length <= 256 && same(await sha(secret), hero);
-  let ticks = 0, joined = 0, busy = 0;
+  let ticks = 0, joined = 0, busy = 0, healed = clock();
 
   // a phone the town's done with, so that nothing more goes to it and its closing doesn't count as leaving twice
   function letGo(id) { const ws = sockets.get(id); sockets.delete(id); if (ws) ws.id = 0; return ws; }
-  // what the town said to tell, to whom, in the order it said it
+  // what the town said to tell, to whom, in the order it said it: everyone, everyone but whoever said it, or one of them
   function deliver(out) {
-    for (const { to, msg, close } of out) {
+    for (const { to, except, msg, close } of out) {
       const words = say(msg);
-      if (to === 'all') { for (const ws of sockets.values()) if (ws.open) ws.send(words); continue; }
+      if (to === 'all') { for (const [id, ws] of sockets) if (ws.open && id !== except) ws.send(words); continue; }
       const ws = sockets.get(to);
       if (ws?.open) ws.send(words);
       if (close) letGo(to)?.close();
@@ -48,6 +49,8 @@ export function createHost({ town, heroHash = '', mindsOf = null, rektOf = null,
     // coming in without it. Whoever's wearing the owner's own rektguy is the hero, in the hero's own look.
     const worn = keyHash && rektOf ? await rektOf(keyHash).catch((e) => { console.error(`What someone's wearing couldn't be read: ${e.message}`); return null; }) : null;
     if (ws.gone) return;   // it went while that was being worked out
+    // whatever came due while nobody was about heals before they're told what's broken
+    deliver(town.heal());
     const r = town.join({ keyHash, name: m.name, look: m.look, hero: him || worn?.id === HERO_TOKEN, rekt: worn?.handle, build: m.build, minds });
     if (!r.id) { deliver(r.out ?? []); ws.send(say(r.no)); ws.close(); return; }
     // Anything everyone's told before his welcome happened before he was here, and he'll find it in the welcome itself
@@ -67,6 +70,7 @@ export function createHost({ town, heroHash = '', mindsOf = null, rektOf = null,
         const m = decodeMessage(data);
         if (m?.t === 'keep') deliver(town.keep(ws.id, m));
         else if (m?.t === 'mind') deliver(town.mind(ws.id, m));
+        else if (m?.t === 'wreck') deliver(town.wreck(ws.id, m.w));
         return;
       }
       if (ws.said || !words) return;
@@ -81,6 +85,7 @@ export function createHost({ town, heroHash = '', mindsOf = null, rektOf = null,
       const began = clock();
       for (const ws of waiting) if (began - ws.since > helloWithin) { waiting.delete(ws); ws.kill(); }
       for (const id of town.silent(began, silence)) { letGo(id)?.kill(); deliver(town.leave(id)); }
+      if (began - healed >= HEAL_EVERY) { healed = began; deliver(town.heal()); }
       const snapshot = town.snapshot();
       for (const ws of sockets.values()) if (ws.open && (ws.buffered ?? 0) < SLOW) ws.send(snapshot);
       ticks++; busy += clock() - began;

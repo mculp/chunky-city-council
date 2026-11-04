@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import v8 from 'node:v8';
 import { createTown } from './town.js';
+import { readFileSync } from 'node:fs';
 import { encodePose, decodeMessage, decodePose, HOW } from '../src/net.js';
+import { encodeParts, partsIn } from '../src/wrecks.js';
+import { BRIDGE, createAside } from '../src/aside.js';
+
+const farm = JSON.parse(readFileSync(new URL('../data/farm.json', import.meta.url), 'utf8'));
 
 const pose = (x = 1, y = 2, z = 3, extra) => encodePose(100, x, y, z, 0, extra);
 const key = (n) => n.toString(16).padStart(64, '0');
@@ -18,7 +23,7 @@ test('everyone who joins gets an id of their own, and a welcome with their name 
   const t = createTown(), a = t.join(hello({ name: 'Miss Bobby', look: 5 })), b = t.join(hello());
   assert.notEqual(a.id, b.id);
   const [welcome] = to(a.out, a.id);
-  assert.deepEqual({ ...welcome, cars: undefined }, { t: 'welcome', id: a.id, name: 'Miss Bobby', look: 5, hero: false, saved: null, minds: {}, cars: undefined });
+  assert.deepEqual({ ...welcome, cars: undefined, wrecks: undefined }, { t: 'welcome', id: a.id, name: 'Miss Bobby', look: 5, hero: false, saved: null, minds: {}, cars: undefined, wrecks: undefined });
 });
 
 test('everyone hears who\'s here each time someone comes', () => {
@@ -382,4 +387,134 @@ test('the snapshot holds a pose for a vehicle as it was sent', () => {
   const p = decodeMessage(t.snapshot()).players[0];
   assert.deepEqual([p.ride, p.swings, p.waves, p.how], [7, 4, 2, HOW.swim]);
   assert.equal(decodePose(pose()).ride, 0);
+});
+
+// ---------------- what's broken (CHUNKY-152): the same for everyone, and healed a day later
+const DAY = 864e5;
+const wall = (t = 1e12) => { const w = () => w.now; w.now = t; return w; };
+const fence = (n = 1, over) => ({ k: `pfence:${n}:0`, x: n / 10, z: 0, d: 9, ...over });
+const wall3 = (over) => ({ k: 'b7301', x: 10, z: -20, n: 40, p: encodeParts([{ part: 3, gone: true, cracked: false, burning: false, dir: 40, hp: 0, shade: 200 }]), ...over });
+// what someone new is told is broken, as they come in
+const wrecksNow = (t) => { const c = t.join(hello()); return to(c.out, c.id)[0].wrecks; };
+const carsNow = (t) => { const c = t.join(hello()); return to(c.out, c.id)[0].cars; };
+
+test('something broken on one phone is broken for everyone else in town, and for anyone who comes later', () => {
+  const t = createTown(), a = inTown(t), b = inTown(t);
+  const out = t.wreck(a, [wall3(), fence()]);
+  assert.deepEqual(out, [{ to: 'all', except: a, msg: { t: 'wreck', w: [wall3(), fence(1, { x: .1 })] } }]);
+  assert.deepEqual(wrecksNow(t), [wall3(), fence(1, { x: .1 })]);
+  assert.ok(b);
+});
+
+test('what everyone already knows is broken is nothing to tell', () => {
+  const t = createTown(), a = inTown(t);
+  t.wreck(a, [fence()]);
+  assert.deepEqual(t.wreck(a, [fence(1, { d: 200 })]), []);
+});
+
+test('the town keeps only what the game could have, a few at a time, from someone who\'s in town', () => {
+  const t = createTown(), a = inTown(t);
+  assert.deepEqual(t.wreck(a, [{ k: 'x1', x: 0, z: 0 }, fence(1, { d: 999 }), 'fence']), []);
+  assert.deepEqual(t.wreck(a, 'all of it'), []);
+  assert.deepEqual(t.wreck(99, [fence()]), []);
+  const out = t.wreck(a, Array.from({ length: 100 }, (_, i) => fence(i + 1)));
+  assert.equal(out[0].msg.w.length, 64);
+});
+
+test('nothing at the places set aside is kept broken, whatever a phone says', () => {
+  const t = createTown({ aside: createAside(farm) }), a = inTown(t);
+  const [x, z] = [-254.5 - BRIDGE[0], 200 - BRIDGE[1]];
+  assert.deepEqual(t.wreck(a, [fence(1, { x, z })]), []);
+  assert.deepEqual(wrecksNow(t), []);
+});
+
+test('it heals a real day after it first broke, once nobody\'s within 200 m of it, and everyone\'s told', () => {
+  const w = wall(), t = createTown({ wall: w }), a = inTown(t);
+  t.move(a, pose(10, 0, -120));
+  t.wreck(a, [wall3()]);
+  w.now += DAY / 2; t.wreck(a, [wall3({ p: encodeParts([{ part: 7, gone: true, cracked: false, burning: false, dir: 1, hp: 0, shade: 255 }]) })]);
+  w.now += DAY / 2 - 1;
+  assert.deepEqual(t.heal(), [], 'not quite a day');
+  w.now += 1;
+  assert.deepEqual(t.heal(), [], 'a day, from when it first broke and not when it was last hit, but he\'s 100 m off');
+  t.move(a, pose(10, 0, 181));
+  assert.deepEqual(t.heal(), [{ to: 'all', msg: { t: 'heal', k: ['b7301'] } }], 'and he\'s gone 201 m off');
+  assert.deepEqual(wrecksNow(t), []);
+});
+
+test('somewhere busy, anything broken two days heals as soon as nobody\'s within 60 m', () => {
+  const w = wall(), t = createTown({ wall: w }), a = inTown(t);
+  t.wreck(a, [fence()]);
+  t.move(a, pose(.1, 0, 61));
+  w.now += DAY;
+  assert.deepEqual(t.heal(), [], 'a day, and he\'s within 200 m');
+  w.now += DAY - 1;
+  assert.deepEqual(t.heal(), []);
+  w.now += 1;
+  assert.deepEqual(t.heal(), [{ to: 'all', msg: { t: 'heal', k: ['pfence:1:0'] } }], 'two, and he\'s more than 60 m off');
+});
+
+test('past 2000 broken things the oldest heals first, as long as nobody\'s near it, and otherwise nothing new is kept', () => {
+  const w = wall(), t = createTown({ wall: w }), a = inTown(t);
+  for (let i = 0; i < 2000; i += 50) { t.wreck(a, Array.from({ length: 50 }, (_, j) => fence(i + j + 1, { x: 1000 + i + j, z: 0 }))); w.now += 1; }
+  t.move(a, pose(1000, 0, 0));
+  const out = t.wreck(a, [fence(9999, { x: 30000, z: 0 })]);
+  assert.deepEqual(kinds(out), ['all:heal', 'all:wreck']);
+  assert.ok(out[0].msg.k.length >= 1 && !out[0].msg.k.includes('pfence:1:0'), 'not the very oldest, with him beside it');
+  t.move(a, pose(0, 0, 0));
+  const all = createTown({ wall: w }), b = inTown(all);
+  for (let i = 0; i < 2000; i += 50) all.wreck(b, Array.from({ length: 50 }, (_, j) => fence(i + j + 1, { x: 0, z: 0 })));
+  all.move(b, pose(0, 0, 0));
+  assert.deepEqual(all.wreck(b, [fence(9999)]), [], 'with him beside every one of them, there\'s no room');
+});
+
+test('a vehicle that\'s gone up is where it ended up for everyone, unless someone\'s in it, and healing it puts it back where it was parked', () => {
+  const w = wall(), t = createTown({ wall: w }), a = inTown(t), b = inTown(t);
+  const car = { k: 'v4', x: 50, z: 60, y: 1, yaw: 2, h: 0, f: 3 };
+  assert.deepEqual(kinds(t.wreck(a, [car])), ['all:wreck', 'all:car']);
+  assert.deepEqual(carsNow(t), [{ v: 4, x: 50, y: 1, z: 60, yaw: 2 }]);
+  t.move(b, pose(1, 0, 1, { ride: 5 }));
+  assert.deepEqual(kinds(t.wreck(a, [{ ...car, x: 70, h: 0, f: 7 }])), ['all:wreck'], 'and with someone in it, it\'s wherever they take it');
+  t.move(a, pose(-3000, 0, -3000)); t.move(b, pose(400, 0, 400, { ride: 5 }));
+  w.now += DAY;
+  assert.deepEqual(t.heal(), [], 'and it isn\'t put back with someone in it, a long way from where it was wrecked');
+  t.move(b, pose(400, 0, 402));
+  assert.deepEqual(carsNow(t), [{ v: 4, x: 400, y: 0, z: 400, yaw: 0 }], 'they leave it by them');
+  assert.deepEqual(t.heal(), [], 'nor with them beside it');
+  t.move(b, pose(400, 0, 700));
+  assert.deepEqual(kinds(t.heal()), ['all:heal']);
+  assert.deepEqual(carsNow(t).filter((c) => c.v === 4), [], 'back where it was parked');
+});
+
+test('what\'s broken is kept apart from the town, with when each thing first broke, and comes back out', () => {
+  const w = wall(), t = createTown({ wall: w }), a = inTown(t);
+  t.wreck(a, [wall3()]); w.now += 5; t.wreck(a, [fence()]);
+  assert.ok(t.wrecksDirty);
+  const kept = JSON.parse(JSON.stringify(t.dumpWrecks()));
+  assert.ok(!t.wrecksDirty);
+  assert.equal('wrecks' in t.dump(), false, 'and not in the town\'s one value');
+  const u = createTown({ wall: w }); u.load(t.dump()); u.loadWrecks(kept);
+  assert.deepEqual(wrecksNow(u), [wall3(), fence(1, { x: .1 })]);
+  w.now += DAY - 3;
+  assert.deepEqual(u.heal(), [{ to: 'all', msg: { t: 'heal', k: ['b7301'] } }], 'the one that broke first');
+  assert.deepEqual(u.heal(), []);
+  u.loadWrecks([{ k: 'nope' }, { ...fence(), at: 'yesterday' }, null]);
+  assert.deepEqual(wrecksNow(u), [], 'and anything in it that isn\'t a wreck is left out');
+});
+
+test('once the vehicles change, what was broken of them goes with where they were left', () => {
+  const t = createTown(), a = inTown(t, { build: { at: 100, world: 'w1' } });
+  t.wreck(a, [{ k: 'v4', x: 50, z: 60, y: 1, yaw: 2, h: 0, f: 3 }, fence()]);
+  const fresh = t.join(hello({ build: { at: 300, world: 'w2' } }));
+  assert.deepEqual(to(fresh.out, fresh.id)[0].wrecks.map((x) => x.k), ['pfence:1:0']);
+});
+
+test('however much is broken, it\'s less than Cloudflare keeps in one value', () => {
+  const t = createTown(), a = inTown(t), parts = Array.from({ length: 300 }, (_, i) => ({ part: i, gone: true, cracked: true, burning: false, dir: 200, hp: 0, shade: 0 }));
+  for (let i = 0; i < 100; i++) t.wreck(a, [{ k: `b${1e11 + i}`, x: 39999.9, z: -39999.9, n: 4096, p: encodeParts(parts) }]);
+  for (let i = 0; i < 1900; i += 50) t.wreck(a, Array.from({ length: 50 }, (_, j) => fence(i + j + 1, { k: `pabcdefghijklmnopqrstuvwx:${-1e6 - i - j}:-999999#999`, x: -39999.9, z: 39999.9 })));
+  const save = t.dumpWrecks();
+  assert.equal(save.length, 2000, 'as many things as it keeps');
+  assert.equal(save.reduce((n, w) => n + partsIn(w), 0), 30000, 'with as many of a building\'s parts as it keeps');
+  assert.ok(v8.serialize(save).length + 'wrecks'.length < 2e6, `${v8.serialize(save).length} bytes`);
 });
