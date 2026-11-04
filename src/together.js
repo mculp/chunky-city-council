@@ -1,10 +1,10 @@
 // Playing together, step 1 (CHUNKY-151): everyone in town sees everyone else, by name and by look, walking, running, driving and
-// swinging, anywhere they are, and on the map. It's brought in by Play with others on the title card, and nothing in here runs until
-// then: index.html's few lines for it all hang on `net`, which stays null in a game on its own.
+// swinging, anywhere they are, and on the map. It's brought in by a page that's the town everyone shares, online.chunky.ms or ?net,
+// and nothing in here runs anywhere else: index.html's few lines for it all hang on `net`, which stays null in a game on its own.
 //
 // What goes over the wire, how someone's steps are smoothed and the town itself are in src/net.js and server/. This is the phone's
-// side: the panel for a name and a look, starting out front of the gas station every time they come, everyone's bodies, their names
-// over them and their dots on the map, the vehicles they drive, and WAVE.
+// side: the title card's Play and how many are in town under it, the panel for a name and a look, starting out front of the gas
+// station every time they come, everyone's bodies, their names over them and their dots on the map, the vehicles they drive, and WAVE.
 //
 // Everyone but the owner is someone from Chunky who un-quit, in a townsperson's body from the town's own looks, standing all the way
 // up and not glowing, which is what marks a player in a crowd. That goes for you on your own screen too. They're the crowd's own
@@ -12,13 +12,14 @@
 // link of their own, and only one phone at a time. Nobody hurts anybody: a swing goes through people, and a vehicle someone else is
 // driving nudges you aside and does you no harm.
 import * as THREE from 'three';
-import { connectNet, rollLook, makeKey, worldOf, townUrl, HOW, PHONE_KEY } from './net.js';
+import { connectNet, rollLook, makeKey, worldOf, townUrl, hereUrl, HOW, PHONE_KEY } from './net.js';
 import { checkName, NAME_MOST } from './names.js';
 import { inVehicle, settle, KINDS } from './vehicles.js';
 import { toScreen, drawLabel, nameBeside, COLORS as MAPC } from './mapview.js';
 
 const MOST = 25;                  // everyone the town holds, you included
 const SEE = 160, NAMED = 40;      // drawn this far from the camera, and named this far from you
+const HERE_EVERY = 10000;         // how often the title card asks how many are in town, in ms
 const SWING_FOR = .5, WAVE_FOR = 1.6;
 // A swing as the townsfolk do it, a drawing at a time on the twelve: the arm up over the shoulder and down through what's in front,
 // in radians forward of hanging straight down
@@ -60,8 +61,8 @@ export function together(G) {
   // the town on this machine, unless the address says where
   const url = townUrl(G.url, location);
   let link = null, you = { id: 0, name: '', look: 0, hero: false }, picked = null;
-  // started: let into town, and saying where they are; alone: let go of the town
-  let started = false, alone = false;
+  // started: let into town, and saying where they are; alone: let go of the town; going: on their way in from the title card's Play
+  let started = false, alone = false, going = false;
   let swings = 0, waves = 0, swungAt = -9, wavedAt = -9, wasSwinging = false, keptWas = '';
 
   // ---------------- the panel: a name and a look
@@ -88,11 +89,15 @@ export function together(G) {
   back.addEventListener('click', () => {
     panel.hidden = true;
     if (started) { alone = true; link?.close(); return; }
-    link?.close(); document.getElementById('title').hidden = false; G.leave();
+    link?.close(); document.getElementById('title').hidden = false; here();
   });
-  function show(why = '') {
+  // who they were last time, if they've been before
+  function fillIn() {
     nameBox.value ||= store.get(KEPT.name) ?? '';
     const l = store.get(KEPT.look); if (picked === null && l !== null && +l >= 0 && +l < looks.length) picked = +l;
+  }
+  function show(why = '') {
+    fillIn(); going = false;
     showLook(); say(why); back.textContent = started ? 'Play alone' : 'Back';
     document.getElementById('title').hidden = true; panel.hidden = false;
     // and the mouse, if it's looking about, so the panel can be clicked
@@ -114,8 +119,22 @@ export function together(G) {
     const why = m?.say ?? 'Can\'t reach the others. Trying again.';
     // lost or full once they're playing, it tries again by itself, and they carry on meanwhile
     if (started && (s === 'lost' || s === 'full')) { G.toast(s === 'lost' ? 'Lost the others. Trying again.' : why); return; }
-    if (s === 'lost' || s === 'full') { say(why); return; }
+    // and with the panel up it says why there while it tries, and one that went straight in from the title card gets the panel to say it
+    if ((s === 'lost' || s === 'full') && !panel.hidden) { say(why); return; }
     show(why);
+  }
+
+  // ---------------- the title card: Play, how many are in town right now under it, and a way to change their look for anyone who's
+  // been before, since Play takes them straight in (CHUNKY-169)
+  const hereAt = hereUrl(url);
+  let hereLine = null, lookLink = null;
+  async function here() {
+    if (!hereLine || !hereAt || started || going) return;
+    let n = null;
+    try { const r = await fetch(hereAt, { cache: 'no-store' }); if (r.ok) n = (await r.json()).here; } catch { /* nobody to ask */ }
+    if (started || going) return;
+    hereLine.textContent = !Number.isInteger(n) ? '' : n ? `${n} in town right now` : 'Nobody in town right now';
+    hereLine.hidden = !hereLine.textContent;
   }
 
   // ---------------- let in: out front of the gas station, the first time and every time
@@ -453,8 +472,24 @@ export function together(G) {
       }
       if (big) lastMap = { v, dpr, g };
     },
-    // the title card's Play with others
-    open() { show(''); },
+    // The title card, given its Play: how many are in town under it, asked again every so often while it's up, and Change your look
+    // for anyone who's been before
+    title(play) {
+      hereLine = document.createElement('p'); hereLine.id = 'here'; hereLine.hidden = true; hereLine.setAttribute('aria-live', 'polite');
+      lookLink = document.createElement('button'); lookLink.className = 'forget'; lookLink.id = 'changeLook'; lookLink.textContent = 'Change your look';
+      lookLink.hidden = !store.get(KEPT.name);
+      lookLink.addEventListener('click', () => show(''));
+      play.after(hereLine, lookLink);
+      here();
+      const asking = setInterval(() => { if (started) clearInterval(asking); else if (!document.hidden && !document.getElementById('title').hidden) here(); }, HERE_EVERY);
+    },
+    // Play: the first time, who they are, and after that straight into town as who they were. It says which it did.
+    play() {
+      fillIn();
+      if (!store.get(KEPT.name) || !checkName(nameBox.value).ok) { show(''); return false; }
+      going = true; hereLine.textContent = 'Going into town…'; hereLine.hidden = false;
+      join(); return true;
+    },
   };
   let lastMap = null;
   // where each of them has their name on the big map, by id, from its last turn for room
@@ -463,6 +498,8 @@ export function together(G) {
   if (G.TEST) {
     window.__net = {
       get link() { return link; }, you: () => ({ ...you }), group,
+      // how many are in town, asked now rather than at the title card's next turn
+      here: () => here(),
       drawn() {
         const deg = THREE.MathUtils.radToDeg, at = (m, n) => new THREE.Matrix4().fromArray(m.instanceMatrix.array, n * 16), down = new THREE.Vector3(0, -1, 0);
         return {

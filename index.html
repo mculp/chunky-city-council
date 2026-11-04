@@ -216,7 +216,7 @@ body.talking #mute,body.talking #levels,body.talking #levelsBox{visibility:hidde
 <div class="panel" id="title">
   <div class="pbox">
     <h1>Chunky <span>2026</span></h1>
-    <p>Chapter 1 · Cut Down</p>
+    <p id="chapter">Chapter 1 · Cut Down</p>
     <button class="big" id="start">Start</button>
     <button class="forget" id="free">Skip to town</button>
     <button class="forget" id="forget" hidden>Forget everyone</button>
@@ -7950,7 +7950,8 @@ function soundTick(dt, M) {
     const stride = Math.floor(HP.phase / Math.PI);
     if (stride !== lastStride) { lastStride = stride; if (player.grounded && HP.speed > .4) footstep(player.running ? 1.2 : 1); }
   }
-  if (M === 'hang' || M === 'title') { const side = Math.sin(time * 2.4) > 0; if (side !== creakSide) { creakSide = side; SFX.play('rope.creak'); } }
+  // the rope, which isn't there behind the title card in a town that's shared
+  if ((M === 'hang' || M === 'title') && !titleAt) { const side = Math.sin(time * 2.4) > 0; if (side !== creakSide) { creakSide = side; SFX.play('rope.creak'); } }
   if (M === 'hang' && input.a && cardT <= 0 && time - sawAt > .3) { sawAt = time; SFX.play('rope.saw'); }
   if (M === 'swim' && HP.speed > .2 && (strokeT -= dt) <= 0) { const fast = HP.speed > 2; strokeT = fast ? .55 : .95; SFX.play('swim.stroke', { rate: fast ? 1.15 : 1 }); }
   if (M === 'bridge' && (plankGroanT -= dt) <= 0) { plankGroanT = 1.8 + soundRand() * 1.6; SFX.play('bridge.groan'); }
@@ -8029,6 +8030,8 @@ function openSignBoard() {
   head('The rest'); SIGN_SHEET.lines.forEach((rows, i) => put(churches[i % churches.length], rows));
 }
 const V = new THREE.Vector3();
+// Where the title card's camera is in a town that's shared, which is set under "playing together", and null on the game's own
+let titleAt = null;
 function tick(dt, draw = true) {
   time += dt;
   for (let i = timers.length - 1; i >= 0; i--) if (time >= timers[i].at) timers.splice(i, 1)[0].fn();
@@ -8257,7 +8260,10 @@ function tick(dt, draw = true) {
 
   // ---------------- camera
   if (M === 'title' || M === 'hang') {
-    camera.position.set(-4.4 + Math.sin(time * .2) * .4, 3.5, 9.8); camera.lookAt(0, 3.55, 3.1); camera.fov = 48; camera.updateProjectionMatrix();
+    // a town that's shared has its title card over the gas station, drifting as the bridge's does, with the land as high as it's drawn
+    if (M === 'title' && titleAt) { const T = titleAt, d = Math.sin(time * .2) * .4, x = T.x + T.rx * d, z = T.z + T.rz * d; camera.position.set(x, floorAt(x, z) + hillUp(x, z) + T.up, z); camera.lookAt(T.lx, floorAt(T.lx, T.lz) + hillUp(T.lx, T.lz) + T.lup, T.lz); }
+    else { camera.position.set(-4.4 + Math.sin(time * .2) * .4, 3.5, 9.8); camera.lookAt(0, 3.55, 3.1); }
+    camera.fov = 48; camera.updateProjectionMatrix();
   } else if (M === 'dream') {
     // straight up off him, looking down and turning, and then it comes up to look along the road and drifts away down it
     const k = reduceMotion ? 0 : Math.min(1, dreamT / DREAM_T), up = sstep(0, .45, k), on = sstep(.3, 1, k), H = heroRoot.position, turn = dreamYaw + k * 1.5, r = 4.6;
@@ -8386,12 +8392,14 @@ heroRoot.position.copy(ANCHOR); poseHero(0); drawPlanks();
 for (const s of SNAKES) s.update(.016); deckSnake.update(.016);
 ghost.position.set(-17.5, 1.3, 7.5);
 
-// ================================================================ playing together (CHUNKY-151)
-// Play with others goes under Start when there's a town to play in: ?net for one on this machine (npm run net:server), or ?net=ws://…
-// for one somewhere else. Nothing of it is loaded until it's pressed, and src/together.js is all of it. `net` stays null in a game on
-// its own, which is what the few lines that mention it go by. The owner's link, #hero=…, is kept on their phone the first time it's
-// opened, for the town it came with and no other (as chunky.net.hero@ and the ?net that came with it, like the rest of what
-// src/together.js keeps), and it comes off the address so it isn't passed on.
+// ================================================================ playing together (CHUNKY-151, CHUNKY-169)
+// online.chunky.ms is the town everyone shares, and so is ?net anywhere else: one on this machine (npm run net:server) with ?net alone,
+// or ?net=ws://… for one somewhere else. There's nothing of the story in it. Its title card is one thing, Play, with how many are in
+// town right now under it, over the gas station where everyone starts, and src/together.js is all the rest. `net` stays null in a game
+// on its own, which is what the few lines that mention it go by, and nothing of playing together is loaded there. The owner's link,
+// #hero=…, is kept on their phone the first time it's opened, for the town it came with and no other (as chunky.net.hero@ and the
+// ?net that came with it, like the rest of what src/together.js keeps), and it comes off the address so it isn't passed on.
+const SHARED = location.hostname === 'online.chunky.ms' || new URLSearchParams(location.search).has('net');
 {
   const town = new URLSearchParams(location.search);
   if (location.hash.startsWith('#hero=')) { try { localStorage.setItem(`chunky.net.hero@${town.get('net') ?? ''}`, decodeURIComponent(location.hash.slice(6))); } catch { /* not kept */ } history.replaceState(null, '', location.pathname + location.search); }
@@ -8409,7 +8417,6 @@ ghost.position.set(-17.5, 1.3, 7.5);
     get time() { return time; }, get driving() { return driving; }, get swingT() { return swingT; },
     vehMoved() { vehDirty = true; },
     trainsOff() { trainsOn = false; },
-    leave() { net = null; },
     // straight into town, where they're put
     toTown(at) {
       $('title').hidden = true; tidyOpening(); HP.kind = 'run'; onWakeBridge(); feverLeft = 0; feverTo(0); gifMat.uniforms.uFade.value = 1; startTown();
@@ -8418,15 +8425,29 @@ ghost.position.set(-17.5, 1.3, 7.5);
     // the hero, as everyone else sees the owner: built as he is under "the hero", with a face of its own for its hood to turn
     heroTwin() { const r = makeRig({ ...HERO_BUILD, faceM: tapeMat(HERO_SHAPE) }); r.setHood(heroHood); return r; },
   };
-  if (town.has('net')) {
-    const play = document.createElement('button'); play.className = 'forget'; play.id = 'together'; play.textContent = 'Play with others';
+  if (SHARED) {
+    // the title card's Play, and nothing of the story's
+    for (const id of ['chapter', 'start', 'free', 'forget']) $(id).hidden = true;
+    const play = document.createElement('button'); play.className = 'big'; play.id = 'together'; play.textContent = 'Play';
     $('start').after(play);
-    let made = null;
-    play.addEventListener('click', async () => { made ??= (await import('./src/together.js')).together(game); net = made; net.open(); });
+    // and behind it the town, as it is when it's shared, from the first frame: the opening's things put away, no trains, and the camera
+    // across US 80 from the pumps, looking back at them under the canopy's light, and a little over it, so that the sky's behind the
+    // title and the gas station's under it on a phone
+    tidyOpening(); trainsOn = false; S.collapse = 99; S.flags.town = true; vehGroup.visible = true; gasMesh.visible = gasLine.visible = true;
+    player.pos.set(game.start.x, floorAt(game.start.x, game.start.z), game.start.z);
+    {
+      const [lx, lz] = gasAt(53, 10), x = lx - 12, z = MAP.zAt('us_80', x) + 16, d = Math.hypot(lx - x, lz - z);
+      titleAt = { x, z, up: 2.6, lx, lz, lup: 8.5, rx: -(lz - z) / d, rz: (lx - x) / d };
+    }
+    // The town's own comings and goings wait until playing together's loaded, since it's `net` that keeps the drivers off the roads
+    const full = townFull; townFull = false;
+    const ready = import('./src/together.js').then(({ together }) => { net = together(game); net.title(play); townFull = full; return net; });
+    // the first time it asks who they are, and after that it takes them straight in, which is when it takes the mouse
+    play.addEventListener('click', async (e) => { if ((await ready).play()) clickedIn(e); });
   }
 }
 requestAnimationFrame(loop);
-if (location.hash === '#free') startFree();
+if (location.hash === '#free' && !SHARED) startFree();
 if (location.hash === '#sounds' || location.hash === '#sounds-new') openBoard();
 if (location.hash === '#signs') openSignBoard();
 
@@ -8545,6 +8566,8 @@ if (TEST) {
     vehicles: VEHICLES, vehShown, driving: () => driving, getIn, getOut, kinds: KINDS, vehicleFits, vehicleInReach,
     wreck: { strike, blast, blastCan, thud, toss, damage, breakProp, props: PROPS, falling, swing, burnAt, burners, catchTree, treesNear, treeBlocks, fellTree, gasCans: GAS_CANS, wreckVehicle, explodeVehicle, startFree, housesNear, trees: (x, z, r) => { const out = []; treesNear(x, z, r, (t) => out.push(t)); return out; } },
     openMap, closeMap, updateMini, mapState: () => ({ open: mapOpen, cam: mapCam, mini: !$('mini').hidden, name: $('miniName').hidden ? '' : $('miniName').textContent }), mapCamTo(c) { mapCam = { ...mapCam, ...c }; drawFullMap(); },
+    // where the title card's camera is in a town that's shared, which can be moved
+    title: () => titleAt,
     pause() { paused = true; },
     resume() { if (paused) { paused = false; clock.getDelta(); requestAnimationFrame(loop); } },
     step(seconds = 1 / 60, dt = 1 / 60) { paused = true; for (let i = 0, n = Math.max(1, Math.round(seconds / dt)); i < n; i++) tick(dt); return this.state(); },

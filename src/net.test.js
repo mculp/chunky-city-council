@@ -1,17 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { encodePose, decodePose, encodeSnapshot, decodeMessage, say, rollLook, createWalkers, connectNet, makeKey, worldOf, townUrl, POSE_BYTES, NET_RATE, HOW, PHONE_KEY } from './net.js';
+import { encodePose, decodePose, encodeSnapshot, decodeMessage, say, rollLook, createWalkers, connectNet, makeKey, worldOf, townUrl, hereUrl, POSE_BYTES, NET_RATE, HOW, PHONE_KEY } from './net.js';
 
 const near = (a, b, within, what) => assert.ok(Math.abs(a - b) <= within, `${what ?? 'value'}: ${a} is not within ${within} of ${b}`);
 
 // ---------------- which town
-test('Play with others goes to the town it\'s given, the shared one on the game\'s own site, or one on the same machine', () => {
+test('Play goes to the town it\'s given, the shared one on the game\'s own site, or one on the same machine', () => {
   assert.equal(townUrl('ws://192.168.1.20:8787', { protocol: 'https:', hostname: 'chunky.ms' }), 'ws://192.168.1.20:8787');
   assert.equal(townUrl('', { protocol: 'https:', hostname: 'chunky.ms' }), 'wss://chunky.chunkymetro.workers.dev/town');
   assert.equal(townUrl(null, { protocol: 'https:', hostname: 'www.chunky.ms' }), 'wss://chunky.chunkymetro.workers.dev/town');
   assert.equal(townUrl('', { protocol: 'http:', hostname: 'localhost' }), 'ws://localhost:8787');
   assert.equal(townUrl('', { protocol: 'http:', hostname: '192.168.1.20' }), 'ws://192.168.1.20:8787', 'a phone on the same network');
   assert.equal(townUrl('', { protocol: 'file:', hostname: '' }), 'ws://localhost:8787');
+});
+test('the title card asks how many are in town beside the town itself: the shared one on Cloudflare, or one on this machine', () => {
+  assert.equal(hereUrl('wss://chunky.chunkymetro.workers.dev/town'), 'https://chunky.chunkymetro.workers.dev/town/here');
+  assert.equal(hereUrl('ws://localhost:8787'), 'http://localhost:8787/here');
+  assert.equal(hereUrl('ws://192.168.1.20:8787/'), 'http://192.168.1.20:8787/here', 'a phone on the same network');
+  assert.equal(hereUrl('ws://localhost:8788/town'), 'http://localhost:8788/town/here', 'the hosted town, run on this machine');
+  assert.equal(hereUrl('not an address'), null, 'nothing to ask, so the card just leaves it out');
 });
 
 // ---------------- what goes over the wire

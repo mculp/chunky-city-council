@@ -9,7 +9,7 @@ npm run net:server
 python3 -m http.server
 ```
 
-Open http://localhost:8000/?net in two windows and press Play with others in each. From a phone on the same network it's `http://<this machine's address>:8000/?net`, since the town is looked for on the same host as the page. `?net=ws://…` points at a town somewhere else. On the game's own site, which is https, `?net` alone is the town everyone shares on Cloudflare, `TOWN_URL` in `src/net.js`, since a page on https can't open a plain ws:// socket.
+Open http://localhost:8000/?net in two windows and press Play in each. From a phone on the same network it's `http://<this machine's address>:8000/?net`, since the town is looked for on the same host as the page. `?net=ws://…` points at a town somewhere else. On the game's own site, which is https, `?net` alone is the town everyone shares on Cloudflare, `TOWN_URL` in `src/net.js`, since a page on https can't open a plain ws:// socket.
 
 The owner's link is `#hero=<secret>` on the end of the address, for a town started with `CHUNKY_HERO` set to the secret's sha256 in hex:
 
@@ -29,6 +29,7 @@ and it's `?net=ws://localhost:8788/town`. `npm run town:host` checks it there.
 
 ## What happens
 
+- **The title card.** It's one thing, Play, with how many are in town right now under it ("Nobody in town right now" when there's nobody), and nothing of the story: no Start, Skip to town, Forget everyone or chapter. Behind it is the gas station at night with its pumps lit, from across US 80, where everyone comes to, drifting as the bridge's camera does on chunky.ms. The first time, Play asks for a name and a look. After that it takes them straight in as who they were, and Change your look under it opens the panel they joined with, since there's no pause screen to change it from in town yet.
 - **Joining.** A name of up to 16 letters, checked for PG-13 on the phone and again by the town, and one of the town's eight crowd looks, picked or rolled from the name.
 - **Starting.** Everyone starts out front of the gas station on US 80, by the pumps where Coop can see them, facing him and each a little apart from the others (CHUNKY-169). That's where they start the first time and every time they come back. Where they're put is checked first: on dry ground, inside nothing, near enough for Coop to turn to them, and with nothing between them and him. Nobody watches the opening, the owner included. Tadpole comes with CHUNKY-112.
 - **No story.** A town that's shared has no chapters, the hero's included, so the objective box says nothing to anyone until the side quests (CHUNKY-163). Everyone's beans are a count, "Beans 5", and twelve of them is just twelve, with no end card. "Swim to the bank." still shows for anyone in the water in town.
@@ -51,16 +52,18 @@ and it's `?net=ws://localhost:8788/town`. `npm run town:host` checks it there.
 - `src/names.js`: the PG-13 check.
 - `server/town.js`, `server/host.js` and `server/index.js`: the town, the town behind any socket, and a Node server for it on this machine.
 - `server/worker.js`: the town hosted for everyone, as the Durable Object `Town`, beside the characters' words. `/town/here` says how many are in town right now, for the title card, to the same pages `/town` lets in. The town on this machine says it at `/here`, to any page, as any page can join it.
-- `src/together.js`: the phone's side. It covers the panel, where everyone starts, everyone's bodies (the crowd's own, in six draw calls however many there are), the hero as others see him, names over heads, map dots, vehicles and WAVE.
-- `index.html`: six lines hang on `net`, which is null in a game on its own, so the opening is the same to the byte (`npm run frames`).
+- `src/together.js`: the phone's side. It covers the title card's Play and how many are in town, the panel, where everyone starts, everyone's bodies (the crowd's own, in six draw calls however many there are), the hero as others see him, names over heads, map dots, vehicles and WAVE.
+- `index.html`: a few lines hang on `net`, which is null in a game on its own, and the title card over the gas station on the page being the town that's shared, so the opening is the same to the byte (`npm run frames`).
 - `npm run net`: the check, and `npm run town:host` the hosted town's.
 
 ## Calls made along the way
 
-- **Where the town is.** One town for everyone, the Durable Object `Town` in `server/worker.js` on Cloudflare, beside the talk server. It's made in the eastern US the first time anyone comes, which is the nearest to Mississippi. It beats twenty times a second while anyone's in it, is kept every 5 s and once the last one goes, and then rests. Until it's deployed and its address is in `src/net.js`, Play with others only shows with `?net`.
+- **Where the town is.** One town for everyone, the Durable Object `Town` in `server/worker.js` on Cloudflare, beside the talk server. It's made in the eastern US the first time anyone comes, which is the nearest to Mississippi. It beats twenty times a second while anyone's in it, is kept every 5 s and once the last one goes, and then rests. Its address is `TOWN_URL` in `src/net.js`.
 - **Keeping the town.** It's written without holding up the snapshots (`allowUnconfirmed`), so a crash loses at most the last 5 s of where people were. Everyone it's ever kept is one value, which Cloudflare holds to 2 MB: several thousand people.
 - **Two things Cloudflare's sockets do differently.** Since compatibility date 2026-03-17, a socket taken with `accept()` hands over bytes as a `Blob`, which the town would drop. So the town takes them with `acceptWebSocket`, whose `webSocketMessage` always gets an `ArrayBuffer`. And wrangler dev doesn't answer a phone's close, whatever the compatibility date says, so the town answers it itself. A phone waits for that before it's closed.
 - **What it costs.** Cloudflare bills 20 incoming WebSocket messages as one request. Twenty-five people for two hours is about 180,000, which is past the free plan's 100,000 a day, so playing for real is the $5 a month plan. The free plan does for building and a few testers. Whether the free plan's 100,000 counts messages 20 to one too, Cloudflare doesn't say.
+- **The town behind the title card.** On a page that's the town everyone shares, the town's on behind the title card from the first frame, as it is when it's shared: the opening's things put away and no trains. Its comings and goings wait until `src/together.js` is loaded, which is a moment, since it's `net` that keeps the drivers off the roads, and a driver who'd started before then would stop dead in the road once it was on.
+- **How many are in town.** The title card asks the town's `/here`, beside its own address, when it comes up and every 10 s while it's up and the tab's showing. Nothing's said under Play if there's nobody to ask.
 - **Staying connected.** A phone that says nothing for 5 s is let go. A dropped line tries again by itself, and a newer phone with the same key, or the hero's link, takes over.
 - **Different versions of the game.** Each phone sends a fingerprint of the parked vehicles. A town only mixes games whose vehicles are the same, since that's what the list's places mean.
 - **Parking exactly.** Getting out sends one last pose from the vehicle at once, so the town leaves it exactly where they did. Another phone ignores that rider's older poses from in it, even though smoothing puts those a little way back down the road.

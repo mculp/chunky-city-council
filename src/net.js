@@ -13,9 +13,13 @@ export const NET_PORT = 8787;
 export const TALK_URL = 'https://chunky.chunkymetro.workers.dev/talk';
 // and the town everyone shares, beside it
 export const TOWN_URL = 'wss://chunky.chunkymetro.workers.dev/town';
-// Where Play with others goes: the town it's given with ?net=…, and with ?net alone the one everyone shares on the game's own site,
+// Where Play goes: the town it's given with ?net=…, and otherwise the one everyone shares on the game's own site,
 // which is https, or one on the same machine as the page anywhere else, which a phone on the same network finds by the page's address
 export const townUrl = (given, { protocol, hostname }) => given || (protocol === 'https:' ? TOWN_URL : `ws://${hostname || 'localhost'}:${NET_PORT}`);
+// where a town says how many are in it right now, for the title card: beside it, at /here, and null for an address that isn't one
+export function hereUrl(town) {
+  try { const u = new URL(town); u.protocol = u.protocol === 'wss:' ? 'https:' : 'http:'; u.pathname = `${u.pathname.replace(/\/$/, '')}/here`; u.search = ''; return u.href; } catch { return null; }
+}
 // who a phone is: a key it makes the first time it's needed and keeps, for the town and for the characters' words
 export const PHONE_KEY = /^[\w-]{16,128}$/;
 // how someone is, besides where: on their feet (walking, running, standing), swimming, or knocked down
