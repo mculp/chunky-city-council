@@ -8399,21 +8399,16 @@ ghost.position.set(-17.5, 1.3, 7.5);
   const tidyOpening = () => { nooseRing.visible = knot.visible = false; S.removedNoose = true; ropeTop.visible = false; ropeTail.visible = false; lantern.visible = false; bottle.visible = false; };
   const game = {
     url: town.get('net'), store: saveStore, parked, TEST, reduceMotion,
-    S, HP, player, cam, camera, scene, heroRoot, vehicles: VEHICLES, map: MAP, water: WATER, wakeRoad: WAKE_ROAD, wakeBridge: WAKE_BRIDGE,
+    S, HP, player, cam, camera, scene, heroRoot, vehicles: VEHICLES, map: MAP, water: WATER,
+    // where everyone starts in a town that's shared: out front of the gas station between the pumps and the road, where Coop can see them
+    start: (() => { const [x, z] = gasAt(53, 12.5); return { x, z, look: { x: NPCS.coop.spot.x, z: NPCS.coop.spot.z } }; })(),
     looks: CROWD_LOOKS, crowdParts, zombieLine, TOWN_SCALE, ZOMBIE_HIP, HEAD, SEATED, HERO_SCALE, HERO_HIPS, SWING_POSES, SWING_T, hoods: { stand: heroHood, swim: heroHoodSwim },
     hillUp, floorAt, onRoad, blocked: blockedInTown, markVehicle, toast, prompt, getOut, rattle,
-    get time() { return time; }, get driving() { return driving; }, get swingT() { return swingT; }, get cardT() { return cardT; },
+    get time() { return time; }, get driving() { return driving; }, get swingT() { return swingT; },
     vehMoved() { vehDirty = true; },
     trainsOff() { trainsOn = false; },
     leave() { net = null; },
-    opening() { $('title').hidden = true; startHang(); },
-    dropBottle() { if (bottle.parent === hero.body) dropProp(bottle, true); },
-    // what the opening has waiting to be said, since swimming for the bank isn't theirs to do
-    letGo() { timers.length = 0; objective(null); },
-    fade(k) { gifMat.uniforms.uFade.value = k; },
-    // coming to where they're put, without his fever
-    comeTo(x, z, yaw) { tidyOpening(); startWake(); feverLeft = 0; feverTo(0); player.pos.set(x, floorAt(x, z), z); player.yaw = yaw; cam.yaw = yaw + Math.PI; cam.snap = true; },
-    // straight into town, where he wakes or where they were
+    // straight into town, where they're put
     toTown(at) {
       $('title').hidden = true; tidyOpening(); HP.kind = 'run'; onWakeBridge(); feverLeft = 0; feverTo(0); gifMat.uniforms.uFade.value = 1; startTown();
       if (at) { player.pos.set(at.x, at.y, at.z); player.yaw = at.yaw; player.grounded = true; cam.yaw = at.yaw + Math.PI; cam.snap = true; }

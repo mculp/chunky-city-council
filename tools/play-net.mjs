@@ -1,9 +1,10 @@
 // Playing together (CHUNKY-151, step 1), in real Chrome against a real town on this machine, with real key presses, clicks and taps.
-// Two newcomers press Play with others, one on a keyboard and one on a phone: a name each and a look, the opening watched with the
-// rope cut for them, and they come to on the riverbank by the Griffis Fountain bridge. Then each sees the other, by name and by look,
-// walking, running, driving and swinging, and on the map; a truck nudges someone aside and a swing goes through them, and nobody's
-// hurt. One goes and comes back to where they left, with what they had, and doesn't watch the opening again. Then the hero's link:
-// everyone sees the hero, and only one phone at a time is him. Fails on anything out of place or a console error.
+// Two newcomers press Play with others, one on a keyboard and one on a phone: a name each and a look, and they're straight into town
+// out front of the gas station, where Coop can see them, on dry ground and with nothing in the objective box (CHUNKY-169). Then each
+// sees the other, by name and by look, walking, running, driving and swinging, and on the map; a truck nudges someone aside and a
+// swing goes through them, and nobody's hurt. One goes into the river and comes back out front of the gas station, with what they
+// had. Then the hero's link, who starts there too: everyone sees the hero, and only one phone at a time is him. Fails on anything out
+// of place or a console error.
 //
 //   npm i && npm run net -- [--shots dir]
 import { createHash } from 'node:crypto';
@@ -73,6 +74,29 @@ const standOnA = async (p, id, at) => {
   await on(p, ([x, z]) => __game.place(x, z), [at.x, at.z]);
   return until(async () => { const s = await seenOnA(id); return s && away(s, at) < .3 ? s : null; }, 4000);
 };
+// Every mode a phone's in and everything its objective box says, from now on: the modes a frame at a time, and the box each time it
+// changes, so that nothing's missed however quickly it's gone
+const record = (p) => on(p, () => {
+  const seen = window.__seen = { modes: [__game.S.mode], said: [] }, box = document.getElementById('obj');
+  new MutationObserver(() => { const t = box.hidden ? '' : box.textContent; if (t && !seen.said.includes(t)) seen.said.push(t); }).observe(box, { attributes: true, childList: true, characterData: true, subtree: true });
+  (function look() { if (seen.modes.at(-1) !== __game.S.mode) seen.modes.push(__game.S.mode); requestAnimationFrame(look); })();
+});
+// Once a phone's let into town and has stood there a moment: what it went through on the way, and where they're standing, against Coop
+const cameIn = async (p) => {
+  await until(() => on(p, () => __game.S.mode === 'town' && !!window.__net?.you().id), 10000);
+  await sleep(400);
+  return on(p, () => {
+    const G = __game, P = G.player.pos, C = G.npcs.coop, floor = G.floorAt(P.x, P.z), off = (a) => Math.abs(Math.atan2(Math.sin(a), Math.cos(a)));
+    return { ...window.__seen, id: __net.you().id, x: P.x, z: P.z, fromCoop: Math.hypot(P.x - C.x, P.z - C.z), dry: floor - G.water.level(P.x, P.z), feet: P.y - floor, kind: G.HP.kind, blocked: G.blocked(P.x, P.z, P.y), facing: off(G.player.yaw - Math.atan2(C.x - P.x, C.z - P.z)), behind: off(G.cam.yaw - G.player.yaw - Math.PI), hero: G.heroRoot.visible };
+  });
+};
+// out front of the gas station, near enough to Coop for him to turn to them, facing him, and on their feet on dry ground in nothing
+function startsAtTheGasStation(name, w) {
+  check(`${name} goes straight into town, without the opening: ${w.modes.join(' → ')}`, w.modes.length > 1 && w.modes.slice(1).every((m) => m === 'town'), w);
+  check(`out front of the gas station, ${w.fromCoop.toFixed(1)} m from Coop, which is near enough for him to turn to them`, w.fromCoop > 1 && w.fromCoop < 6.5, w);
+  check(`facing him, to ${w.facing.toFixed(3)} radians, with the camera behind them`, w.facing < .05 && w.behind < .05, w);
+  check(`on their feet on dry ground, ${w.dry.toFixed(2)} m above any water, and inside nothing`, w.kind === 'run' && Math.abs(w.feet) < .1 && w.dry > .05 && !w.blocked, w);
+}
 
 try {
   for (const p of pages) await on(p, () => __game.resume());
@@ -95,35 +119,21 @@ try {
   const picked = await on(b, () => [...document.querySelectorAll('#join .look')].findIndex((e) => e.getAttribute('aria-pressed') === 'true'));
   check('B picks the fourth', picked === 3, picked);
   await snap(b, '01-b-picks');
+  for (const p of pages) await record(p);
   for (const p of pages) await press(p, '#joinGo');
 
-  // ---------------- the opening, watched once, with the rope cut for them
-  const watched = await Promise.all(pages.map(async (p) => {
-    const seen = new Set(), prompts = new Set();
-    const end = Date.now() + 40000;
-    while (Date.now() < end) {
-      const s = await on(p, () => ({ mode: __game.S.mode, prompt: document.getElementById('prompt').hidden ? '' : document.getElementById('prompt').textContent, title: !document.getElementById('title').hidden, join: !document.getElementById('join').hidden, cut: __game.HP.cut }));
-      seen.add(s.mode); if (s.prompt) prompts.add(s.prompt);
-      if (s.mode === 'town' && seen.has('hang')) return { seen: [...seen], prompts: [...prompts], ...s };
-      await sleep(50);
-    }
-    return { seen: [...seen], prompts: [...prompts], timedOut: true };
-  }));
-  for (const [p, name, w] of [[a, 'A', watched[0]], [b, 'B', watched[1]]]) {
-    check(`${name} watches the opening through: ${w.seen.join(' → ')}`, !w.timedOut && ['hang', 'fall', 'wake', 'town'].every((m) => w.seen.includes(m)) && !w.seen.includes('land') && !w.seen.includes('bridge'), w);
-    check(`with the rope cut for them, and nothing asked of them on the way: ${w.prompts.length ? w.prompts.join(' / ') : 'nothing'}`, !w.prompts.length, w);
-    check('and the title card and the name are gone', !w.title && !w.join, w);
+  // ---------------- straight into town, out front of the gas station where Coop can see them, and with nothing to do
+  const came = await Promise.all(pages.map(cameIn));
+  for (const [name, w] of [['A', came[0]], ['B', came[1]]]) {
+    startsAtTheGasStation(name, w);
+    check(`and the objective box never says a thing: ${w.said.length ? w.said.map((t) => `"${t}"`).join(' / ') : 'nothing'}`, !w.said.length, w);
   }
-  const bank = await Promise.all(pages.map((p) => on(p, () => {
-    const G = __game, P = G.player.pos, B = G.map.crossings.find((c) => c.road === 'griffis_fountain_rd' && c.with === 'river');
-    return { x: P.x, z: P.z, fromBridge: Math.hypot(P.x - B.x, P.z - B.z), dry: G.floorAt(P.x, P.z) - G.water.level(P.x, P.z), onRoad: G.onRoad(P.x, P.z), blocked: G.blocked(P.x, P.z, P.y), hero: G.heroRoot.visible };
-  })));
-  for (const [name, w] of [['A', bank[0]], ['B', bank[1]]]) check(`${name} comes to on the riverbank, ${w.fromBridge.toFixed(0)} m from where the road crosses the river, and on their feet on dry ground`, w.fromBridge < 45 && w.dry > .05 && !w.onRoad && !w.blocked, w);
-  check(`and not on top of each other: ${away(bank[0], bank[1]).toFixed(1)} m apart`, away(bank[0], bank[1]) > 1, bank);
-  check('nobody has the hoodie or the tape, not even on their own screen', !bank[0].hero && !bank[1].hero, bank);
-  const told = await Promise.all(pages.map((p) => on(p, () => { const o = document.getElementById('obj'); return o.hidden ? '' : o.textContent; })));
-  check(`each is told the road into town: ${told.map((t) => `"${t}"`).join(' / ')}`, told.every((t) => /^Follow Griffis Fountain Rd into town$/.test(t)), told);
-  await snap(a, '02-a-comes-to');
+  const gone = await Promise.all(pages.map((p) => on(p, () => document.getElementById('title').hidden && document.getElementById('join').hidden)));
+  check('and the title card and the name are gone', gone.every(Boolean), gone);
+  check(`and they're not on top of each other: ${away(came[0], came[1]).toFixed(1)} m apart`, away(came[0], came[1]) > 1, came);
+  check('nobody has the hoodie or the tape, not even on their own screen', !came[0].hero && !came[1].hero, came);
+  await snap(a, '02-a-at-the-gas-station');
+  await snap(b, '02-b-at-the-gas-station');
 
   // ---------------- each sees the other: who they are and what they look like
   let A = await me(a), B = await me(b);
@@ -371,25 +381,40 @@ try {
     if (inCar) { await a.page.keyboard.press('e'); await until(async () => !(await state(a)).drive); }
   }
 
-  // ---------------- coming back, where they left and with what they had, without the opening
+  // ---------------- coming back: out front of the gas station again, with what they had and not where they were standing, even when
+  // that was in the river, which is where the owner came back under it
   {
     await on(a, () => { __game.S.beans = 5; __game.S.items.bottle = 2; });
+    // out in the river well away from any bridge, and swimming
+    const river = await on(a, () => {
+      const G = __game, M = G.map, [tx, tz] = M.fromTrue(0, 0), bridges = M.crossings.filter((k) => k.with === 'river');
+      const [x, z] = M.river.flat().filter(([x, z]) => M.inBounds(x, z) && Math.hypot(x, z) > 300 && bridges.every((k) => Math.hypot(k.x - x, k.z - z) > 90) && G.water.level(x, z) > G.floorAt(x, z) + .5)
+        .sort((p, q) => Math.hypot(p[0] - tx, p[1] - tz) - Math.hypot(q[0] - tx, q[1] - tz))[0];
+      G.place(x, z); return { x, z };
+    });
+    const swimming = await until(() => on(a, () => __game.HP.kind === 'swim'), 4000);
+    const seenThere = await until(async () => { const s = await on(b, (id) => __net.link.others().find((o) => o.id === id), A.id); return s && away(s, river) < 3 ? s : null; }, 4000);
     await sleep(800);
     const left = await me(a);
+    check(`A swims out into the river, and B's phone has them there, ${seenThere ? away(seenThere, river).toFixed(1) : '?'} m off`, swimming && !!seenThere, { river, left, seenThere });
     await a.page.reload({ waitUntil: 'load' }); await a.page.waitForFunction(() => window.__game && window.__game.resume);
     await on(a, () => __game.resume());
     await a.page.click('#together');
     const name = await until(() => on(a, () => { const j = document.getElementById('join'); return j && !j.hidden && document.getElementById('joinName').value; }));
     check(`A comes back and is asked who they are with it filled in: "${name}"`, name === 'Junebug', name);
+    await record(a);
     await a.page.click('#joinGo');
-    const modes = new Set(); let back = null;
-    await until(async () => { const s = await on(a, () => ({ mode: __game.S.mode, joined: !!__net.link.id })); modes.add(s.mode); return s.joined && s.mode === 'town'; }, 8000);
-    back = await me(a);
+    const back = await cameIn(a);
+    startsAtTheGasStation('A, coming back,', back);
+    check(`and not in the river they left from, ${away(left, back).toFixed(0)} m off`, away(left, back) > 100, { left, back });
     const had = await state(a);
-    check(`and is straight back in town without the opening (${[...modes].join(' → ')}), ${away(left, back).toFixed(2)} m from where they left`, !modes.has('hang') && !modes.has('fall') && away(left, back) < .5, { left, back, modes: [...modes] });
     check(`with what they had: ${had.beans} beans and ${had.items.bottle} bottles`, had.beans === 5 && had.items.bottle === 2, had);
-    A = back;
-    check('and B sees them back', !!await until(() => bodyOf(b, A.id)), null);
+    check(`and the objective box still never says a thing: ${back.said.length ? back.said.map((t) => `"${t}"`).join(' / ') : 'nothing'}`, !back.said.length, back);
+    A = await me(a);
+    check('and B sees them back', !!await until(async () => { const s = await on(b, (id) => __net.link.others().find((o) => o.id === id), A.id); return s && away(s, A) < 1 ? s : null; }), null);
+    await snap(a, '07-a-back-at-the-gas-station');
+    // and back out on US 80, where there's room beside them for the hero
+    await onRoad(a, spot.x, spot.z); await sleep(300); A = await me(a);
   }
 
   // ---------------- the hero's link: everyone sees the hero, and only one phone at a time is him
@@ -399,8 +424,12 @@ try {
     const kept = await on(c, () => ({ hash: location.hash }));
     check('the hero\'s link comes off the address as soon as it\'s read', !kept.hash.includes('hero'), kept);
     await on(c, () => __game.resume());
-    await c.page.click('#together'); await c.page.click('#joinName'); await c.page.keyboard.type('Matt'); await c.page.click('#joinGo');
-    await until(async () => (await me(c)).mode === 'town' && (await me(c)).id, 10000);
+    await c.page.click('#together'); await c.page.click('#joinName'); await c.page.keyboard.type('Matt');
+    await record(c);
+    await c.page.click('#joinGo');
+    const Cin = await cameIn(c);
+    startsAtTheGasStation('The hero', Cin);
+    check(`and his chapters are all the objective box says: ${Cin.said.map((t) => `"${t}"`).join(' / ') || 'nothing'}`, Cin.said.length > 0 && Cin.said.every((t) => /^Stock up on beans/.test(t)), Cin);
     const C = await me(c);
     check('the owner\'s phone is the hero, in his hoodie, on his own screen', C.hero, C);
     await onRoad(c, A.x + 4, A.z);
@@ -445,7 +474,7 @@ try {
     await until(async () => (await me(d)).id, 10000);
     const told = await until(() => on(c, () => !document.getElementById('join').hidden && document.getElementById('joinSay').textContent), 4000);
     check(`the hero on a second phone takes over, and the first is told: "${told}"`, /hero on another phone/.test(told ?? ''), told);
-    // the second phone starts where he wakes, which is too far off for A to see him, so it's who's in town that says
+    // it's who's in town that says, and not who's drawn near A
     const D = await me(d);
     const one = await until(() => on(a, ([c, d]) => { const all = __net.link.others(), h = all.filter((w) => w.hero); return h.length === 1 && h[0].id === d && !all.some((w) => w.id === c) ? h[0].id : null; }, [C.id, D.id]), 4000);
     check('and there\'s one hero in town, on the second phone, with the first one gone', one === D.id, { one, C: C.id, D: D.id });

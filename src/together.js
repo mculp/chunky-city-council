@@ -3,8 +3,8 @@
 // then: index.html's few lines for it all hang on `net`, which stays null in a game on its own.
 //
 // What goes over the wire, how someone's steps are smoothed and the town itself are in src/net.js and server/. This is the phone's
-// side: the panel for a name and a look, the opening watched once with the rope cut for them, coming back where they left, everyone's
-// bodies, their names over them and their dots on the map, the vehicles they drive, and WAVE.
+// side: the panel for a name and a look, starting out front of the gas station every time they come, everyone's bodies, their names
+// over them and their dots on the map, the vehicles they drive, and WAVE.
 //
 // Everyone but the owner is someone from Chunky who un-quit, in a townsperson's body from the town's own looks, standing all the way
 // up and not glowing, which is what marks a player in a crowd. That goes for you on your own screen too. They're the crowd's own
@@ -40,8 +40,7 @@ const CSS = `
 .nettag[hidden]{display:none}
 #bW{position:absolute;right:9px;bottom:162px;width:54px;height:54px;font-size:10px;background:var(--panel);color:var(--cream);border-color:var(--cream);box-shadow:0 3px 0 var(--ink)}
 #bW[hidden]{display:none}
-#bH:not([hidden])~#bW{bottom:228px}
-body.watching .ctl,body.watching #keyStrip{visibility:hidden}`;
+#bH:not([hidden])~#bW{bottom:228px}`;
 
 // A private window can refuse storage outright, and then who they are lasts as long as the page
 function kept(store) {
@@ -61,9 +60,9 @@ export function together(G) {
   // the town on this machine, unless the address says where
   const url = townUrl(G.url, location);
   let link = null, you = { id: 0, name: '', look: 0, hero: false }, picked = null;
-  // started: let into town the first time; watching: the opening; arrived: somewhere in town, and saying where; alone: let go of the town
-  let started = false, watching = false, arrived = false, alone = false, fadeT = -1;
-  let swings = 0, waves = 0, swungAt = -9, wavedAt = -9, wasSwinging = false, keptAt = 0, keptWas = '';
+  // started: let into town, and saying where they are; alone: let go of the town
+  let started = false, alone = false;
+  let swings = 0, waves = 0, swungAt = -9, wavedAt = -9, wasSwinging = false, keptWas = '';
 
   // ---------------- the panel: a name and a look
   document.head.insertAdjacentHTML('beforeend', `<style>${CSS}</style>`);
@@ -119,7 +118,9 @@ export function together(G) {
     show(why);
   }
 
-  // ---------------- let in: the opening once, or back where they were
+  // ---------------- let in: out front of the gas station, the first time and every time
+  // Everyone starts where Coop can see them, the owner too, and comes back there with what they had and not where they were standing,
+  // which could be the middle of the river (CHUNKY-169). There's no opening in a town that's shared.
   function welcome(m) {
     you = { ...you, id: m.id, name: m.name, look: m.look, hero: m.hero };
     for (const c of m.cars ?? []) park(c);
@@ -127,10 +128,10 @@ export function together(G) {
     // back after the line dropped: nothing to start again
     if (started) return;
     started = true; G.trainsOff();
-    if (m.saved) { G.toTown(freeSpot(m.saved)); restore(m.saved); arrived = true; }
-    // the owner's opening is theirs, and the first time in town they start where he wakes
-    else if (m.hero) { G.toTown(null); arrived = true; }
-    else { watching = true; document.body.classList.add('watching'); G.opening(); }
+    if (m.saved) restore(m.saved);
+    // in town from the first, so there's no road into town for the objective box to give them
+    S.flags.arrived = true;
+    G.toTown(startSpot());
   }
   function restore(had) {
     S.beans = had.beans ?? 0; S.gas = had.gas ?? 0;
@@ -138,44 +139,22 @@ export function together(G) {
     Object.assign(S.items, had.items ?? {});
     keptWas = JSON.stringify({ beans: S.beans, items: S.items, gas: S.gas });
   }
-  // where they left, unless something's been parked on it since, or it was in something they were driving
-  function freeSpot(at) {
-    for (let r = 0; r <= 6; r += .8) for (let k = 0; k < (r ? 10 : 1); k++) {
-      const x = at.x + Math.cos(k * .628) * r, z = at.z + Math.sin(k * .628) * r, y = G.floorAt(x, z);
-      if (!G.blocked(x, z, y) && y > G.water.level(x, z) - .1) return { x, y, z, yaw: at.yaw };
+  // Each of them a little apart from the others, on a sunflower's spiral out from the start, and facing Coop. Each spot's checked on the
+  // ground before anyone's put there: dry, inside nothing, near enough for him to turn to them, and nothing between them and him.
+  function startSpot() {
+    const at = G.start, from = you.id % MOST, face = (x, z) => Math.atan2(at.look.x - x, at.look.z - z);
+    for (let i = 0; i < MOST * 2; i++) {
+      const n = (from + i) % (MOST * 2), r = .55 * Math.sqrt(n), a = n * 2.39996, x = at.x + Math.cos(a) * r, z = at.z + Math.sin(a) * r;
+      if (seen(x, z)) return { x, y: G.floorAt(x, z), z, yaw: face(x, z) };
     }
-    return at;
+    return { x: at.x, y: G.floorAt(at.x, at.z), z: at.z, yaw: face(at.x, at.z) };
   }
-
-  // The opening, watched: the rope's cut for them once the cards are done, it ends at the river, and they come to on the bank by the
-  // Griffis Fountain bridge, where he wakes. The hanging stays his, so nothing's asked of them on the way.
-  function watch(dt) {
-    if (S.mode === 'hang' && G.cardT <= 0 && HP.cut < 1) { HP.cut = Math.min(1, HP.cut + dt / 2.4); G.dropBottle(); }
-    if (S.mode === 'hang' || S.mode === 'fall') G.prompt(null);
-    if (S.mode === 'swim' && fadeT < 0) { fadeT = 0; G.letGo(); }
-    if (fadeT >= 0) {
-      fadeT += dt; G.fade(1 - Math.min(1, fadeT / .9));
-      if (fadeT >= 1) { const at = bankSpot(); watching = false; fadeT = -1; document.body.classList.remove('watching'); G.comeTo(at.x, at.z, at.yaw); arrived = true; }
-    }
-  }
-  // on dry ground by the water, upstream or down of where the road crosses it, each of them somewhere a little different
-  function bankSpot() {
-    const B = G.wakeBridge, s0 = G.map.sOn(G.wakeRoad, B.x, B.z), turn = (you.id * 2.39996) % (Math.PI * 2);
-    let best = null;
-    for (const along of [-14, -20, -26, -32, -8, -38]) {
-      const p = G.map.along(G.wakeRoad, s0 + along);
-      for (const side of [1, -1]) for (const out of [7, 10, 13, 16, 5]) {
-        const x = p.x + p.tz * side * out + Math.cos(turn) * 1.5, z = p.z - p.tx * side * out + Math.sin(turn) * 1.5, y = G.floorAt(x, z), wet = G.water.level(x, z);
-        if (y < wet + .1 || G.blocked(x, z, y) || G.onRoad(x, z)) continue;
-        // facing the water's what makes it the bank
-        const near = Math.min(...[1, 2, 3].map((k) => (G.water.level(x + p.tx * k * 2, z + p.tz * k * 2) > G.floorAt(x + p.tx * k * 2, z + p.tz * k * 2) ? k : 9)));
-        const score = Math.abs(along) * .05 + near;
-        if (!best || score < best.score) best = { x, z, yaw: Math.atan2(p.tx, p.tz), score };
-      }
-    }
-    if (best) return best;
-    const p = G.map.along(G.wakeRoad, s0 - 3);
-    return { x: p.x, z: p.z, yaw: Math.atan2(-p.tx, -p.tz) };
+  function seen(x, z) {
+    const { look } = G.start, y = G.floorAt(x, z), d = Math.hypot(look.x - x, look.z - z);
+    if (d < 1.5 || d > 6.5 || y < G.water.level(x, z) + .1 || G.blocked(x, z, y)) return false;
+    // up to a metre short of him, since he's something to walk into himself
+    for (let s = .5; s < d - 1; s += .5) { const px = x + (look.x - x) * s / d, pz = z + (look.z - z) * s / d; if (G.blocked(px, pz, G.floorAt(px, pz))) return false; }
+    return true;
   }
 
   // ---------------- the wire
@@ -186,16 +165,15 @@ export function together(G) {
     if (alone) return;
     const d = G.driving, P = G.player.pos;
     // just out of something: where it was left goes first, so it's left there for everyone
-    if (riding && riding !== d && arrived) link.now(riding.x, riding.y, riding.z, riding.yaw, { ride: G.vehicles.indexOf(riding) + 1, swings, waves, how: HOW.foot });
+    if (riding && riding !== d && started) link.now(riding.x, riding.y, riding.z, riding.yaw, { ride: G.vehicles.indexOf(riding) + 1, swings, waves, how: HOW.foot });
     riding = d;
-    if (!arrived) link.tend();
+    if (!started) link.tend();
     else if (d) link.update(d.x, d.y, d.z, d.yaw, { ride: G.vehicles.indexOf(d) + 1, swings, waves, how: HOW.foot });
     // down until they're halfway up, coming to
     else link.update(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: HP.kind === 'swim' ? HOW.swim : HP.kind === 'down' && HP.down > .5 ? HOW.down : HOW.foot });
-    // What they carry goes when it changes, and every few seconds while they're nowhere yet, which is how the town knows they're
-    // still there through the opening
-    const now = performance.now(), had = JSON.stringify({ beans: S.beans, items: S.items, gas: S.gas });
-    if (link.id && (had !== keptWas || (!arrived && now - keptAt > 2000))) { keptWas = had; keptAt = now; link.keep({ beans: S.beans, items: { ...S.items }, gas: S.gas }); }
+    // what they carry goes whenever it changes
+    const had = JSON.stringify({ beans: S.beans, items: S.items, gas: S.gas });
+    if (link.id && had !== keptWas) { keptWas = had; link.keep({ beans: S.beans, items: { ...S.items }, gas: S.gas }); }
   }
 
   // ---------------- vehicles someone else is in
@@ -402,7 +380,7 @@ export function together(G) {
   // ---------------- WAVE: a button on a phone, and V on a keyboard
   const waveButton = document.createElement('button'); waveButton.className = 'btn'; waveButton.id = 'bW'; waveButton.textContent = 'WAVE'; waveButton.setAttribute('aria-label', 'Wave'); waveButton.hidden = true;
   document.getElementById('btns')?.appendChild(waveButton);
-  const doWave = () => { if (!arrived || alone || S.mode !== 'town' || G.time - wavedAt < WAVE_FOR) return; waves = (waves + 1) & 15; wavedAt = G.time; };
+  const doWave = () => { if (!started || alone || S.mode !== 'town' || G.time - wavedAt < WAVE_FOR) return; waves = (waves + 1) & 15; wavedAt = G.time; };
   waveButton.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); doWave(); });
   addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 'v' && !e.repeat && panel.hidden) doWave(); });
 
@@ -422,15 +400,14 @@ export function together(G) {
     // after the world's placed, each frame that's drawn
     frame(dt, step) {
       if (!started) return;
-      if (watching) watch(dt);
       // nobody but the owner wears the hoodie and the tape, and that's on everyone's screen including their own
-      if (arrived && !you.hero) G.heroRoot.visible = false;
+      if (!you.hero) G.heroRoot.visible = false;
       const swinging = G.swingT >= 0; if (swinging && !wasSwinging) { swings = (swings + 1) & 255; swungAt = G.time; } wasSwinging = swinging;
-      const showWave = arrived && !alone && S.mode === 'town'; if (waveButton.hidden === showWave) waveButton.hidden = !showWave;
+      const showWave = !alone && S.mode === 'town'; if (waveButton.hidden === showWave) waveButton.hidden = !showWave;
       const list = alone || !link ? [] : link.others(), cx = G.camera.position.x, cz = G.camera.position.z;
       drive(list, step); nudge();
       let n = 0, hero = null;
-      if (arrived && !you.hero) {
+      if (!you.hero) {
         const d = G.driving, P = G.player.pos;
         pose(n++, { id: 0, x: P.x, y: P.y, z: P.z, yaw: G.player.yaw, speed: HP.speed, phase: HP.phase, look: you.look, seat: d, how: HP.kind === 'swim' ? HOW.swim : HOW.foot, down: HP.kind === 'down' ? HP.down : 0, air: HP.kind === 'air', swingAge: G.time - swungAt, waveAge: G.time - wavedAt }, step);
         slots[0].id = you.id;
