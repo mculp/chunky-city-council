@@ -262,6 +262,10 @@ Asked what Toni looks like, her hair and what she wears:
 
 **In the game:** she's at the burned house on the south side of Gallatin St, straight across from Clay St, ten years old and see-through, in rows like a picture on an old television, with long brown hair, a big green coat and boots, and a frog in her hand. There's no jar. She catches them all night in the ditch along Gallatin and the tall grass round the house, and goes up to whoever comes by and shows them one. She has twelve, with names, and shows him one he hasn't seen every time he comes by, and remembers which. When he's seen them all she gives him Gerald, and he can't swing till he lets Gerald go in a ditch. Nothing can hurt her, nobody lives in the house and nothing's parked at it. What she says and the cast say about Gerald is the Creative Director's, in `data/toni.json` and `data/cast.json`, and `data/toni.md` has the rest.
 
+After trying her in the game, through the Liaison, on 2026-11-04 at 07:16:
+
+> I think she needs to be redone. She looks like a tiny adult, I can't communicate with her, the frog she's holding looks misplaced in the world, she should be a little more heavyset. not fat but big boned. she didn't have 12 frogs she just talked about gerald
+
 ## The fish camp
 
 On 2026-11-03, as it's quoted at the top of CHUNKY-149:
