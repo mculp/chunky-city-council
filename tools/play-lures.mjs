@@ -186,6 +186,8 @@ const lot = await g(() => {
   return { kind: truck.kind, can: G.lures.canAlarm(truck), n: crowd.length, angle: +(best.a * 180 / Math.PI).toFixed(0), far: crowd.map(([x, z]) => Math.round(Math.hypot(x - truck.x, z - truck.z))), throwAt: Math.round(Math.hypot(him[0] - truck.x, him[1] - truck.z)) };
 });
 check(`there's a truck with an alarm in it, ${lot.throwAt} m from him, and a crowd ${lot.far[0]} to ${lot.far.at(-1)} m from it at ${lot.angle}° between it and him`, lot.can && lot.n === 12 && lot.angle >= 35, lot);
+// The sound files come in four at a time from the first touch, and only while nothing's being played through, so the alarm's has to be in before all of it's played through at once below
+await page.waitForFunction(() => __game.sound.state().files.includes('vehicle.alarm'), null, { timeout: 20000 }).catch(() => {});
 await tap();
 const alarm = await g(() => {
   // what's on the screen before it comes down on the truck, to see what the alarm and the three stopping and turning to him put on it
