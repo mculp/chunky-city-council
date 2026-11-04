@@ -97,6 +97,25 @@ test('the page can only pick a model that\'s on the list, for trying them side b
   assert.equal(up.calls.length, 1);
 });
 
+test('a model that only answers reasoning is given the least it will take and room to do it in, and the rest are asked with none', async () => {
+  const thinkers = Object.keys(MODELS).filter((m) => MODELS[m].reasoning);
+  assert.ok(thinkers.length, 'there\'s one on the list to try');
+  for (const model of thinkers) {
+    const { go, up } = talk();
+    await go(ask(body({ model })));
+    assert.deepEqual(up.calls[0].body.reasoning, MODELS[model].reasoning, model);
+    assert.equal(up.calls[0].body.max_tokens, MODELS[model].tokens, model);
+    assert.ok(MODELS[model].tokens > TALK.tokens, model);
+  }
+});
+
+test('a model that reasons, given up on, is charged for all the room it was given', async () => {
+  const model = Object.keys(MODELS).find((m) => MODELS[m].reasoning), { go, bill } = talk({ up: upstream({ hang: true }), wait: 30 });
+  await go(ask(body({ model })));
+  const chars = SAID.reduce((n, m) => n + m.content.length, 0), { in: inPrice, out: outPrice, tokens } = MODELS[model];
+  assert.ok(Math.abs(bill.kept.get('2026-11') - (inPrice * chars / 4 + outPrice * tokens) / 1e6) < 1e-12);
+});
+
 // The Creative Director's pick from tools/talk-trial.mjs, and what answers when it can't
 test('with nothing named, the Creative Director\'s pick is asked, and nothing else once it answers', async () => {
   const { go, up } = talk({ up: voices() });
