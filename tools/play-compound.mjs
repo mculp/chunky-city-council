@@ -142,8 +142,9 @@ const downHill = await g(() => ({ ...walkTo([true2(1053, 602), true2(1053, 599),
 check('he walks from the end of the drive down the hill to the cabin and steps up onto its deck, which is wood underfoot', downHill.off < .8 && downHill.deck && Math.abs(downHill.up - .3) < .05 && downHill.under === 'wood', downHill);
 const inCabin = await g(() => ({ ...walkTo([doorsOf(__game.compound.CABIN).in], .4, 8), ...stand() }));
 check('  and in through its door', inCabin.hit === 900019, inCabin);
-const toCinema = await g(() => ({ ...walkTo([doorsOf(__game.compound.CABIN).out, true2(1053, 598.6), true2(1049, 596.4)], .5, 30), ...stand() }));
-check('  and out again, and west along the decks to the cinema', toCinema.off < .8 && toCinema.deck && Math.abs(toCinema.up - .3) < .05, toCinema);
+// round the projector, to between the rows of chairs
+const toCinema = await g(() => ({ ...walkTo([doorsOf(__game.compound.CABIN).out, true2(1053, 598.6), true2(1051.2, 597.4), __game.compound.CINEMA.at(3.05, 3.3)], .5, 30), ...stand() }));
+check('  and out again, and along the decks to the cinema beside it', toCinema.off < .8 && toCinema.deck && Math.abs(toCinema.up - .3) < .05, toCinema);
 const toStudio = await g(() => ({ ...walkTo([true2(1045.9, 598.6), doorsOf(__game.compound.STUDIO).out], .5, 30), ...stand() }));
 check('  and on south along the deck to the studio\'s door', toStudio.off < .8 && toStudio.deck, toStudio);
 const inStudio = await g(() => ({ ...walkTo([doorsOf(__game.compound.STUDIO).in], .4, 8), ...stand() }));
@@ -154,6 +155,35 @@ const things = await g(() => {
 });
 check('the swing is out on the deck', things.swing, things);
 check('the studio has the easel, the bench and six canvases', things.easel === 1 && things.bench === 1 && things.canvases === 6, things);
+
+// ---------------- which way the cinema faces: the screen right up against the cabin's west end with its face to the south, the chairs in rows in front of it facing north,
+// and the projector behind them. Then from between the rows, looking north, the screen's straight ahead and fills the view, with the cabin just to its right.
+const facing = await g(() => {
+  const G = __game, C = G.compound, F = C.CINEMA, s = C.screen(), at = s.position, cabin = G.structures.find((b) => b.id === C.CABIN).pts;
+  const wall = Math.min(...cabin.map((p) => p[0])), ends = [Math.min(...cabin.map((p) => p[1])), Math.max(...cabin.map((p) => p[1]))];
+  // which way its face looks, from north round through east, and where its ends are
+  const ry = s.rotation.y, face = Math.round(Math.atan2(Math.sin(ry), -Math.cos(ry)) * 180 / Math.PI), across = [Math.cos(ry), -Math.sin(ry)], ends2 = [-2, 2].map((k) => [at.x + across[0] * k, at.z + across[1] * k]);
+  // a chair faces the way from its back to its seat: the back's the tallest of its boxes and the seat's the flattest
+  const chairs = G.wreck.props.filter((p) => p.kind === 'chair' && Math.hypot(p.cx - at.x, p.cz - at.z) < 9).map((p) => {
+    const by = [...p.boxes].sort((a, b) => (a.box.max.y - a.box.min.y) - (b.box.max.y - b.box.min.y)).map((h) => h.box.getCenter(at.clone())), seat = by[0], back = by.at(-1);
+    return { x: +seat.x.toFixed(1), z: +seat.z.toFixed(1), way: Math.round(Math.atan2(seat.x - back.x, back.z - seat.z) * 180 / Math.PI) };
+  });
+  const zs = chairs.map((c) => c.z).sort((a, b) => a - b), rows = 1 + zs.filter((z, i) => i && z - zs[i - 1] > .8).length;
+  // and from between the rows, looking north, where the screen and the cabin's west wall are across the view, from -1 at its left edge to 1 at its right
+  const [x, z] = F.at(3.05, 3.3); G.place(x, z); G.look(0); G.sim(.2, .2); G.step(.1);
+  const across2 = (wx, wz) => +at.clone().set(wx, at.y, wz).project(G.camera).x.toFixed(2), left = across2(...ends2[0]), right = across2(...ends2[1]);
+  return {
+    face, gap: +(wall - Math.max(ends2[0][0], ends2[1][0])).toFixed(2), beside: at.z > ends[0] && at.z < ends[1], chairs, rows, behind: Math.min(...chairs.map((c) => c.z)) - at.z,
+    projector: { past: +(C.projector.cz - Math.max(...zs)).toFixed(1), off: +Math.abs(C.projector.cx - at.x).toFixed(1) },
+    view: { left, right, cabin: Math.min(across2(wall, at.z), across2(wall, ends[0])) },
+  };
+});
+check(`the screen's face looks south (${facing.face}°), at the north edge of the deck, ${facing.gap} m from the cabin's west end`, Math.abs(facing.face) > 165 && facing.beside && facing.gap > 0 && facing.gap < 1.6, facing);
+check(`the chairs are in ${facing.rows} rows in front of it, every one facing north`, facing.rows === 2 && facing.chairs.length === 6 && facing.behind > 1.5 && facing.chairs.every((c) => Math.abs(c.way) < 25), facing.chairs);
+check('  and the projector is behind them, in line with the screen', facing.projector.past > .8 && facing.projector.off < .5, facing.projector);
+const v = facing.view;
+check(`from between the rows, looking north, the screen's straight ahead and fills the view (${v.left} to ${v.right}), with the cabin just to its right (${v.cabin})`, Math.abs(v.left + v.right) < .4 && v.right - v.left > 1 && v.cabin > v.right, v);
+await snap('cinema');
 
 // ---------------- the screen
 const film = await g(() => {

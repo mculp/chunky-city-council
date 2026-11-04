@@ -3271,9 +3271,10 @@ const patioMat = new THREE.MeshStandardMaterial({ color: '#a6a091', roughness: 1
   const here = nearHere(1045, 646, 90), [hx, hz] = F.at(4.66, 1.35);
   thing(here, 'hottub', hotTub(), hx, hz, F.yaw, 2.5, { solid: [2, 2, .95], chip: '#4c3a30' });
 }
-// ---- the outdoor cinema, on the deck running west from the cabin's door: the screen at its far end, the chairs, and the projector by the cabin throwing it back across the deck.
-// The deck's about 6 m square, as the owner said. CINEMA's along the screen and away from it, from the deck's south-west corner. The fenced lawn by the white building is LAWN.
-const LAWN = tilted(960.4, 659.7, -32), CINEMA = tilted(1044.2, 597.3, -90, CABIN_DECK_TOP);
+// ---- the outdoor cinema, on the deck beside the cabin's west end: the screen at its north edge facing south, right up against the cabin, the chairs in rows in front of it,
+// and the projector behind them throwing north. It's where the owner drew it, between the hill and the cabin, so that you look north to watch it.
+// CINEMA's along the screen and away from it, from the deck's north-west corner. The fenced lawn by the white building is LAWN.
+const LAWN = tilted(960.4, 659.7, -32), CINEMA = tilted(1049.85, 591.2, 0, CABIN_DECK_TOP);
 let screenOn = true;
 const SCREEN_FRAMES = 7;
 const leaderTex = textTex([''], 256 * SCREEN_FRAMES, 144, '#d8d0bc', '#000', '12px sans-serif', { after: (g) => {
@@ -3301,13 +3302,13 @@ let screenMesh = null, screenBeam = null, screenProjector = null, shedTank = nul
   flushBuckets(110);
 }
 {
-  const F = CINEMA, D = F.up, deck = nearHere(1047, 594, 110);
+  const F = CINEMA, D = F.up, deck = nearHere(1053, 595, 110);
   // two rows of lawn chairs, no two quite in line, facing the screen
   [[1.2, 2.6], [3.05, 2.45], [4.9, 2.65], [1.7, 4.05], [3.5, 4.2], [5, 4.1]].forEach(([u, v], i) => {
     const q = F.q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(UP, (hash(i, 3, 305) - .5) * .5)), [x, z] = F.at(u, v), [bx, bz] = F.at(u, v + .24);
     breakable('chair', .5, () => { addBox(benchMat, x, Y0 + D + .42, z, .5, .05, .5, .9, q); addBox(benchMat, bx, Y0 + D + .68, bz, .5, .5, .05, .9, q); for (const a of [-.22, .22]) { const [lx, lz] = F.at(u + a, v); addBox(poleMat, lx, Y0 + D + .21, lz, .05, .42, .5, 0, q); } }, { chip: '#6e5238' });
   });
-  // the screen on two posts at the deck's far end, with guy wires down to the ground past it
+  // the screen on two posts at the deck's north edge, with guy wires down to the ground behind it
   const postMat = new THREE.MeshStandardMaterial({ color: '#3c2c20', roughness: 1 });
   const framed = breakable('screen', 2, () => {
     for (const u of [.95, 5.15]) { F.box(postMat, u, 1.75, .3, .14, 3.5, .14, 1); const [x, z] = F.at(u, .3); solid(x - .11, x + .11, z - .11, z + .11, Y0 + D + 3.5); }
@@ -3315,7 +3316,7 @@ let screenMesh = null, screenBeam = null, screenProjector = null, shedTank = nul
     for (const u of [.95, 5.15]) F.beam([u, 3, .3], [u, -D, -1.2], .03, .03, poleMat, 0);
   }, { rigid: true, T: 1.1, foot: screenAt, line: [...F.at(.95, .3), ...F.at(5.15, .3)], falls: [Math.sin(F.yaw), Math.cos(F.yaw)], chip: '#d8d0bc', broke() { screenOn = false; screenBeam.visible = false; spotOff(); } });
   screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 2.25), screenMat); screenMesh.position.set(screenAt[0], Y0 + D + 2.24, screenAt[1]); screenMesh.rotation.y = F.yaw; deck.add(screenMesh); framed.objs.push(screenMesh);
-  // the projector, at the cabin's end of the deck, throwing it back across
+  // the projector, behind the chairs, throwing it north over them
   const [px, pz] = F.at(3.05, 5.65);
   screenProjector = thing(deck, 'projector', projector(), px, pz, F.yaw + Math.PI, 1, { y: D, solid: [.6, .6, 1.4 + D], chip: '#d8d2bd', broke() { screenOn = false; screenMat.color.setRGB(.05, .05, .05); screenBeam.visible = false; spotOff(); } });
   // the light on its way there
@@ -3325,11 +3326,12 @@ let screenMesh = null, screenBeam = null, screenProjector = null, shedTank = nul
   screenBeam = new THREE.Mesh(bg, beamMat); deck.add(screenBeam);
   flushBuckets(110);
 }
-// ---- the cabin's decks: along its south side with the swing, looking out over the river; from its door west to the cinema; and from there on south to the studio.
-// They're laid out round the cabin's and the studio's roofs on the satellite, the way the owner said they go, on the flat ground of the terrace in data/hills.json and a step up off it.
+// ---- the cabin's decks: along its south side with the swing, looking out over the river; west from its door and up along its west end, where the cinema is; on west from there
+// over the pale boards on the satellite; and south to the studio. They're laid out round the cabin's and the studio's roofs, the way the owner said they go,
+// on the flat ground of the terrace in data/hills.json and a step up off it.
 {
   const F = tilted(1041.5, 588, 0, CABIN_DECK_TOP), D = F.up, here = nearHere(1052, 597, 110), deckMat = new THREE.MeshStandardMaterial({ color: '#8f8572', roughness: 1 });
-  for (const [u0, u1, v0, v1] of [[14.1, 20.1, 9.45, 12.1], [8.8, 14.1, 7, 12.1], [2.7, 8.8, 3.2, 9.3], [2.4, 6.4, 9.3, 15.4]]) {
+  for (const [u0, u1, v0, v1] of [[14.1, 20.1, 9.45, 12.1], [8.8, 14.1, 7, 12.1], [8.8, 14.7, 3.2, 7], [2.7, 8.8, 3.2, 9.3], [2.4, 6.4, 9.3, 15.4]]) {
     F.box(deckMat, (u0 + u1) / 2, -D / 2, (v0 + v1) / 2, u1 - u0, D, v1 - v0, 1);
     const [ax, az] = F.at(u0, v0), [bx, bz] = F.at(u1, v1); CABIN_DECKS.push([Math.min(ax, bx), Math.max(ax, bx), Math.min(az, bz), Math.max(az, bz)]);
   }
@@ -8867,7 +8869,7 @@ if (TEST) {
     THREE, hills: { at: HILLS.at, slope: HILLS.slope, follow: HILLS.follow, terraces: HILLS.terraces, here: () => HILL.uHillHere.value, uniforms: HILL, flat: hillsFlat, skyline },
     stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, STONE_CLIP, WORDS_SLAB, GRAVE_TURN, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead },
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },
-    compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach },
+    compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, screen: () => screenMesh, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach },
     lures: { LYING, lyingNear, flying, popping, ALARMS, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
     horde, folks, traffic, homes: HOMES, putBack, HOME: { SEE: HOME_SEE, PUT: HOME_PUT }, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, horns: hornLog, blasts: () => blastsBlown, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, kept: putBack.length, roused: horde.active.filter((s) => s.state === ROUSED).length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf,
     // the river's, for the tests: which way it flows and where it brings someone up, and what's drawn of someone soaked: how soaked the graphics card has them, the snakes on sleeves and the ones falling
