@@ -1,13 +1,14 @@
 // The host for everyone, on Cloudflare at chunky.<the account's subdomain>.workers.dev, so nothing about chunky.ms changes: see
-// server/worker.js. The owner's OpenRouter key isn't in here. It's the secret OPENROUTER_KEY, which only the owner puts in.
+// server/worker.js. The owner's OpenRouter key isn't in here. It's the secret OPENROUTER_KEY, which only the owner puts in, and
+// the hero's is the secret CHUNKY_HERO.
 {
   "name": "chunky",
   "main": "worker.js",
   "compatibility_date": "2026-10-20",
   "workers_dev": true,
   "preview_urls": false,
-  "durable_objects": { "bindings": [{ "name": "BILL", "class_name": "Bill" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Bill"] }],
+  "durable_objects": { "bindings": [{ "name": "BILL", "class_name": "Bill" }, { "name": "TOWN", "class_name": "Town" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Bill"] }, { "tag": "v2", "new_sqlite_classes": ["Town"] }],
   // about a line every two seconds from one phone, and thirty a minute from one address, which leaves room for a family on one Wi-Fi
   "ratelimits": [
     { "name": "PHONE", "namespace_id": "1071", "simple": { "limit": 5, "period": 10 } },

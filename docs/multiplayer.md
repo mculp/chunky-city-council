@@ -19,6 +19,14 @@ CHUNKY_HERO=$(printf '%s' "$SECRET" | shasum -a 256 | cut -d' ' -f1) npm run net
 
 The phone keeps the secret once the link's been opened, for the town it came with and no other, and it comes off the address straight away so it isn't passed on.
 
+The town as it's hosted for everyone runs on this machine in Cloudflare's own runtime too, without signing in to anything:
+
+```sh
+npx wrangler@4.154.0 dev --config server/wrangler.jsonc --port 8788 --var CHUNKY_HERO:<the sha256>
+```
+
+and it's `?net=ws://localhost:8788/town`. `npm run town:host` checks it there.
+
 ## What happens
 
 - **Joining.** A name of up to 16 letters, checked for PG-13 on the phone and again by the town, and one of the town's eight crowd looks, picked or rolled from the name.
@@ -39,14 +47,18 @@ The phone keeps the secret once the link's been opened, for the town it came wit
 
 - `src/net.js`: what goes over the wire, and how someone's steps are smoothed. Poses are 18 bytes, twenty times a second each way, and everything else goes as JSON words. Each phone sends about 400 bytes a second, and gets about 400 a second for each other person in town, so 25 in town is under 10 KB a second down.
 - `src/names.js`: the PG-13 check.
-- `server/town.js` and `server/index.js`: the town, and a Node server for it on this machine.
+- `server/town.js`, `server/host.js` and `server/index.js`: the town, the town behind any socket, and a Node server for it on this machine.
+- `server/worker.js`: the town hosted for everyone, as the Durable Object `Town`, beside the characters' words.
 - `src/together.js`: the phone's side. It covers the panel, the opening and coming back, everyone's bodies (the crowd's own, in six draw calls however many there are), the hero as others see him, names over heads, map dots, vehicles and WAVE.
 - `index.html`: six lines hang on `net`, which is null in a game on its own, so the opening is the same to the byte (`npm run frames`).
-- `npm run net`: the check.
+- `npm run net`: the check, and `npm run town:host` the hosted town's.
 
 ## Calls made along the way
 
-- **Where the town is.** No town is hosted yet, so Play with others only shows with `?net`. Hosting it is the next step: a Durable Object beside the talk server on Cloudflare.
+- **Where the town is.** One town for everyone, the Durable Object `Town` in `server/worker.js` on Cloudflare, beside the talk server. It's made in the eastern US the first time anyone comes, which is the nearest to Mississippi. It beats twenty times a second while anyone's in it, is kept every 5 s and once the last one goes, and then rests. Until it's deployed and its address is in `src/net.js`, Play with others only shows with `?net`.
+- **Keeping the town.** It's written without holding up the snapshots (`allowUnconfirmed`), so a crash loses at most the last 5 s of where people were. Everyone it's ever kept is one value, which Cloudflare holds to 2 MB: several thousand people.
+- **Two things Cloudflare's sockets do differently.** Since compatibility date 2026-03-17, a socket taken with `accept()` hands over bytes as a `Blob`, which the town would drop. So the town takes them with `acceptWebSocket`, whose `webSocketMessage` always gets an `ArrayBuffer`. And wrangler dev doesn't answer a phone's close, whatever the compatibility date says, so the town answers it itself. A phone waits for that before it's closed.
+- **What it costs.** Cloudflare bills 20 incoming WebSocket messages as one request. Twenty-five people for two hours is about 180,000, which is past the free plan's 100,000 a day, so playing for real is the $5 a month plan. The free plan does for building and a few testers. Whether the free plan's 100,000 counts messages 20 to one too, Cloudflare doesn't say.
 - **Staying connected.** A phone that says nothing for 5 s is let go. Through the opening a newcomer has nowhere to be yet, so their phone says what it carries every 2 s instead. A dropped line tries again by itself, and a newer phone with the same key, or the hero's link, takes over.
 - **Different versions of the game.** Each phone sends a fingerprint of the parked vehicles. A town only mixes games whose vehicles are the same, since that's what the list's places mean.
 - **Parking exactly.** Getting out sends one last pose from the vehicle at once, so the town leaves it exactly where they did. Another phone ignores that rider's older poses from in it, even though smoothing puts those a little way back down the road.
