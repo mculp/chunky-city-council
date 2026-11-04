@@ -14,7 +14,8 @@ import { serveAndOpen } from './browser.mjs';
 
 const args = process.argv.slice(2), shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : null;
 const ref = args[0] && !args[0].startsWith('--') ? args[0] : 'origin/main';
-const git = (...a) => execFileSync('git', a, { maxBuffer: 1 << 28 });
+// what git says when something's wrong goes with the error rather than out, since a file that's new since the ref is one too
+const git = (...a) => execFileSync('git', a, { maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'pipe'] });
 
 async function opening(overrides, name) {
   const { page, errors, close } = await serveAndOpen({ overrides, args: ['--disable-accelerated-2d-canvas'] });

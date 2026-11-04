@@ -243,6 +243,38 @@ try {
     await until(() => on(a, () => !__game.mapState().open));
   }
 
+  // ---------------- in a Camaro, which sits low: on someone else's phone, their head's under its roof right above it
+  {
+    const car = await on(a, ([x, z]) => {
+      const G = __game, list = G.vehicles; let best = -1, d = 1e9;
+      list.forEach((v, i) => { const k = Math.hypot(v.x - x, v.z - z); if (/^coupe/.test(v.kind) && !v.wrecked && k < d) { d = k; best = i; } });
+      const v = list[best], side = v.K.width / 2 + .6;
+      G.place(v.x - Math.cos(v.yaw) * side, v.z + Math.sin(v.yaw) * side); return { i: best, kind: v.kind, x: v.x, z: v.z, yaw: v.yaw, side };
+    }, [spot.x, spot.z]);
+    // what's in reach is picked twice a second, and A's come a long way
+    const t0 = (await state(a)).time;
+    await until(async () => (await state(a)).time > t0 + .6);
+    await a.page.keyboard.press('e');
+    const inCar = await until(async () => (await state(a)).drive);
+    await on(b, (c) => __game.place(c.x - Math.cos(c.yaw) * (c.side + 1.5), c.z + Math.sin(c.yaw) * (c.side + 1.5)), car);
+    const sat = await until(async () => { const s = await bodyOf(b, A.id); return s?.seated ? s : null; }, 4000);
+    // the highest point of their body, and of the roof where it's over them, both as the car sees it
+    const fit = sat && await on(b, async ([id, i]) => {
+      const THREE = await import('three'), { vehicleGeometries } = await import('./src/vehiclemodels.js');
+      const v = __game.vehicles[i], toCar = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(v.pitch, v.yaw, v.roll, 'YXZ')).setPosition(v.x, v.y, v.z).invert();
+      const body = __net.group.children[0], slot = __net.drawn().bodies.findIndex((s) => s.id === id);
+      const m = new THREE.Matrix4().fromArray(body.instanceMatrix.array, slot * 16).premultiply(toCar), p = new THREE.Vector3(), head = new THREE.Vector3(0, -1e9, 0);
+      const pos = body.geometry.attributes.position, shell = vehicleGeometries()[v.kind].geo.attributes.position;
+      for (let k = 0; k < pos.count; k++) { p.fromBufferAttribute(pos, k).applyMatrix4(m); if (p.y > head.y) head.copy(p); }
+      let roof = -1e9;
+      for (let k = 0; k < shell.count; k++) { p.fromBufferAttribute(shell, k); if (Math.hypot(p.x - head.x, p.z - head.z) < .35) roof = Math.max(roof, p.y); }
+      return { kind: v.kind, head: head.y, roof };
+    }, [A.id, car.i]);
+    check(`A sits in the ${car.kind === 'coupe' ? '\'91' : '\'99'} Camaro on B's phone with their head ${fit ? `${((fit.roof - fit.head) * 100).toFixed(0)} cm under its roof` : 'nowhere'}`, inCar?.kind === car.kind && fit && fit.head < fit.roof - .02, { inCar, sat, fit });
+    await snap(b, '06-b-sees-a-in-the-camaro');
+    if (inCar) { await a.page.keyboard.press('e'); await until(async () => !(await state(a)).drive); }
+  }
+
   // ---------------- coming back, where they left and with what they had, without the opening
   {
     await on(a, () => { __game.S.beans = 5; __game.S.items.bottle = 2; });
@@ -276,6 +308,8 @@ try {
     const C = await me(c);
     check('the owner\'s phone is the hero, in his hoodie, on his own screen', C.hero, C);
     await onRoad(c, A.x + 4, A.z);
+    // and A turns to him, since names only show over heads that are on screen
+    await on(a, ([x, z]) => { const P = __game.player.pos; __game.look(Math.atan2(P.x - x, P.z - z), .25); }, [A.x + 4, A.z]);
     await sleep(800);
     const seen = (await drawn(a)).hero;
     check(`and everyone else sees the hero where he is: ${seen ? away(seen, { x: A.x + 4, z: A.z }).toFixed(2) + ' m off' : 'not at all'}`, seen?.visible && away(seen, { x: A.x + 4, z: A.z }) < .1, seen);
@@ -295,6 +329,20 @@ try {
     const D = await me(d);
     const one = await until(() => on(a, ([c, d]) => { const all = __net.link.others(), h = all.filter((w) => w.hero); return h.length === 1 && h[0].id === d && !all.some((w) => w.id === c) ? h[0].id : null; }, [C.id, D.id]), 4000);
     check('and there\'s one hero in town, on the second phone, with the first one gone', one === D.id, { one, C: C.id, D: D.id });
+
+    // A link to some other town, even one that would take the hero's secret, doesn't get it: it's kept for the town it came with.
+    // Nor does it get who the phone is here.
+    const elsewhere = await startServer({ port: 0, quiet: true, heroHash: createHash('sha256').update(HERO).digest('hex') });
+    try {
+      await c.page.goto(c.page.url().replace(/[?#].*$/, `?test&net=ws://localhost:${elsewhere.port}`), { waitUntil: 'load', timeout: 120000 });
+      await c.page.waitForFunction(() => window.__game, null, { timeout: 30000 });
+      await on(c, () => __game.resume());
+      await c.page.click('#together'); await c.page.click('#joinGo');
+      const there = await until(() => on(c, () => window.__net?.you().id ? __net.you() : null), 10000);
+      check(`a link to another town doesn't take the hero's secret there: "${there?.name}" is ${there?.hero ? 'the hero' : 'a townsperson'} in it`, there && !there.hero, there);
+      const keys = await on(c, () => Object.keys(localStorage).filter((k) => k.startsWith('chunky.net.key')).map((k) => localStorage.getItem(k)));
+      check(`and the phone is someone else there, with a key of its own: ${keys.length} kept`, keys.length === 2 && keys[0] !== keys[1], keys.length);
+    } finally { await elsewhere.close(); }
   }
 
   // ---------------- what it costs

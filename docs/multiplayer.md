@@ -17,13 +17,13 @@ The owner's link is `#hero=<secret>` on the end of the address, for a town start
 CHUNKY_HERO=$(printf '%s' "$SECRET" | shasum -a 256 | cut -d' ' -f1) npm run net:server
 ```
 
-The phone keeps the secret once the link's been opened, and it comes off the address straight away so it isn't passed on.
+The phone keeps the secret once the link's been opened, for the town it came with and no other, and it comes off the address straight away so it isn't passed on.
 
 ## What happens
 
 - **Joining.** A name of up to 16 letters, checked for PG-13 on the phone and again by the town, and one of the town's eight crowd looks, picked or rolled from the name.
 - **The first time.** They watch the opening with the rope cut for them. It ends at the splash, fades, and they come to on the bank beside the Chunky River Bridge on Griffis Fountain Rd, where he wakes, each a few metres from the others. Tadpole comes with CHUNKY-112.
-- **Coming back.** The town keeps their name, look, where they were, their beans, pockets and gas, by the hash of a key their phone makes and keeps. They come straight back to where they left, without the opening.
+- **Coming back.** The town keeps their name, look, where they were, their beans, pockets and gas, by the hash of a key their phone makes and keeps for that town. They come straight back to where they left, without the opening.
 - **The owner.** The hero is the owner's alone, and only one phone at a time can be him: a second one takes over, and the first is told. The first time, the owner starts where he wakes.
 - **Everyone else.** Everyone else is a townsperson in their look, on their own screen too, standing all the way up and not glowing. Their names float over them within 40 m, and they're cyan dots on both maps, with names on the big one. WAVE is a button on a phone, and V on a keyboard.
 - **Vehicles.** A vehicle is known by its place in the game's list, so it's the same one on every phone. Someone driving it is seen in it, and it's left exactly where they get out, for everyone. Nobody can get in one someone else is in.
@@ -49,6 +49,9 @@ The phone keeps the secret once the link's been opened, and it comes off the add
 - **Where the town is.** No town is hosted yet, so Play with others only shows with `?net`. Hosting it is the next step: a Durable Object beside the talk server on Cloudflare.
 - **Staying connected.** A phone that says nothing for 5 s is let go. Through the opening a newcomer has nowhere to be yet, so their phone says what it carries every 2 s instead. A dropped line tries again by itself, and a newer phone with the same key, or the hero's link, takes over.
 - **Different versions of the game.** Each phone sends a fingerprint of the parked vehicles. A town only mixes games whose vehicles are the same, since that's what the list's places mean.
-- **Parking exactly.** Getting out sends one last pose from the vehicle at once, so the town leaves it exactly where they did. Another phone ignores that rider's older pose from in it, even though smoothing puts that pose a little way back down the road.
+- **Parking exactly.** Getting out sends one last pose from the vehicle at once, so the town leaves it exactly where they did. Another phone ignores that rider's older poses from in it, even though smoothing puts those a little way back down the road.
+- **Getting in and out isn't smoothed.** Everyone's shown a tenth of a second behind, and what they're in and how they are go with where they're shown, from the same pose. Getting in or out is a jump: they're just there. Before, what they were in came from the newest pose, so a pickup jumped to where its driver had been standing on everyone else's phone for a tenth of a second.
+- **Who a phone is, per town.** A phone's key, which is its place in a town, and the hero's link are each kept for the town they came with, by the `?net` on the address, and never go to another. Otherwise a link to someone else's town would hand over both. The name and look go anywhere.
+- **Sitting in anything.** The crowd only drives cars, pickups and four-wheelers, so `SEATED` in `index.html` only has those. In anything else, someone sits as the hero does, going by the car: as much lower as his seat is, and as much smaller as he is there. The pickup's numbers come out of the car's the same way, and it's what keeps a head under a Camaro's roof.
 - **The hero as others see him.** He's built the way he is under "the hero" in `index.html`, with his face of its own. If his build changes there, it changes in the hero entry of the playing-together block at the end too.
 - **No hammer for townsfolk.** A swing is the arm going over and down.

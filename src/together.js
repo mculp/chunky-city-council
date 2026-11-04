@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import { connectNet, rollLook, makeKey, worldOf, HOW, PHONE_KEY, NET_PORT } from './net.js';
 import { checkName, NAME_MOST } from './names.js';
-import { inVehicle, settle } from './vehicles.js';
+import { inVehicle, settle, KINDS } from './vehicles.js';
 import { toScreen, drawLabel, COLORS as MAPC } from './mapview.js';
 
 const MOST = 25;                  // everyone the town holds, you included
@@ -23,8 +23,10 @@ const SWING_FOR = .5, WAVE_FOR = 1.6;
 // A swing as the townsfolk do it, a drawing at a time on the twelve: the arm up over the shoulder and down through what's in front,
 // in radians forward of hanging straight down
 const SWING_ARM = [-2.75, -2.95, -2.1, -1.2, -.75, -.55];
-// what the phone keeps: what it calls itself, the name and the look, and the hero's link once it's been opened on it
-export const KEPT = { key: 'chunky.net.key', name: 'chunky.net.name', look: 'chunky.net.look', hero: 'chunky.net.hero' };
+// What the phone keeps: the name and the look, which go to any town, and what it calls itself and the hero's link once it's been
+// opened on it, which are each kept for one town, by the ?net it came with, and never go to another. Otherwise a link to someone
+// else's town would hand them both, and with them someone's place in this one, or the hero.
+export const KEPT = { key: 'chunky.net.key@', name: 'chunky.net.name', look: 'chunky.net.look', hero: 'chunky.net.hero@' };
 const UP = new THREE.Vector3(0, 1, 0);
 const CSS = `
 #join input{font:inherit;font-size:16px;width:min(300px,82vw);padding:10px 12px;text-align:center;letter-spacing:.06em;color:var(--cream);background:var(--panel);border:2px solid var(--line);border-radius:0;-webkit-user-select:text;user-select:text}
@@ -51,10 +53,10 @@ function kept(store) {
 
 // `G` is the game, as index.html hands it over: what's in it, and the few things that have to be done from in there.
 export function together(G) {
-  const store = kept(G.store), looks = G.looks, S = G.S, HP = G.HP;
-  let key = store.get(KEPT.key);
-  if (!PHONE_KEY.test(key ?? '')) { key = makeKey(); store.set(KEPT.key, key); }
-  const secret = store.get(KEPT.hero) || undefined, build = { at: G.built ?? 0, world: worldOf(G.parked) };
+  const store = kept(G.store), looks = G.looks, S = G.S, HP = G.HP, town = G.url ?? '';
+  let key = store.get(KEPT.key + town);
+  if (!PHONE_KEY.test(key ?? '')) { key = makeKey(); store.set(KEPT.key + town, key); }
+  const secret = store.get(KEPT.hero + town) || undefined, build = { at: G.built ?? 0, world: worldOf(G.parked) };
   // the town on this machine, unless the address says where
   const url = G.url || `ws://${location.hostname || 'localhost'}:${NET_PORT}`;
   let link = null, you = { id: 0, name: '', look: 0, hero: false }, picked = null;
@@ -268,7 +270,19 @@ export function together(G) {
   { const c = G.zombieLine(0, 0); for (let i = 0; i < MOST * 2; i++) { if (i < MOST) c.toArray(line1.array, i * 3); c.toArray(line2.array, i * 3); } }
   const _b = new THREE.Matrix4(), _u = new THREE.Matrix4(), _l = new THREE.Matrix4(), _m = new THREE.Matrix4(), _vb = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler(), _ve = new THREE.Euler(0, 0, 0, 'YXZ'), _h = new THREE.Vector3();
   const bodyOf = (v) => _vb.makeRotationFromEuler(_ve.set(v.pitch, v.yaw, v.roll)).setPosition(v.x, v.y, v.z);
-  const seated = (v) => G.SEATED[v.kind] ?? G.SEATED.car;
+  // How the crowd sits in what it drives, and in anything else as he sits in it, going by the car: as much lower as his seat is, and
+  // as much smaller as he is there, which is how the Camaros keep everyone's head under their roofs. The pickup's numbers come out of
+  // the car's that way too.
+  const sits = new Map();
+  const seated = (v) => {
+    let s = sits.get(v.kind);
+    if (!s) {
+      const car = KINDS.car, k = v.K.size / car.size, own = G.SEATED[v.kind];
+      s = own ? { ...own, size: G.TOWN_SCALE } : { ...G.SEATED.car, hip: v.K.seat[1] - (car.seat[1] - G.SEATED.car.hip) * k, size: G.TOWN_SCALE * k };
+      sits.set(v.kind, s);
+    }
+    return s;
+  };
   // how each was drawn, for the tests: whose they are and the numbers that went into them
   const slots = [];
   // the angles go on the game's twelve frames a second, like everyone else's, while where they are moves every frame
@@ -277,7 +291,7 @@ export function together(G) {
 
   // Someone in slot i: where their feet are and which way they face, how they're going, what they're in, and their latest swing and wave
   function pose(i, p, step) {
-    const seat = p.seat, size = G.TOWN_SCALE, HIP = G.ZOMBIE_HIP, ph = heldPhase(p.id, p.phase, step), lie = p.down ?? 0;
+    const seat = p.seat, size = seat ? seated(seat).size : G.TOWN_SCALE, HIP = G.ZOMBIE_HIP, ph = heldPhase(p.id, p.phase, step), lie = p.down ?? 0;
     const swim = p.how === HOW.swim && !seat, moving = p.speed > .25 && !seat && !lie, run = Math.min(1, Math.max(0, (p.speed - 4.4) / 3.6));
     const stride = moving && !swim ? Math.min(1, p.speed / 4.4) * (.36 + .26 * run) : 0;
     let { x, y, z, yaw } = p;

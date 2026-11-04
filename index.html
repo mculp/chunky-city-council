@@ -7582,10 +7582,11 @@ ghost.position.set(-17.5, 1.3, 7.5);
 // Play with others goes under Start when there's a town to play in: ?net for one on this machine (npm run net:server), or ?net=ws://…
 // for one somewhere else. Nothing of it is loaded until it's pressed, and src/together.js is all of it. `net` stays null in a game on
 // its own, which is what the few lines that mention it go by. The owner's link, #hero=…, is kept on their phone the first time it's
-// opened (as chunky.net.hero, like the rest of what src/together.js keeps), and it comes off the address so it isn't passed on.
+// opened, for the town it came with and no other (as chunky.net.hero@ and the ?net that came with it, like the rest of what
+// src/together.js keeps), and it comes off the address so it isn't passed on.
 {
   const town = new URLSearchParams(location.search);
-  if (location.hash.startsWith('#hero=')) { try { localStorage.setItem('chunky.net.hero', decodeURIComponent(location.hash.slice(6))); } catch { /* not kept */ } history.replaceState(null, '', location.pathname + location.search); }
+  if (location.hash.startsWith('#hero=')) { try { localStorage.setItem(`chunky.net.hero@${town.get('net') ?? ''}`, decodeURIComponent(location.hash.slice(6))); } catch { /* not kept */ } history.replaceState(null, '', location.pathname + location.search); }
   // what's parked where before anything moves, which everyone in town has to agree on
   const parked = VEHICLES.map(({ kind, x, z, yaw }) => ({ kind, x, z, yaw }));
   // out of the opening, with nothing of his left on them
