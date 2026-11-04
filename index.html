@@ -4356,12 +4356,13 @@ const HP = { kind: 'hang', phase: 0, speed: 0, cut: 0, lag: 0, t: 0 };
 let roll = null;
 // A swing, as drawings: up over his shoulder, and down through whatever's in front of him. [hand x, y, z, the handle's turn]
 const SWING_POSES = [[.2, .34, -.2, -2.1], [.15, .5, -.08, -1], [.1, .16, .42, .85], [.08, -.26, .6, 1.75], [.08, -.36, .55, 2.15], [.2, -.46, .34, 2.5]], SWING_T = .46, SWING_AT = .2;
-// It turns him toward the nearest one he can reach in front of him: anywhere on his side of a right angle on a phone, and close to where he's looking with a mouse
-const SWING_REACH = 2.8, SWING_CONE = { stick: Math.cos(1.25), mouse: Math.cos(.5) };
+// It turns him to the nearest one he can reach, whichever way he's facing on a phone, and close to where he's looking with a mouse. It lands on them where it's
+// best, at the end of his arms (SWING_ARM, nearest and furthest), which he steps in or back to as he winds up, up to this quick (SWING_LUNGE, m/s).
+const SWING_REACH = 2.8, SWING_CONE = { mouse: Math.cos(.5) }, SWING_ARM = { hammer: [.85, 1.35], bat: [.95, 1.75] }, SWING_LUNGE = 10;
 // How long a hit keeps one of them down, getting up included: about ten seconds from the hammer or the bat, and longer the harder anything else hits. Nobody's ever worse off than down.
 // and the train's longer than any of them, 20 s being the most that anything else keeps them down: thrown off its side, and off its front
 const DOWN_FOR = { swing: 10, blast: 14, train: [30, 45] }, downByTruck = (speed) => Math.min(20, 8 + speed * .5);
-let swingT = -1, swingHit = false, throwT = 0;
+let swingT = -1, swingHit = false, throwT = 0, swingSide = 1, swingWho = null;
 function poseHero(tq) {
   const k = HP.kind, ph = HP.phase, R = hero, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
   const over = k === 'roll' && roll ? roll.beta : 0;
@@ -4446,7 +4447,8 @@ function poseHero(tq) {
   const tool = S.flags.bat ? batTool : hammer; (S.flags.bat ? hammer : batTool).visible = false;
   tool.visible = swingT >= 0 && (k === 'run' || k === 'air');
   if (tool.visible) {
-    const [x, y, z, turn] = SWING_POSES[Math.min(SWING_POSES.length - 1, Math.floor(swingT * 12))];
+    // and back the other way, from over his other shoulder
+    const [x0, y, z, turn] = SWING_POSES[Math.min(SWING_POSES.length - 1, Math.floor(swingT * 12))], x = x0 * swingSide;
     const g = R.arm(1, V3(x, y, z), V3(.7, -.3, -.25), V3(0, 1, .25));
     R.arm(0, V3(x - .05, y - Math.cos(turn) * .24, z - Math.sin(turn) * .24), V3(-.7, -.3, -.25), V3(0, 1, .25));
     tool.position.copy(g); tool.quaternion.setFromEuler(new THREE.Euler(turn, 0, 0));
@@ -4770,6 +4772,8 @@ const leanOf = (s) => (s.bentFor === s.hips ? s.bend : (s.bentFor = s.hips, s.be
 const DEEPEST = Math.max(leanFor(0), KNEEL_FOLD);
 // Knocked down: held a step as they were, gone over in a third of a second, and getting up at the end of it, which takes at most this long, with their legs this far back on their knees
 const HIT_HOLD = 1 / 12, HIT_FALL = .3, GET_UP = 2.4, KNEEL = 1.05, SMOOTH = (t) => THREE.MathUtils.smoothstep(t, 0, 1);
+// how far a blow jolts whoever it lands on, the way it went, how far it rears them back and how far it throws their head back, in metres and radians
+const JOLT = { back: .2, rear: .4, head: .5 };
 // Flung by what he's driving (src/horde.js's fling), they're limp: every joint swings on its own, this far either side of where it's centred, in radians, as two waves apiece at about these
 // speeds, which is a new shape on every 12 fps step. Each flight has its own seed, so no two are alike, and once they're down it's held wherever it was, which is the heap they lie in. With
 // reduced motion nothing swings, and they're held in the one shape the whole way.
@@ -4868,9 +4872,14 @@ function stanceOf(s) {
     if (a === 0) step = deg(Math.atan2(leg.dot(ahead), -leg.y));
   }
   // the crown is the highest point of the body as it's built, and the neck is what it hangs from
-  const P = bodyGeo.attributes.position; for (let k = 1; k < P.count; k++) if (P.getY(k) > P.getY(top)) top = k;
+  const P = bodyGeo.attributes.position; let low = P.getY(0); for (let k = 1; k < P.count; k++) { if (P.getY(k) > P.getY(top)) top = k; low = Math.min(low, P.getY(k)); }
   const along = drawn(bodyGeo, top, new THREE.Vector3()).applyMatrix4(B).sub(new THREE.Vector3(...NECK).applyMatrix4(B));
-  return { hips, torso: deg(up.angleTo(new THREE.Vector3(0, 1, 0))), legs, arms, step, hands, feet, head: lowest(bodyGeo, B, .2), pitch: deg(Math.atan2(along.dot(ahead), along.y)) };
+  // And where things are in the world: the middle of the head, which is everything over the neck, the middle of the top half of the body under it, and where the body's drawn from
+  const middle = (lo, hi) => { const b = new THREE.Box3(), v = new THREE.Vector3(); for (let k = 0; k < P.count; k++) if (P.getY(k) > lo && P.getY(k) <= hi) b.expandByPoint(drawn(bodyGeo, k, v).applyMatrix4(B)); return b.getCenter(v).toArray(); };
+  return {
+    hips, torso: deg(up.angleTo(new THREE.Vector3(0, 1, 0))), legs, arms, step, hands, feet, head: lowest(bodyGeo, B, .2), pitch: deg(Math.atan2(along.dot(ahead), along.y)),
+    headAt: middle(.2, Infinity), chestAt: middle((low + NECK[1]) / 2, NECK[1]), at: new THREE.Vector3().setFromMatrixPosition(B).toArray(),
+  };
 }
 function crowdWritten() { crowdBodies.instanceMatrix.needsUpdate = crowdArms.instanceMatrix.needsUpdate = crowdLegs.instanceMatrix.needsUpdate = crowdAura.instanceMatrix.needsUpdate = crowdZ.needsUpdate = crowdLimbZ.needsUpdate = crowdLine.needsUpdate = crowdLimbLine.needsUpdate = crowdAuraZ.needsUpdate = crowdWet.needsUpdate = crowdLimbWet.needsUpdate = crowdHead.needsUpdate = true; }
 function poseCrowd(s, i, step) {
@@ -4906,8 +4915,10 @@ function poseCrowd(s, i, step) {
     const back = fold * HIPS_BACK, tilt = Math.asin(back / FOLD_LEG), legs0 = kneel * KNEEL - tilt, drop = FOLD_LEG * (1 - Math.cos(legs0));
     const p = s.gait, stride = still ? 0 : low ? .44 : after || away ? .62 : .36 - fold * .05;
     const look = s.look % CROWD_LOOKS.length, size = s.size * TOWN_SCALE;
-    // and drawn where they were struck until they've gone over, sliding to where they were thrown as they do
-    const slide = struck ? 1 - SMOOTH(fell) : 0, px = s.x + ((s.fromX ?? s.x) - s.x) * slide, pz = s.z + ((s.fromZ ?? s.z) - s.z) * slide;
+    // and drawn where they were struck until they've gone over, sliding to where they were thrown as they do. The blow jolts them back first, the way it went, and that's
+    // the moment the picture holds. With reduced motion they only go over.
+    const jolt = struck && s.hitX !== undefined && !reduceMotion ? (held ? 1 : 1 - SMOOTH(fell)) : 0;
+    const slide = struck ? 1 - SMOOTH(fell) : 0, px = s.x + ((s.fromX ?? s.x) - s.x) * slide + (s.hitX ?? 0) * JOLT.back * jolt, pz = s.z + ((s.fromZ ?? s.z) - s.z) * slide + (s.hitZ ?? 0) * JOLT.back * jolt;
     _cb.compose(_cp.set(px, seat ? s.y : s.y + (1.43 - drop) * size * (1 - lie) + .28 * lie + Math.abs(Math.sin(p)) * .03, pz), _cq.setFromAxisAngle(UP, s.yaw + (st === CURIOUS && still ? Math.sin(step / 5 + s.phase) * .6 : 0)), _cs.setScalar(size));
     if (back) _cb.multiply(_cl.makeTranslation(0, 0, -back));
     if (flop) {
@@ -4920,7 +4931,7 @@ function poseCrowd(s, i, step) {
     }
     // the top half leans from the hips, so the feet stay on the ground. It doubles over going down, rears back a little reaching for him, and wobbles on its knees.
     const crumple = struck && fell > 0 && fell < 1 ? Math.sin(fell * Math.PI) * .8 : 0;
-    const list = (s.phase - 3.14) * .035, stood = Math.max(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : seat ? .16 : 0, fold) + crumple - grip * .25 + (sore && !lie ? SORE.bent : 0);
+    const list = (s.phase - 3.14) * .035, stood = Math.max(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : seat ? .16 : 0, fold) + crumple - grip * .25 + (sore && !lie ? SORE.bent : 0) - jolt * JOLT.rear;
     // and in the heap, bent a little at the hips off the ground rather than into it
     const limp = FLOP.lean[0] + jig(0) * FLOP.lean[1], lean = stood + (limp + (-facing * Math.abs(limp) * FLOP.flat - limp) * heap - stood) * floppy;
     _cl.makeRotationFromEuler(_ce.set(lean, 0, (list + (st === STUNNED ? Math.sin(step * .9) * .12 + kneel * Math.sin(step * .7 + s.phase) * .16 : Math.sin(p) * (after ? .05 : .1))) * (1 - floppy) + jig(1) * FLOP.list * (1 - heap * .7) * floppy));
@@ -4931,6 +4942,7 @@ function poseCrowd(s, i, step) {
     const hung = SMOOTH((fold - HEAD.from) / (HEAD.to - HEAD.from));
     let tip = HEAD.back + (HEAD.hang - HEAD.back) * hung - grip * .3 + (reduceMotion ? 0 : Math.sin(p * 1.7 + 1) * HEAD.loose * hung * (still ? .3 : 1));
     if (seat) tip = HEAD.seated; else if (lie) tip += (HEAD.rest - tip) * lie;
+    tip -= jolt * JOLT.head;
     if (floppy) tip += (FLOP.head[0] + jig(2) * FLOP.head[1] + (HEAD.rest - FLOP.head[0] - jig(2) * (FLOP.head[1] - .15)) * heap - tip) * floppy;
     crowdHead.setX(i, tip - HEAD.pitch);
     // where the top of their head is, or their neck if that's higher, for whatever's said over it
@@ -7706,38 +7718,131 @@ function updateTrains(dt) {
 // With the mouse, what he swings at or throws at is what the camera's looking at. He keeps going the way he was going while he does.
 let aimT = 0;
 function aimWithCamera() { if (mouseHeld()) { player.yaw = cam.yaw + Math.PI; aimT = .35; } }
-// both hands, so not with Gerald in one
-function swing() { if (swingT < 0 && S.mode === 'town' && !S.items.gerald) { giveAway(); aimWithCamera(); faceNearest(); swingT = 0; swingHit = false; SFX.play('swing'); } }
-// the nearest one in front of him he can reach, and sooner one who's coming for him than one who isn't
-function faceNearest() {
-  if (!folkOut) return;
-  const P = player.pos, fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), cone = aimT > 0 ? SWING_CONE.mouse : SWING_CONE.stick;
+// Both hands, so not with Gerald in one. Once it's landed, another goes while he's following through, back the other way, at whoever's next.
+function swing() {
+  if (S.mode !== 'town' || S.items.gerald || (swingT >= 0 && swingT < SWING_AT)) return;
+  swingSide = swingT >= 0 ? -swingSide : 1;
+  giveAway(); aimWithCamera();
+  swingWho = swingAt();
+  if (swingWho) { player.yaw = Math.atan2(swingWho.x - player.pos.x, swingWho.z - player.pos.z); fightOn(swingWho); }
+  swingT = 0; swingHit = false; SFX.play('swing');
+}
+// Who a swing's at: the nearest he can reach, and one coming for him before one that isn't. On a phone that's whichever way he's facing, and with a mouse it's close to where
+// the camera's looking. Nobody on the other side of a wall.
+function swingAt() {
+  if (!folkOut) return null;
+  const P = player.pos, fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
   let best = null, bd = Infinity;
   for (const s of horde.active) {
-    if (s.flat > 0 || s.under !== undefined || s.thrown) continue;
+    if (s.flat > 0 || s.under !== undefined || s.thrown || s.seated || Math.abs(s.y - P.y) > 1.5) continue;
     const dx = s.x - P.x, dz = s.z - P.z, d = Math.hypot(dx, dz);
-    if (d > SWING_REACH || d < .05 || (dx * fx + dz * fz) / d < cone) continue;
-    const k = d - (s.state >= HUNTING && s.state <= GRABBING ? 1 : 0);
-    if (k < bd) { best = s; bd = k; }
+    if (d > SWING_REACH + .02 || (aimT > 0 && d > .05 && (dx * fx + dz * fz) / d < SWING_CONE.mouse)) continue;
+    const k = d + (s.state >= HUNTING && s.state <= GRABBING ? 0 : SWING_REACH);
+    if (k < bd && !wallBetween(P, s)) { best = s; bd = k; }
   }
-  if (best) player.yaw = Math.atan2(best.x - P.x, best.z - P.z);
+  return best;
+}
+function wallBetween(a, b) {
+  const dx = b.x - a.x, dz = b.z - a.z, n = Math.ceil(Math.hypot(dx, dz) / .3);
+  for (let i = 1; i < n; i++) if (blockedInTown(a.x + dx * i / n, a.z + dz * i / n, a.y + 1)) return true;
+  return false;
+}
+// moved on foot by this much, as far as walls and steps let him
+function stepBy(dx, dz) {
+  const P = player.pos, ok = (x, z) => floorAt(x, z) - P.y <= .6 && !blockedInTown(x, z, P.y);
+  if (ok(P.x + dx, P.z + dz)) { P.x += dx; P.z += dz; } else if (ok(P.x + dx, P.z)) P.x += dx; else if (ok(P.x, P.z + dz)) P.z += dz;
 }
 function updateSwing(dt) {
   if (throwT > 0) throwT -= dt;
   if (swingT < 0) return;
+  // Winding up at someone, he keeps facing them, and steps in if they're past the end of what he's swinging, or back if they're right up against him, so that it lands on them
+  // at the end of his arms
+  const who = swingWho && !swingHit && !(swingWho.flat > 0) ? swingWho : null;
+  if (who) {
+    const P = player.pos, dx = who.x - P.x, dz = who.z - P.z, d = Math.hypot(dx, dz) || 1, [near, far] = S.flags.bat ? SWING_ARM.bat : SWING_ARM.hammer, close = nearestOf(who);
+    player.yaw = Math.atan2(dx, dz);
+    const want = d > far ? d - far : close < near ? close - near : 0, left = Math.max(dt, SWING_AT - swingT);
+    if (want) { const k = Math.sign(want) * Math.min(Math.abs(want) * dt / left, SWING_LUNGE * dt); stepBy(dx / d * k, dz / d * k); }
+  }
   swingT += dt;
   if (!swingHit && swingT >= SWING_AT) {
     swingHit = true;
-    const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), P = player.pos, x = P.x + fx * .9, z = P.z + fz * .9, car = parkedAt(x, z, P.y + 1), r = car ? null : strike(x, P.y + 1.1, z, 1.3, 1, fx, fz), n = folkOut ? horde.knock(x, z, S.flags.bat ? 1.9 : 1.5, DOWN_FOR.swing) : 0;
+    const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), P = player.pos, bat = S.flags.bat, s = swingWho && canHit(swingWho) ? swingWho : null;
+    if (s) {
+      // On someone, it's them and nobody else. A ring of cast iron over the thud, and the picture holds a frame and tears, like a drawing being hit.
+      horde.knockOne(s, P.x, P.z, DOWN_FOR.swing);
+      SFX.play('hit.flesh'); SFX.play(bat ? 'hit.wood' : 'hit.metal');
+      if (!reduceMotion) { triggerBurst(.45, .1, true, false); stepBurst(); cam.shake = Math.max(cam.shake, .22); }
+    } else {
+      // At the air, it's whatever's in front of him: a car, a window, a wall
+      const x = P.x + fx * .9, z = P.z + fz * .9, car = parkedAt(x, z, P.y + 1), r = car ? null : strike(x, P.y + 1.1, z, 1.3, 1, fx, fz);
+      if (car) { SFX.play('hit.metal'); spray(x, P.y + 1.1, z, FEW ? 2 : 4, .05, 2.4, .8, .75, .65); soundAlarm(car); if (car.ai && !car.kid) traffic.letGo(car.ai, 'hit'); }
+      if (r && !r.gone) SFX.play(r.house ? (r.house.walls === 'metal' || r.house.walls === 'mobile' ? 'hit.metal' : 'hit.wood') : METAL_PROPS.has(r.thing.kind) ? 'hit.metal' : 'hit.wood');
+      if ((r || car) && !reduceMotion) cam.shake = Math.max(cam.shake, .22);
+    }
     swatFlies(P.x, P.z);
-    // and landing on someone, the picture holds a frame and tears, like a drawing being hit
-    if (n) { SFX.play('hit.flesh'); if (!reduceMotion) { triggerBurst(.45, .1, true, false); stepBurst(); } }
-    if (car) { SFX.play('hit.metal'); spray(x, P.y + 1.1, z, FEW ? 2 : 4, .05, 2.4, .8, .75, .65); soundAlarm(car); if (car.ai && !car.kid) traffic.letGo(car.ai, 'hit'); }
-    if (r && !r.gone) SFX.play(r.house ? (r.house.walls === 'metal' || r.house.walls === 'mobile' ? 'hit.metal' : 'hit.wood') : METAL_PROPS.has(r.thing.kind) ? 'hit.metal' : 'hit.wood');
-    if ((r || n || car) && !reduceMotion) cam.shake = Math.max(cam.shake, .22);
     if (folkOut) horde.noise(P.x, P.z, 14, 1, 'swing');
   }
-  if (swingT >= SWING_T) swingT = -1;
+  if (swingT >= SWING_T) { swingT = -1; swingWho = null; }
+}
+// how near the nearest of them is to him, their middle or their head, which hangs out in front of anyone folded over
+function nearestOf(s) {
+  const P = player.pos, d = Math.hypot(s.x - P.x, s.z - P.z);
+  return s.hdx === undefined ? d : Math.min(d, Math.hypot(s.x + s.hdx - P.x, s.z + s.hdz - P.z));
+}
+// still there to be hit when it lands: on their feet, and in front of him within the end of what he's swinging, give or take
+function canHit(s) {
+  if (s.flat > 0 || s.under !== undefined || s.thrown) return false;
+  const P = player.pos, dx = s.x - P.x, dz = s.z - P.z, d = Math.hypot(dx, dz);
+  return d < (S.flags.bat ? SWING_ARM.bat : SWING_ARM.hammer)[1] + .4 && (d < .3 || (dx * Math.sin(player.yaw) + dz * Math.cos(player.yaw)) / d > .5);
+}
+// ---- a fight, seen. Swinging at someone, the camera goes round him as little as it takes for them to be off to the side of him on the screen as it lands and not behind
+// him, which is further round the nearer they'll be, steps up a little and looks between them. It's there before the swing lands, and if he's still in the way of their head
+// or chest as it winds up, it goes round further. On a phone it stays where it's gone. With a mouse, which is where he aims, it goes back once it's over. With reduced motion
+// it doesn't move at all. How long it's held, how quickly it steps up and comes back, how quickly it gets there, how high it looks down from, how far along to them and how
+// high it looks, how far round from looking at them over him it has to be [with them as near as he'll be, and as far, at most and at least], how much further it goes each
+// time it finds him in the way, and how far off they've got to be for it to be over.
+const FIGHT = { hold: 1.1, step: 14, out: 3, glide: 26, pitch: .42, along: .4, eye: 1.4, side: [1.35, .9], more: .12, far: 6 };
+const fight = { who: null, x: 0, z: 0, t: 0, w: 0, turn: 0, way: 1, mouse: false }, fightRay = new THREE.Raycaster(), _fa = new THREE.Vector3(), _fb = new THREE.Vector3(), _fc = new THREE.Vector3();
+function fightOn(s) {
+  Object.assign(fight, { who: s, x: s.x, z: s.z, t: FIGHT.hold, mouse: mouseHeld(), turn: 0 });
+  if (reduceMotion) return;
+  // how far they are off to one side of where the camera looks over him, and how far they've got to be, by how near he'll be to them once he's stepped in or back
+  const P = player.pos, [near, far] = S.flags.bat ? SWING_ARM.bat : SWING_ARM.hammer, k = (clamp(nearestOf(s), near, far) - near) / (far - near);
+  const off = angDiff(cam.yaw + Math.PI, Math.atan2(s.x - P.x, s.z - P.z)), least = FIGHT.side[0] + (FIGHT.side[1] - FIGHT.side[0]) * k;
+  fight.way = off >= 0 ? -1 : 1;
+  if (Math.abs(off) < least) fight.turn = off + fight.way * least;
+  // on a phone it's turned straight away, and the camera glides round to it quickly enough to be there when it lands
+  if (!fight.mouse && fight.turn) { cam.yaw += fight.turn; fight.turn = 0; lastLook = time; }
+}
+// Whether he's in the way of a point from the camera at C, by what's drawn of him. What's in his hands doesn't count, and his outlines are the same shapes.
+let heroSolid = null;
+function heroHides(C, Q) {
+  heroSolid ??= (() => { const out = []; hero.body.traverse((o) => { if (o.isMesh && !o.material.userData?.outline) { let t = o; while (t && t !== hammer && t !== batTool) t = t.parent; if (!t) out.push(o); } }); return out; })();
+  const d = _fc.subVectors(Q, C), far = d.length(); fightRay.set(C, d.divideScalar(far)); fightRay.far = far;
+  for (const o of heroSolid) { let v = o; while (v && v.visible) v = v.parent === heroRoot ? null : v.parent; if (!v && fightRay.intersectObject(o, false).length) return true; }
+  return false;
+}
+// how far into a fight the camera is, which is gone back on once it's been held, and on a phone, turning to it
+function fightView(dt) {
+  if (fight.t > 0) fight.t -= dt;
+  // and it's over once they're nowhere near him, however they got there
+  const P = player.pos, near = !!fight.who && Math.hypot(fight.who.x - P.x, fight.who.z - P.z) < FIGHT.far;
+  if (!near) fight.t = 0;
+  const on = fight.t > 0 && !reduceMotion && S.mode === 'town';
+  fight.w = clamp(fight.w + (on ? dt * FIGHT.step : -dt * FIGHT.out), 0, 1);
+  if (near && !(fight.who.flat > 0)) { fight.x = fight.who.x; fight.z = fight.who.z; }
+  if (!fight.w && !on) fight.who = null;
+}
+// and as it winds up, from where the camera's going, if he's in the way of their head or chest as they're drawn, it goes round a little further, away from
+// looking at them over him
+function fightClear(V) {
+  if (!fight.w || reduceMotion || !fight.who || fight.who !== swingWho || swingHit || swingT < 0) return;
+  const st = stanceOf(fight.who); if (!st) return;
+  heroRoot.updateMatrixWorld(true);
+  if (![st.headAt, st.chestAt].some(([x, y, z]) => heroHides(V, _fb.set(x, y, z)))) return;
+  const P = player.pos, off = angDiff(Math.atan2(P.x - V.x, P.z - V.z), Math.atan2(fight.who.x - P.x, fight.who.z - P.z)), way = Math.abs(off) > .02 ? -Math.sign(off) : fight.way;
+  if (fight.mouse) fight.turn += way * FIGHT.more; else { cam.yaw += way * FIGHT.more; lastLook = time; }
 }
 // ---------------- what he can throw to slip past the ones who've burnt down. What each one does is in src/lures.js, and what they make of it is in src/horde.js.
 // Near him, what's lying around is drawn with whatever's in the air, one mesh and an outline for each kind that's there to be seen.
@@ -8510,10 +8615,15 @@ function tick(dt, draw = true) {
     if (M === 'bitten' && !reduceMotion) { cam.yaw += angDiff(cam.yaw, player.yaw + Math.PI - 1.05) * Math.min(1, dt * 1.5); cam.pitch += (.42 - cam.pitch) * Math.min(1, dt * 1.5); }
     const dist = car ? car.K.camDist + carSpeed * .04 : swim ? 4.6 : 5.4;
     // looking down on him when he's held, or whoever's holding him is all you'd see
-    const pitch = M === 'grabbed' ? Math.max(cam.pitch, .9) : cam.pitch;
-    V.set(Math.sin(cam.yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(cam.yaw) * Math.cos(pitch)).multiplyScalar(dist).add(tgt);
+    const held = M === 'grabbed' ? Math.max(cam.pitch, .9) : cam.pitch;
+    // and in a fight, round to where he can be seen hitting them, a step up and looking between them
+    fightView(dt);
+    const fw = car || swim ? 0 : fight.w, pitch = held + Math.max(0, FIGHT.pitch - held) * fw, yaw = cam.yaw + (fight.mouse ? fight.turn * fw : 0);
+    if (fw) { const H = heroRoot.position; tgt.lerp(_fa.set(H.x + (fight.x - H.x) * FIGHT.along, H.y + FIGHT.eye, H.z + (fight.z - H.z) * FIGHT.along), fw); }
+    V.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).multiplyScalar(dist).add(tgt);
     V.y = Math.max(V.y, .35, WATER.level(V.x, V.z) + .35);
     { const up = hillUp(V.x, V.z); if (up > 0) V.y = Math.max(V.y, TOWN_Y + up + .6); }
+    if (fw) fightClear(V);
     // talking: over his shoulder, looking between them, or a hood that size is all you'd see of whoever it is
     cam.talk = clamp(cam.talk + (M === 'dialog' && S.talkTo ? dt : -dt) * 2.5, 0, 1);
     const overShoulder = (N, { side, k, dir }, w, shape = TALK) => {
@@ -8531,7 +8641,7 @@ function tick(dt, draw = true) {
     cam.crt = reduceMotion ? +crtLook : clamp((cam.crt ?? 0) + (crtLook ? dt : -dt) * 2.2, 0, 1);
     if (cam.crt > 0) { const w = sstep(0, 1, cam.crt), eye = crtEye(); V.lerp(eye, w); tgt.lerp(_crtAt, w); }
     { const away = cam.crt > .5; if (away !== !!cam.away) { cam.away = away; heroRoot.visible = !away; } }
-    if (cam.snap) { camera.position.copy(V); cam.snap = false; } else camera.position.lerp(V, 1 - Math.exp(-dt * (M === 'fall' ? 3 : mouseHeld() ? (car ? 18 : 24) : car ? 12 : 7)));
+    if (cam.snap) { camera.position.copy(V); cam.snap = false; } else camera.position.lerp(V, 1 - Math.exp(-dt * (M === 'fall' ? 3 : mouseHeld() ? (car ? 18 : 24) : car ? 12 : fw && fight.t > FIGHT.hold - .4 ? FIGHT.glide : 7)));
     if (cam.shake > 0) { cam.shake -= dt; camera.position.x += (Math.random() - .5) * cam.shake * .3; camera.position.y += (Math.random() - .5) * cam.shake * .3; }
     camera.lookAt(tgt); { const fov = 55 + (reduceMotion ? 0 : 5 * player.runK + 12 * Math.min(1, Math.abs(car ? car.f : 0) / 30)); if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); } }
     // it cuts down to the road for the bite itself, low behind his legs and looking up the road, so that its mouth is coming at you against the sky
@@ -8678,7 +8788,7 @@ if (location.hash === '#signs') openSignBoard();
 if (TEST) {
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, farm: FARM, dock: DOCK, onDock, sound: SFX, singers, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, church: { house: CHURCH_HOUSE, at: CF.at, door: () => wallsOf(CHURCH_HOUSE, Y0).doors[0], steeple: churchSteeple, steeplePos: STEEPLE, steepleShown: () => churchSteepleOn.visible, us80: US80_CHURCH, us80Shown: () => us80Steeple.visible, roundWindow, rope: ROPE, bellInReach, ring: ringBell, ringing: () => bellLeft > 0, strokes: () => bellStrokes, BELL, pantry, PANTRY, today, owes: pantryOwes, shown: () => pantryCans.count, shelf: PANTRY_SHELF }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
-    mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
+    mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, skillet: { tools: [hammer, batTool], side: () => swingSide, who: () => swingWho }, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
     // flung by what he's driving: the shoes that came off and how many are drawn, which way and how far each one's glow is drawn streaking, and the cast, where they are and whether anything can hit them
     fling: { shoes: () => shoeList.map((o) => ({ x: o.x, y: o.y, z: o.z, down: o.down, roll: o.roll })), drawnShoes: () => shoes.count, streak: (s) => { const i = crowdShown.indexOf(s), a = crowdAura.instanceMatrix.array; return i < 0 ? null : [a[i * 16 + 8], a[i * 16 + 9], a[i * 16 + 10]]; },
       cast: () => Object.entries(NPCS).filter(([, n]) => n.box).map(([id, n]) => ({ id, x: n.root.position.x, y: n.root.position.y, z: n.root.position.z, spot: [n.spot.x, n.spot.z], jumping: !!n.jump, solid: n.box[4] > -Infinity })), JUMP, loose },

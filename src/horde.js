@@ -40,7 +40,11 @@ export const TUNING = {
   // They give up. One that can't see him, round a corner or further off than this, for this long, stops, folds back down and wanders home.
   sight: 25, sightStep: .5, giveUp: 8, stops: 1,
   grabReach: .95, grabbers: 3, dragSpeed: .7,
+  armsLength: .8,                  // metres. One coming for him gets no nearer than this, and reaches for him from here.
   windUp: .5,                      // seconds it takes them to get hold of him once they're close enough, and a hit in that time stops it
+  // Hit with something he swung, the one he swung at goes over away from him and lands this far off, by their number, short of a wall or a car or the water, with this much room
+  // left between them and anyone else, and room for this much of them lying there past where they land
+  knockedOff: [1.9, 2.5], lieApart: .6, lieReach: .7,
   mash: .17, mashFade: .12, grabHold: 7,   // one press, how fast it slips back, and how long you've got
   stun: 1.6, shove: 2.6, mercy: 1.6,       // what breaking free buys you
   personalSpace: .95,
@@ -271,12 +275,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     for (const s of active) {
       const dx = s.x - x, dz = s.z - z, d = hypot(dx, dz);
       if (d >= r || s.flat > 0 || s.under !== undefined) continue;
-      // whoever was after him and is knocked over by something that isn't him, a fire or the train, never stopped: they're straight back at him when they're up. It's checked before the state changes.
-      if (!his && isAfter(s)) s.resumes = true;
-      s.started = his || (s.started ?? false);
-      // and what they were doing and where they were, which is how they're drawn for a moment before they go over
-      s.hitAs = s.state === ROUSED ? SHAMBLE : s.state; s.fromX = s.x; s.fromZ = s.z; s.reaching = 0; s.rouse = null; s.rank = 0;
-      s.state = STUNNED; s.timer = seconds; s.alert = 1; s.moving = 0; s.flat = s.flatFor = seconds; n++;
+      floor(s, seconds, his, dx / (d || 1), dz / (d || 1)); n++;
       if (flung) fling(s, flung, dx, dz);
       else {
         const k = 1 + (1 - d / r) * 2.4, nx = s.x + dx / (d || 1) * k, nz = s.z + dz / (d || 1) * k;
@@ -289,6 +288,35 @@ export function createHorde(world, tuning = {}, on = {}) {
     // and whoever saw him do it comes for him, with whoever was nearest as the one he hit
     if (n && his) rile(x, z, victim);
     return n;
+  };
+  // Down, whatever put them there. hx, hz is the way the blow went.
+  function floor(s, seconds, his, hx, hz) {
+    // whoever was after him and is knocked over by something that isn't him, a fire or the train, never stopped: they're straight back at him when they're up. It's checked before the state changes.
+    if (!his && isAfter(s)) s.resumes = true;
+    s.started = his || (s.started ?? false);
+    // and what they were doing and where they were, which is how they're drawn for a moment before they go over
+    s.hitAs = s.state === ROUSED ? SHAMBLE : s.state; s.fromX = s.x; s.fromZ = s.z; s.hitX = hx; s.hitZ = hz; s.reaching = 0; s.rouse = null; s.rank = 0;
+    s.state = STUNNED; s.timer = seconds; s.alert = 1; s.moving = 0; s.flat = s.flatFor = seconds;
+  }
+  // Hit with something he swung, from where he stands at x, z: only the one he swung at goes down. It goes over away from him, along the line from him through it, and lands
+  // 1.5 to 3 m off, sliding there short of anything that would stop it, a wall, a car, the water or another of them, or where it stood if there's no room at all. It falls the way
+  // it's knocked, so it's turned to face him first. It says whether it went down. They remember it, and so does whoever was there.
+  h.knockOne = (s, x, z, seconds, by = 'hit') => {
+    if (s.flat > 0 || s.under !== undefined || s.thrown) return false;
+    const d = hypot(s.x - x, s.z - z) || 1, ux = (s.x - x) / d, uz = (s.z - z) / d, [near, far] = T.knockedOff;
+    floor(s, seconds, true, ux, uz);
+    s.yaw = Math.atan2(-ux, -uz);
+    const reach = near + (far - near) * (((s.look ?? 0) * 0.618) % 1), clear = (t) => {
+      const nx = s.fromX + ux * t, nz = s.fromZ + uz * t, lx = nx + ux * T.lieReach, lz = nz + uz * T.lieReach;
+      return open(s, nx, nz) && open(s, lx, lz) && !active.some((o) => o !== s && o.under === undefined && Math.min(hypot(o.x - nx, o.z - nz), hypot(o.x - lx, o.z - lz)) < T.lieApart);
+    };
+    let k = 0;
+    for (let t = .1; t <= reach + 1e-6; t += .1) { if (!clear(t)) break; k = t; }
+    if (k) { s.x = s.fromX + ux * k; s.z = s.fromZ + uz * k; s.y = world.floorAt(s.x, s.z); }
+    if (s.who) F.hurt(s.who, s.x, s.z, by);
+    if (F) for (const o of active) if (o.who && !(o.flat > 0) && hypot(o.x - x, o.z - z) < T.witness) F.wasThere(o.who);
+    rile(s.fromX, s.fromZ, s);
+    return true;
   };
   // How much longer someone's down for, getting up included. It's nothing for anyone on their feet.
   h.down = (s) => (s.flat > 0 && !s.thrown && s.under === undefined ? s.flat : 0);
@@ -602,6 +630,8 @@ export function createHorde(world, tuning = {}, on = {}) {
     s.moving = 0; if (!sp) return;
     let dx = s.tx - s.x, dz = s.tz - s.z, l = hypot(dx, dz);
     if (l < .35) return;
+    // one coming for him stops at arm's length, wherever it was making for, and never comes inside him
+    if (isAfter(s) && hypot(s.x - watch.x, s.z - watch.z) < T.armsLength) return;
     dx /= l; dz /= l;
     // keep out of each other's way, so they crowd rather than stack, except someone who's scared, who goes straight past anybody
     if (s.state !== AVOIDING) for (const o of active) {
