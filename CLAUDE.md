@@ -49,9 +49,15 @@ python3 -m http.server
 
 Then open http://localhost:8000.
 
+`npm run net:server` runs the town everyone shares on this machine, at ws://localhost:8787, and keeps it in `data/raw/town.json`. What goes over the wire is in `src/net.js`, and the town itself is `server/town.js`.
+
+`npm run deploy` puts main up at https://chunky.ms, the game's own files and nothing else: `index.html`, `src/`, `data/` and `audio/`, without tests, Markdown or `data/raw/`. It takes `--ref` for another commit and `--dry` to list the files.
+
 ## Tests
 
 `npm test` runs `node --test` for data and logic. Name test files `*.test.js`.
+
+`npm run check` runs everything below and `npm test` too, three at a time and longest first, and runs anything that fails again on its own. `-- --changed` runs only what the uncommitted changes, or the last commit, could break, `-- --dry` says what it would run, and `-- --at <commit>` checks a commit from a copy so the worktree can change meanwhile.
 
 `npm run smoke` plays Chapter 1 in real Chrome and fails on a wrong beat or a console error. It needs `npm i` first and takes `--shots dir` for screenshots and `--touch` for a phone viewport.
 

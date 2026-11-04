@@ -29,8 +29,8 @@ const names = (s) => new Set((s || '').split(',').map((x) => x.trim()).filter(Bo
 const jobs = Math.max(1, +opt('--jobs') || 3), only = names(opt('--only')), skip = names(opt('--skip'));
 const limit = (+opt('--timeout') || 600) * 1000, at = opt('--at');
 
-// never run from here: it spends money, writes the sound sheet, needs a ref, or serves rather than checks
-const NEVER = new Set(['check', 'sound:make', 'sound:level', 'frames', 'net:server', 'net:bots']);
+// never run from here: it spends money, writes the sound sheet, needs a ref, serves rather than checks, or puts the game live
+const NEVER = new Set(['check', 'deploy', 'sound:make', 'sound:level', 'frames', 'net:server', 'net:bots']);
 // run as well as the plain script, when its tool takes the flag
 const VARIANTS = { smoke: '--touch', sound: '--old' };
 // for --changed: modules whose check isn't named after them, and names too common in index.html to mean a check
