@@ -63,7 +63,7 @@ Then open http://localhost:8000.
 
 `npm run frames` plays the opening as it is and as it is on `origin/main`, or the commit it's given, and fails unless every frame is the same to the byte. It's for a change that isn't meant to touch the opening, and it's run by hand.
 
-`npm run check` runs everything below and `npm test` too, three at a time and longest first, and runs anything that fails again on its own. `-- --changed` runs only what the uncommitted changes, or the last commit, could break, `-- --dry` says what it would run, and `-- --at <commit>` checks a commit from a copy so the worktree can change meanwhile.
+`npm run check` runs everything below and `npm test` too, three at a time and longest first, and runs anything that fails again on its own. `-- --changed` runs only what the uncommitted changes, or the last commit, could break, `-- --dry` says what it would run, and `-- --at <commit>` checks a commit from a copy so the worktree can change meanwhile. Together, `--changed` is what that commit could break, or everything from `--changed <base>` to it.
 
 `npm run talk:host` plays the server for the characters' own words in Cloudflare's runtime on this machine, against a stand-in for OpenRouter so nothing's spent: a line and what it cost, a page on another site turned away, the month's cap, a phone asking too fast, and the month still spent after a restart. What it does is `server/talk.js`, and `server/worker.js` puts it on Cloudflare with the owner's key, which only the owner puts in.
 

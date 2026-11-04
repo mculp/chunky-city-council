@@ -4,7 +4,7 @@
 //
 // The checks are package.json's scripts, plus the variants below, less what spends money or writes files.
 // --changed runs only what a change could break: the uncommitted changes, or the last commit when there are none, or
-// everything since base. The node tests and smoke always run, and then:
+// everything since base. With --at it's that commit, or everything from base to it. The node tests and smoke always run, and then:
 // - the checks whose tool changed, or whose script in package.json did
 // - for a src/ or data/ file, the check named for it, and the checks that mention its name if three or fewer do
 //   (horde and map are in nearly every tool, so they'd pick everything)
@@ -73,10 +73,11 @@ for (const [name, cmd] of Object.entries(pkg.scripts)) {
 const why = new Map();
 if (args.includes('--changed')) {
   const given = opt('--changed'), base = given && !given.startsWith('--') ? given : null;
-  const dirty = git('status', '--porcelain') !== '';
-  const range = base ? [base] : dirty ? ['HEAD'] : ['HEAD~1', 'HEAD'], from = range[0];
+  // a commit from a copy is that commit, whatever the worktree's doing meanwhile
+  const dirty = !at && git('status', '--porcelain') !== '';
+  const range = at ? [base ?? `${at}~1`, at] : base ? [base] : dirty ? ['HEAD'] : ['HEAD~1', 'HEAD'], from = range[0];
   const files = git('diff', '--name-only', ...range).split('\n').filter(Boolean);
-  if (base || dirty) files.push(...git('ls-files', '--others', '--exclude-standard').split('\n').filter(Boolean));
+  if (!at && (base || dirty)) files.push(...git('ls-files', '--others', '--exclude-standard').split('\n').filter(Boolean));
   const script = (c) => c.name.split(' ')[0], toolOf = (c) => pkg.scripts[script(c)]?.match(/tools\/[\w.-]+\.mjs/)?.[0];
   const sources = new Map(), word = (w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
   const mentions = (c, w) => {
@@ -90,7 +91,7 @@ if (args.includes('--changed')) {
   for (const f of files) {
     if (f === 'tools/browser.mjs') for (const c of checks) add(c, f);
     if (f === 'package.json') {
-      const was = JSON.parse(git('show', `${from}:package.json`)), is = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+      const was = JSON.parse(git('show', `${from}:package.json`)), is = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
       const deps = (p) => JSON.stringify([p.dependencies, p.devDependencies]);
       for (const c of checks) {
         if (deps(was) !== deps(is)) add(c, 'a dependency changed');
@@ -121,7 +122,7 @@ if (args.includes('--changed')) {
       if (touched) add(c, `index.html's changes touch ${touched}`);
     }
   }
-  console.log(`${files.length} files changed${base ? ` since ${base}` : dirty ? ', not committed yet' : ' in the last commit'}`);
+  console.log(`${files.length} files changed${base ? ` since ${base}` : at ? ` in ${at}` : dirty ? ', not committed yet' : ' in the last commit'}`);
 }
 let chosen = checks.filter((c) => (!only.size || only.has(c.name) || only.has(c.name.split(' ')[0])) && !skip.has(c.name) && (!why.size || why.has(c.name)));
 // a check whose tool runs Python can't run without the venv; data/roads.md says how to make one
