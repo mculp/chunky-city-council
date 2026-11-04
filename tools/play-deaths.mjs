@@ -1,14 +1,16 @@
 // Every way a try ends, on a phone-sized page with real taps: the fever from the bite, full of whatever got him, with nothing written anywhere
 // on the screen, and then he comes to where he starts again about five seconds after the hit, his heart the first thing heard, or with a tap
-// straight to coming to. The crowd drag him down and stand round him folded over, looking down. The train goes by stretching while its light
-// swells till it's all there is. A pickup that hits him goes up and over, end over end, against a horizon that won't hold still, and it's back
-// where it was after. A blast, a fire and something coming down on him turn the sky, with the camera rising off him from the far side of it. The
-// cottonmouths have him, and the river takes him on the bridge run and his hood comes up once. Then the same with reduced motion: held still,
-// with no warping, and quicker.
+// straight to coming to. The crowd drag him down and stand round him folded over, looking down. Their fever's looked at a frame at a time from
+// each way he could be facing, the picture as well as the camera: it's them on the screen in every frame, and never any of him. The train goes
+// by stretching while its light swells till it's all there is. A pickup that hits him goes up and over, end over end, against a horizon that
+// won't hold still, and it's back where it was after. A blast, a fire and something coming down on him turn the sky, with the camera rising off
+// him from the far side of it. The cottonmouths have him, and the river takes him on the bridge run and his hood comes up once. Then the same
+// with reduced motion: held still, with no warping, and quicker.
 //
 //   npm i && npm run deaths [-- --shots dir]
 import { mkdirSync } from 'node:fs';
 import { serveAndOpen } from './browser.mjs';
+import { oneColour, WALL } from './picture.mjs';
 import { CAUSES, FEVER } from '../src/fever.js';
 
 const at = process.argv.indexOf('--shots'), shots = at > 0 ? process.argv[at + 1] : null;
@@ -57,12 +59,26 @@ const helpers = () => {
   };
   // where the camera is from him, how far up and how far across, and how far over towards a point
   window.camFrom = (P, to) => { const c = G.state().cam, dx = c[0] - P.x, dz = c[2] - P.z; return { up: c[1] - P.y, across: Math.hypot(dx, dz), towards: to ? (dx * (to.x - P.x) + dz * (to.z - P.z)) / (Math.hypot(to.x - P.x, to.z - P.z) || 1) : 0 }; };
+  // What's on the screen, read off the canvas in the same task it's drawn in, and how much of it is the one colour there's most of (tools/picture.mjs)
+  window.picture = () => {
+    const c = G.renderer.domElement, w = c.width, h = c.height, cv = (window.shot ??= document.createElement('canvas'));
+    cv.width = w; cv.height = h; const x = cv.getContext('2d', { willReadFrequently: true }); x.drawImage(c, 0, 0);
+    return oneColour(x.getImageData(0, 0, w, h));
+  };
+  // how many of those stood round him are on the screen: any of three points on each, from their middle up, leaning in over him
+  const on = new G.THREE.Vector3();
+  window.ringOn = () => {
+    const P = G.player.pos;
+    return H.all.filter((s) => s.ring && [.6, 1, 1.4].some((up) => { const lean = up / 1.4 * .45; on.set(s.x + (P.x - s.x) * lean, (s.y ?? P.y) + up, s.z + (P.z - s.z) * lean).project(G.camera); return on.z < 1 && Math.abs(on.x) <= 1 && Math.abs(on.y) <= 1; })).length;
+  };
 };
 
 let { page, errors, close: shut } = await serveAndOpen({ touch: true });
 const g = (fn, arg) => page.evaluate(fn, arg);
-const snap = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.png` }); };
+// A frame that's meant to be all one colour, or nearly, says so, so that tools/browser.mjs doesn't take it for a wall
+const snap = async (name, flat = false) => { if (shots) await page.screenshot({ path: `${shots}/${name}.png`, ...(flat && { flat }) }); };
 await g(helpers);
+await g(`window.oneColour = ${oneColour}`);
 // Nothing makes a sound until a real key or touch, so there's a heart to hear
 await page.keyboard.press('x');
 const heard = await page.waitForFunction(() => { const s = G.sound.state(); return s.ctx === 'running' && s.waiting === 0 && s.files.includes('wake.heart'); }, null, { timeout: 30000 }).then(() => true, () => false);
@@ -94,6 +110,23 @@ r = await g(() => {
 check(`he comes to on the church steps ${r.took.toFixed(1)} s after the hit, his heart beating as soon as he's there in the dark, with three hearts and nobody stood round`, close(r.took, 5, .3) && r.mode === 'town' && r.dark.includes('wake.heart') && r.hp === 3 && r.church && !r.ring, r);
 check('and everything\'s back as it was', r.look.up[1] === 1 && r.look.fade === 1 && r.look.swell === 0 && r.look.stretch === 1 && r.look.truck === null, r.look);
 
+// ---- their fever as it's seen, a frame at a time from each way he could be facing, from the first frame after they get him until it starts to go
+// black. The camera's where he's lying, looking up at them, so it's them on the screen and none of him: from there he'd be the inside of his hood,
+// a wall of red. The picture's measured as well as the numbers, so a frame that's a wall of one colour fails it.
+for (let f = 0; f < 4; f++) {
+  r = await g(({ f, end }) => {
+    const P = standAt(home.x, home.z, homeYaw + f * Math.PI / 2);
+    for (let i = 0; i < 5; i++) { const a = i * 1.25; H.add(P.x + Math.sin(a) * 1.6, P.z + Math.cos(a) * 1.6).state = 2; }
+    const by = untilDead()?.by, frames = [];
+    // the frame they get him in is still the one behind him
+    for (G.step(T, T); G.fever() && G.fever().t < end; G.step(T, T)) frames.push({ t: G.fever().t, him: G.hero.body.visible, on: ringOn(), ...picture() });
+    through();
+    const worst = frames.reduce((a, b) => (b.share > a.share ? b : a), frames[0]);
+    return { by, n: frames.length, him: frames.filter((x) => x.him).length, on: [Math.min(...frames.map((x) => x.on)), Math.max(...frames.map((x) => x.on))], worst: worst && { t: +worst.t.toFixed(2), share: +worst.share.toFixed(2), colour: worst.colour } };
+  }, { f, end: FEVER.scene - FEVER.out });
+  check(`facing ${f * 90}° round from there: in all ${r.n} frames of their fever none of him's drawn, ${r.on[0]} to ${r.on[1]} of them are on the screen, and no frame is a wall of one colour, the most of one being ${r.worst?.share} of it at ${r.worst?.t} s`, r.by === 'crowd' && r.n >= 70 && !r.him && r.on[0] >= 3 && r.worst.share < WALL, r);
+}
+
 // ---- the train, the real way, and a tap to skip it
 r = await g(() => {
   ready(); const s = TR.gates.find((c) => c.road === 'poplar_st').s + 300, q = R.RAIL.at(s);
@@ -106,7 +139,8 @@ check('hit by the train, it\'s the train\'s fever', r.fever?.by === 'train', r);
 r = await g(() => { until(1); const a = G.deathLook(); until(2.6); const b = G.deathLook(); return { a, b, words: words() }; });
 check(`the boxcars stretch as they go by, to ${r.b.stretch.toFixed(1)} times as long, and its light swells till it's nearly all there is`, r.a.stretch > 1.1 && r.b.stretch > r.a.stretch && r.b.swell > .8 && r.b.swell > r.a.swell, r);
 check('with nothing written', !r.words.length, r.words);
-await snap('2-the-train');
+// the train's light swells till it's nearly all there is, which is meant to be nearly one colour
+await snap('2-the-train', true);
 const box = await page.locator('canvas').first().boundingBox(), tap = () => page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
 await g(() => until(1.4));
 await tap();
@@ -176,11 +210,15 @@ await shut();
 // ---- with reduced motion: the same, held still, and quicker
 ({ page, errors, close: shut } = await serveAndOpen({ touch: true, reducedMotion: 'reduce' }));
 await page.evaluate(helpers);
+await page.evaluate(`window.oneColour = ${oneColour}`);
 r = await page.evaluate(() => {
-  standAt(home.x, home.z, homeYaw + Math.PI); G.die('crowd'); until(.3); const a = G.state().cam, la = G.deathLook(); until(1.2); const b = G.state().cam, lb = G.deathLook();
-  return { moved: Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), dream: Math.max(la.dream, lb.dream), tint: lb.tint, fov: [la.fov, lb.fov], down: G.HP.down, ...through() };
+  const P = standAt(home.x, home.z, homeYaw + Math.PI);
+  // a frame for them to be about, since the ring is whoever's nearest of those that are
+  for (let i = 0; i < 5; i++) { const a = i * 1.25; H.add(P.x + Math.sin(a) * 1.6, P.z + Math.cos(a) * 1.6); }
+  G.step(T, T); G.die('crowd'); until(.3); const a = G.state().cam, la = G.deathLook(), pa = picture(); until(1.2); const b = G.state().cam, lb = G.deathLook(), pb = picture();
+  return { moved: Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), dream: Math.max(la.dream, lb.dream), tint: lb.tint, fov: [la.fov, lb.fov], down: G.HP.down, him: G.hero.body.visible, on: ringOn(), most: Math.max(pa.share, pb.share), ...through() };
 });
-check(`with reduced motion it's held still, with the tint and no warping, him down from the start, and he's playing again ${r.took.toFixed(1)} s after it`, r.moved < .01 && r.dream === 0 && r.tint > .9 && r.fov[0] === r.fov[1] && r.down === 1 && r.took < 4, r);
+check(`with reduced motion it's held still, with the tint and no warping, him down from the start and none of him drawn, ${r.on} of them on the screen, and he's playing again ${r.took.toFixed(1)} s after it`, r.moved < .01 && r.dream === 0 && r.tint > .9 && r.fov[0] === r.fov[1] && r.down === 1 && !r.him && r.on >= 3 && r.most < WALL && r.took < 4, r);
 r = await page.evaluate(() => {
   ready(); const s = TR.gates.find((c) => c.road === 'poplar_st').s + 300, q = R.RAIL.at(s);
   G.place(q.x, q.z); G.look(Math.atan2(-q.tx, -q.tz), .3); G.HP.speed = 0; TR.send(1, s - 300);

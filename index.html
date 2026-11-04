@@ -8105,7 +8105,8 @@ function tick(dt, draw = true) {
     else if (HP.kind === 'down') { const d = HP.down, e = d * d; hero.body.position.set(0, HERO_HIPS + (.3 - HERO_HIPS) * Math.min(1, d * 1.08), 0); hero.body.rotation.set(.3 * (1 - d) + 1.46 * e, 0, Math.sin(Math.floor(time * 12) * .9) * .05 * (1 - d) + .16 * e); }
     else { const bob = Math.abs(Math.sin(HP.phase)) * .05 * Math.min(1, HP.speed / 4); hero.body.position.set(0, HERO_HIPS + bob, 0); hero.body.rotation.set(HP.kind === 'struggle' ? .32 : .1 * Math.min(1, HP.speed / 4) + .22 * player.runK, 0, 0); }
   }
-  hero.body.visible = !(player.inv > 0 && Math.floor(time * 16) % 2 === 0 && player.inv < 1.3);
+  // In the crowd's fever the camera's where he lies, looking up at them, so none of him is drawn: from there he'd be the inside of his hood
+  hero.body.visible = !(player.inv > 0 && Math.floor(time * 16) % 2 === 0 && player.inv < 1.3) && !(M === 'fail' && died?.by === 'crowd' && !died.placed);
   // dropped props: lantern and bottle fall, float, sink glowing
   for (const d of drops) {
     if (d.obj.position.y > 0) { d.v.y -= 9.8 * dt; d.obj.position.addScaledVector(d.v, dt); if (d.obj.position.y <= 0) addRipple(d.obj.position.x, d.obj.position.z, .3, d.glow ? 1 : 0); }
