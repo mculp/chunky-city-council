@@ -161,6 +161,82 @@ test('a loop turned all the way down on its sheet never starts, and one that isn
   assert.deepEqual(s.state().loops, ['amb.crickets']);
 });
 
+test('a loop that dies away a little at a time still goes quiet, and is let go of', async () => {
+  const d = data(); d.cues['vehicle.dirt'] = { gain: 1, file: 'v.mp3' };
+  const w = fakeWorld({ respond: () => tone({ seconds: 2, amp: .2 }) }), s = createSound(d, { win: w.win }); w.touch(); await w.settle(); s.update(0, 0, 0);
+  // a pickup rolling to a stop on the dirt, where the last step down is less than a loop bothers with
+  for (const k of [.4, .2, .05, .01, .003, 0]) s.loop('vehicle.dirt', k);
+  assert.equal(s.state().loopLevels['vehicle.dirt'], 0);
+  w.made.ctx.currentTime = 3; s.update(0, 0, 0);
+  assert.deepEqual(s.state().loops, []);
+});
+
+test('a horn is blown as its notes: the steady part of its take held for each, rests between, and it\'s one sound until the echo after the last is gone', async () => {
+  const d = data(); d.cues['train.horn'] = { gain: .5, reach: 1200, max: 1, gap: 1, file: 'h.mp3', stereo: true, held: [.1, 2.3], notes: [2, 2, .7, 2.1], rest: .55, echo: .3 };
+  const w = fakeWorld({ respond: () => tone({ seconds: 7 }) }), s = createSound(d, { win: w.win }); w.touch(); await w.settle(); s.update(0, 0, 0);
+  const before = w.made.sources.length;
+  assert.ok(s.play('train.horn', { x: 100, z: 0 }));
+  const notes = w.made.sources.slice(before), starts = notes.map((n) => n.started.at);
+  assert.equal(notes.length, 4);
+  assert.deepEqual(starts.slice(1).map((t, i) => +(t - starts[i]).toFixed(2)), [2.55, 2.55, 1.25], 'long, long, short, long, with .55 s between');
+  for (const n of notes) assert.deepEqual([n.started.offset, n.loop, n.loopStart, n.loopEnd], [.1, true, .1, 2.3]);
+  assert.ok(notes[2].stopped - starts[2] < 1.1, 'the short one stops short');
+  assert.ok(notes[3].stopped - starts[3] > 2.1 + 2, 'the last one waits out the echo');
+  assert.equal(s.lastHeard('train.horn').notes, 4);
+  assert.equal(s.play('train.horn', { x: 100, z: 0 }), false, 'one at a time');
+  for (const n of notes.slice(0, 3)) n.onended();
+  assert.equal(s.state().voices, 1, 'it\'s still blowing');
+  notes[3].onended();
+  assert.equal(s.state().voices, 0, 'and it\'s over when the last note and its echo are');
+});
+
+test('no note on the new sheet is longer than the steady part it holds, so none goes round with a click', () => {
+  const made = JSON.parse(readFileSync(new URL('../data/sound-new.json', import.meta.url), 'utf8'));
+  const blown = Object.entries(made.cues).filter(([, c]) => c.notes);
+  assert.ok(blown.some(([name]) => name === 'train.horn'), 'the horn is blown as notes');
+  for (const [name, c] of blown) for (const n of c.notes) assert.ok(c.held[1] > c.held[0] && n <= c.held[1] - c.held[0], `${name}'s ${n} s note fits in what it holds`);
+  const horn = made.cues['train.horn'], at = (d) => horn.gain * Math.max(0, 1 - d / horn.reach) ** 2;
+  assert.deepEqual(horn.notes.map((n) => (n > 1.5 ? 'long' : 'short')), ['long', 'long', 'short', 'long']);
+  assert.ok(at(1000) > 0 && at(1000) < at(400) / 10 && at(1500) === 0, 'it\'s loud close by, faint from a kilometre off and gone past that');
+});
+
+test('the player\'s own levels for the effects and the night noise go on top of the sheet\'s, and are kept for next time', () => {
+  const w = fakeWorld(), s = createSound(data(), { win: w.win }); w.touch();
+  s.setLevel('ambience', .25); s.setLevel('effects', 1.7); s.setLevel('nonsense', .5);
+  assert.deepEqual([s.levelOf('ambience'), s.levelOf('effects'), s.levelOf('music')], [.25, 1, 1]);
+  assert.deepEqual(JSON.parse(w.made.stored['chunky.levels']), { ambience: .25, effects: 1 });
+  const again = createSound(data(), { win: w.win }); w.touch();
+  assert.equal(again.levelOf('ambience'), .25);
+  assert.ok(Math.abs(again.state().levels.ambience - DATA.levels.ambience * .25) < 1e-3, 'the night\'s down from the start');
+  assert.ok(Math.abs(again.state().levels.effects - DATA.levels.effects) < 1e-3, 'and nothing else is');
+});
+
+test('levels that can\'t be kept, or that were kept wrong, are forgotten rather than trouble', () => {
+  const w = fakeWorld(); w.win.localStorage = { getItem() { throw new Error('no'); }, setItem() { throw new Error('no'); } };
+  const s = createSound(data(), { win: w.win }); w.touch(); s.setLevel('ambience', .5);
+  assert.equal(s.levelOf('ambience'), .5);
+  const w2 = fakeWorld(); w2.made.stored['chunky.levels'] = '{nope'; assert.equal(createSound(data(), { win: w2.win }).levelOf('ambience'), 1);
+  const w3 = fakeWorld(); w3.made.stored['chunky.levels'] = '{"ambience":"loud","effects":-3}';
+  const s3 = createSound(data(), { win: w3.win }); assert.deepEqual([s3.levelOf('ambience'), s3.levelOf('effects')], [1, 0]);
+});
+
+test('the night never takes the last four sounds at once, so a horn or a crash is always heard', () => {
+  const d = data(); Object.assign(d.cues['frog.a'], { max: 30, gap: 0 }); Object.assign(d.cues.explosion, { max: 30, gap: 0 });
+  const w = fakeWorld({ coarse: true }), s = createSound(d, { win: w.win }); w.touch();
+  let frogs = 0; for (let i = 0; i < 30; i++) if (s.play('frog.a')) frogs++;
+  assert.equal(frogs, 12 - 4, 'the frogs stop with four to spare on a phone');
+  let booms = 0; for (let i = 0; i < 30; i++) if (s.play('explosion')) booms++;
+  assert.equal(booms, 4, 'and those four are there for the rest');
+});
+
+test('how long a go at a sound lasts is known once its file is in', async () => {
+  const d = data(); d.cues['step.road'].file = ['a.mp3', 'b.mp3'];
+  const w = fakeWorld({ respond: (f) => tone({ seconds: f === 'a.mp3' ? 1 : 1.5 }) }), s = createSound(d, { win: w.win }); w.touch();
+  assert.equal(s.lengthOf('step.road'), null, 'not while it\'s on its way');
+  await w.settle();
+  assert.ok(Math.abs(s.lengthOf('step.road') - 1.5) < .05, `${s.lengthOf('step.road')}`);
+});
+
 const scored = (extra) => { const d = data(); Object.assign(d.music.title, { file: 'title.mp3' }); Object.assign(d.music.hang, { file: 'title.mp3' }); Object.assign(d.music.town, { file: ['t1.mp3', 't2.mp3'], next: ['chase'] }); Object.assign(d.music.chase, { file: 'chase.mp3' }); Object.assign(d.music.dream, { file: 'dream.mp3', once: true }); extra?.(d); return d; };
 const started = (w) => w.made.sources.filter((x) => x.started && x.buffer?.length >= 1000);
 

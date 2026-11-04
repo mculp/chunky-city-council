@@ -62,7 +62,7 @@ const pass = await g(() => {
   stand(c.s + 60, 14); TR.send(1, c.s - 700);
   const out = { armsAtFirst: arms.map((a) => a.down), shut0: c.shut };
   // up to the horn
-  G.sim(13, T); out.horn = !!Snd.lastHeard('train.horn'); out.gapHorn = Math.round(TR.train.gap); out.rumbleFar = Snd.state().loopLevels['train.rumble'] ?? 0; out.rateComing = Snd.state().loopRates['train.rumble'];
+  G.sim(13, T); out.horn = !!Snd.lastHeard('train.horn'); out.notes = Snd.lastHeard('train.horn')?.notes ?? 0; out.gapHorn = Math.round(TR.train.gap); out.rumbleFar = Snd.state().loopLevels['train.rumble'] ?? 0; out.rateComing = Snd.state().loopRates['train.rumble'];
   // up to the nose getting there
   let shutAt = null; while ((c.s - TR.train.head) > 8) { G.sim(.1, T); if (c.shut && shutAt === null) shutAt = Math.round(c.s - TR.train.head); }
   out.shutAt = shutAt; out.armsDown = arms.map((a) => a.down); out.bell = Snd.state().loopLevels['crossing.bell'] ?? 0; out.shutHere = TR.shutAt(c.x, c.z); out.shutElse = TR.shutAt(c.x + 50, c.z);
@@ -70,7 +70,7 @@ const pass = await g(() => {
   out.blows = R.horns.filter((h) => h.blown).map((h) => h.road);
   return out;
 });
-check('it blows for the crossing, and it\'s heard', pass.horn, pass);
+check('it blows for the crossing, long, long, short, long, and it\'s heard', pass.horn && pass.notes === 4, pass);
 check('it blows the once, for the crossing he\'s by', pass.blows.length === 1 && pass.blows[0] === 'chestnut_st', pass);
 check('it\'s heard coming, a little sharp', pass.rumbleFar > 0 && pass.rateComing > 1.02, pass);
 check('the crossing shuts in good time', pass.shutAt > 200 && pass.shutAt < 340 && pass.shutHere && !pass.shutElse, pass);

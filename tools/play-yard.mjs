@@ -112,8 +112,10 @@ check('beside the ball it says to bump it, and the button says BUMP', start.act 
 const seen = await (async () => {
   let bumps = 0, last = null, ring = false, says = true;
   for (let i = 1; i <= 6; i++) {
+    // everything heard since the tap, since a frog can sing at the same moment
+    const from = await g(() => played.length);
     await tap();
-    last = await g(() => { const G = __game, B = G.yard.BALL; return { count: B.count, air: B.air, played: played.at(-1), up: B.vy > 0, toast: document.getElementById('toast').textContent }; });
+    last = await g((from) => { const G = __game, B = G.yard.BALL; return { count: B.count, air: B.air, played: played.slice(from), up: B.vy > 0, toast: document.getElementById('toast').textContent }; }, from);
     if (last.count !== i) break;
     bumps = i;
     if (i === 2) await snap('ball-up');
@@ -136,7 +138,7 @@ const seen = await (async () => {
 })();
 check('six in a row with one thumb and one button', seen.bumps === 6, seen);
 check('it counts up, and the sixth says so', seen.last.toast === '6 in a row.', seen.last);
-check('it sounds like something', seen.last.played === 'ball.bump', seen.last);
+check('it sounds like something', seen.last.played.includes('ball.bump'), seen.last);
 check('a ring shows where it\'s coming down', seen.ring, seen);
 check('the button stays BUMP all the time it\'s up', seen.says, seen);
 const dropped = await g(() => {

@@ -145,7 +145,16 @@ body.talking .ctl{visibility:hidden}
 #mute .off{display:none}
 #mute.muted .on{display:none}
 #mute.muted .off{display:block}
-body.talking #mute{visibility:hidden}
+.soundrow{display:flex;align-items:flex-start}
+#levels{width:40px;height:40px;margin:-4px 0 0 -4px;padding:9px;background:none;border:0;color:var(--cream);opacity:.6;pointer-events:auto;touch-action:manipulation}
+#levels svg{display:block;width:100%;height:100%;filter:drop-shadow(0 1px 0 var(--ink))}
+#levels[aria-expanded="true"]{opacity:1}
+#mute[hidden]+#levels{display:none}
+#levelsBox{pointer-events:auto;width:188px;margin:-2px 0 0 -2px;padding:10px 12px 8px;background:var(--panel);border:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+#levelsBox[hidden]{display:none}
+#levelsBox label{display:flex;flex-direction:column;gap:2px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--cream);text-shadow:0 1px 0 var(--ink)}
+#levelsBox input{width:100%;height:30px;margin:0;accent-color:var(--rust);touch-action:none}
+body.talking #mute,body.talking #levels,body.talking #levelsBox{visibility:hidden}
 #sub{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom, 0px) + 176px);z-index:6;max-width:min(86vw,520px);padding:6px 12px;background:var(--panel);border:1px solid var(--line);color:var(--cream);font-size:15px;line-height:1.35;text-align:center;pointer-events:none}
 #sub[hidden]{display:none}
 #board{overflow-y:auto;padding:calc(env(safe-area-inset-top, 0px) + 16px) 16px 32px;align-items:flex-start;display:block}
@@ -169,7 +178,8 @@ body.talking #mute{visibility:hidden}
     <div class="stam" id="stam" hidden><i id="stamFill"></i></div>
     <div class="beans" id="beans" hidden>Beans 0/12</div>
     <div class="pockets" id="pockets" hidden></div>
-    <button id="mute" aria-label="Sound" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.6L12 18.5v-13L7.6 9.5z" fill="currentColor"/><path class="on" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"/><path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
+    <div class="soundrow"><button id="mute" aria-label="Sound" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.6L12 18.5v-13L7.6 9.5z" fill="currentColor"/><path class="on" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"/><path class="off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button><button id="levels" aria-label="Sound levels" aria-expanded="false" aria-controls="levelsBox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 8h18M3 16h18"/><circle cx="9" cy="8" r="2.6" fill="currentColor"/><circle cx="15" cy="16" r="2.6" fill="currentColor"/></svg></button></div>
+    <div id="levelsBox" hidden><label>Effects<input type="range" id="lvEffects" min="0" max="100" step="5" value="100"></label><label>Night noise<input type="range" id="lvNight" min="0" max="100" step="5" value="100"></label></div>
   </div>
   <div class="right">
     <div class="obj" id="obj" hidden></div>
@@ -6851,7 +6861,7 @@ function thrownNow() {
   return kind ? { kind, name: LURES[kind].name, word: LURES[kind].word, n: have[kind], more: kindsHeld(have) > 1 } : null;
 }
 // A sound that's only on the new sheet plays nothing with #old, and doesn't make a fuss about it
-const playNew = (name, opts) => { if (SFX.data.cues[name]) SFX.play(name, opts); };
+const playNew = (name, opts) => !!SFX.data.cues[name] && SFX.play(name, opts);
 function throwLure(kind) {
   const f = flying.find((t) => !t.on); if (!f) return false;
   const L = LURES[kind], P = player.pos;
@@ -6885,8 +6895,8 @@ function parkedAt(x, z, y) {
 // for him and not for the car.
 function soundAlarm(v) {
   if (!canAlarm(v)) return;
-  v.alarmed = true; ALARMS.push({ v, until: time + ALARM.seconds, hush: time + ALARM.sounds });
-  if (folkOut) horde.noise(v.x, v.z, ALARM.reach, ALARM.sounds, 'alarm');
+  v.alarmed = true; ALARMS.push({ v, until: time + ALARM.seconds });
+  if (folkOut) horde.noise(v.x, v.z, ALARM.reach, ALARM.rouses, 'alarm');
 }
 function glowAt(x, y, z, size, r, g, b, a) {
   const o = lureGlows[lureGlowsOn++]; if (!o) return;
@@ -6911,12 +6921,12 @@ function updateLures(dt) {
     if (time >= p.next) { p.next = time + .1 + wreckRand() * wreckRand() * .7; p.lit = time + 1 / 12; spray(p.x, p.y + .05, p.z, FEW ? 3 : 5, .045, 3.4, 1, .82, .35); playNew('lure.pop', { x: p.x, z: p.z }); }
     if (flash && time < p.lit) glowAt(p.x, p.y + .25, p.z, 1.5, 1, .78, .38, .9);
   }
-  // and a car alarm goes on until it stops, or the car does. It's only heard for the first few seconds of it, while all there is to play for it is a siren.
+  // and a car alarm goes on until it runs down, or the car stops being one. It's loud close to and fainter further off, gone past ALARM.heard, and it stops in its last second.
   let loudest = 0;
   for (let i = ALARMS.length - 1; i >= 0; i--) {
     const a = ALARMS[i], v = a.v;
     if (time >= a.until || v === driving || v.wrecked || v.drowned || v.exploded) { ALARMS.splice(i, 1); continue; }
-    if (time < a.hush) loudest = Math.max(loudest, (1 - Math.min(1, Math.hypot(v.x - player.pos.x, v.z - player.pos.z) / 130)) ** 1.5);
+    loudest = Math.max(loudest, (1 - Math.min(1, Math.hypot(v.x - player.pos.x, v.z - player.pos.z) / ALARM.heard)) ** 2 * Math.min(1, a.until - time));
     // its lights go on and off, or just stay on for anyone who'd rather they didn't flash
     if (!flash || Math.floor(time * 3) % 2 === 0) {
       const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw), h = v.K.length / 2 + .05, k = flash ? .95 : .5;
@@ -7145,6 +7155,28 @@ function surfaceUnder() {
   return pavedAt(P.x, P.z) ? 'road' : 'dirt';
 }
 function footstep(k = 1) { SFX.play(`step.${surfaceUnder()}`, { gain: k, rate: k > 1.2 ? .85 : 1 }); }
+// The crickets: two at most, each on a spot of its own in the grass round him, singing over and over for a while and then stopping, and another starting up somewhere
+// else a while after, so that sometimes there's none and there's never a loop to hear. Each one's a little higher or lower and quicker or slower than the next, as they are.
+// Only the new sheet has them. The old one has its loop.
+const CRICKETS = ['cricket.a', 'cricket.a', 'cricket.b', 'cricket.c'], singers = [];
+let nextSinger = 2;
+function crickets(on, gain) {
+  const P = player.pos;
+  for (let i = singers.length - 1; i >= 0; i--) {
+    const s = singers[i];
+    if (!on || time >= s.until || Math.hypot(s.x - P.x, s.z - P.z) > 60) { singers.splice(i, 1); continue; }
+    const len = time >= s.next && SFX.lengthOf(s.kind);
+    if (!len) continue;
+    // a call there wasn't room for, with too much else going, is tried again a moment later rather than sung to nobody
+    s.next = playNew(s.kind, { x: s.x, z: s.z, rate: s.rate, gain }) ? time + len / s.rate + soundRand() * 1.5 : time + .5;
+  }
+  if (!on || !SFX.data.cues[CRICKETS[0]] || time < nextSinger) return;
+  // the wait for the next is mostly short and now and then long, and the long ones are the quiet
+  nextSinger = time + 2 - Math.log(1 - soundRand()) * 6;
+  if (singers.length >= 2) return;
+  const a = soundRand() * 6.283, d = 10 + soundRand() * 35;
+  singers.push({ kind: CRICKETS[Math.floor(soundRand() * CRICKETS.length)], x: P.x + Math.cos(a) * d, z: P.z + Math.sin(a) * d, rate: .94 + soundRand() * .12, next: time, until: time + 5 + soundRand() * 15 });
+}
 function crowdVoices() {
   let hunters = 0;
   const P = player.pos, list = horde.active;
@@ -7197,6 +7229,7 @@ function soundTick(dt, M) {
   const rd = riverDist(P.x, P.z), shore = WATER.look(P.x, P.z) ? WATER.d : Infinity, water = 1 - Math.min(sstep(8, 38, rd), sstep(0, 14, shore));
   SFX.loop('amb.wind', 1);
   SFX.loop('amb.crickets', driving ? .5 : 1);
+  crickets(quiet === 1, driving ? .5 : 1);
   SFX.loop('amb.river', M === 'swim' ? 1 : water);
   let fire = Infinity;
   for (const b of burners) if (!b.dead) fire = Math.min(fire, Math.hypot(b.x - P.x, b.z - P.z));
@@ -7222,6 +7255,21 @@ showMuted(SFX.muted);
 $('mute').addEventListener('click', () => showMuted(!SFX.muted));
 // The tap that starts the sound is asking for sound, so it doesn't turn it straight off again
 $('soundWord').addEventListener('click', () => { if (SFX.muted || performance.now() - SFX.startedAt > 900) showMuted(!SFX.muted); });
+// The effects and the night noise, on sliders of their own under the button beside the mute. They're kept for next time. A tap anywhere else or Esc puts them away.
+const LEVELS = { lvEffects: 'effects', lvNight: 'ambience' };
+function showLevels(open) {
+  $('levelsBox').hidden = !open; $('levels').setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) for (const [id, bus] of Object.entries(LEVELS)) $(id).value = Math.round(SFX.levelOf(bus) * 100);
+}
+$('levels').addEventListener('click', () => showLevels($('levelsBox').hidden));
+for (const [id, bus] of Object.entries(LEVELS)) {
+  const el = $(id);
+  el.addEventListener('input', () => SFX.setLevel(bus, el.value / 100));
+  // and then the arrow keys are for walking again
+  el.addEventListener('change', () => el.blur());
+}
+addEventListener('pointerdown', (e) => { if (!$('levelsBox').hidden && !e.target.closest?.('#levelsBox, #levels')) showLevels(false); }, true);
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('levelsBox').hidden) showLevels(false); });
 // Every sound and every part of the score, one button each, at #sounds and #sounds-new. Nothing else in the game runs while it's up.
 function openBoard() {
   boardOpen = true; const box = $('board'); box.hidden = false; $('title').hidden = true; $('mute').hidden = true;
@@ -7633,7 +7681,7 @@ if (location.hash === '#signs') openSignBoard();
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, farm: FARM, dock: DOCK, onDock, sound: SFX, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, church: { house: CHURCH_HOUSE, at: CF.at, door: () => wallsOf(CHURCH_HOUSE, Y0).doors[0], steeple: churchSteeple, steeplePos: STEEPLE, steepleShown: () => churchSteepleOn.visible, us80: US80_CHURCH, us80Shown: () => us80Steeple.visible, roundWindow, rope: ROPE, bellInReach, ring: ringBell, ringing: () => bellLeft > 0, strokes: () => bellStrokes, BELL, pantry, PANTRY, today, owes: pantryOwes, shown: () => pantryCans.count, shelf: PANTRY_SHELF }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, farm: FARM, dock: DOCK, onDock, sound: SFX, singers, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, church: { house: CHURCH_HOUSE, at: CF.at, door: () => wallsOf(CHURCH_HOUSE, Y0).doors[0], steeple: churchSteeple, steeplePos: STEEPLE, steepleShown: () => churchSteepleOn.visible, us80: US80_CHURCH, us80Shown: () => us80Steeple.visible, roundWindow, rope: ROPE, bellInReach, ring: ringBell, ringing: () => bellLeft > 0, strokes: () => bellStrokes, BELL, pantry, PANTRY, today, owes: pantryOwes, shown: () => pantryCans.count, shelf: PANTRY_SHELF }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
     THREE, hills: { at: HILLS.at, slope: HILLS.slope, follow: HILLS.follow, terraces: HILLS.terraces, here: () => HILL.uHillHere.value, uniforms: HILL, flat: hillsFlat, skyline },
     stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead },

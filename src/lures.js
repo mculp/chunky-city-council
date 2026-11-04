@@ -13,9 +13,9 @@ export const LURES = {
   crackers: { name: 'firecrackers', word: 'CRACKERS', carry: 6, speed: 14, up: 6, reach: 24, seconds: 8, look: 8 },
   fluid: { name: 'lighter fluid', word: 'FLUID', carry: 4, speed: 13, up: 5.5, reach: 14, seconds: 18, look: 18 },
 };
-// A car alarm is noise, like a crash. It's only heard for the first few seconds of its 15, while all there is to play for it is a siren, and that's how long it rouses anyone.
-// Its lights go on and off for all 15.
-export const ALARM = { reach: 80, seconds: 15, sounds: 5, kinds: new Set(['car', 'pickup', 'coupe', 'coupe99']) };
+// A car alarm whoops and warbles for half a minute, with its lights going on and off, and he can hear it from `heard` metres off, fainter the further he is. It's noise,
+// like a crash, but only as it goes off: for its first few seconds it rouses the burnt-down ones within `reach`, and nothing after that.
+export const ALARM = { reach: 80, seconds: 30, rouses: 5, heard: 160, kinds: new Set(['car', 'pickup', 'coupe', 'coupe99']) };
 
 // the order they come up in. Gas after the rest, because it's the loudest way to make a point.
 const ORDER = ['bottle', 'crackers', 'fluid', 'gas'];

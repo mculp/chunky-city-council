@@ -101,7 +101,7 @@ Noise rouses the ones who've burnt down and are near enough to hear it, and only
 
 A noise rouses once for each one. Anyone who walks into earshot while it's still going is roused then, and one that has just been sent back or given up isn't roused again by the same racket. If he can't be found, in the church or barred in, it stirs nobody then, and the moment he can be found while it's still going the nearest three are. His own noise counts too, by how fast he's going and, in a vehicle, by the vehicle: a pickup's heard from 45 m and well past that flat out, and a golf cart hardly at all.
 
-The reach and time of each is the `horde.noise(x, z, reach, seconds, kind)` call in `index.html`: a swing 14 m for 1 s, a hard hit in a vehicle 40 m for 1.5 s, a wreck 60 m for 2 s, a blast nine times its radius for 6 s, a car alarm `ALARM` in `src/lures.js`, 80 m for the 5 seconds of its 15 that it's heard (its lights go on and off for all of them), and the bell `BELL`, 160 m for 20 s, with the church off limits to them while it rings and after.
+The reach and time of each is the `horde.noise(x, z, reach, seconds, kind)` call in `index.html`: a swing 14 m for 1 s, a hard hit in a vehicle 40 m for 1.5 s, a wreck 60 m for 2 s, a blast nine times its radius for 6 s, a car alarm `ALARM` in `src/lures.js`, 80 m for the first 5 seconds of its 30, as it goes off (it's heard, and its lights go on and off, for all of them), and the bell `BELL`, 160 m for 20 s, with the church off limits to them while it rings and after.
 
 **Nothing draws a crowd.** Not the bell, an alarm or the train's horn, since everyone in Chunky has heard all of them every day for years, and nobody follows anything into the water. A crowd will come for supper, and supper isn't in yet.
 

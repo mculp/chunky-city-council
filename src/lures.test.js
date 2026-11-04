@@ -12,7 +12,9 @@ test('each thing says how near a burnt-down one has to be to look at it, how lon
     assert.ok(L.look <= L.seconds, `${k} is looked at while it's there`);
   }
   assert.ok(ALARM.reach > LURES.crackers.reach, 'a car alarm\'s the loudest thing in town');
-  assert.ok(ALARM.sounds > 0 && ALARM.sounds < ALARM.seconds, 'but it\'s only heard for the first few of its seconds, which is how long it rouses anyone');
+  assert.ok(ALARM.rouses > 0 && ALARM.rouses < ALARM.seconds, 'but it only rouses anyone as it goes off, not for all of its seconds');
+  assert.ok(ALARM.seconds >= 25 && ALARM.seconds <= 40, 'it runs down after about half a minute');
+  assert.ok(ALARM.heard > ALARM.reach, 'and he can hear it from further off than it rouses anyone');
   assert.ok(LURES.bottle.reach < LURES.crackers.reach && LURES.bottle.look < LURES.fluid.look);
 });
 

@@ -149,12 +149,14 @@ Between the end of the bridge run and the edge of town there isn't a word, and n
 
 ## Sound
 
-The night comes first: wind, insects, the river and frogs near water, all of it thin enough that a footstep carries. The music is slow and has a lot of room in it, a low drone and a slide guitar a long way off, and it only gets a pulse when something's after him.
+The night comes first: crickets one here and one there with quiet between them, the river, and frogs near water, all of it thin enough that a footstep carries. Nothing under it is a loop or a hiss. The music is slow and has a lot of room in it, a low drone and a slide guitar a long way off, and it only gets a pulse when something's after him.
 
 - **The rope snapping is the loudest silence in the game.** The music cuts as it goes, so there's only air and then the splash, and it comes back under the water.
 - **The bridge** gets drums and a pulse. **The bite** cuts everything dead. **The fever** takes the night away altogether and leaves the music going out of tune. **Waking** is his heart.
 - **The crowd** mutter to themselves. One that's noticed him says so, louder the closer it is, and the music turns on him until they've been gone a while. One that reaches for him groans once more as its hands go up, higher and shorter, since by then his hood is hiding it.
-- **The train** is heard before it's seen: a rumble from over a kilometre off, higher as it comes and lower as it goes, the horn once, short of a crossing he's near, the crossing bell, and the wheels over the joints up close. Two short blasts mean it's seen him on the tracks.
+- **The train** is heard before it's seen: a rumble from over a kilometre off, higher as it comes and lower as it goes, the horn once, long, long, short, long, short of a crossing he's near, the crossing bell, and the wheels over the joints up close. Two short blasts mean it's seen him on the tracks.
+- **A car alarm** whoops, blares and warbles for half a minute, the kind every car had, and never a siren, since Chunky has no police.
+- The effects and the night noise each have a slider of their own, under the button beside the mute.
 - **Nothing speaks for him.** His voice is the owner's to record. There's a place for each line, and no line exists until there's a recording of it.
 
 `data/sound.md` has how it's all kept.

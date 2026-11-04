@@ -16,6 +16,8 @@ const PHRASES = [
 const ROOTS = [1, 1, 1.189, .891];   // the low bowed part: D, D, F, C, as rates of the D in the bank
 const LOOP_FADE = 5;                 // how long a track takes to fade into itself each time it comes round
 const TRACK_RMS = .1, VOICE_RMS = .126;
+// how many sounds at once the night always leaves for everything else, so the frogs and crickets can't keep a horn or a crash from being heard
+const NIGHT_LEAVES = 4;
 const FADE_IN = Float32Array.from({ length: 32 }, (_, i) => Math.sin(i / 31 * Math.PI / 2)), FADE_OUT = FADE_IN.slice().reverse();
 const silentWav = () => {
   // half a second of nothing, for the element that holds an iPhone's audio session open
@@ -33,15 +35,18 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
   let deck = null, loading = 0, startedAt = -Infinity;
   const levels = { ...data.levels }, L = { x: 0, z: 0, yaw: 0 };
   const fades = {};
+  // how far up the player has a bus, from 0 to 1 of what the sheet says, kept for next time like the mute
+  let mine = {};
   let ctx = null, master = null, buses = {}, voices = 0, muted = false, wanted = 'title', score = null, keepAlive = null, hidden = !!win.document?.hidden, speaking = null, nextLine = null, meterNode = null;
   try { muted = win.localStorage?.getItem('chunky.mute') === '1'; } catch { /* a private window can refuse */ }
+  try { const kept = JSON.parse(win.localStorage?.getItem('chunky.levels') ?? '{}'); for (const b of BUSES) if (Number.isFinite(kept?.[b])) mine[b] = Math.max(0, Math.min(1, kept[b])); } catch { mine = {}; }
 
   // Sound must never be what stops the game, so nothing in here gets to throw into it. It says so, once for each different complaint.
   const said_ = new Set(), complain = (kind, why) => { if (!said_.has(why)) { said_.add(why); win.console?.[kind](`Sound: ${why}`); } };
   const guarded = (f, otherwise = false) => (...args) => { try { return f(...args); } catch (e) { complain('error', e.message); return otherwise; } };
   const cueOf = (name) => { const c = data.cues[name]; return c ? { ...defaults, ...c } : null; };
   const smooth = (param, value, seconds) => { const now = ctx.currentTime; param.cancelScheduledValues(now); param.setTargetAtTime(value, now, seconds); };
-  const busGain = (b) => (levels[b] ?? 1) * (fades[b] ?? 1) * (speaking && b !== 'voice' ? data.duck?.[b] ?? 1 : 1);
+  const busGain = (b) => (levels[b] ?? 1) * (mine[b] ?? 1) * (fades[b] ?? 1) * (speaking && b !== 'voice' ? data.duck?.[b] ?? 1 : 1);
 
   function toBuffer(samples) { const b = ctx.createBuffer(1, samples.length, RATE); b.getChannelData(0).set(samples); return b; }
   // A sound's takes: its file's if that's come in, or the bank's, worked out now if it hasn't been already
@@ -240,6 +245,30 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
     });
   }
 
+  // A sound blown as notes, the way a train blows for a crossing: long, long, short, long. Each note holds the steady stretch of the take, `held`, going round it if the
+  // note's longer than that, and lets go, with `rest` between them. A take's own echo is at its end, past what's held, so an `echo` that many seconds behind comes back
+  // off the woods after each note instead. `out` is where it goes after its level.
+  function blow(take, c, rate, amp, out, done) {
+    const [from, to] = c.held ?? [0, take.duration], rest = c.rest ?? .5, tail = [];
+    if (c.echo) {
+      const delay = ctx.createDelay(2), dark = ctx.createBiquadFilter(), back = ctx.createGain(), wet = ctx.createGain();
+      delay.delayTime.value = c.echo; dark.type = 'lowpass'; dark.frequency.value = 1400; back.gain.value = .35; wet.gain.value = .45;
+      amp.connect(delay); delay.connect(dark); dark.connect(back); back.connect(delay); dark.connect(wet); wet.connect(out);
+      tail.push(delay, dark, back, wet);
+    }
+    let at = ctx.currentTime + .03;
+    c.notes.forEach((len, i) => {
+      const src = ctx.createBufferSource(), env = ctx.createGain(), final = i === c.notes.length - 1;
+      src.buffer = take; src.playbackRate.value = rate; src.loop = true; src.loopStart = from; src.loopEnd = to;
+      env.gain.setValueAtTime(0, at); env.gain.linearRampToValueAtTime(1, at + .06); env.gain.setValueAtTime(1, at + len); env.gain.setTargetAtTime(0, at + len, .05);
+      src.connect(env); env.connect(amp); src.start(at, from);
+      // the last one carries on with nothing to hear while the echo dies away, and that's when it's all over
+      src.stop(at + len + (final && c.echo ? 2.5 : .3));
+      src.onended = () => { src.disconnect(); env.disconnect(); if (final) { for (const n of tail) n.disconnect(); done(); } };
+      at += len + rest;
+    });
+  }
+
   const applyLevels = () => { if (!ctx) return; for (const b of BUSES) smooth(buses[b].gain, busGain(b), .12); };
   const pause = () => { hidden = true; if (ctx) ctx.suspend?.(); keepAlive?.pause(); };
   const carryOn = () => { hidden = false; if (ctx) ctx.resume?.(); keepAlive?.play()?.catch?.(() => {}); };
@@ -258,7 +287,7 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
       master = ctx.createGain(); master.gain.value = muted ? 0 : levels.master ?? 1;
       const limit = ctx.createDynamicsCompressor(); limit.threshold.value = -9; limit.ratio.value = 8; limit.attack.value = .003; limit.release.value = .2;
       master.connect(limit); limit.connect(ctx.destination); buses.limit = limit;
-      for (const b of BUSES) { const g = ctx.createGain(); g.gain.value = levels[b] ?? 1; g.connect(master); buses[b] = g; }
+      for (const b of BUSES) { const g = ctx.createGain(); g.gain.value = busGain(b); g.connect(master); buses[b] = g; }
       score = buildScore();
       // the long ones first, while the title's still on and there's nothing moving to hold up. Anything with a file doesn't need working out, unless the file doesn't come.
       for (const name of Object.keys(RECIPES).sort((a, b) => RECIPES[b].s - RECIPES[a].s)) if (!data.cues[name]?.file) queueRecipe(name);
@@ -306,19 +335,23 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
       }
       if (g < .004) return false;
       const now = ctx.currentTime, n = playing.get(name) ?? 0;
-      if (voices >= MAX_VOICES || n >= c.max || now - (last.get(name) ?? -9) < c.gap) return false;
+      if (voices >= MAX_VOICES - (c.bus === 'ambience' ? NIGHT_LEAVES : 0) || n >= c.max || now - (last.get(name) ?? -9) < c.gap) return false;
       const takes = takesOf(name);
       if (!takes) return false;
-      const src = ctx.createBufferSource(), amp = ctx.createGain(); src.buffer = takes[Math.floor(rand() * takes.length)]; src.playbackRate.value = rate * (c.rate ?? 1) * (1 + (rand() * 2 - 1) * c.spread); amp.gain.value = g; src.connect(amp);
+      const take = takes[Math.floor(rand() * takes.length)], amp = ctx.createGain(); amp.gain.value = g;
       let end = amp, panner = null;
       if (pan && ctx.createStereoPanner) { panner = ctx.createStereoPanner(); panner.pan.value = pan; amp.connect(panner); end = panner; }
       end.connect(buses[c.bus]);
       voices++; playing.set(name, n + 1); last.set(name, now);
-      src.onended = () => { voices--; playing.set(name, playing.get(name) - 1); src.disconnect(); amp.disconnect(); panner?.disconnect(); };
-      src.start();
-      heard.push({ name, g, pan, at: now }); if (heard.length > 200) heard.shift();
+      const done = () => { voices--; playing.set(name, playing.get(name) - 1); amp.disconnect(); panner?.disconnect(); };
+      const r = rate * (c.rate ?? 1) * (1 + (rand() * 2 - 1) * c.spread);
+      if (c.notes) blow(take, c, r, amp, panner ?? buses[c.bus], done);
+      else { const src = ctx.createBufferSource(); src.buffer = take; src.playbackRate.value = r; src.connect(amp); src.onended = () => { src.disconnect(); done(); }; src.start(); }
+      heard.push({ name, g, pan, at: now, notes: c.notes?.length ?? 0 }); if (heard.length > 200) heard.shift();
       return true;
     },
+    // How long a go at a sound lasts, at its own pitch, once it's there to play
+    lengthOf(name) { const takes = files.get(name) ?? buffers.get(name); return takes?.length ? Math.max(...takes.map((b) => b?.duration ?? 0)) : null; },
     // A sound that keeps going, at a level, from 0 for not at all, and a rate for its pitch. Call it as often as it changes.
     loop(name, level, rate = 1) {
       if (!live()) return;
@@ -331,13 +364,22 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
         const src = ctx.createBufferSource(), gain = ctx.createGain(); src.buffer = takes[0]; src.loop = true; src.playbackRate.value = rate; gain.gain.value = 0; src.connect(gain); gain.connect(buses[c.bus]); src.start();
         l = { src, gain, level: 0, rate, since: ctx.currentTime }; loops.set(name, l);
       }
-      if (Math.abs(to - l.level) > .004) { if (to <= 0 && l.level > 0) l.since = ctx.currentTime; else if (to > 0) l.since = Infinity; l.level = to; smooth(l.gain.gain, to, .12); }
+      // little changes aren't worth a ramp, except the last one down, or a loop that died away gradually would hum on under everything for good
+      if (Math.abs(to - l.level) > .004 || (to <= 0 && l.level > 0)) { if (to <= 0 && l.level > 0) l.since = ctx.currentTime; else if (to > 0) l.since = Infinity; l.level = to; smooth(l.gain.gain, to, .12); }
       if (Math.abs(rate - l.rate) > .004) { l.rate = rate; smooth(l.src.playbackRate, rate, .06); }
     },
     // What the score's doing. The sheet has what each of these is made of.
     music(state) { wanted = state; if (live()) toScoreState(state); },
     // How loud a whole bus is, as a fraction of its level, so that the night can go quiet for the fever
     fade(bus, k) { fades[bus] = k; if (ctx) smooth(buses[bus].gain, busGain(bus), .5); },
+    // How far up the player wants a bus, the effects or the night noise, from 0 to 1 of what the sheet says. It's kept for next time, like the mute.
+    setLevel(bus, k) {
+      if (!BUSES.includes(bus)) return;
+      mine[bus] = Math.max(0, Math.min(1, Number(k) || 0));
+      try { win.localStorage?.setItem('chunky.levels', JSON.stringify(mine)); } catch { /* it only forgets */ }
+      applyLevels();
+    },
+    levelOf: (bus) => mine[bus] ?? 1,
     // A voice line, by name, if there's a recording for it: the music dips, the words come up, and it only plays once unless it's asked to.
     say(name, { again = false } = {}) {
       const line = data.voice?.[name];
@@ -366,7 +408,7 @@ export function createSound(data, { win = globalThis, onLine = () => {}, seed = 
     get data() { return data; },
     cueNames: () => Object.keys(data.cues),
   };
-  for (const k of ['setMuted', 'update', 'play', 'loop', 'music', 'fade', 'say']) api[k] = guarded(api[k]);
+  for (const k of ['setMuted', 'update', 'play', 'loop', 'music', 'fade', 'setLevel', 'say']) api[k] = guarded(api[k]);
   return api;
 }
 

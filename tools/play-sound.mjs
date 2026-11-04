@@ -89,7 +89,7 @@ check('he hits the river', has(opening.fall.heard, 'splash.big'), opening.fall.h
 check('he swims', has(opening.swim.heard, 'swim.stroke'), opening.swim.heard);
 check('the bridge comes apart behind him', has(opening.bridge.heard, 'bridge.fall', 'bridge.groan', 'plank.crack'), [...new Set(opening.bridge.heard)]);
 check('the bite', has(opening.bitten.heard, 'snake.strike', 'bite.sting'), opening.bitten.heard);
-check('the fever, with the night gone quiet and no frogs', has(opening.dream.heard, 'dream.swell') && !opening.dream.heard.some((n) => n.startsWith('frog')) && opening.dream.night < .1, opening.dream);
+check('the fever, with the night gone quiet and no frogs or crickets', has(opening.dream.heard, 'dream.swell') && !opening.dream.heard.some((n) => n.startsWith('frog') || n.startsWith('cricket')) && opening.dream.night < .1, opening.dream);
 check('and his heart when he wakes', has(opening.wake.heard, 'wake.heart'), opening.wake);
 
 // ---------------- his feet
@@ -207,6 +207,32 @@ const grabbed = await g(async () => {
 });
 check('getting grabbed', grabbed.mode === 'grabbed' && grabbed.heard.includes('groan.grab') && grabbed.music === 'grabbed', grabbed);
 
+// ---------------- the night
+const night = await g(async () => {
+  const P = G.player.pos; G.S.mode = 'town'; G.horde.T.grabReach = 0; G.place(...G.map.fromTrue(-120, -60)); await run(.3);
+  // two minutes of it in a hurry, for who sings where and how often there's nobody
+  let most = 0, none = 0, n = 0; const spots = new Set(), off = [];
+  for (let t = 0; t < 120; t += .25) {
+    G.sim(.25, T); most = Math.max(most, G.singers.length); if (!G.singers.length) none++; n++;
+    for (const s of G.singers) { spots.add(`${s.x.toFixed(1)},${s.z.toFixed(1)}`); off.push(Math.hypot(s.x - P.x, s.z - P.z)); }
+  }
+  // and then at the speed it plays, to hear them, until two have been heard or long enough that they never will be. What the hurry started is still
+  // playing as it begins, and some of the time there's nobody singing, so it can't be a set few seconds.
+  const before = { voices: Snd.state().voices, singing: G.singers.length };
+  const crick = () => Snd.state().heard.filter((h) => h.startsWith('cricket'));
+  Snd.forget(); let took = 0;
+  while (crick().length < 2 && took < 40) { await run(1); took++; }
+  const heard = crick(), last = heard.length ? Snd.lastHeard(heard.at(-1)) : null;
+  return { most, none: none / n, spots: spots.size, near: off.length ? Math.min(...off) : 0, far: off.length ? Math.max(...off) : 0, before, took, heard, g: last?.g ?? 0, loops: Snd.state().loops, bus: Snd.data.cues['cricket.a']?.bus };
+});
+if (args.includes('--old')) check('with the old sounds the night\'s their loop of crickets, and nobody sings on their own', night.loops.includes('amb.crickets') && night.most === 0, night);
+else {
+  check('the old loop of crickets is off', !night.loops.includes('amb.crickets'), night.loops);
+  check(`crickets sing one here and one there, two at most, from ${night.spots} spots ${night.near.toFixed(0)} to ${night.far.toFixed(0)} m off`, night.most >= 1 && night.most <= 2 && night.spots >= 4 && night.near >= 10 && night.far <= 45, night);
+  check(`and some of the time there's none: ${Math.round(night.none * 100)}%`, night.none > .05 && night.none < .6, night.none);
+  check(`they're heard, two calls in ${night.took} s, on the night noise and well under the rest`, night.heard.length >= 2 && night.bus === 'ambience' && night.g > 0 && night.g < .2, night);
+}
+
 // ---------------- what it costs
 const cost = await g(() => crowdCost());
 check('it keeps to its limit on sounds at once', cost.voices <= 20, cost);
@@ -298,6 +324,19 @@ const tapped = await s(() => Snd.muted);
 await snap(swapped.page, 'town-phone-muted');
 await swapped.page.locator('#mute').tap(); await quietFor(.2);
 check('the button mutes it with a tap, and back', tapped && !(await s(() => Snd.muted)), tapped);
+// the effects and the night noise on sliders of their own, under the button beside the mute, with a real drag
+await swapped.page.locator('#levels').tap(); await quietFor(.2);
+const lane = await swapped.page.locator('#lvNight').boundingBox(), mid = lane.y + lane.height / 2;
+await swapped.page.mouse.move(lane.x + lane.width - 6, mid); await swapped.page.mouse.down(); await swapped.page.mouse.move(lane.x + lane.width * .3, mid, { steps: 8 }); await swapped.page.mouse.up(); await quietFor(.5);
+const slid = await s(() => ({ open: !document.getElementById('levelsBox').hidden, night: Snd.levelOf('ambience'), effects: Snd.levelOf('effects'), bus: Snd.state().levels, kept: JSON.parse(localStorage.getItem('chunky.levels') ?? '{}'), sheet: Snd.data.levels, focus: document.activeElement?.id ?? '' }));
+await snap(swapped.page, 'town-phone-levels');
+await swapped.page.touchscreen.tap(300, 560); await quietFor(.2);
+const shut = await s(() => ({ open: !document.getElementById('levelsBox').hidden, muted: Snd.muted }));
+check(`a drag on the night noise's slider turns it down to ${Math.round(slid.night * 100)}%, and nothing else, and lets the keys go back to walking`, slid.open && slid.night > .1 && slid.night < .5 && slid.effects === 1 && slid.bus.ambience < slid.sheet.ambience * .55 && Math.abs(slid.bus.effects - slid.sheet.effects) < .01 && slid.kept.ambience === slid.night && slid.focus !== 'lvNight', slid);
+check('a tap anywhere else puts the sliders away, and doesn\'t mute it', !shut.open && !shut.muted, shut);
+await swapped.page.reload(); await swapped.page.waitForFunction(() => window.__game, null, { timeout: 30000 }); await s(setUp); await swapped.page.locator('#soundWord').tap(); await quietFor(.5);
+const kept = await s(() => ({ night: Snd.levelOf('ambience'), bus: Snd.state().levels, sheet: Snd.data.levels }));
+check('and it\'s still down next time, from the start', Math.abs(kept.night - slid.night) < .01 && kept.bus.ambience < kept.sheet.ambience * .55, kept);
 check('no console errors with files swapped in, apart from the missing ones', swapped.errors.filter((e) => !/not-there|404/.test(e)).length === 0, swapped.errors.slice(0, 5));
 await swapped.close();
 

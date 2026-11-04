@@ -14,7 +14,7 @@ There are two sheets, each saying what every sound and part of the score is and 
 
 To put one sound back, copy its line from `data/sound.json` over its line in `data/sound-new.json`. To put them all back, it's the line in `index.html` that picks the sheet.
 
-A sound that came after the old sheet stopped changing is only on the new one. So far that's `amb.flies`, the flies round Robby, the `jam.` sounds, for what's in the shed on Pine Forest Rd, `ball.bump`, `ball.land` and `tramp.spring`, for the yard off True Light Rd, `lure.bottle`, `lure.pop` and `vehicle.alarm`, for what he throws, `train.rumble`, `train.clatter`, `train.horn`, `train.blast` and `crossing.bell`, for the railroad, `church.bell`, for the steeple on the church on Church St, and `groan.reach`, for the moment their hands go up when one of them reaches for him. They have no worked-out version to fall back on or to be levelled against, so `#old` plays without them, and without saying so. `tools/make-sound.test.js` checks that the new sheet has everything the old one has, and not the other way round.
+A sound that came after the old sheet stopped changing is only on the new one. So far that's `amb.flies`, the flies round Robby, the `jam.` sounds, for what's in the shed on Pine Forest Rd, `ball.bump`, `ball.land` and `tramp.spring`, for the yard off True Light Rd, `lure.bottle`, `lure.pop` and `vehicle.alarm`, for what he throws, `train.rumble`, `train.clatter`, `train.horn`, `train.blast` and `crossing.bell`, for the railroad, `church.bell`, for the steeple on the church on Church St, `cricket.a`, `cricket.b` and `cricket.c`, for the night, and `groan.reach`, for the moment their hands go up when one of them reaches for him. They have no worked-out version to fall back on or to be levelled against, so `#old` plays without them, and without saying so. `tools/make-sound.test.js` checks that the new sheet has everything the old one has, and not the other way round.
 
 ## Swapping a sound
 
@@ -41,6 +41,10 @@ Whatever the file's like, it comes out sitting with the rest. Its silence comes 
 | `gap` | The fewest seconds between one and the next |
 | `stereo` | Keeps both channels |
 | `loop` | Says it's a loop, for a new sound that has no worked-out one |
+| `notes` | Blows it as notes, so many seconds each, the way a train blows for a crossing. Each one holds `held` |
+| `held` | The steady stretch of the take, `[from, to]` in seconds, that each note holds. A note that's longer goes round it, and `src/sound.test.js` checks none is |
+| `rest` | The seconds between notes |
+| `echo` | How many seconds behind each note its echo comes back. A take's own echo is at its end, past what's held, so this stands in for it |
 
 Two sounds can share files and still be told apart, with `rate`. `groan.reach` is `groan.hunt`'s four takes at 1.4, so it comes out higher and shorter, once as their hands go up, when he can't see them for his hood. Each line loads its own copy of its files, so those four are asked for twice and held decoded twice, about 1 MB more.
 
@@ -118,14 +122,21 @@ This is what was on record on 2026-11-01. It isn't legal advice, and it's the ow
 
 Check all of this again before the game's sold, or if it outgrows those figures. No prompt names an artist or a song. The sound of the game's own bridge videos has no licence, and it stays out, as `docs/art-direction.md` says.
 
-## Turned down for now
+## The night, car alarms and the train
 
-The owner found the night noise, the train and the car alarm too much, so until CHUNKY-137 has better ones:
-- `amb.wind` is off, at a gain of 0, and a loop at 0 never starts. `amb.crickets` is at a fifth of what it was. Those two were the static under everything.
-- `train.horn` carries 1 km instead of 3.2, and `train.blast` 500 m instead of 700, so they fade the way they should. Both are at 0.5 instead of 0.8. When they're blown is in `data/railroad.md`.
-- `vehicle.alarm` is only heard for the first 5 seconds of an alarm (`ALARM.sounds` in `src/lures.js`), since its file is a siren. It's noise for those 5 seconds and nothing else, so it rouses the burnt-down ones near enough to hear it and draws nobody, and its lights go on and off for all 15.
+The owner found the night noise, the train and the car alarm too much (CHUNKY-137), so:
+- The night is crickets, one here and one there. `cricket.a`, `.b` and `.c` are three of them, a field cricket, a tree cricket and a slower one further off, each a 6 s take of one cricket with silence between its chirps. The game puts two at most on spots of their own in the grass, 10 to 45 m off, each singing its takes over and over for 5 to 20 s, a little higher or lower and quicker or slower than the next, and another starts up somewhere else after a wait that's mostly short and now and then long, 8 s on average. Over twenty minutes of it there was none a fifth of the time, for 7 s on average and half a minute at the longest, and two at once a third of it. They're on the night noise, and well under everything: one 10 m off is 20 dB under his footsteps, and one 30 m off 31 dB under, about as loud as a frog 20 m off. They're quiet in the fever. Near water there are frogs as well.
+- The night never takes the last four sounds that can play at once, so the frogs and crickets can't keep a horn or a crash from being heard. A cricket's call there's no room for is tried again half a second later, rather than missed.
+- A take that sounds like static is the wrong one, so each cricket's was measured: at least 82% of what's in it is on its own pitch, against 65% for the old loop, and a fifth of it or more is gaps 40 dB down or more. A katydid was tried first and taken out, at 70%.
+- `amb.crickets` and `amb.wind` are off, at a gain of 0, and a loop at 0 never starts. They were the static under everything. The old sheet has its own crickets, and `#old` still plays them.
+- `vehicle.alarm` is a car alarm going round its tones: whoops, a blare and a fast warble, 20 s of it. One goes for half a minute (`ALARM.seconds` in `src/lures.js`) with its lights going on and off, and it's fainter the further off he is and gone past `ALARM.heard`, 160 m. It's only noise for its first 5 seconds (`ALARM.rouses`), so it rouses the burnt-down ones near enough to hear it go off, as CHUNKY-136 says, and draws nobody.
+- `train.horn` is blown as notes: long, long, short, long, out of the steady first 2.2 s of its take, with an echo after each. It carries 1.2 km, so it's loud close by, faint from a kilometre off and gone past that. `train.blast` carries 500 m. Both are at 0.5. When they're blown is in `data/railroad.md`.
 
-`npm run sound:level` sets the levels to match the old sheet's, which would bring the two loops back up. If it's run before they're replaced, turn them back down after.
+These are all new, so `npm run sound:level` has nothing to level them against and leaves them be, but it would bring `amb.crickets` back up. Turn it back down after.
+
+## The player's own levels
+
+The button beside the mute opens two sliders, for the effects and the night noise, from nothing up to what the sheet says. They go on top of `levels`, and they're kept in the browser as `chunky.levels`, the way the mute's kept as `chunky.mute`.
 
 ## On a phone
 

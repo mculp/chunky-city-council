@@ -273,6 +273,54 @@
       "request": "01a198b8-9c9b-7133-ac36-9db4c0b9b9e3",
       "date": "2026-11-01T20:06:42.305Z"
     },
+    "audio/sfx/cricket.a.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 6,
+      "bytes": 97009,
+      "sha256": "06a814bc1e888ae616932e81437edec45021f181ec1f3ee4eed50c92517e6722",
+      "request": "01a1a557-80f8-7311-aec4-36200d272787",
+      "date": "2026-11-04T06:55:42.521Z"
+    },
+    "audio/sfx/cricket.a.2.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 6,
+      "bytes": 97009,
+      "sha256": "0b9dd52ca4488d9c799b78e212a62625d95af2251c93c99a3ac3ddcbf903529e",
+      "request": "01a1a557-80f4-7430-9a37-af976d0ef374",
+      "date": "2026-11-04T06:55:42.536Z"
+    },
+    "audio/sfx/cricket.b.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 6,
+      "bytes": 97009,
+      "sha256": "a209b03782421394ae65215a372134025397794a825b37145a5736270f9049ff",
+      "request": "01a1a557-8100-7092-87b3-70f51f754027",
+      "date": "2026-11-04T06:55:42.657Z"
+    },
+    "audio/sfx/cricket.b.2.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 6,
+      "bytes": 97009,
+      "sha256": "0b92bdf037a932afd2e0efb761c95bd4fdcda1c9cc37a943da6cd4714afdad1c",
+      "request": "01a1a557-9463-7403-b058-94460adf0623",
+      "date": "2026-11-04T06:55:49.317Z"
+    },
+    "audio/sfx/cricket.c.1.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 6,
+      "bytes": 97009,
+      "sha256": "26af094140ef717ee58ccdde3b8b2c5954f2188eb8e81df6e4cf9d6716b90b30",
+      "request": "01a1a55c-64f4-7a73-8488-f20218ba3e73",
+      "date": "2026-11-04T07:01:06.872Z"
+    },
+    "audio/sfx/cricket.c.2.mp3": {
+      "model": "fal-ai/elevenlabs/sound-effects/v2",
+      "seconds": 6,
+      "bytes": 97009,
+      "sha256": "30cac3807b13c259a6cbe4f5f9dcd8655881439584ca011f9ffe55738a0e19c5",
+      "request": "01a1a55c-64f4-74f3-b1cb-b247303fd918",
+      "date": "2026-11-04T07:01:05.894Z"
+    },
     "audio/sfx/crossing.bell.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
       "seconds": 4,
@@ -1027,11 +1075,11 @@
     },
     "audio/sfx/vehicle.alarm.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
-      "seconds": 6,
-      "bytes": 97009,
-      "sha256": "5f4e1b78da317703465b75dafd97d59051674d5803040326b5962cf5b0d5cb2d",
-      "request": "01a199df-4e96-7362-b5ee-4fce371bd39a",
-      "date": "2026-11-02T01:28:35.618Z"
+      "seconds": 20,
+      "bytes": 321035,
+      "sha256": "6ea3045060522046c0c33fa96b843d2973199c8ebe6659ddefe8d3ced5257423",
+      "request": "01a1a55c-64f5-7a13-9e51-f66b92df4fcd",
+      "date": "2026-11-04T07:01:09.256Z"
     },
     "audio/sfx/vehicle.dirt.1.mp3": {
       "model": "fal-ai/elevenlabs/sound-effects/v2",
@@ -1083,7 +1131,7 @@
     }
   },
   "spent": {
-    "likely": 11.5424,
-    "most": 16.7624
+    "likely": 11.7184,
+    "most": 16.9384
   }
 }

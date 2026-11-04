@@ -212,10 +212,14 @@ const alarm = await g(() => {
   }
   const noted = G.roused.log.map((l) => l.kind), whyBox = !!document.getElementById('why'), deg = (u, v) => Math.round(Math.acos((u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v))) * 180 / Math.PI);
   const head = [...began.values()].filter((b) => b.p1).map((b) => { const m = [b.p1[0] - b.p0[0], b.p1[1] - b.p0[1]]; return { moved: +Math.hypot(...m).toFixed(1), toHim: deg(m, [him[0] - b.p0[0], him[1] - b.p0[1]]), toCar: deg(m, [truck.x - b.p0[0], truck.z - b.p0[1]]) }; });
-  // it's noise for the 5 seconds it's heard, and its lights go on for all 15
+  // it's noise for its first 5 seconds and no more, but he hears it for all of it, fainter the further off he is, and its lights go on for all of it
   G.sim(1, T); const heard = { noisy: H.noises.some((e) => e.kind === 'alarm'), lit: G.lures.ALARMS.length };
-  // and the rest of it, to see the alarm out at 15 s
-  G.sim(11, T); G.step(.5);
+  const level = () => { G.step(T, T); return G.sound.state().loopLevels['vehicle.alarm'] ?? 0; }, back = [G.player.pos.x, G.player.pos.z];
+  const ux = (back[0] - truck.x) / Math.hypot(back[0] - truck.x, back[1] - truck.z), uz = (back[1] - truck.z) / Math.hypot(back[0] - truck.x, back[1] - truck.z);
+  const at = (d) => { G.place(truck.x + ux * d, truck.z + uz * d); return level(); };
+  heard.loud = { 20: at(20), 60: at(60), 170: at(170) }; G.place(...back); G.step(T, T);
+  // and the rest of it, to see it run down at 30 s
+  G.sim(23, T); heard.late = level(); G.sim(2, T); G.step(.5);
   return { heard, went, flashed: shown.has(0) && [...shown].some((n) => n > 0), burnt: burnt.length, stood: stood.size, theNearest: nearest.every((s) => stood.has(s)), looked: looked.size, peak, noted, added, whyBox, head, quiet: quiet.length, odd, after: G.lures.ALARMS.length, glowsAfter: glow(), again: G.lures.canAlarm(truck) };
 });
 check('a bottle thrown at it sets it off, from across the lot', alarm.went, alarm);
@@ -225,8 +229,9 @@ check(`no more than three are after him at once, however loud: ${alarm.peak}`, a
 check('the three were woken by the alarm, and nothing on the screen says why: no new line when they stopped, and nothing in the page to write one in', alarm.noted.length === 3 && alarm.noted.every((k) => k === 'alarm') && alarm.added?.length === 0 && !alarm.whyBox, alarm);
 check(`and they come for him and not for the car: ${alarm.head.map((h) => `${h.toHim}° off him against ${h.toCar}° off the car`).join(', ')}`, alarm.head.length === 3 && alarm.head.every((h) => h.moved > 2.5 && h.toHim < h.toCar - 10), alarm);
 check(`and not one of the ${alarm.quiet} who've gone quiet stops, looks or comes for it, in any frame of the five seconds`, alarm.quiet === 3 && alarm.odd === 0, alarm);
-check('it\'s only noise for the 5 seconds it\'s heard, while its lights are still going', !alarm.heard.noisy && alarm.heard.lit === 1, alarm);
-check('and it stops after 15 s, and doesn\'t go again', alarm.after === 0 && alarm.glowsAfter === 0 && !alarm.again, alarm);
+check('it\'s only noise for its first 5 seconds, while it carries on going off and its lights keep going', !alarm.heard.noisy && alarm.heard.lit === 1, alarm);
+check(`he hears it the whole time, fainter further off: ${alarm.heard.loud[20].toFixed(2)} at 20 m, ${alarm.heard.loud[60].toFixed(2)} at 60 m and ${alarm.heard.loud[170]} at 170 m`, alarm.heard.loud[20] > alarm.heard.loud[60] * 1.5 && alarm.heard.loud[60] > 0 && alarm.heard.loud[170] === 0 && alarm.heard.late > 0, alarm.heard);
+check('and it runs down after 30 s, and doesn\'t go again', alarm.after === 0 && alarm.glowsAfter === 0 && !alarm.again, alarm);
 const hammer = await g(() => {
   crowdOnRoad([]);
   const parked = G.lures.VEHICLES.find((v) => v.kind === 'car' && G.lures.canAlarm(v) && Math.hypot(v.x - truck.x, v.z - truck.z) > 20 && Math.hypot(v.x - truck.x, v.z - truck.z) < 900);
