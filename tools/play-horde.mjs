@@ -131,7 +131,7 @@ r = await g(() => ({ inv: __game.player.inv, stunned: states()[5], prompt: docum
 check(`they're thrown off and stunned (${r.stunned}), and he gets a moment`, r.stunned >= 1 && r.inv > 0 && r.prompt, r);
 await snap('04-free');
 r = await g(() => {
-  // back onto the road, where there's nothing in his way. The low and quick ones swarm at 4 m/s to his 4.4, so it takes a while to put much road between them.
+  // back onto the road, where there's nothing in his way. The ones who scuttle, folded over, swarm at 4 m/s to his 4.4, so it takes a while to put much road between them.
   const G = __game, P = G.player.pos, x = P.x - 80, z = G.map.zAt('us_80', x);
   let caught = false; run(x, z, 15, () => { caught = caught || G.S.mode === 'grabbed'; return caught; });
   return { caught, near: nearest(), mode: G.S.mode };

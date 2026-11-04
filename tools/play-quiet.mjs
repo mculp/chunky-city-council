@@ -1,7 +1,7 @@
 // Goes among the ones who've gone quiet, on a phone-sized page with the stick and real taps: how many have burnt down and how far gone those look, walking through
-// 30 of them on US 80 with only the burnt ones coming for him, the rest folded over at the waist with their arms hanging, a swing bringing the one he hit and everyone
-// close by and nobody further off, a bottle thrown at one, a can picked up from at one's feet and one that isn't, the ones who come for him stood up and the ones who
-// come low and quick, what they mutter when he's close, the same again with reduced motion, and what 30 of them cost.
+// 30 of them on US 80 with only the burnt ones coming for him, the rest folded over at the waist with their arms hanging straight down, a swing bringing the one he hit and
+// everyone close by and nobody further off, a bottle thrown at one, a can picked up from at one's feet and one that isn't, the ones who come for him stood up and the ones
+// who stay folded over and scuttle, quicker, what they mutter when he's close, the same again with reduced motion, and what 30 of them cost.
 //
 //   npm i && npm run quiet [-- --shots dir]
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -102,7 +102,7 @@ await g(() => {
 const idle = await g(() => lot.filter((s) => s.quiet && s.state === 0 && G.stance(s)).map((s) => ({ number: Math.round(s.hips), ...G.stance(s), arm: s.arm })));
 await snap('2-folded-on-us-80');
 const bent = idle.map((r) => r.hips);
-check(`the ones who've gone quiet stand folded over at the waist, each their own way, from ${Math.min(...bent).toFixed(0)}° to ${Math.max(...bent).toFixed(0)}° at the hips, with their arms hanging or their hands on the ground: ${idle.length} of them`, idle.length >= 8 && Math.max(...bent) - Math.min(...bent) > 30 && idle.every((r) => r.hips > 38 && r.hips < 156 && r.head > 0 && r.hands > 0 && r.arm < .35), idle);
+check(`the ones who've gone quiet stand folded over at the waist, each their own way, from ${Math.min(...bent).toFixed(0)}° to ${Math.max(...bent).toFixed(0)}° at the hips, which is 90° plus half their numbers, give or take a stride, with their arms hanging straight down and their hands and heads well off the ground: ${idle.length} of them`, idle.length >= 8 && Math.max(...bent) - Math.min(...bent) > 30 && idle.every((r) => Math.abs(r.hips - (90 + r.number / 2)) < 6 && r.hips > 100 && r.hips < 167 && r.head > .3 && r.hands > .1 && r.arms < 20), idle);
 let through;
 for (let i = 0; i < 12; i++) {
   through = await g(() => { const r = cross(4); G.step(.05, T); return r; });
@@ -115,7 +115,7 @@ check(`and both of the ones who've burnt down do: ${through.came}`, through.came
 // ---- a swing
 const swing = await g(() => {
   clear();
-  // someone bold enough to come for him once he's hit them, right in front of him. Four more within 10 m of that who'd come for him over it, two of whom come low,
+  // someone bold enough to come for him once he's hit them, right in front of him. Four more within 10 m of that who'd come for him over it, two of whom scuttle,
   // and someone the kind to keep out of his way. Three more a long way further off than anyone who'd have seen it.
   const used = [], pick = (ok) => { const s = quiet.find((o) => !used.includes(o) && ok(o)); used.push(s); return s; };
   window.hit = hold(ahead(pick((s) => s.who.nerve > .7), 1.1));
@@ -133,16 +133,16 @@ check(`and the ${r.near.length} who've gone quiet within 10 m of it come for him
 check('except someone the kind to keep out of his way, who does', r.timid === 6, r);
 check(`and nobody further off (${swing.further.join(', ')} m) comes for him`, r.further.every((st) => st <= 1), { ...r, ...swing });
 const lows = r.leans.filter((l) => l.low).map((l) => l.lean), ups = r.leans.filter((l) => !l.low).map((l) => l.lean);
-check(`some come for him stood up, leaning ${ups.map((l) => l.toFixed(2)).join(' and ')}, and some folded over and low, ${lows.map((l) => l.toFixed(2)).join(' and ')}`, ups.every((l) => l < .5) && lows.every((l) => l > .9), r.leans);
+check(`some come for him stood up, leaning ${ups.map((l) => l.toFixed(2)).join(' and ')}, and some stay folded over to scuttle, leaning ${lows.map((l) => l.toFixed(2)).join(' and ')}`, ups.every((l) => l < .5) && lows.every((l) => l > .6), r.leans);
 r = await g(() => { const was = dist(hit); while (H.down(hit) > 0) G.sim(T, T); G.sim(1, T); return { state: hit.state, was, now: dist(hit) }; });
 check(`the one he hit gets up and comes for him: from ${r.was.toFixed(1)} m to ${r.now.toFixed(1)} m`, r.state >= 2 && r.state <= 4 && r.now < r.was, r);
 
-// ---- low and quick
+// ---- folded over and quick
 r = await g(() => {
   clear();
   const lows = quiet.filter((s) => s.scuttle).slice(0, 3), ups = quiet.filter((s) => !s.scuttle).slice(0, 3), all = [...lows, ...ups];
   all.forEach((s, i) => ahead(s, 26, (i - 2.5) * .1));
-  // set off the way they would if he'd picked up what was at their feet. Six of them together come for him as a swarm, the low ones and the others alike.
+  // set off the way they would if he'd picked up what was at their feet. Six of them together come for him as a swarm, the ones who scuttle and the others alike.
   for (const s of all) H.provoke(s, 'took');
   G.step(1, T);
   const from = all.map((s) => dist(s));
@@ -150,8 +150,8 @@ r = await g(() => {
   const pace = all.map((s, i) => (from[i] - dist(s)) / 1.5), mean = (a) => a.reduce((n, v) => n + v, 0) / a.length;
   return { low: mean(pace.slice(0, 3)), up: mean(pace.slice(3)), states: all.map((s) => s.state), leans: all.map((s) => +s.lean.toFixed(2)) };
 });
-await snap('5-low-and-quick');
-check(`and the low ones come quicker: ${r.low.toFixed(2)} m/s against ${r.up.toFixed(2)} m/s, which is still slower than he runs`, r.low > r.up * 1.04 && r.low < 4.4 && r.states.every((st) => st === r.states[0] && comes(st)), r);
+await snap('5-scuttling');
+check(`and the ones who scuttle, folded over, come quicker: ${r.low.toFixed(2)} m/s against ${r.up.toFixed(2)} m/s, which is still slower than he runs`, r.low > r.up * 1.04 && r.low < 4.4 && r.states.every((st) => st === r.states[0] && comes(st)), r);
 
 // ---- a bottle
 const fall = await g(() => {

@@ -575,20 +575,24 @@ const deckMat = triplanar(deckTex, .2, { roughness: .8 });
 const stoneMat = triplanar(stoneTex, .35, { roughness: .95 });
 const asphaltMat = triplanar(asphaltTex, .12, { roughness: 1 });
 const outlineMats = new Map();
+// Where the crowd's heads hang from: the neck, which is ZOMBIE_SHAPE's pivot. The shaders that tip the head do it about this, through the ring weights in `aBend`.
+const NECK = [0, .16, .03];
+const HEAD_TIP = `const vec3 NECK=vec3(${NECK.map((v) => v.toFixed(3)).join(',')});
+  vec3 tipHead(vec3 p, float a){ float c=cos(a), s=sin(a); vec3 q=p-NECK; return NECK+vec3(q.x,q.y*c-q.z*s,q.y*s+q.z*c); }`;
 // A wall between the camera and him opens up around him, in the same dither as everything else
 const SEE_THROUGH = `if(uSee.w>0.&&gl_FragCoord.z<uSee.z&&vSeeY>uSeeY){ float seeD=length(gl_FragCoord.xy-uSee.xy)/uSee.w; if(seeD<.68||(seeD<1.&&mod(floor(gl_FragCoord.x/(2.*uPxScale))+floor(gl_FragCoord.y/(2.*uPxScale)),2.)>.5)) discard; }`;
 // A ghost's drawn in the dither a wall you're seeing through is drawn in: him, the same as anyone, with holes through him that move on the twelve frames.
 // His line has the same holes, or the inside of it would show through them. With reduced motion they hold still, since it's all of him flickering otherwise.
 const ghostHoles = (px, step) => `if(fract(sin(dot(floor(gl_FragCoord.xy/(2.*${px}))+${reduceMotion ? '0.' : step}*3.,vec2(91.7,47.3)))*24634.6345)<.52) discard;`;
-function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = false } = {}) {
-  const key = [color, px, chalk, tinted, cut, ghost].join('|');
+function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = false, headTip = false } = {}) {
+  const key = [color, px, chalk, tinted, cut, ghost, headTip].join('|');
   if (outlineMats.has(key)) return outlineMats.get(key);
   const uniforms = Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
     uColor: { value: new THREE.Color(color) }, uPx: { value: px }, uChalk: { value: chalk }, uStep: G.uStep, uRes: G.uRes, uPxScale: G.uPxScale, uMask: G.uMask, uSee: G.uSee, uSeeY: G.uSeeY, uHideRoof: G.uHideRoof
   });
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, fog: true, uniforms, userData: { outline: true },
-    defines: { ...(tinted && { TINTED: 1 }), ...(cut && { CUT: 1 }), ...(ghost && { GHOST: 1 }) },
+    defines: { ...(tinted && { TINTED: 1 }), ...(cut && { CUT: 1 }), ...(ghost && { GHOST: 1 }), ...(headTip && { HEADTIP: 1 }) },
     vertexShader: `#include <hill_pars>
       uniform float uPx, uStep, uChalk, uPxScale; uniform vec2 uRes;
       #ifdef TINTED
@@ -597,18 +601,26 @@ function outlineMat(color, px, chalk, { tinted = false, cut = false, ghost = fal
       #ifdef CUT
       attribute vec3 aMat; uniform vec2 uHideRoof; varying float vSeeY;
       #endif
+      #ifdef HEADTIP
+      attribute float iHead, aBend;
+      ${HEAD_TIP}
+      #endif
       #include <fog_pars_vertex>
       float hn(vec3 p){ return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453); }
       float vn(vec3 p){ vec3 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
         return mix(mix(mix(hn(i),hn(i+vec3(1,0,0)),f.x),mix(hn(i+vec3(0,1,0)),hn(i+vec3(1,1,0)),f.x),f.y),
                    mix(mix(hn(i+vec3(0,0,1)),hn(i+vec3(1,0,1)),f.x),mix(hn(i+vec3(0,1,1)),hn(i+vec3(1,1,1)),f.x),f.y),f.z); }
       void main(){
-        mat4 mm=modelViewMatrix; vec3 n=normal;
-        #ifdef USE_INSTANCING
-          mm=modelViewMatrix*instanceMatrix; n=mat3(instanceMatrix)*normal;
+        vec3 pos=position, nor=normal;
+        #ifdef HEADTIP
+          { float a=iHead*aBend, c=cos(a), s=sin(a); pos=tipHead(position,a); nor=vec3(normal.x,normal.y*c-normal.z*s,normal.y*s+normal.z*c); }
         #endif
-        vec4 mvPosition=mm*vec4(position,1.);
-        vec4 hillP=vec4(position,1.);
+        mat4 mm=modelViewMatrix; vec3 n=nor;
+        #ifdef USE_INSTANCING
+          mm=modelViewMatrix*instanceMatrix; n=mat3(instanceMatrix)*nor;
+        #endif
+        vec4 mvPosition=mm*vec4(pos,1.);
+        vec4 hillP=vec4(pos,1.);
         #ifdef USE_INSTANCING
           hillP=instanceMatrix*hillP;
         #endif
@@ -3849,8 +3861,12 @@ const HERO_SHAPE = {
 // Everyone else's shape: a thin person, stooped, with a small bare head hanging forward on its neck, so that you can tell them
 // from him a long way off. Clothes go once round it and from hem to crown. src/looks.js's BODY is measured to these same heights.
 const TOWN_SCALE = .92, TOWN_HIPS = 1.43 * TOWN_SCALE, ZOMBIE_HIP = -.55;
+// How far over someone stands is their number, the angle at the hips in src/agents.js: 180° is stood up straight and 0° is folded right over. It's drawn at 90° plus half of it, so the
+// furthest over anyone is drawn is 90°, with the back about level. This is the angle at the hips, in degrees, that someone with this number is drawn at.
+const HIPS_FROM = 90;
+const hipsDrawn = (n) => HIPS_FROM + (180 - HIPS_FROM) * Math.min(180, Math.max(0, n)) / 180;
 const ZOMBIE_SHAPE = {
-  pivot: [0, .16, .03], bend: [.13, .22], fit: true, openY: [0, 1], open: () => 0,
+  pivot: NECK, bend: [.13, .22], fit: true, openY: [0, 1], open: () => 0,
   rings: [
     [-0.62, .165, .118, 0, 2.3], [-0.50, .16, .115, 0, 2.3], [-0.34, .145, .105, .005, 2.2], [-0.18, .165, .112, .012, 2.2], [-0.04, .205, .122, .02, 2.2], [0.04, .232, .118, .028, 2.3], [0.085, .215, .1, .032, 2.2],
     [0.125, .125, .08, .035, 2], [0.16, .066, .065, .04, 2], [0.205, .056, .058, .045, 2],
@@ -3864,7 +3880,7 @@ function buildHoodie(pitch, yaw, roll, SUB, M, { rings: C, open, openY, pivot, b
     for (let s = 0; s < SUB; s++) rings.push(p1.map((_, k) => cr(p0[k], p1[k], p2[k], p3[k], s / SUB)));
   }
   rings.push(C[C.length - 1].slice());
-  const R = rings.length, pos = [], uv = [], surf = [], face = [];
+  const R = rings.length, pos = [], uv = [], surf = [], face = [], bendW = [];
   const PV = new THREE.Vector3(...pivot), e = new THREE.Euler(), q = new THREE.Quaternion(), v = new THREE.Vector3();
   for (let r = 0; r < R; r++) {
     const [y, a, b, cz, n] = rings[r];
@@ -3873,6 +3889,7 @@ function buildHoodie(pitch, yaw, roll, SUB, M, { rings: C, open, openY, pivot, b
     for (let j = 0; j <= M; j++) {
       const th = j / M * Math.PI * 2, c = Math.cos(th), s = Math.sin(th);
       const x = a * Math.sign(c) * Math.pow(Math.abs(c), 2 / n), z = cz + b * Math.sign(s) * Math.pow(Math.abs(s), 2 / n);
+      bendW.push(w);
       v.set(x, y, z).sub(PV).applyQuaternion(q).add(PV); pos.push(v.x, v.y, v.z);
       if (fit) uv.push(j / M, (y - C[0][0]) / (C[C.length - 1][0] - C[0][0])); else uv.push(j / M * 3, y * 1.5);
       let tp = th - Math.PI / 2; if (tp > Math.PI) tp -= Math.PI * 2;
@@ -3881,7 +3898,7 @@ function buildHoodie(pitch, yaw, roll, SUB, M, { rings: C, open, openY, pivot, b
       face.push(s >= 0 ? x : Math.sign(c) * 9, s >= 0 ? y : 9);
     }
   }
-  const bc = pos.length / 3; pos.push(0, rings[0][0] + .012, rings[0][3]); uv.push(0, 0); surf.push(0, -1); face.push(9, 9);
+  const bc = pos.length / 3; pos.push(0, rings[0][0] + .012, rings[0][3]); uv.push(0, 0); surf.push(0, -1); face.push(9, 9); bendW.push(0);
   const idx = [], fidx = [], fe = (i) => (Math.abs(face[i * 2]) < open(face[i * 2 + 1]) + .06 ? 0 : 9);
   for (let r = 0; r < R - 1; r++) for (let j = 0; j < M; j++) {
     const a = r * (M + 1) + j, b = (r + 1) * (M + 1) + j, c = a + 1, d = b + 1;
@@ -3891,6 +3908,8 @@ function buildHoodie(pitch, yaw, roll, SUB, M, { rings: C, open, openY, pivot, b
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setAttribute('aSurf', new THREE.Float32BufferAttribute(surf, 2)); geo.setAttribute('aFace', new THREE.Float32BufferAttribute(face, 2));
+  // how much of the bend at the neck each point goes with, which is also how much of any more the crowd's shaders give the head
+  geo.setAttribute('aBend', new THREE.Float32BufferAttribute(bendW, 1));
   geo.setIndex(idx); geo.computeVertexNormals();
   const nr = geo.attributes.normal;
   for (let r = 0; r < R; r++) { const i0 = r * (M + 1), i1 = i0 + M; const nx = nr.getX(i0) + nr.getX(i1), ny = nr.getY(i0) + nr.getY(i1), nz = nr.getZ(i0) + nr.getZ(i1), l = Math.hypot(nx, ny, nz) || 1; nr.setXYZ(i0, nx / l, ny / l, nz / l); nr.setXYZ(i1, nx / l, ny / l, nz / l); }
@@ -3974,13 +3993,25 @@ function tapeMat({ pivot }) {
 // zombieZ says, for someone by themselves, what a crowd has per person: the row they're on, how far gone they are, how worked up, and which way round the map goes.
 let radiationMap = null;
 const RADIUM = 'vec3(.42,1.,.22)', RADIUM_HOT = 'vec3(.8,1.,.36)', STEP_HELD = reduceMotion ? '0.' : 'uStep';
-function zombieMat(sheet, part, { rows = 1, far = 0 } = {}) {
+function zombieMat(sheet, part, { rows = 1, far = 0, headTip = false } = {}) {
   radiationMap ??= (() => { const t = canvasFor(1024, 512, (g) => drawRadiation(g, 1024, 512), false); t.colorSpace = THREE.NoColorSpace; return t; })();
   const m = new THREE.MeshToonMaterial({ map: sheet, emissiveMap: sheet, emissive: 0xffffff, emissiveIntensity: .42, gradientMap: toonGrad }), rect = { value: new THREE.Vector2(...PARTS[part]) }, zombieZ = { value: new THREE.Vector4(0, far, 0, 0) };
+  // The crowd's heads tip about the neck, in the vertex shader and by instance (`iHead`, in radians, forward), so they cost nothing more to draw. The body's outline does the same.
+  if (headTip) m.defines.HEAD_TIP = 1;
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, { uStep: G.uStep, uPxScale: G.uPxScale, uRect: rect, uZ: zombieZ, uRows: { value: rows }, uRad: { value: radiationMap } });
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
+    sh.vertexShader = sh.vertexShader.replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+      #ifdef HEAD_TIP
+      { float a=iHead*aBend, c=cos(a), s=sin(a); objectNormal=vec3(objectNormal.x,objectNormal.y*c-objectNormal.z*s,objectNormal.y*s+objectNormal.z*c); }
+      #endif`).replace('#include <begin_vertex>', `#include <begin_vertex>
+      #ifdef HEAD_TIP
+      transformed=tipHead(transformed,iHead*aBend);
+      #endif`).replace('#include <common>', `#include <common>
       uniform float uStep, uRows; uniform vec2 uRect;
+      #ifdef HEAD_TIP
+      attribute float iHead, aBend;
+      ${HEAD_TIP}
+      #endif
       #ifdef USE_INSTANCING
       attribute vec4 iZ;
       attribute float iWet;
@@ -4331,7 +4362,7 @@ function makeNPC({ id, name, x, z, y = Y0, yaw, extra, ghost = false, ph = null 
   // Having only quit a little, they stand a little over: the top half and whatever's on it turned forward about the hips, and their arms hung from
   // wherever that puts their shoulders. Robby's not one of them.
   if (!ghost) {
-    const pivot = V3(0, ZOMBIE_HIP, 0), turn = new THREE.Quaternion().setFromAxisAngle(V3(1, 0, 0), Math.PI * (1 - flickering(far) / 180));
+    const pivot = V3(0, ZOMBIE_HIP, 0), turn = new THREE.Quaternion().setFromAxisAngle(V3(1, 0, 0), Math.PI * (1 - hipsDrawn(flickering(far)) / 180));
     for (const o of [rig.hm, ...rig.body.children.filter((o) => !bare.has(o) && o.position.y > ZOMBIE_HIP)]) { o.position.sub(pivot).applyQuaternion(turn).add(pivot); o.quaternion.premultiply(turn); }
     for (const S of rig.S) S.sub(pivot).applyQuaternion(turn).add(pivot);
   }
@@ -4419,13 +4450,20 @@ const CROWD_SHOWN = 48, CROWD_SEE = 110, CROWD_LOOKS = LOOKS.crowd;
 const BURNT_LINE = degreeOf(1 - HOW.burnt[0]);
 const crowdGroup = new THREE.Group(); crowdGroup.visible = false; scene.add(crowdGroup);
 const crowdSheet = canvasFor(512, 256 * CROWD_LOOKS.length, (g) => CROWD_LOOKS.forEach((look, i) => drawPerson(g, 0, (CROWD_LOOKS.length - 1 - i) * 256, 512, 256, look)), false);
-const crowdBody = buildHoodie(.3, 0, 0, 1, 16, ZOMBIE_SHAPE);
+// The head hangs on its neck. The body is built with it pitched forward by `pitch`, and each instance tips it by `iHead` more, in the vertex shader (about the neck, and fading out down it),
+// so that costs no more to draw. Stood up it tips back, looking up with its mouth open, and folded over it hangs, forward and down. All of them are radians, forward being down, taken
+// off the line of the back: `back` stood up, `hang` once they're over by `to` (radians of lean), `from` being where it lets go. Sat in something they look where they're going, and lying down
+// the head rests. `loose` is how far it swings as they go, which reduced motion keeps still.
+const HEAD = { pitch: .3, back: -.45, hang: 1.15, from: .2, to: .6, seated: .05, rest: -.15, loose: .07 };
+// and the top of the crown, up and forward of the neck, before any of that
+const CROWN = [ZOMBIE_SHAPE.rings.at(-1)[0] - NECK[1], ZOMBIE_SHAPE.rings.at(-1)[3] - NECK[2]];
+const crowdBody = buildHoodie(HEAD.pitch, 0, 0, 1, 16, ZOMBIE_SHAPE);
 function crowdMesh(geo, mat, n, share) {
   const m = new THREE.InstancedMesh(geo, mat, n); m.frustumCulled = false; m.count = 0;
   if (share) m.instanceMatrix = share.instanceMatrix; else m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   crowdGroup.add(m); return m;
 }
-const crowdLines = (m, px, tint) => { const o = crowdMesh(m.geometry, outlineMat('#ffffff', px, 1, { tinted: true }), m.instanceMatrix.count, m); o.instanceColor = tint; return o; };
+const crowdLines = (m, px, tint, style) => { const o = crowdMesh(m.geometry, outlineMat('#ffffff', px, 1, { tinted: true, ...style }), m.instanceMatrix.count, m); o.instanceColor = tint; return o; };
 const crowdAttr = (n, size = 1) => new THREE.InstancedBufferAttribute(new Float32Array(n * size), size).setUsage(THREE.DynamicDrawUsage);
 // a limb hangs down from its pivot, with a hand or a foot on the end, which takes its colour from the very end of its strip
 const crowdLimb = (len, top, end, tip) => { const tube = new THREE.CylinderGeometry(top, end, len, 6, 2, true).translate(0, -len / 2, 0), n = tube.attributes.position.count, g = mergeGeometries([tube, tip.translate(0, -len, 0)]), uv = g.attributes.uv; for (let i = n; i < uv.count; i++) uv.setXY(i, .5, .012); return g; };
@@ -4434,9 +4472,12 @@ const crowdLegGeo = crowdLimb(.83, .09, .054, new THREE.SphereGeometry(.062, 6, 
 const crowdZ = crowdAttr(CROWD_SHOWN, 4), crowdLimbZ = crowdAttr(CROWD_SHOWN * 2, 4), crowdLine = crowdAttr(CROWD_SHOWN, 3), crowdLimbLine = crowdAttr(CROWD_SHOWN * 2, 3);
 // and how soaked each is, from the river, 0 to 1
 const crowdWet = crowdAttr(CROWD_SHOWN, 1), crowdLimbWet = crowdAttr(CROWD_SHOWN * 2, 1);
+// and how much further than the body is built to each one's head is tipped
+const crowdHead = crowdAttr(CROWD_SHOWN, 1);
 crowdBody.geo.setAttribute('iZ', crowdZ); crowdArmGeo.setAttribute('iZ', crowdLimbZ); crowdLegGeo.setAttribute('iZ', crowdLimbZ);
 crowdBody.geo.setAttribute('iWet', crowdWet); crowdArmGeo.setAttribute('iWet', crowdLimbWet); crowdLegGeo.setAttribute('iWet', crowdLimbWet);
-const crowdWear = (part) => zombieMat(crowdSheet, part, { rows: CROWD_LOOKS.length });
+crowdBody.geo.setAttribute('iHead', crowdHead);
+const crowdWear = (part) => zombieMat(crowdSheet, part, { rows: CROWD_LOOKS.length, headTip: part === 'body' });
 const crowdBodies = crowdMesh(crowdBody.geo, crowdWear('body'), CROWD_SHOWN);
 const crowdArms = crowdMesh(crowdArmGeo, crowdWear('arm'), CROWD_SHOWN * 2), crowdLegs = crowdMesh(crowdLegGeo, crowdWear('leg'), CROWD_SHOWN * 2);
 // What's coming off them. Two quads for each of them, one facing you and one flat on the ground, in one draw call, and nothing
@@ -4483,39 +4524,42 @@ const crowdAura = crowdMesh(auraGeo, new THREE.ShaderMaterial({
       #endif
     }`
 }), CROWD_SHOWN);
-const crowdParts = [crowdBodies, crowdLines(crowdBodies, 2.8, crowdLine), crowdArms, crowdLines(crowdArms, 2.2, crowdLimbLine), crowdLegs, crowdLines(crowdLegs, 2, crowdLimbLine), crowdAura];
-const _cc = new THREE.Color(), _cb = new THREE.Matrix4(), _cu = new THREE.Matrix4(), _cl = new THREE.Matrix4(), _cm = new THREE.Matrix4(), _cp = new THREE.Vector3(), _cq = new THREE.Quaternion(), _cs = new THREE.Vector3(), _ce = new THREE.Euler();
+const crowdParts = [crowdBodies, crowdLines(crowdBodies, 2.8, crowdLine, { headTip: true }), crowdArms, crowdLines(crowdArms, 2.2, crowdLimbLine), crowdLegs, crowdLines(crowdLegs, 2, crowdLimbLine), crowdAura];
+const _cc = new THREE.Color(), _cb = new THREE.Matrix4(), _cu = new THREE.Matrix4(), _cl = new THREE.Matrix4(), _cm = new THREE.Matrix4(), _cp = new THREE.Vector3(), _cn = new THREE.Vector3(), _cq = new THREE.Quaternion(), _cs = new THREE.Vector3(), _ce = new THREE.Euler();
 const GAIT = [3.6, 4.6, 9, 11, 16, 0, 10, 4.6];   // how quickly their limbs go, by state
-// How far over someone stands is their own, the angle at the hips in src/agents.js, and the pose gets there by leaning the top half forward and putting
-// the hips back so they don't topple, which tips the legs. Going to look or following him about they come up some, and coming after him or getting out
-// of his way they stand up, unless they're folded further over than a table, who stay that low with their arms dragging, or their hands on the ground
-// once they're far enough over to reach it. Getting up off their knees they're as far over as the quiet all stood before there was a range. It's only
-// ever a pose, so whatever stands them up for good can undo it.
-const COME_UP = .46, KNEEL_FOLD = 1.3, FOLD_LEG = .83, HIPS_BACK = .17, CROWD_ARM = .9, CRAWL = .35;
+// How far over someone stands is their number, the angle at the hips in src/agents.js: 180° is stood up straight and 0° is folded right over. It's drawn at 90° plus half of it
+// (`HIPS_FROM` is the 90), so the furthest over anyone is drawn is 90°, with the back about level, and nobody's hands or head are near the ground. It's a standing fold, at the hips
+// and nowhere else: feet flat, the legs straight, the top half leaning forward and the hips going back a little over the heels so they don't topple, which tips the legs. Their arms
+// hang straight down from the shoulders whatever the fold, so their hands never touch the ground. Going to look or following him about they come up some, and coming after him or
+// getting out of his way they stand up, unless their number's under 90, who stay folded and scuttle: a quick shuffle on their feet with their arms swinging. Getting up off their knees
+// they're as far over as the quiet all stood before there was a range. It's only ever a pose, so whatever stands them up for good can undo it.
+const COME_UP = .46, KNEEL_FOLD = 1.3, FOLD_LEG = .83, HIPS_BACK = .17;
+// How far their arms swing either side of straight down: hardly at all stood about, a little going about their business, and a good deal scuttling. On their knees getting up, once they're
+// folded over (from `outFrom` of lean, all the way by `outOver` more), they're held out to the sides `kneeling` radians for balance, which keeps their hands off the ground where their
+// shoulders are lower than an arm is long. Their arms are as long as their legs, so for the last `from` radians of fold their elbows give a little, and the arms are `short` shorter by the
+// deepest, which keeps the hands off the ground by a hand's length or more however small they are.
+const ARM = { still: .04, walk: .16, scuttle: .45, kneeling: .7, outFrom: .6, outOver: .5, short: .09, from: .3 };
 // Sore from the train: the pace their limbs go at, how little of the swing the leg they favour has, and how much more bent they are
 const SORE = { pace: .75, limp: .22, bent: .07 };
 // How soaked someone is, 0 to 1: all the way for the first half of the time they've got, and then they dry
 const wetOf = (s) => (s.wet > 0 ? Math.min(1, s.wet / (horde.T.dries * .5)) : 0);
-// From the hips to the top of the head is longer than the legs, so a body folded all the way over would have its head in the ground. Nobody's drawn
-// further over at the hips than the first of these, which leaves the head 6 cm off the ground at their feet, and anyone under the second is eased
-// into what's left, so whoever's further over by their number is still drawn further over.
-const HIPS_LEAST = [34, 60];
-// how far the top half leans, in radians from upright, for someone with this angle at their hips, once their legs have tipped as far as that puts the hips back
-function leanFor(hips) {
-  const [least, eased] = HIPS_LEAST, drawn = hips < eased ? least + (eased - least) * Math.max(0, hips) / eased : hips;
-  const want = Math.PI * (1 - drawn / 180), k = HIPS_BACK / FOLD_LEG;
+// how far the top half leans, in radians from upright, for someone with this number, once their legs have tipped as far as that puts the hips back
+function leanFor(n) {
+  const want = Math.PI * (1 - hipsDrawn(n) / 180), k = HIPS_BACK / FOLD_LEG;
   let l = want * .8;
   for (let i = 0; i < 6; i++) { const t = Math.min(.99, k * l); l -= (l + Math.asin(t) - want) / (1 + k / Math.sqrt(1 - t * t)); }
   return Math.max(0, l);
 }
 const leanOf = (s) => (s.bentFor === s.hips ? s.bend : (s.bentFor = s.hips, s.bend = leanFor(s.hips ?? 180)));
+// the furthest anyone's drawn over, or kneeling, as a lean
+const DEEPEST = Math.max(leanFor(0), KNEEL_FOLD);
 // Knocked down: held a step as they were, gone over in a third of a second, and getting up at the end of it, which takes at most this long, with their legs this far back on their knees
 const HIT_HOLD = 1 / 12, HIT_FALL = .3, GET_UP = 2.4, KNEEL = 1.05, SMOOTH = (t) => THREE.MathUtils.smoothstep(t, 0, 1);
 const crowdShown = [];
 // How high someone's hips are, sat in each of them, and how their straight limbs go
 const SEATED = { car: { hip: .8, arms: -1.2, legs: -1.3 }, pickup: { hip: 1.04, arms: -1.2, legs: -1.3 }, quad: { hip: 1.02, arms: -1, legs: -.62 } };
 let crowdPicked = -1, crowdDrawn = -1, crowdSeated = 0;
-// Just over the top of someone's head, wherever it's got to, on the screen. Folded over, that's in front of them and not much higher than their hips.
+// Just over the top of someone's head, wherever it's got to, on the screen. Folded over their head hangs, so that's over their neck, the highest of them.
 const overHead = (s, v) => (s.hdy === undefined ? v.set(s.x, s.y + hillUp(s.x, s.z) + 2.05 * s.size * TOWN_SCALE, s.z) : v.set(s.x + s.hdx, s.y + s.hdy + hillUp(s.x, s.z) + .1, s.z + s.hdz)).project(camera);
 // The name of whoever's nearest, over their head, once he's been around them long enough to know it
 const WHO_REACH = 9, whoTag = document.getElementById('who'), _who = new THREE.Vector3();
@@ -4594,20 +4638,31 @@ function drawCrowd(step) {
 }
 // Whoever's driving goes with the vehicle, which moves every frame
 function drawSeated(step) { if (!crowdSeated) return; for (let i = 0; i < crowdSeated; i++) poseCrowd(crowdShown[i], i, step); crowdWritten(); }
-// For the tests: how someone in the crowd is drawn, from what went to the graphics card. The angle at their hips, and how far over the ground the
-// lowest of their head and of their hands are, in metres.
+// For the tests: how someone in the crowd is drawn, from what went to the graphics card, with the head tipped the way the vertex shader does it. In degrees: the angle at their hips, how far
+// their back is from upright, how far back their legs are from straight down, how far their arms are from straight down at the worst, which way their head points, from straight up, forward
+// being positive, and how far forward their first leg is from straight down. And how far over the ground the lowest of their head, of their hands and of their feet are, in metres.
 function stanceOf(s) {
   const i = crowdShown.indexOf(s); if (i < 0) return null;
-  const at = (mesh, n) => new THREE.Matrix4().fromArray(mesh.instanceMatrix.array, n * 16), B = at(crowdBodies, i), up = new THREE.Vector3().setFromMatrixColumn(B, 1).normalize();
-  const lowest = (geo, M, from = -Infinity) => { const P = geo.attributes.position, v = new THREE.Vector3(); let y = Infinity; for (let k = 0; k < P.count; k++) if (P.getY(k) > from) y = Math.min(y, v.fromBufferAttribute(P, k).applyMatrix4(M).y); return y - s.y; };
-  let hips = 0, hands = Infinity;
+  const deg = THREE.MathUtils.radToDeg, at = (mesh, n) => new THREE.Matrix4().fromArray(mesh.instanceMatrix.array, n * 16), B = at(crowdBodies, i), axis = (M) => new THREE.Vector3().setFromMatrixColumn(M, 1).normalize();
+  const up = axis(B), ahead = new THREE.Vector3().setFromMatrixColumn(B, 2).setY(0).normalize(), down = new THREE.Vector3(0, -1, 0), tip = crowdHead.array[i], bodyGeo = crowdBodies.geometry, W = bodyGeo.attributes.aBend;
+  // a point of the body, where the shader puts it: the head about the neck, by the weight it carries
+  const drawn = (geo, k, v) => { v.fromBufferAttribute(geo.attributes.position, k); if (geo === bodyGeo && tip) { const a = tip * W.getX(k), c = Math.cos(a), n = Math.sin(a), y = v.y - NECK[1], z = v.z - NECK[2]; v.set(v.x, NECK[1] + y * c - z * n, NECK[2] + y * n + z * c); } return v; };
+  const lowest = (geo, M, from = -Infinity) => { const P = geo.attributes.position, v = new THREE.Vector3(); let y = Infinity; for (let k = 0; k < P.count; k++) if (P.getY(k) > from) y = Math.min(y, drawn(geo, k, v).applyMatrix4(M).y); return y - s.y; };
+  let hips = 0, legs = 0, arms = 0, hands = Infinity, feet = Infinity, step = 0, top = 0;
   for (let a = 0; a < 2; a++) {
-    hips += THREE.MathUtils.radToDeg(up.angleTo(new THREE.Vector3().setFromMatrixColumn(at(crowdLegs, i * 2 + a), 1).normalize().negate())) / 2;
+    const leg = axis(at(crowdLegs, i * 2 + a)).negate(), arm = axis(at(crowdArms, i * 2 + a)).negate();
+    hips += deg(up.angleTo(leg)) / 2; legs += deg(leg.angleTo(down)) / 2;
+    arms = Math.max(arms, deg(arm.angleTo(down)));
     hands = Math.min(hands, lowest(crowdArms.geometry, at(crowdArms, i * 2 + a)));
+    feet = Math.min(feet, lowest(crowdLegs.geometry, at(crowdLegs, i * 2 + a)));
+    if (a === 0) step = deg(Math.atan2(leg.dot(ahead), -leg.y));
   }
-  return { hips, head: lowest(crowdBodies.geometry, B, .2), hands };
+  // the crown is the highest point of the body as it's built, and the neck is what it hangs from
+  const P = bodyGeo.attributes.position; for (let k = 1; k < P.count; k++) if (P.getY(k) > P.getY(top)) top = k;
+  const along = drawn(bodyGeo, top, new THREE.Vector3()).applyMatrix4(B).sub(new THREE.Vector3(...NECK).applyMatrix4(B));
+  return { hips, torso: deg(up.angleTo(new THREE.Vector3(0, 1, 0))), legs, arms, step, hands, feet, head: lowest(bodyGeo, B, .2), pitch: deg(Math.atan2(along.dot(ahead), along.y)) };
 }
-function crowdWritten() { crowdBodies.instanceMatrix.needsUpdate = crowdArms.instanceMatrix.needsUpdate = crowdLegs.instanceMatrix.needsUpdate = crowdAura.instanceMatrix.needsUpdate = crowdZ.needsUpdate = crowdLimbZ.needsUpdate = crowdLine.needsUpdate = crowdLimbLine.needsUpdate = crowdAuraZ.needsUpdate = crowdWet.needsUpdate = crowdLimbWet.needsUpdate = true; }
+function crowdWritten() { crowdBodies.instanceMatrix.needsUpdate = crowdArms.instanceMatrix.needsUpdate = crowdLegs.instanceMatrix.needsUpdate = crowdAura.instanceMatrix.needsUpdate = crowdZ.needsUpdate = crowdLimbZ.needsUpdate = crowdLine.needsUpdate = crowdLimbLine.needsUpdate = crowdAuraZ.needsUpdate = crowdWet.needsUpdate = crowdLimbWet.needsUpdate = crowdHead.needsUpdate = true; }
 function poseCrowd(s, i, step) {
   const bodies = crowdBodies.instanceMatrix.array, arms = crowdArms.instanceMatrix.array, legs = crowdLegs.instanceMatrix.array, auras = crowdAura.instanceMatrix.array;
   {
@@ -4640,29 +4695,36 @@ function poseCrowd(s, i, step) {
     if (s.tumble) _cb.multiply(_cl.makeRotationX(s.tumble));
     // the top half leans from the hips, so the feet stay on the ground. It doubles over going down, rears back a little reaching for him, and wobbles on its knees.
     const crumple = struck && fell > 0 && fell < 1 ? Math.sin(fell * Math.PI) * .8 : 0;
-    const list = (s.phase - 3.14) * .035, lean = Math.max(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : .16, fold) + crumple - grip * .25 + (sore && !lie ? SORE.bent : 0);
+    const list = (s.phase - 3.14) * .035, lean = Math.max(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : seat ? .16 : 0, fold) + crumple - grip * .25 + (sore && !lie ? SORE.bent : 0);
     _cl.makeRotationFromEuler(_ce.set(lean, 0, list + (st === STUNNED ? Math.sin(step * .9) * .12 + kneel * Math.sin(step * .7 + s.phase) * .16 : Math.sin(p) * (after ? .05 : .1))));
     const e = _cl.elements; _cl.setPosition(-ZOMBIE_HIP * e[4], ZOMBIE_HIP - ZOMBIE_HIP * e[5], -ZOMBIE_HIP * e[6]);
     _cu.multiplyMatrices(_cb, _cl).toArray(bodies, i * 16);
-    // where the top of their head is, for whatever's said over it
-    _cp.set(0, .55, .18).applyMatrix4(_cu); s.hdx = _cp.x - s.x; s.hdy = _cp.y - s.y; s.hdz = _cp.z - s.z; s.lean = lean; s.lie = lie; s.kneel = kneel;
+    // Their head hangs from the neck: tipped back with the mouth open stood up, hanging forward and down once they're folded over, and resting when they're down. It follows how far over
+    // they stand and not how they lean at the moment, so someone who's stood up to run at him has it back. Reaching for him it goes back a little more, and loose, it swings as they go.
+    const hung = SMOOTH((fold - HEAD.from) / (HEAD.to - HEAD.from));
+    let tip = HEAD.back + (HEAD.hang - HEAD.back) * hung - grip * .3 + (reduceMotion ? 0 : Math.sin(p * 1.7 + 1) * HEAD.loose * hung * (still ? .3 : 1));
+    if (seat) tip = HEAD.seated; else if (lie) tip += (HEAD.rest - tip) * lie;
+    crowdHead.setX(i, tip - HEAD.pitch);
+    // where the top of their head is, or their neck if that's higher, for whatever's said over it
+    _cp.set(0, NECK[1] + CROWN[0] * Math.cos(tip) - CROWN[1] * Math.sin(tip), NECK[2] + CROWN[0] * Math.sin(tip) + CROWN[1] * Math.cos(tip)).applyMatrix4(_cu);
+    if (_cn.set(0, .2, .05).applyMatrix4(_cu).y > _cp.y) _cp.copy(_cn);
+    s.hdx = _cp.x - s.x; s.hdy = _cp.y - s.y; s.hdz = _cp.z - s.z; s.lean = lean; s.lie = lie; s.kneel = kneel;
+    // Their arms hang straight down from the shoulders whatever the fold, which is the lean taken off, so they're straight down in the world. They're loose, swinging a little as they go and a good
+    // deal scuttling, and they never reach for the ground. Stood up to run at him or keep away they have them out or up instead, coming into it as they come up out of the fold.
+    const up = (after || away) && !low, sway = still ? ARM.still : low ? ARM.scuttle : ARM.walk, give = 1 - ARM.short * SMOOTH((fold - (DEEPEST - ARM.from)) / ARM.from);
+    // and on their knees, folded over, how far out to the sides they hold them: all the way once they're folded over as far as they kneel, and not at all while they're still coming up
+    const out = kneel * ARM.kneeling * SMOOTH((fold - ARM.outFrom) / ARM.outOver);
     for (let a = 0; a < 2; a++) {
       const side = a ? 1 : -1, swing = Math.sin(p + (a ? Math.PI : 0));
       let reach = seat ? SEATED[seat.kind].arms : after ? -1.3 + Math.sin(p * 1.3 + a * 2) * .16 : st === CURIOUS ? -.4 - a * .25 : st === STUNNED ? .15 : away ? -2.1 + a * .35 + swing * .12 : st === TRAILING && still ? -.03 : swing * .18 - .1 - (a === s.limp ? .22 : .04);
-      // folded over, their arms hang straight down from the shoulder, swinging a little, and drag behind them coming after him like that
-      if (!seat && fold > .05) { const hang = -lean + (after ? (st === GRABBING ? -.6 : .3 + Math.sin(p * 1.3 + a * 2) * .1) : st === CURIOUS ? -.25 - a * .15 : swing * .14 - (a === s.limp ? .06 : 0)); reach += (hang - reach) * Math.min(1, fold / .6); }
+      if (!seat) { const hang = -lean + (st === GRABBING ? -.6 : swing * sway) - (a === s.limp ? .06 : 0); reach += (hang - reach) * (up ? Math.min(1, fold / .6) : 1 - lie); }
       if (grip) reach += (-2.3 + a * .15 - reach) * grip;
-      // and however far over they are, their hands come no further down than the ground, where they rest in front of them, and when they're going
-      // anywhere like that each hand goes forward with the other foot, the way something crawls
-      if (!seat && !lie) {
-        const room = (1.43 + ZOMBIE_HIP - drop + (.06 - ZOMBIE_HIP) * Math.cos(lean) - .04) / CROWD_ARM;
-        if (room < 1) reach = Math.min(lean + reach, -Math.acos(Math.max(-1, room)) - (still ? 0 : CRAWL * (1 - swing) / 2)) - lean;
-      }
       if (a === 0) s.arm = lean + reach;
-      _cl.makeRotationFromEuler(_ce.set(reach, 0, side * (after ? .03 : .07))).setPosition(side * .205, .06, 0);
-      _cm.multiplyMatrices(_cu, _cl).toArray(arms, (i * 2 + a) * 16);
+      _cl.makeRotationFromEuler(_ce.set(reach, 0, side * ((after ? .03 : .07) + out))).setPosition(side * .205, .06, 0);
+      _cm.multiplyMatrices(_cu, _cl);
       // a cottonmouth hanging off the sleeve of one of them: its head's got hold halfway down, and the rest hangs. With reduced motion it only hangs.
       if (s.snake > 0 && !seat && a === (s.who ? s.who.id : s.look) % 2) hangSnake(_cm, s, step);
+      _cm.scale(_cs.set(1, give, 1)).toArray(arms, (i * 2 + a) * 16);
       _cl.makeRotationFromEuler(_ce.set(seat ? SEATED[seat.kind].legs : -swing * stride * (a === s.limp ? (sore ? SORE.limp : .55) : 1) + legs0, 0, side * (seat ? .1 : .03))).setPosition(side * .1, ZOMBIE_HIP, 0);
       _cm.multiplyMatrices(_cb, _cl).toArray(legs, (i * 2 + a) * 16);
     }

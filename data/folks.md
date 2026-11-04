@@ -99,7 +99,7 @@ He **starts something** with one who's gone quiet when he:
 
 Then that one comes for him, and so does anyone gone quiet within 10 m of it. They know where he is for 5 seconds, the same as when he gives himself away. Anyone he knocks down comes for him when they get up. Being hit, or seeing it, changes how they are with him the same as it would anyone, so anyone it makes the kind to keep away does that instead. Once they've lost him they go quiet again, unless it's left them **after you** or **keeping away**, which nobody gone quiet gets over.
 
-Anyone folded further over than a table, under 90° at the hips, comes for him folded over like that, low and quick, with their arms dragging or their hands going on the ground, 8% quicker than the ones who stand up: 3.2 m/s hunting and 4 m/s in a swarm, against 3 and 3.7. That's about half of the ones who've gone quiet and every one who's burnt down. Running, at 4.4, he still gets away from either.
+Anyone whose number is under 90°, folded further over than a table, comes for him folded over like that and **scuttles**: a quick shuffle on their feet with their arms swinging, and never on their hands. They're 8% quicker than the ones who stand up: 3.2 m/s hunting and 4 m/s in a swarm, against 3 and 3.7. That's about half of the ones who've gone quiet and every one who's burnt down. Running, at 4.4, he still gets away from either.
 
 **Muttering.** Within 7 m of him, someone gone quiet who's on the screen says their line over their head, small and faint. It's one of the twenty in `mutters`, picked by their number, which the Creative Director wrote. It lasts 3.2 seconds, drifting up a little as it fades, and the same person doesn't say it again for 9 to 16 seconds. It's two at once at most, with someone new twice a second. With reduced motion it's there at once and fades out without moving. That's all anyone in the crowd says, and nothing new is made up for them. Whether they should say more, with a real AI model, is the owner's call.
 
@@ -107,19 +107,26 @@ The numbers are `HOW.burnt`, `HOW.burntOut` and `HOW.hips` in `src/agents.js`, `
 
 ## How far over
 
-Everyone stands as far over as how far gone they are, as the angle at the hips between their legs and their back: 180° is stood up straight, 90° is the back flat like a table and 0° is folded right over. It comes from their number, so the same person always stands the same way, anywhere in town, and a player can read a crowd:
+Everyone stands as far over as how far gone they are, as the angle at the hips between their legs and their back: 180° is stood up straight, 90° is the back flat like a table and 0° is folded right over. That's their number. It comes from their number, so the same person always stands the same way, anywhere in town, and a player can read a crowd.
 
-| How far gone | At the hips |
-| -- | -- |
-| Burnt down | 0° to 30°, the furthest gone the furthest over |
-| Gone quiet, and the people at home | 30° to 150°, spread evenly by their numbers, so no two in a crowd stand quite alike |
-| Coop, Rocky and Miss Bobby | 150° to 170°, by how far gone their looks are: Rocky 151°, Coop 159° and Miss Bobby 164° |
+It's **drawn at 90° plus half of their number**, as the owner's reference picture has it: a number of 0° looks like the picture's furthest over, 90° like the one in the middle and 180° is stood up. So nobody's drawn further over than 90°, with their back about level, and nobody's hands or head are near the ground.
+
+| How far gone | Their number | Drawn at the hips |
+| -- | -- | -- |
+| Holding out | 180° | 180°, stood up |
+| Coop, Rocky and Miss Bobby, and any other cast who've only quit a little | 150° to 170°, by how far gone their looks are: Rocky 151°, Coop 159° and Miss Bobby 164° | 165° to 175°: Rocky 165°, Coop 170° and Miss Bobby 172° |
+| Gone quiet, and the people at home | 30° to 150°, spread evenly by their numbers, so no two in a crowd stand quite alike | 105° to 165° |
+| Burnt down | 0° to 30°, the furthest gone the furthest over | 90° to 105° |
 
 The kids on four-wheelers and anyone driving sit up straight. Robby's a ghost and isn't on it, and neither is the hero. Nobody in town stands at 180° yet: that's for anyone holding out.
 
-The arms hang straight down, so the further over someone is the nearer their hands are to the ground, and anyone further over than about 80° has them resting on the ground in front of them. From the hips to the top of the head is longer than the legs, so a body folded right over would have its head in the ground. Nobody's drawn further over than 34°, which leaves the head 6 cm off the ground at their feet, and anyone under 60° is eased into the 34° to 60° there's room for, so whoever's further over by their number is still drawn further over. Someone who's burnt down is drawn at 34° to 47°.
+It's a standing fold, at the hips and nowhere else:
 
-It's only a pose, so reduced motion doesn't change it. The numbers are `HOW.hips` and `HOW.flickers` in `src/agents.js` and `HIPS_LEAST` in `index.html`. `npm run fold` looks at all of it in Chrome.
+- **Legs and feet.** The legs are straight and the feet are on the ground. The top half leans forward and the hips go back a little over the heels, so they don't topple, which tips the legs back, by up to 16° at the deepest. The legs don't bend, and a foot turns with its leg, so at the deepest the toes are a few centimetres up.
+- **Arms.** They hang straight down from the shoulders whatever the fold, loose, swinging a little as they walk and a good deal when they scuttle. The hands never touch the ground, never rest on it and never walk on it. Their arms are as long as their legs, so for the last stretch of the fold their elbows give a little, up to 9% off the length, and a hand's never lower than about 15 cm off the ground, standing, scuttling or on their knees. Getting up off their knees, folded over, they hold them out to the sides a little for balance.
+- **Head.** Stood up it tips back with the mouth open. Folded over it hangs from the neck, forward and down: a head's never lower than about 55 cm off the ground, or 45 cm getting up on their knees. It lets go between about 12° and 34° of lean. It's turned about the neck in the vertex shader by instance, so it costs no draw calls and no triangles, and it swings a little as they go, which reduced motion keeps still. Sat in something they look where they're going.
+
+It's only a pose, so reduced motion doesn't change it. The numbers are `HOW.hips` and `HOW.flickers` in `src/agents.js`, and `HIPS_FROM` (the 90°), `ARM` and `HEAD` in `index.html`. `npm run fold` looks at all of it in Chrome.
 
 ## Knocked down
 

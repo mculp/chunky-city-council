@@ -1,6 +1,6 @@
 // First, one of them walking straight at him with the sound on: with his hood in the way, all that warns him is its glow flaring and one groan as its hands go up,
 // and the glow's back once it has hold of him. Then swings at one of them walking straight at him, the way the ticket says to try it: standing still, ten times on
-// a phone-sized page with real taps and ten times on a laptop with real clicks, from straight ahead and from off to one side, stood up and low and quick, tapped as
+// a phone-sized page with real taps and ten times on a laptop with real clicks, from straight ahead and from off to one side, stood up and folded over and scuttling, tapped as
 // soon as they're in reach and as late as while they're reaching for him. Each time the swing has to land before they get hold of him, and without one they do. Then
 // how long one stays down, lying there and getting up slowly, with him stood over it the whole time, and the picture holding and tearing when a swing lands, which
 // it doesn't with reduced motion, though the glow still flares.
@@ -38,9 +38,9 @@ const helpers = () => {
   };
   window.dist = (s) => Math.hypot(s.x - P().x, s.z - P().z);
   window.off = (s) => { const a = G.player.yaw - Math.atan2(s.x - P().x, s.z - P().z); return Math.abs(Math.atan2(Math.sin(a), Math.cos(a))); };
-  // the two kinds who come for him, stood up and low and quick, and the burnt-down ones if there are any, who'd come for him on sight
+  // the two kinds who come for him, stood up and folded over and scuttling, and the burnt-down ones if there are any, who'd come for him on sight
   const one = (low) => H.all.find((s) => s.who && !s.scuttle === !low && s.quiet === false) ?? H.all.find((s) => s.who && !s.scuttle === !low);
-  window.kinds = { up: one(false), low: one(true) };
+  window.kinds = { up: one(false), scuttle: one(true) };
   // stepped on until it's this close, or has been reaching for him this long
   window.closeTo = (s, d, reach) => { for (let i = 0; i < 300 && (reach ? (s.reaching ?? 0) < reach : dist(s) > d) && !H.grab; i++) G.sim(T, T); return { d: dist(s), reaching: s.reaching ?? 0, grab: !!H.grab }; };
   // then, after the tap: which way he turned to swing, and whether it went down or got hold of him first
@@ -58,8 +58,8 @@ const helpers = () => {
 // A phone turns him to anyone on his side of a right angle, and a mouse only to anyone close to where he's looking. From 2.6 m and 1.1 rad off, only
 // turning to it can land it.
 const TRIALS = {
-  phone: [[0, 2.8, 'up'], [.4, 2.6, 'low'], [-.4, 2.4, 'up'], [.8, 2.2, 'low'], [-.8, 2, 'up'], [1.1, 1.8, 'low'], [-1.1, 2.6, 'up'], [0, 1.2, 'low'], [.3, 1, 'up'], [-.6, 'reaching', 'low']],
-  laptop: [[0, 2.8, 'up'], [.2, 2.6, 'low'], [-.2, 2.4, 'up'], [.35, 2.2, 'low'], [-.35, 2, 'up'], [.45, 1.8, 'low'], [-.45, 2.6, 'up'], [0, 1.2, 'low'], [.1, 1, 'up'], [-.3, 'reaching', 'low']],
+  phone: [[0, 2.8, 'up'], [.4, 2.6, 'scuttle'], [-.4, 2.4, 'up'], [.8, 2.2, 'scuttle'], [-.8, 2, 'up'], [1.1, 1.8, 'scuttle'], [-1.1, 2.6, 'up'], [0, 1.2, 'scuttle'], [.3, 1, 'up'], [-.6, 'reaching', 'scuttle']],
+  laptop: [[0, 2.8, 'up'], [.2, 2.6, 'scuttle'], [-.2, 2.4, 'up'], [.35, 2.2, 'scuttle'], [-.35, 2, 'up'], [.45, 1.8, 'scuttle'], [-.45, 2.6, 'up'], [0, 1.2, 'scuttle'], [.1, 1, 'up'], [-.3, 'reaching', 'scuttle']],
 };
 async function tenOf(device, g, press) {
   let down = 0, faced = 0;
@@ -69,7 +69,7 @@ async function tenOf(device, g, press) {
     const r = await g((kind) => after(kinds[kind], yaw0), kind);
     if (r.down && !r.grab) down++;
     if (r.aim < .05) faced++;
-    console.log(`     ${device}, ${kind === 'up' ? 'stood up' : 'low and quick'} from ${a} rad, tapped ${when === 'reaching' ? `${got.reaching.toFixed(2)} s into reaching for him` : `at ${got.d.toFixed(2)} m`}: ${r.down && !r.grab ? `down at ${r.at} m, ${r.t} s later, turned ${r.turned}` : r.grab ? `got hold of him ${r.t} s later` : 'missed'}`);
+    console.log(`     ${device}, ${kind === 'up' ? 'stood up' : 'scuttling'} from ${a} rad, tapped ${when === 'reaching' ? `${got.reaching.toFixed(2)} s into reaching for him` : `at ${got.d.toFixed(2)} m`}: ${r.down && !r.grab ? `down at ${r.at} m, ${r.t} s later, turned ${r.turned}` : r.grab ? `got hold of him ${r.t} s later` : 'missed'}`);
     if (!r.down || r.aim >= .05) console.log(`       ${JSON.stringify(r)}`);
   }
   return { down, faced };
@@ -81,8 +81,8 @@ let { page, errors } = phone;
 let g = (fn, arg) => page.evaluate(fn, arg);
 const snap = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.jpg`, type: 'jpeg', quality: 82 }); };
 await g(helpers);
-const K = await g(() => ({ up: kinds.up.who.name, low: kinds.low.who.name, reach: H.T.grabReach, windUp: H.T.windUp }));
-console.log(`     ${K.up} comes stood up and ${K.low} comes low and quick. They get hold of him from ${K.reach} m, ${K.windUp} s after they're close enough.`);
+const K = await g(() => ({ up: kinds.up.who.name, scuttle: kinds.scuttle.who.name, reach: H.T.grabReach, windUp: H.T.windUp }));
+console.log(`     ${K.up} comes stood up and ${K.scuttle} scuttles, folded over. They get hold of him from ${K.reach} m, ${K.windUp} s after they're close enough.`);
 
 // With the camera behind him, one coming straight at him is behind his hood by the time it reaches, so what warns him is its glow flaring and one groan as its hands go up.
 // Nothing makes a sound until a real key or touch, and the groan's file has to have come down first. A groan's gap is in real seconds, which the next trial doesn't wait for, so this goes first.
