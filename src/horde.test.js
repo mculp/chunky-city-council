@@ -147,7 +147,7 @@ describe('senses', () => {
     assert.ok(!wet(s.x), `it's at ${s.x}`);
   });
 
-  test('a lure in the water takes them in after it, and they don\'t come out', () => {
+  test('a lure in the water takes them in after it, and the cottonmouths have them', () => {
     const wet = (x) => x > 15, bitten = [], h = createHorde(field({ water: wet }), {}, { bitten: (o) => bitten.push(o) }), s = h.add(10, 0), far = h.add(-40, 0);
     h.lure(25, 0, 40, 8, true);
     const p = { ...still, x: -100 }; let went = false;
@@ -157,26 +157,89 @@ describe('senses', () => {
     assert.equal(far.wading, undefined, 'and whoever couldn\'t hear it stays out');
     const y = s.y; run(h, p, TUNING.goesUnder / 2);
     assert.ok(s.y < y, 'it goes down');
-    assert.ok(h.all.includes(s));
     run(h, p, TUNING.goesUnder);
-    assert.ok(!h.all.includes(s), 'and it\'s gone');
-    assert.ok(h.all.includes(far));
+    assert.ok(s.under > 0, 'and stays down a while'); assert.ok(h.all.includes(s), 'but not gone');
+    assert.deepEqual(bitten, [s], 'only the once');
   });
 
-  test('the town doesn\'t empty: another wanders in for each, in time, from out of sight, and only for those', () => {
-    const wet = (x) => x > 15, h = createHorde(field({ water: wet, comeFrom: () => [500, 500] }, {})), s = h.add(14, 0), p = { ...still, x: -100 };
+  describe('the river brings them up', () => {
+    // the water is east of x = 15 everywhere, and downstream is south, so a place to come up is just in it with a bank just out of it
+    const world = (extra = {}) => field({ water: (x) => x > 15, level: () => 0, floorAt: (x) => (x > 15 ? -2 : 0), comeUp: (s, how) => ({ x: 16, z: s.z + how.metres, bank: [13, s.z + how.metres] }), ...extra });
+    const p = { ...still, x: -100 };
+    // lures one into the water and runs until the cottonmouths have them. It says what they were like as they came up.
+    const wade = (h, s, up) => {
+      s.wading = true; h.lure(25, 0, 40, 8, true);
+      for (let t = 0; t < 40 && !(s.under > 0); t += 1 / 30) h.update(1 / 30, p);
+      const was = { x: s.x, z: s.z, swept: s.swept };
+      for (let t = 0; t < 40 && s.under !== undefined; t += 1 / 30) h.update(1 / 30, p);
+      return { ...was, up: up[0] };
+    };
+    const seen = (o) => ({ x: o.x, z: o.z, state: o.state, wet: o.wet, snake: o.snake, homeward: o.homeward, climbing: o.climbing, wading: o.wading, under: o.under });
+
+    test('downstream, soaked, with a snake on a sleeve, in the same number as before', () => {
+      const up = [], h = createHorde(world(), {}, { surfaced: (o) => up.push(seen(o)) }), s = h.add(10, 0), n = h.all.length;
+      const was = wade(h, s, up);
+      assert.ok(was.swept >= TUNING.below[0] * TUNING.current && was.swept <= TUNING.below[1] * TUNING.current, `${was.swept} m`);
+      assert.equal(up.length, 1, 'up again, the once'); assert.equal(h.all.length, n, 'nobody new, and nobody missing');
+      assert.ok(Math.abs(up[0].z - was.z - was.swept) < 1e-9, `${up[0].z - was.z} m downstream when it was ${was.swept}`);
+      assert.equal(up[0].wet, TUNING.dries);
+      assert.ok(up[0].snake >= TUNING.snakeFor[0] && up[0].snake <= TUNING.snakeFor[1], `a snake for ${up[0].snake} s`);
+      assert.equal(up[0].state, SHAMBLE); assert.ok(up[0].homeward); assert.equal(up[0].under, undefined);
+      assert.ok(up[0].x > 15 && up[0].climbing && up[0].wading, 'in the water, to wade out of it');
+    });
+
+    test('they wade out first and nothing takes them back in, then walk home to dry off', () => {
+      const up = [], bitten = [], h = createHorde(world(), {}, { bitten: (o) => bitten.push(o), surfaced: (o) => up.push(seen(o)) }), s = h.add(10, 0);
+      s.homeX = 0; s.homeZ = 400;
+      wade(h, s, up);
+      // another into the water while they're still getting out of it doesn't take them back
+      h.lure(25, s.z, 40, 1.5, true);
+      run(h, p, 12);
+      assert.ok(s.x < 15 && !s.climbing && !s.wading, `on the bank at ${s.x}`);
+      assert.equal(bitten.length, 1, 'bitten the once');
+      // and with him a way off, keeping up, a long walk
+      const q = { ...still, x: 80, z: 0 }, z = s.z;
+      for (let t = 0; t < 40; t += 5) { q.z = s.z; run(h, q, 5); }
+      assert.ok(s.z > z + 5, 'and off home');
+      for (let t = 0; t < 400 / TUNING.speed[SHAMBLE]; t += 5) { q.z = s.z; run(h, q, 5); }
+      assert.ok(Math.hypot(s.x, s.z - 400) < TUNING.homeIs + 3, `at ${s.x}, ${s.z}`); assert.ok(!s.homeward);
+    });
+
+    test('dry after a while, and the snake lets go before that', () => {
+      const up = [], dropped = [], h = createHorde(world(), {}, { drop: (o) => dropped.push(o), surfaced: (o) => up.push(seen(o)) }), s = h.add(10, 0);
+      wade(h, s, up);
+      run(h, p, up[0].snake + .5);
+      assert.deepEqual(dropped, [s]); assert.equal(s.snake, 0); assert.ok(s.wet > 0, 'still soaked');
+      run(h, p, TUNING.dries);
+      assert.ok(!(s.wet > 0), 'dry');
+    });
+
+    test('nobody is asked for a random number to bring them up, which would change what everyone else does', () => {
+      let n = 0;
+      const h = createHorde({ ...world(), rand: () => { n++; return rand(); } }, {}, {}), s = h.add(10, 0);
+      s.wading = true; h.lure(25, 0, 40, 8, true);
+      for (let t = 0; t < 40 && !(s.under > 0); t += 1 / 30) h.update(1 / 30, p);
+      while (s.under > 1 / 30) h.update(1 / 30, p);
+      n = 0; h.update(1 / 30, p);
+      assert.equal(s.under, undefined, 'up'); assert.equal(n, 0, `${n} calls`);
+    });
+
+    test('with nowhere to come up they\'re where they went under, and wade out from there', () => {
+      const h = createHorde(world({ comeUp: undefined }), {}, {}), s = h.add(10, 0);
+      const was = wade(h, s, []);
+      assert.equal(s.under, undefined); assert.ok(Math.abs(s.x - was.x) < 1 && Math.abs(s.z - was.z) < 1);
+      run(h, p, 20); assert.ok(s.x < 15, `out of it at ${s.x}`);
+    });
+  });
+
+  test('nobody new wanders in to take anyone\'s place, and the town is never asked for anyone', () => {
+    let asked = 0;
+    const wet = (x) => x > 15, h = createHorde(field({ water: wet, comeFrom: () => { asked++; return [500, 500]; } }), {}, {}), s = h.add(14, 0), p = { ...still, x: -100 };
     h.lure(25, 0, 40, 30, true);
     run(h, p, 20);
-    assert.ok(!h.all.includes(s), 'the water had it');
-    assert.equal(h.all.length, 0);
-    run(h, p, TUNING.comeIn - 15);
-    assert.equal(h.all.length, 0, 'not straight away');
-    run(h, p, 16);
-    assert.deepEqual([h.all.length, h.all[0].x, h.all[0].z], [1, 500, 500]);
-    run(h, p, TUNING.comeIn * 3);
-    assert.equal(h.all.length, 1, 'one for one');
-    h.all.length = 0; run(h, p, TUNING.comeIn * 2);
-    assert.equal(h.all.length, 0, 'and nobody comes for those it didn\'t have');
+    run(h, p, 600);
+    assert.equal(h.all.length, 1, 'one, as there always was');
+    assert.equal(h.all[0], s); assert.equal(asked, 0);
   });
 
   test('it only takes a moment of hearing it, and they go all the way', () => {
@@ -501,7 +564,8 @@ describe('gone quiet', () => {
 });
 
 describe('run over', () => {
-  const hit =(over = {}) => ({ x: 3, z: 0, vx: 10, vz: 0, vy: 6, kills: true, seconds: 30, spin: 8, ...over });
+  const hit = (over = {}) => ({ x: 3, z: 0, vx: 10, vz: 0, vy: 6, seconds: 30, spin: 8, ...over });
+  const away = { ...still, x: -100 };
 
   test('whoever it finds is thrown, and it says how many', () => {
     const h = createHorde(field()), near = h.add(1, 0), far = h.add(9, 0);
@@ -511,27 +575,55 @@ describe('run over', () => {
     assert.equal(h.runOver(() => hit()), 1, 'not twice for the same one');
   });
 
-  test('they fly, land, and if it killed them they lie there and then they\'re gone', () => {
+  test('they fly, land, and lie where they land for as long as it says, and nobody dies of it', () => {
     const h = createHorde(field()), s = h.add(1, 0), n = h.all.length;
-    run(h, still, .05);
+    run(h, away, .05);
     h.runOver((x) => (x < 2 ? hit() : null));
-    run(h, still, .3);
+    run(h, away, .3);
     assert.ok(s.y > 0, 'in the air'); assert.ok(s.x > 4); assert.ok(s.tumble > 0);
-    run(h, still, .7);
+    run(h, away, .7);
     assert.equal(s.thrown, null); assert.equal(s.y, 0); assert.equal(s.tumble, 0); assert.ok(s.x > 9, `to ${s.x}`);
     const landed = s.x;
-    run(h, still, TUNING.liesDead - .5);
-    assert.ok(s.flat > 0, 'still down'); assert.equal(s.x, landed, 'and not going anywhere'); assert.equal(h.all.length, n);
-    run(h, still, 2.5);
-    assert.equal(h.all.length, n - 1, 'gone');
+    run(h, away, 28);
+    assert.ok(h.down(s) > 0, 'still down'); assert.equal(s.x, landed, 'and not going anywhere'); assert.equal(h.all.length, n); assert.equal(s.dead, undefined);
+    run(h, away, 10);
+    assert.equal(h.down(s), 0, 'up'); assert.equal(h.all.length, n, 'and nobody\'s gone');
   });
 
-  test('if it didn\'t, they get up, and not while they\'re still down', () => {
-    const h = createHorde(field()), s = h.add(1, 0), n = h.all.length;
-    run(h, still, .05);
-    h.runOver((x) => (x < 2 ? hit({ kills: false, seconds: 3 }) : null));
-    for (let t = 0; t < 6; t += 1 / 30) { h.update(1 / 30, still); if (h.down(s) > 0) assert.equal(s.state, STUNNED, `up with ${h.down(s)} s still to go`); }
-    assert.notEqual(s.state, STUNNED); assert.equal(h.down(s), 0); assert.equal(h.all.length, n); assert.equal(s.dead, undefined);
+  test('not while they\'re still down, and then they\'re sore, and on their way home', () => {
+    const h = createHorde(field()), s = h.add(1, 0);
+    run(h, away, .05);
+    h.runOver((x) => (x < 2 ? hit({ seconds: 3 }) : null));
+    for (let t = 0; t < 8; t += 1 / 30) { h.update(1 / 30, away); if (h.down(s) > 0) assert.equal(s.state, STUNNED, `up with ${h.down(s)} s still to go`); }
+    assert.equal(h.down(s), 0); assert.notEqual(s.state, STUNNED);
+    assert.equal(s.state, SHAMBLE); assert.ok(s.homeward && s.sore > 0, 'sore and heading home');
+  });
+
+  test('they go home, at the pace that leaves them, and are sore until they get there and a little after', () => {
+    const h = createHorde(field()), s = h.add(1, 0), q = { ...away, x: 0, z: 0 };
+    run(h, q, .05);
+    h.runOver((x) => (x < 2 ? hit({ x: 12, z: 0, vx: 0, vz: 0, vy: 1, seconds: 2 }) : null));
+    run(h, away, 6);
+    const was = s.x; run(h, away, 4);
+    assert.ok(was - s.x > 4 * TUNING.speed[SHAMBLE] * TUNING.soreSpeed * .8 && was - s.x < 4 * TUNING.speed[SHAMBLE] * TUNING.soreSpeed * 1.2, `${was - s.x} m in 4 s`);
+    assert.ok(s.moving < TUNING.speed[SHAMBLE]);
+    for (let t = 0; t < 60 && s.homeward; t += 1 / 30) h.update(1 / 30, away);
+    assert.ok(Math.abs(s.x - 1) < TUNING.homeIs + .5, `at ${s.x}`); assert.ok(!s.homeward); assert.ok(s.sore > TUNING.soreFor - 1, 'still sore at home');
+    run(h, away, TUNING.soreFor + 1);
+    assert.ok(!(s.sore > 0), 'and over it');
+    // as quick as they ever were
+    s.x = 20; s.tx = 1; s.tz = 0; s.timer = 99; run(h, away, 4);
+    assert.ok(20 - s.x > 4 * TUNING.speed[SHAMBLE] * .8, `${20 - s.x} m in 4 s`);
+  });
+
+  test('whatever they were doing, they\'ve had enough of it: someone after him goes home, and doesn\'t come back for him', () => {
+    const h = createHorde(field()), s = h.add(1, 0), p = { ...still, noise: 20, x: -100 };
+    s.state = HUNTING; s.started = true;
+    run(h, away, .05);
+    h.runOver((x) => (x < 2 ? hit({ seconds: 3 }) : null));
+    run(h, away, 30);
+    assert.notEqual(s.state, HUNTING); assert.equal(s.started, false);
+    assert.ok(Math.abs(s.x - 1) < TUNING.homeIs + 1, `home at ${s.x}`);
   });
 
   test('a wall stops them flying through it', () => {
@@ -542,15 +634,29 @@ describe('run over', () => {
     assert.ok(s.x < 5.1, `to ${s.x}`);
   });
 
-  test('into the water and that\'s the last of them, with a splash', () => {
+  test('into the water and the river has them, with a splash, and brings them up again, sore', () => {
     let splashes = 0;
-    const h = createHorde(field({ water: (x) => x > 5, level: () => 0, floorAt: (x) => (x > 5 ? -3 : 0) }), {}, { splash: () => splashes++ }), s = h.add(1, 0), n = h.all.length;
-    run(h, still, .05);
-    h.runOver((x) => (x < 2 ? hit({ kills: false, seconds: 3 }) : null));
-    run(h, still, 1);
+    const up = [], world = field({ water: (x) => x > 5, level: () => 0, floorAt: (x) => (x > 5 ? -3 : 0), comeUp: (s) => ({ x: 6, z: s.z + 30, bank: [4, s.z + 30] }) });
+    const h = createHorde(world, {}, { splash: () => splashes++, surfaced: (o) => up.push([o.sore > 0, o.homeward]) }), s = h.add(1, 0), n = h.all.length;
+    run(h, away, .05);
+    h.runOver((x) => (x < 2 ? hit({ seconds: 3 }) : null));
+    run(h, away, 1);
     assert.equal(splashes, 1); assert.ok(s.under !== undefined);
-    run(h, still, 2);
-    assert.equal(h.all.length, n - 1);
+    run(h, away, 3);
+    assert.equal(h.all.length, n, 'not gone'); assert.ok(h.all.includes(s));
+    run(h, away, TUNING.below[1] + 1);
+    assert.deepEqual(up, [[true, true]]); assert.equal(s.under, undefined); assert.ok(s.z > 20, 'downstream');
+  });
+
+  test('someone who lives somewhere goes home to their door, and on with their day from there', () => {
+    const h = createHorde(field()), door = [0, 0], s = h.add(1, 0, { home: { door, inside: [0, -2], nx: 0, nz: 1 } });
+    run(h, away, .05); s.homeX = 1; s.homeZ = 0;
+    h.runOver((x) => (x < 2 ? hit({ x: 14, z: 0, vx: 0, vz: 0, vy: 1, seconds: 2 }) : null));
+    run(h, away, 6);
+    assert.ok(s.homeward && s.x > 10, `at ${s.x}`);
+    for (let t = 0; t < 90 && s.homeward; t += 1 / 30) h.update(1 / 30, away);
+    assert.ok(Math.hypot(s.x - door[0], s.z - door[1]) < TUNING.homeIs + .5, `home at ${s.x}, ${s.z}`);
+    assert.ok(s.timer >= TUNING.atHome[0] - 1, 'and the day goes on as it does, at the door, in the house or the yard');
   });
 
   test('someone holding him lets go, and with nobody left he\'s free', () => {

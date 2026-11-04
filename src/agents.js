@@ -49,7 +49,7 @@ export const hipsOf = (w, fromTown) => {
 export const flickering = (degree) => { const [a, b] = HOW.hips.flickering; return a + (b - a) * Math.min(1, degree / HOW.flickers); };
 
 // The same every time for the same number and salt, and nothing to do with crowdRand, which would change what everyone does after it
-const roll = (id, salt) => {
+export const roll = (id, salt) => {
   let t = Math.imul(id + 1, 0x9E3779B1) ^ Math.imul(salt + 1, 0x85EBCA77);
   t ^= t >>> 15; t = Math.imul(t, 0xC2B2AE3D); t ^= t >>> 13; t = Math.imul(t, 0x27D4EB2F); t ^= t >>> 16;
   return (t >>> 0) / 4294967296;
@@ -69,12 +69,13 @@ export function personOf(id, data, looks = []) {
     id, first, family, name: `${first} ${family}`, says,
     temper: roll(id, 5), nerve: roll(id, 6), nosy: roll(id, 7), homebody: roll(id, 8), tagalong: roll(id, 9),
     looks: { look, phase: roll(id, 10) * 6.28, limp: roll(id, 11) < .5 ? 0 : 1, size: .94 + roll(id, 12) * .12 },
-    hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, fooled: {}, when: 0, seen: 0, met: false, gone: false, shun: null, where: null,
+    hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, fooled: {}, when: 0, seen: 0, met: false, shun: null, where: null,
   };
 }
 
 // What's worth keeping. Nothing that's zero, so most of them take up no room at all.
-const KEPT = ['hurt', 'truck', 'there', 'told', 'got', 'slipped', 'near', 'when', 'seen', 'met', 'gone', 'shun', 'where'];
+// There was a `gone` here once, for whoever the river had. Nobody is lost to it now, so an old save that has one is read with it left out, and the next save doesn't write it.
+const KEPT = ['hurt', 'truck', 'there', 'told', 'got', 'slipped', 'near', 'when', 'seen', 'met', 'shun', 'where'];
 
 // store is localStorage or anything like it, and a browser that won't keep anything just doesn't remember
 export function createFolks(data, { store = null, looks = [] } = {}) {
@@ -133,13 +134,13 @@ export function createFolks(data, { store = null, looks = [] } = {}) {
   const folks = {
     recent: null,
     person,
-    // The next person to come out, which is the next one who hasn't been lost to the river
-    next() { while (person(turn).gone) turn++; return person(turn++); },
+    // The next person to come out
+    next() { return person(turn++); },
     tick(dt) { clock += dt; if ((wait -= dt) <= 0) { wait = HOW.saveEvery; if (dirty) save(); } },
     now: () => clock,
     save,
     hasSave() { try { return !!store.getItem(KEY); } catch { return false; } },
-    forget() { for (const w of everyone.values()) { Object.assign(w, { hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, fooled: {}, when: 0, seen: 0, met: false, gone: false, shun: null, where: null }); } clock = 0; turn = 0; dirty = false; folks.recent = null; try { store.removeItem(KEY); } catch { /* nothing to remove */ } },
+    forget() { for (const w of everyone.values()) { Object.assign(w, { hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, fooled: {}, when: 0, seen: 0, met: false, shun: null, where: null }); } clock = 0; turn = 0; dirty = false; folks.recent = null; try { store.removeItem(KEY); } catch { /* nothing to remove */ } },
 
     mood: moodOf,
     shock,
@@ -156,8 +157,8 @@ export function createFolks(data, { store = null, looks = [] } = {}) {
     hurt(w, x, z, by) {
       note(w, () => {
         w.shun = [Math.round(x), Math.round(z)];
-        // nobody thinks of a fire or a train as something he did to them
-        if (by === 'fire' || by === 'train') return;
+        // nobody thinks of a fire, a train or the river as something he did to them
+        if (by === 'fire' || by === 'train' || by === 'river') return;
         w.hurt++; if (by === 'truck') w.truck++; w.when = clock;
       });
     },
@@ -177,7 +178,6 @@ export function createFolks(data, { store = null, looks = [] } = {}) {
     got(w) { note(w, () => { w.got++; }); },
     slipped(w) { note(w, () => { w.slipped++; w.when = clock; }); },
     fooled(w, kind) { note(w, () => { w.fooled[kind] = (w.fooled[kind] ?? 0) + 1; }); },
-    gone(w) { w.gone = true; dirty = true; },
     // Close to him. He gets to know their name, and the nosy ones get curious.
     close(w, dt) {
       w.seen = clock; w.near += dt; dirty = true;
@@ -185,7 +185,7 @@ export function createFolks(data, { store = null, looks = [] } = {}) {
     },
 
     // Who he's met, the latest first
-    met() { const list = []; for (const w of everyone.values()) if (w.met && !w.gone) list.push(w); return list; },
+    met() { const list = []; for (const w of everyone.values()) if (w.met) list.push(w); return list; },
     latest(n) { return folks.met().sort((a, b) => b.seen - a.seen).slice(0, n); },
   };
   load();

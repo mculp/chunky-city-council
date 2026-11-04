@@ -5,7 +5,7 @@
 // something, and only the ones who've burnt down come for him on sight, which is the top of how far gone they are.
 // What each of them is like and what they remember of him is in src/agents.js.
 
-import { AFTER, AWAY, TAILING, HOW } from './agents.js';
+import { AFTER, AWAY, TAILING, HOW, roll } from './agents.js';
 
 export const SHAMBLE = 0, CURIOUS = 1, HUNTING = 2, SWARM = 3, GRABBING = 4, STUNNED = 5, AVOIDING = 6, TRAILING = 7;
 export const STATE_NAMES = ['shamble', 'curious', 'hunting', 'swarm', 'grabbing', 'stunned', 'avoiding', 'trailing'];
@@ -30,14 +30,21 @@ export const TUNING = {
   personalSpace: .95,
   feelAlong: 8,                    // seconds along a wall before trying the other way
   lightPull: .35,                  // the chance a shambler heads for a light it's near, at full night
-  comeIn: 40,                      // seconds between new ones wandering in, while the water's had some that haven't been replaced
   drowned: 3.5,                    // metres. While a lure's going they can't make out anything further off than this
   lured: 2,                        // m/s, going to one, which is quicker than going to look
   wading: .55,                     // how much of that they keep in the water
   bite: [3, 7],                    // seconds in the water before the cottonmouths have them
   goesUnder: 1.2,                  // seconds to go down after that
   thrownFalls: 15,                 // m/s², for anyone thrown
-  liesDead: 7,                     // seconds someone the train's killed lies there
+  // Nobody dies. The cottonmouths have them and the current takes them, and they come up a little way downstream, on the bank, soaked, with a snake hanging off a sleeve, and walk home.
+  below: [10, 18],                 // seconds under before they come up, by their number
+  current: 3.5,                    // metres a second it takes them, which is how far downstream they come up: 35 to 63 m
+  dries: 80,                       // seconds they stay soaked once they're up
+  snakeFor: [14, 30],              // seconds the snake hangs on, by their number
+  homeIs: 3,                       // metres. Close enough is home.
+  homeFor: 600,                    // seconds before someone gives up on getting home
+  // The train throws them clear and they lie in the ditch, then get up sore and go home. They're sore the whole way, and for a bit after.
+  soreFor: 20, soreSpeed: .7,      // seconds more, and how much of their pace they keep while they are
   meet: 8,                         // metres. Closer than this counts as being around him.
   witness: 18,                     // metres. Further off than this, they didn't notice him hurt anyone.
   tell: 8,                         // metres. How close they've got to be to pass it on.
@@ -65,14 +72,15 @@ export const TUNING = {
 const hypot = Math.hypot, TRY = [0, .8, 1.6, 2.4, 3.1];
 function turn(from, to, k) { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return from + d * k; }
 
-// world: { blocked(x, z, y), water(x, z), floorAt(x, z), wander(s) -> [x, z], rand(), comeFrom(p) -> [x, z] or nothing, folks: src/agents.js's, or nothing and they're nobody,
-//          quiet(s) whether someone just come out has gone quiet, or nothing and nobody has }
-// on: { grab(grab), free(), overrun(), spotted(s) when one of them sees through his act }
+// world: { blocked(x, z, y), water(x, z), floorAt(x, z), wander(s) -> [x, z], rand(), folks: src/agents.js's, or nothing and they're nobody,
+//          quiet(s) whether someone just come out has gone quiet, or nothing and nobody has,
+//          comeUp(s, { metres, side, home }) -> { x, z, bank: [x, z] } where the river brings someone up, which is src/river.js's, or nothing and it's where they went under }
+// on: { grab(grab), free(), overrun(), spotted(s) when one of them sees through his act, thrown(s, hit), splash(s) into the water, bitten(s) by the cottonmouths,
+//       surfaced(s) up again downstream, drop(s) when the snake lets go }
 export function createHorde(world, tuning = {}, on = {}) {
   const T = { ...TUNING, ...tuning }, all = [], active = [], noises = [], lights = [], zones = [], F = world.folks;
   let clock = 0, bellUntil = -1, mercy = 0;
   const h = { all, active, noises, lights, zones, T, grab: null, on };
-  let owed = 0, comeIn = T.comeIn;
 
   h.inSanctuary = (x, z) => zones.some((a) => hypot(x - a.x, z - a.z) < a.r);
   // Off limits unless the bell's ringing, to anyone outside. Anyone caught inside when it stops is on their way out, and can go round whatever's in the way.
@@ -80,7 +88,7 @@ export function createHorde(world, tuning = {}, on = {}) {
   const open = (s, x, z) => !world.blocked(x, z, s.y) && (s.wading || !world.water(x, z)) && !offLimits(s, x, z);
 
   h.add = (x, z, extra = {}) => {
-    const s = { x, z, y: world.floorAt(x, z), yaw: world.rand() * 6.28, state: SHAMBLE, tx: x, tz: z, alert: 0, timer: 0, lost: 0, moving: 0, stuck: 0, side: 0, clear: 0, next: world.rand() * T.thinkEvery, phase: world.rand() * 6.28, gait: world.rand() * 6.28, limp: world.rand() < .5 ? 0 : 1, look: Math.floor(world.rand() * 1000), size: .94 + world.rand() * .12, ...extra };
+    const s = { x, z, homeX: x, homeZ: z, y: world.floorAt(x, z), yaw: world.rand() * 6.28, state: SHAMBLE, tx: x, tz: z, alert: 0, timer: 0, lost: 0, moving: 0, stuck: 0, side: 0, clear: 0, next: world.rand() * T.thinkEvery, phase: world.rand() * 6.28, gait: world.rand() * 6.28, limp: world.rand() < .5 ? 0 : 1, look: Math.floor(world.rand() * 1000), size: .94 + world.rand() * .12, ...extra };
     // Everyone's somebody, and what they look like goes with who they are
     if (F) { const who = extra.who ?? F.next(); Object.assign(s, who.looks, extra); s.who = who; who.body = s; s.homeX = x; s.homeZ = z; s.mood = 0; }
     // whether they've gone quiet, unless it's been said. The people at home have their own way of being.
@@ -97,7 +105,7 @@ export function createHorde(world, tuning = {}, on = {}) {
   function rile(x, z) {
     let n = 0;
     for (const o of active) {
-      if (!o.quiet || o.flat > 0 || o.under !== undefined || o.thrown || o.dead !== undefined || (o.state >= HUNTING && o.state <= STUNNED) || o.state === AVOIDING || hypot(o.x - x, o.z - z) > T.riled) continue;
+      if (!o.quiet || o.flat > 0 || o.under !== undefined || o.thrown || (o.state >= HUNTING && o.state <= STUNNED) || o.state === AVOIDING || hypot(o.x - x, o.z - z) > T.riled) continue;
       turnOn(o, x, z); n++;
     }
     return n;
@@ -111,7 +119,7 @@ export function createHorde(world, tuning = {}, on = {}) {
   // He's started something with someone without knocking them down: hit them with something he threw, or picked up what was at their feet. They come for him,
   // and so does anyone gone quiet close by who saw it. Being hit is remembered like any other, by them and whoever was there. It says how many came.
   h.provoke = (s, by = 'thrown') => {
-    if (s.under !== undefined || s.thrown || s.dead !== undefined || s.state === GRABBING) return 0;
+    if (s.under !== undefined || s.thrown || s.state === GRABBING) return 0;
     if (s.who && by === 'thrown') { F.hurt(s.who, s.x, s.z, by); for (const o of active) if (o !== s && o.who && !(o.flat > 0) && hypot(o.x - s.x, o.z - s.z) < T.witness) F.wasThere(o.who); }
     if (s.state === STUNNED || s.flat > 0) s.started = true; else if (!(s.who?.calm && leaves(s, moodOf(s)))) turnOn(s, s.x, s.z);
     return 1 + rile(s.x, s.z);
@@ -126,7 +134,7 @@ export function createHorde(world, tuning = {}, on = {}) {
   h.unmask = (p, r = T.unmask) => {
     let n = 0;
     for (const s of active) {
-      if (s.under !== undefined || s.thrown || s.dead !== undefined || s.state === GRABBING || s.state === STUNNED || hypot(s.x - p.x, s.z - p.z) > r) continue;
+      if (s.under !== undefined || s.thrown || s.state === GRABBING || s.state === STUNNED || hypot(s.x - p.x, s.z - p.z) > r) continue;
       const mood = moodOf(s);
       if (leaves(s, mood)) continue;
       s.sus = 0; s.alert = 1; s.lost = 0; s.tx = p.x; s.tz = p.z; s.knows = clock + T.lostAfter;
@@ -135,7 +143,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     return n;
   };
   // Something thrown to draw them. While it's going it's all they can make out, unless he's right on top of them, and they go to it quicker than they'd go to look.
-  // One that's landed in the water takes them in after it, and that's the last anyone sees of them.
+  // One that's landed in the water takes them in after it, and the cottonmouths have them, and the river brings them up again downstream.
   h.lure = (x, z, r, seconds, wet = false, kind = 'lure') => { noises.push({ x, z, r, until: clock + seconds, lure: true, wet, kind }); };
   // Knocked flat: anyone within r goes over, thrown clear, and lies there a while. It says how many. They remember it, and so does whoever was there.
   h.knock = (x, z, r, seconds, by = 'hit') => {
@@ -144,7 +152,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     const his = by !== 'fire' && by !== 'train';
     for (const s of active) {
       const dx = s.x - x, dz = s.z - z, d = hypot(dx, dz);
-      if (d >= r || s.flat > 0) continue;
+      if (d >= r || s.flat > 0 || s.under !== undefined) continue;
       s.started = his || (s.started ?? false) || s.state === HUNTING || s.state === SWARM;
       // and what they were doing and where they were, which is how they're drawn for a moment before they go over
       s.hitAs = s.state; s.fromX = s.x; s.fromZ = s.z; s.reaching = 0;
@@ -158,7 +166,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     return n;
   };
   // How much longer someone's down for, getting up included. It's nothing for anyone on their feet.
-  h.down = (s) => (s.flat > 0 && !s.thrown && s.dead === undefined && s.under === undefined ? s.flat : 0);
+  h.down = (s) => (s.flat > 0 && !s.thrown && s.under === undefined ? s.flat : 0);
   // and keeping someone who's down there for at least this much longer, for anything that needs them to stay put. It says whether they were down.
   h.keepDown = (s, seconds) => {
     if (!h.down(s)) return false;
@@ -167,16 +175,18 @@ export function createHorde(world, tuning = {}, on = {}) {
     return true;
   };
   // Run down by something that isn't him, so nobody holds it against him, though they'll keep off the spot. at(x, z, y) says what's happened to anyone in its way:
-  // where they're knocked to, how they fly, how long they're down for, and whether they get up again. It says how many.
+  // where they're thrown to, how they fly and how long they're down for. Nobody dies of it. They lie where they land, and when they're up they're sore, and go home.
+  // It says how many.
   h.runOver = (at, by = 'train') => {
     let n = 0;
     for (const s of active) {
-      if (s.thrown || s.dead !== undefined || s.under !== undefined) continue;
+      if (s.thrown || s.under !== undefined) continue;
       const hit = at(s.x, s.z, s.y);
       if (!hit) continue;
       if (h.grab?.who.includes(s)) { h.grab.who.splice(h.grab.who.indexOf(s), 1); if (!h.grab.who.length) { h.grab = null; mercy = T.mercy; h.on.free?.(); } }
-      s.x = hit.x; s.z = hit.z; s.thrown = { vx: hit.vx, vz: hit.vz, vy: hit.vy, kills: hit.kills, spin: hit.spin ?? 0 }; s.tumble = 0; s.hitAs = undefined; s.reaching = 0;
-      s.started = s.state === HUNTING || s.state === SWARM || s.state === GRABBING;
+      s.x = hit.x; s.z = hit.z; s.thrown = { vx: hit.vx, vz: hit.vz, vy: hit.vy, spin: hit.spin ?? 0 }; s.tumble = 0; s.hitAs = undefined; s.reaching = 0;
+      // whatever they were up to, they've had enough of it
+      s.started = false; s.sent = true;
       s.state = STUNNED; s.timer = hit.seconds; s.alert = 1; s.moving = 0; s.flat = s.flatFor = hit.seconds + 1;
       if (s.who) F.hurt(s.who, s.x, s.z, by);
       h.on.thrown?.(s, hit);
@@ -189,16 +199,55 @@ export function createHorde(world, tuning = {}, on = {}) {
     s.tumble += f.spin * dt;
     if (!world.blocked(nx, nz, s.y)) { s.x = nx; s.z = nz; } else { f.vx *= -.2; f.vz *= -.2; }
     f.vy -= T.thrownFalls * dt; s.y += f.vy * dt;
-    // into the water, and that's the last anyone sees of them
-    if (world.water(s.x, s.z) && s.y < (world.level?.(s.x, s.z) ?? -Infinity)) { s.thrown = null; s.tumble = 0; s.under = T.goesUnder; h.on.splash?.(s); return; }
+    // into the water, and the river has them
+    if (world.water(s.x, s.z) && s.y < (world.level?.(s.x, s.z) ?? -Infinity)) { s.thrown = null; s.tumble = 0; dive(s); h.on.splash?.(s); return; }
     const floor = world.floorAt(s.x, s.z);
     if (s.y > floor) return;
     s.y = floor; s.thrown = null; s.tumble = 0;
-    if (f.kills) { s.dead = T.liesDead; s.flat = 1; s.flatFor = 9; }
+  }
+
+  // Where someone's home is: the door for anyone who lives somewhere, and for the rest wherever they came out and go about from
+  const homeOf = (s) => (s.home ? s.home.door : [s.homeX, s.homeZ]);
+  // What's random about someone comes from their number, and not world.rand(), which would change what everyone does after it
+  const luckOf = (s, salt) => roll(s.who ? s.who.id : 1e6 + s.look, salt);
+  // Nobody dies of the river. The cottonmouths have them and they go under, and the current takes them, and a little later they come up downstream.
+  function dive(s) {
+    const below = T.below[0] + luckOf(s, 20) * (T.below[1] - T.below[0]);
+    s.under = T.goesUnder + below; s.sinking = T.goesUnder; s.swept = below * T.current;
+    s.wading = false; s.climbing = false; s.soaked = 0;
+    // and whatever lure took them in has had its way with them, so they don't go straight back in after it
+    s.spent = s.lureSeen;
+    if (s.who) F.hurt(s.who, s.x, s.z, 'river');
+  }
+  // and up on the bank, wading out of it, with the water pouring off them and a cottonmouth hanging off a sleeve, and then home
+  function surface(s) {
+    const home = homeOf(s), at = world.comeUp?.(s, { metres: s.swept, side: luckOf(s, 21), home });
+    if (at) { s.x = at.x; s.z = at.z; [s.tx, s.tz] = at.bank; } else { s.tx = s.x; s.tz = s.z; }
+    s.y = world.floorAt(s.x, s.z);
+    s.under = s.sinking = s.swept = undefined;
+    // awake, whatever had them down, and not after anybody
+    s.flat = 0; s.hitAs = undefined; s.thrown = null; s.tumble = 0; s.reaching = 0; s.started = false;
+    s.state = SHAMBLE; s.alert = 0; s.lost = 0; s.moving = 0; s.stuck = 0; s.side = 0; s.sus = 0; s.timer = 20;
+    // they have to get out first, and nothing draws them back in
+    s.wading = true; s.climbing = true;
+    s.wet = T.dries; s.snake = T.snakeFor[0] + luckOf(s, 22) * (T.snakeFor[1] - T.snakeFor[0]);
+    if (s.sent) sore(s);
+    goHome(s);
+    h.on.surfaced?.(s);
+  }
+  // Sore, and on their way home, however far that is
+  function sore(s) { s.sent = false; s.sore = T.soreFor; }
+  function goHome(s) { s.homeward = true; s.homeBy = clock + T.homeFor; }
+  // Another step of the way: where they're going while they're on it, and false once they're there, or have given up
+  function headHome(s) {
+    const [x, z] = homeOf(s), left = hypot(x - s.x, z - s.z);
+    if (left < T.homeIs || clock > s.homeBy) { s.homeward = false; return false; }
+    s.tx = x; s.tz = z; s.timer = left / (T.speed[SHAMBLE] * (s.sore > 0 ? T.soreSpeed : 1)) + 3;
+    return true;
   }
   h.calm = () => {
     if (h.grab) h.grab = null;
-    for (const s of all) { s.state = SHAMBLE; s.alert = 0; s.timer = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; s.moving = 0; }
+    for (const s of all) { s.state = SHAMBLE; s.alert = 0; s.timer = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; s.moving = 0; s.sent = false; }
   };
   // A press of the button while held
   h.mash = () => { if (!h.grab) return; h.grab.progress += T.mash / (1 + .5 * (h.grab.who.length - 1)); if (h.grab.progress >= 1) release(true); };
@@ -206,7 +255,7 @@ export function createHorde(world, tuning = {}, on = {}) {
   function nearestNoise(s) {
     let best = null, bd = Infinity;
     // the nearest, and a lure over anything that isn't one
-    for (const n of noises) { if (n.lure && s.who && (F.wise(s.who, n.kind) || (n.kind === 'train' && s.who.calm))) continue; const d = hypot(n.x - s.x, n.z - s.z), k = n.lure ? d - 1e4 : d; if (d < n.r && k < bd) { bd = k; best = n; } }
+    for (const n of noises) { if (n === s.spent || (n.lure && s.who && (F.wise(s.who, n.kind) || (n.kind === 'train' && s.who.calm)))) continue; const d = hypot(n.x - s.x, n.z - s.z), k = n.lure ? d - 1e4 : d; if (d < n.r && k < bd) { bd = k; best = n; } }
     return best;
   }
   // Someone at home goes between the house, the door and the yard and stays a while, and if they're the kind, goes off down the road and comes back
@@ -243,7 +292,8 @@ export function createHorde(world, tuning = {}, on = {}) {
   }
   function think(s, p) {
     const w = s.who, mood = w ? (s.mood = F.mood(w)) : 0, quiet = leaves(s, mood);
-    const d = hypot(s.x - p.x, s.z - p.z), sharp = 1 + (T.nightSense - 1) * p.night, loud = nearestNoise(s);
+    // getting out of the river, nothing draws them back in
+    const d = hypot(s.x - p.x, s.z - p.z), sharp = 1 + (T.nightSense - 1) * p.night, loud = s.climbing ? null : nearestNoise(s);
     const scared = mood === AWAY || (w?.truck > 0 && p.driving);
     // Shambling, he's one of them to anyone who isn't already after him. Someone with a grudge knows him too well to be taken in, and anyone who'd leave him be doesn't look.
     const taken = !!p.acting && !p.hidden && mood !== AFTER && s.state !== HUNTING && s.state !== SWARM && s.state !== GRABBING && !quiet;
@@ -274,6 +324,8 @@ export function createHorde(world, tuning = {}, on = {}) {
       s.timer -= T.thinkEvery;
       // nobody's up while they've still got time down, which is what anything asking how long that is goes by
       if (s.timer > 0 || s.flat > 0) return;
+      // run down by the train, they've had enough of whatever they were at: up, sore, and off home
+      if (s.sent) { sore(s); goHome(s); s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; return; }
       // up again, and after him if it was him. Anyone who'd leave him be and has no reason not to goes back to it.
       if (!scared && !s.started && (s.quiet || w?.calm) && mood !== AFTER) { s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.tx = s.x; s.tz = s.z; }
       else { s.state = scared ? AVOIDING : HUNTING; s.lost = 0; s.tx = p.x; s.tz = p.z; }
@@ -304,7 +356,10 @@ export function createHorde(world, tuning = {}, on = {}) {
       if (s.alert >= T.curiousAt) { s.state = CURIOUS; s.tx = p.x; s.tz = p.z; s.timer = T.lookAround; return; }
       s.timer -= T.thinkEvery;
       if (s.timer <= 0 || (!s.home && hypot(s.tx - s.x, s.tz - s.z) < .6) || s.stuck > 1) {
-        s.stuck = 0; s.timer = 6 + world.rand() * 10;
+        s.stuck = 0;
+        // on their way home, and that's all they've got in mind until they're there
+        if (s.homeward && headHome(s)) return;
+        s.timer = 6 + world.rand() * 10;
         const near = lights.find((l) => hypot(l.x - s.x, l.z - s.z) < l.r);
         // and it keeps going until it's there
         if (near && !s.home && world.rand() < T.lightPull * p.night) { const a = world.rand() * 6.28, r = 2 + world.rand() * 5; s.tx = near.x + Math.cos(a) * r; s.tz = near.z + Math.sin(a) * r; s.timer = hypot(s.tx - s.x, s.tz - s.z) / T.speed[SHAMBLE] + 2; }
@@ -332,7 +387,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     }
   }
   function walk(s, dt) {
-    const sp = (s.drawn && s.state === CURIOUS ? T.lured : T.speed[s.state]) * (s.soaked > 0 ? T.wading : 1) * (s.scuttle && (s.state === HUNTING || s.state === SWARM) ? T.scuttle : 1);
+    const sp = (s.drawn && s.state === CURIOUS ? T.lured : T.speed[s.state]) * (s.wading && world.water(s.x, s.z) ? T.wading : 1) * (s.sore > 0 ? T.soreSpeed : 1) * (s.scuttle && (s.state === HUNTING || s.state === SWARM) ? T.scuttle : 1);
     s.moving = 0; if (!sp) return;
     let dx = s.tx - s.x, dz = s.tz - s.z, l = hypot(dx, dz);
     if (l < .35) return;
@@ -380,7 +435,7 @@ export function createHorde(world, tuning = {}, on = {}) {
       const dx = s.x - g.x, dz = s.z - g.z, d = hypot(dx, dz) || 1;
       if (!g.who.includes(s) && d > T.shove) continue;
       // whoever was after him still is when they're up again
-      s.started = g.who.includes(s) || s.state === HUNTING || s.state === SWARM;
+      s.started = g.who.includes(s) || s.state === HUNTING || s.state === SWARM; s.sent = false;
       s.state = STUNNED; s.timer = T.stun; s.alert = 1; s.moving = 0;
       const nx = s.x + dx / d * T.shove, nz = s.z + dz / d * T.shove;
       if (open(s, nx, nz)) { s.x = nx; s.z = nz; }
@@ -395,22 +450,30 @@ export function createHorde(world, tuning = {}, on = {}) {
     active.length = 0;
     for (const s of all) if (hypot(s.x - p.x, s.z - p.z) < T.active) active.push(s);
     for (const s of active) {
-      if (s.under !== undefined) { s.under -= dt; s.y -= dt * 1.5; s.moving = 0; continue; }
+      // under the water, and the current's taking them. When it's done with them they come up.
+      if (s.under !== undefined) {
+        s.under -= dt; s.moving = 0;
+        if (s.sinking > 0) { s.sinking -= dt; s.y -= dt * 1.5; }
+        if (s.under <= 0) surface(s);
+        continue;
+      }
       if (s.thrown) { fly(s, dt); continue; }
-      if (s.dead !== undefined) { if ((s.dead -= dt) <= 0) { s.dead = undefined; s.under = T.goesUnder; } continue; }
       s.next -= dt;
       // and up the moment the time they're down for is over, rather than whenever they next look around
       if (s.flat > 0 && (s.flat -= dt) <= 0 && s.state === STUNNED) { s.timer = 0; s.next = 0; }
       if (s.next <= 0) { s.next += T.thinkEvery; think(s, p); }
       walk(s, dt);
-      if (s.wading && s.state !== GRABBING && world.water(s.x, s.z)) {
+      // in the water after a lure, and the cottonmouths have them. Not on their way out of it again.
+      if (s.wading && !s.climbing && s.state !== GRABBING && world.water(s.x, s.z)) {
         s.soaked = (s.soaked ?? 0) + dt; s.biteAt ??= T.bite[0] + world.rand() * (T.bite[1] - T.bite[0]);
-        if (s.soaked >= s.biteAt) { s.under = T.goesUnder; h.on.bitten?.(s); }
-      }
+        if (s.soaked >= s.biteAt) { dive(s); h.on.bitten?.(s); }
+      } else if (s.soaked) s.soaked = 0;
+      if (s.climbing && !world.water(s.x, s.z)) s.climbing = false;
+      // soaked for a while, and the snake lets go of the sleeve sooner than that. Sore till they're home, and for a bit after.
+      if (s.wet > 0) s.wet -= dt;
+      if (s.snake > 0 && (s.snake -= dt) <= 0) { s.snake = 0; h.on.drop?.(s); }
+      if (s.sore > 0 && !s.homeward) s.sore -= dt;
     }
-    for (let i = all.length - 1; i >= 0; i--) if (all[i].under <= 0) { const w = all[i].who; if (w) F.gone(w); all.splice(i, 1); if (!w?.calm) owed++; }
-    // The water can have as many as it likes and the town doesn't empty: another wanders in for each, in time, from somewhere he isn't
-    if (owed && (comeIn -= dt) <= 0) { const at = world.comeFrom?.(p); if (at) { h.add(at[0], at[1]); owed--; } comeIn = T.comeIn; }
     if (h.grab) { h.grab.x = p.x; h.grab.z = p.z; holdOn(dt, p); return; }
     // Close enough, they reach for him, and it takes them a moment to get hold. Whoever's been at it longest gets there first.
     const can = mercy <= 0 && p.canGrab;

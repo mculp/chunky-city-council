@@ -238,6 +238,7 @@ import { randomFrom } from './src/soundbank.js';
 import { createPeople } from './src/people.js';
 import { drawPerson, drawRadiation, drawAura, degreeOf, farOf, PARTS, AURA_CELLS } from './src/looks.js';
 import { createHorde, SHAMBLE, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED, AVOIDING, TRAILING } from './src/horde.js';
+import { createRiver, surfacing } from './src/river.js';
 import { createFolks, burntDown, hipsOf, flickering, AFTER, HOW } from './src/agents.js';
 import { createTraffic } from './src/traffic.js';
 import { LURES, ALARM, SWARM as SWARMED, GRAVITY, inHand, nextUp, kindsHeld, rangeOf, throwOf, aimedAt, whoIsSwarmed } from './src/lures.js';
@@ -3881,27 +3882,34 @@ function zombieMat(sheet, part, { rows = 1, far = 0 } = {}) {
       uniform float uStep, uRows; uniform vec2 uRect;
       #ifdef USE_INSTANCING
       attribute vec4 iZ;
+      attribute float iWet;
       #else
       uniform vec4 uZ;
       #endif
-      varying vec4 vZ; varying vec2 vOn;`).replace('#include <uv_vertex>', `#include <uv_vertex>
+      varying vec4 vZ; varying vec2 vOn; varying float vWet;`).replace('#include <uv_vertex>', `#include <uv_vertex>
       #ifdef USE_INSTANCING
-      vZ=iZ;
+      vZ=iZ; vWet=iWet;
       #else
-      vZ=uZ;
+      vZ=uZ; vWet=0.;
       #endif
       vOn=uv;
       vMapUv=vec2(uRect.x+clamp(uv.x,.04,.95)*uRect.y,(clamp(uv.y,.012,.988)+vZ.x)/uRows);
       vMapUv+=vec2(uStep*.0013,-uStep*.0004); vEmissiveMapUv=vMapUv;`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      uniform float uStep, uPxScale; uniform vec2 uRect; uniform sampler2D uRad; varying vec4 vZ; varying vec2 vOn;
+      uniform float uStep, uPxScale; uniform vec2 uRect; uniform sampler2D uRad; varying vec4 vZ; varying vec2 vOn; varying float vWet;
       float hhs(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         float zFar=vZ.y;
         vec3 zRad=texture2D(uRad,vec2(uRect.x+(vZ.w>.5?fract(.5-vOn.x):vOn.x)*uRect.y,clamp(vOn.y,.002,.998))).rgb;
         { float k=(.88+.2*hhs(floor(gl_FragCoord.xy/(1.5*uPxScale))+uStep*13.))*mix(.3,1.,smoothstep(.05,.6,abs(dot(normal,normalize(vViewPosition)))));
           float gone=zFar>.001?smoothstep(zRad.g-.015,zRad.g+.015,zFar):0.; vec3 sick=mix(vec3(1.),vec3(.78,1.02,.72),zFar);
-          diffuseColor.rgb=mix(diffuseColor.rgb*k*sick,vec3(.022,.02,.026),gone); totalEmissiveRadiance=mix(totalEmissiveRadiance*k*sick,vec3(.006,.005,.008),gone); }`)
+          diffuseColor.rgb=mix(diffuseColor.rgb*k*sick,vec3(.022,.02,.026),gone); totalEmissiveRadiance=mix(totalEmissiveRadiance*k*sick,vec3(.006,.005,.008),gone); }
+        // Soaked, from the river: the cloth goes dark and cold and heavy, and where the moon would find the wet, up on the shoulders and round the edges, there are pale glints that change
+        // on the twelve. They're part of what they have on and held under what blooms, like the rest of it, and with reduced motion they hold still.
+        if(vWet>.001){ float upN=max(dot(normal,normalize((viewMatrix*vec4(0.,1.,0.,0.)).xyz)),0.), rim=pow(1.-abs(dot(normal,normalize(vViewPosition))),2.), sheen=max(upN*upN*.9,rim*.55);
+          float glint=step(1.-.17*sheen,hhs(floor(gl_FragCoord.xy/(1.7*uPxScale))+${STEP_HELD}*5.+vZ.x*3.));
+          diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.5,.62,.72),vWet);
+          totalEmissiveRadiance=mix(totalEmissiveRadiance,totalEmissiveRadiance*vec3(.36,.5,.62),vWet)+vec3(.5,.74,.78)*glint*vWet; }`)
       .replace('#include <opaque_fragment>', `outgoingLight*=min(1.,.84/max(max(outgoingLight.r,max(outgoingLight.g,outgoingLight.b)),1e-4));
         { float crack=smoothstep(1.-zFar,1.-zFar+.1,zRad.r), edge=zFar>.03?1.-smoothstep(0.,.05,abs(zFar-zRad.g)):0., fl=.84+.32*hhs(vec2(vZ.y*91.,${STEP_HELD}*7.+1.));
           float e=max(.05,1.-zFar*1.3), eyes=smoothstep(e,e+.08,zRad.b)*smoothstep(0.,.06,zFar)*(.75+zFar*.9+vZ.z*.6);
@@ -4095,7 +4103,8 @@ const SWING_POSES = [[.2, .34, -.2, -2.1], [.15, .5, -.08, -1], [.1, .16, .42, .
 // It turns him toward the nearest one he can reach in front of him: anywhere on his side of a right angle on a phone, and close to where he's looking with a mouse
 const SWING_REACH = 2.8, SWING_CONE = { stick: Math.cos(1.25), mouse: Math.cos(.5) };
 // How long a hit keeps one of them down, getting up included: about ten seconds from the hammer or the bat, and longer the harder anything else hits. Nobody's ever worse off than down.
-const DOWN_FOR = { swing: 10, blast: 14 }, downByTruck = (speed) => Math.min(20, 8 + speed * .5);
+// and the train's longer than any of them, 20 s being the most that anything else keeps them down: thrown off its side, and off its front
+const DOWN_FOR = { swing: 10, blast: 14, train: [30, 45] }, downByTruck = (speed) => Math.min(20, 8 + speed * .5);
 let swingT = -1, swingHit = false, throwT = 0;
 function poseHero(tq) {
   const k = HP.kind, ph = HP.phase, R = hero, V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -4321,7 +4330,10 @@ const crowdLimb = (len, top, end, tip) => { const tube = new THREE.CylinderGeome
 const crowdArmGeo = crowdLimb(.82, .062, .043, new THREE.SphereGeometry(.05, 6, 4).scale(.9, 1.3, .8).translate(0, -.03, 0));
 const crowdLegGeo = crowdLimb(.83, .09, .054, new THREE.SphereGeometry(.062, 6, 4).scale(.85, .6, 1.7).translate(0, -.02, .05));
 const crowdZ = crowdAttr(CROWD_SHOWN, 4), crowdLimbZ = crowdAttr(CROWD_SHOWN * 2, 4), crowdLine = crowdAttr(CROWD_SHOWN, 3), crowdLimbLine = crowdAttr(CROWD_SHOWN * 2, 3);
+// and how soaked each is, from the river, 0 to 1
+const crowdWet = crowdAttr(CROWD_SHOWN, 1), crowdLimbWet = crowdAttr(CROWD_SHOWN * 2, 1);
 crowdBody.geo.setAttribute('iZ', crowdZ); crowdArmGeo.setAttribute('iZ', crowdLimbZ); crowdLegGeo.setAttribute('iZ', crowdLimbZ);
+crowdBody.geo.setAttribute('iWet', crowdWet); crowdArmGeo.setAttribute('iWet', crowdLimbWet); crowdLegGeo.setAttribute('iWet', crowdLimbWet);
 const crowdWear = (part) => zombieMat(crowdSheet, part, { rows: CROWD_LOOKS.length });
 const crowdBodies = crowdMesh(crowdBody.geo, crowdWear('body'), CROWD_SHOWN);
 const crowdArms = crowdMesh(crowdArmGeo, crowdWear('arm'), CROWD_SHOWN * 2), crowdLegs = crowdMesh(crowdLegGeo, crowdWear('leg'), CROWD_SHOWN * 2);
@@ -4374,6 +4386,10 @@ const GAIT = [3.6, 4.6, 9, 11, 16, 0, 10, 4.6];   // how quickly their limbs go,
 // once they're far enough over to reach it. Getting up off their knees they're as far over as the quiet all stood before there was a range. It's only
 // ever a pose, so whatever stands them up for good can undo it.
 const COME_UP = .46, KNEEL_FOLD = 1.3, FOLD_LEG = .83, HIPS_BACK = .17, CROWD_ARM = .9, CRAWL = .35;
+// Sore from the train: the pace their limbs go at, how little of the swing the leg they favour has, and how much more bent they are
+const SORE = { pace: .75, limp: .22, bent: .07 };
+// How soaked someone is, 0 to 1: all the way for the first half of the time they've got, and then they dry
+const wetOf = (s) => (s.wet > 0 ? Math.min(1, s.wet / (horde.T.dries * .5)) : 0);
 // From the hips to the top of the head is longer than the legs, so a body folded all the way over would have its head in the ground. Nobody's drawn
 // further over at the hips than the first of these, which leaves the head 6 cm off the ground at their feet, and anyone under the second is eased
 // into what's left, so whoever's further over by their number is still drawn further over.
@@ -4423,7 +4439,7 @@ function drawWho() {
 const MUTTER = { reach: 7, gap: [9, 16], lasts: 3.2, rise: 16 };
 const mutterSlots = Array.from({ length: 2 }, () => { const e = document.createElement('div'); e.className = 'mutter'; e.hidden = true; $('mutters').appendChild(e); return { e, s: null, at: 0 }; }), _mut = new THREE.Vector3();
 let mutterLook = 0;
-const muttering = (s) => s.quiet && (s.state === SHAMBLE || s.state === CURIOUS) && !(s.flat > 0) && s.under === undefined && !s.thrown && s.dead === undefined && !!s.who?.says;
+const muttering = (s) => s.quiet && (s.state === SHAMBLE || s.state === CURIOUS) && !(s.flat > 0) && s.under === undefined && !s.thrown && !!s.who?.says;
 function drawMutters() {
   const P = player.pos, on = S.mode === 'town';
   // someone new twice a second, if there's room
@@ -4463,8 +4479,11 @@ function drawCrowd(step) {
     for (const s of horde.active) { s.seen = Math.hypot(s.x - camera.position.x, s.z - camera.position.z); if (s.seen < CROWD_SEE) crowdShown.push(s); }
     crowdShown.sort((a, b) => a.seen - b.seen); if (crowdShown.length > CROWD_SHOWN) crowdShown.length = CROWD_SHOWN;
   }
+  snakeN = 0;
   crowdShown.forEach((s, i) => { poseCrowd(s, i, step); });
   for (const m of crowdParts) m.count = crowdShown.length * (m.instanceMatrix.count / CROWD_SHOWN);
+  drawFallen();
+  crowdSnakes.count = crowdSnakeLine.count = snakeN; crowdSnakes.visible = crowdSnakeLine.visible = snakeN > 0; crowdSnakes.instanceMatrix.needsUpdate = true;
   crowdWritten();
 }
 // Whoever's driving goes with the vehicle, which moves every frame
@@ -4482,7 +4501,7 @@ function stanceOf(s) {
   }
   return { hips, head: lowest(crowdBodies.geometry, B, .2), hands };
 }
-function crowdWritten() { crowdBodies.instanceMatrix.needsUpdate = crowdArms.instanceMatrix.needsUpdate = crowdLegs.instanceMatrix.needsUpdate = crowdAura.instanceMatrix.needsUpdate = crowdZ.needsUpdate = crowdLimbZ.needsUpdate = crowdLine.needsUpdate = crowdLimbLine.needsUpdate = crowdAuraZ.needsUpdate = true; }
+function crowdWritten() { crowdBodies.instanceMatrix.needsUpdate = crowdArms.instanceMatrix.needsUpdate = crowdLegs.instanceMatrix.needsUpdate = crowdAura.instanceMatrix.needsUpdate = crowdZ.needsUpdate = crowdLimbZ.needsUpdate = crowdLine.needsUpdate = crowdLimbLine.needsUpdate = crowdAuraZ.needsUpdate = crowdWet.needsUpdate = crowdLimbWet.needsUpdate = true; }
 function poseCrowd(s, i, step) {
   const bodies = crowdBodies.instanceMatrix.array, arms = crowdArms.instanceMatrix.array, legs = crowdLegs.instanceMatrix.array, auras = crowdAura.instanceMatrix.array;
   {
@@ -4490,13 +4509,15 @@ function poseCrowd(s, i, step) {
     // sat where he'd sit, with their hips on the seat, whatever size they are
     if (seat) { toBody(seat); _cp.set(seat.K.seat[0], SEATED[seat.kind].hip + -ZOMBIE_HIP * s.size * TOWN_SCALE, seat.K.seat[2]).applyMatrix4(_vb); s.x = _cp.x; s.y = _cp.y; s.z = _cp.z; s.yaw = seat.yaw; }
     // Knocked down by something: held a step as they were, then folding over as they go down where they were thrown, and getting up slowly, first to their knees, folded
-    // over, and then up into the fold they stand in. Anyone the train threw, or who's lying dead, is just flat.
+    // over, and then up into the fold they stand in. Anyone the train threw has nothing to hold on, and goes flat where they land, and gets up the same way after.
     const downed = s.flat > 0, since = downed ? s.flatFor - s.flat : 0, struck = downed && s.hitAs !== undefined, held = struck && since < HIT_HOLD;
     const fell = !downed ? 0 : struck ? Math.min(1, Math.max(0, since - HIT_HOLD) / HIT_FALL) : Math.min(1, since * 7);
-    const getUp = downed && !s.thrown && s.dead === undefined ? Math.min(GET_UP, s.flatFor * .4) : 0, rise = getUp ? Math.max(0, 1 - s.flat / getUp) : 0;
+    const getUp = downed && !s.thrown ? Math.min(GET_UP, s.flatFor * .4) : 0, rise = getUp ? Math.max(0, 1 - s.flat / getUp) : 0;
     const lie = downed ? Math.min(SMOOTH(fell), 1 - SMOOTH(rise * 2)) : 0, kneel = rise < .5 ? SMOOTH(rise * 2) : 1 - SMOOTH(rise * 2 - 1);
     const st = held ? s.hitAs : s.state, after = st === HUNTING || st === SWARM || st === GRABBING, away = st === AVOIDING, still = !s.moving && st !== GRABBING, low = (after || away) && s.scuttle;
-    s.gait += held ? 0 : GAIT[st] / 12 * (still ? .2 : 1) * (low ? 1.4 : 1);
+    // sore, from the train: slower, with more of a limp, and bent a little more
+    const sore = s.sore > 0;
+    s.gait += held ? 0 : GAIT[st] / 12 * (still ? .2 : 1) * (low ? 1.4 : 1) * (sore ? SORE.pace : 1);
     // reaching for him, with their hands coming up over their heads, until they've got hold or something stops them
     const grip = after && s.reaching > 0 ? Math.min(1, s.reaching / horde.T.windUp) : 0;
     // folded over as far as they stand, or coming up out of it some, a few steps at a time. The hips go back so they don't topple, which tips the legs, and that takes them down a little.
@@ -4513,7 +4534,7 @@ function poseCrowd(s, i, step) {
     if (s.tumble) _cb.multiply(_cl.makeRotationX(s.tumble));
     // the top half leans from the hips, so the feet stay on the ground. It doubles over going down, rears back a little reaching for him, and wobbles on its knees.
     const crumple = struck && fell > 0 && fell < 1 ? Math.sin(fell * Math.PI) * .8 : 0;
-    const list = (s.phase - 3.14) * .035, lean = Math.max(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : .16, fold) + crumple - grip * .25;
+    const list = (s.phase - 3.14) * .035, lean = Math.max(st === STUNNED ? -.25 : after ? .34 : away ? .42 : st === TRAILING && still ? .05 : .16, fold) + crumple - grip * .25 + (sore && !lie ? SORE.bent : 0);
     _cl.makeRotationFromEuler(_ce.set(lean, 0, list + (st === STUNNED ? Math.sin(step * .9) * .12 + kneel * Math.sin(step * .7 + s.phase) * .16 : Math.sin(p) * (after ? .05 : .1))));
     const e = _cl.elements; _cl.setPosition(-ZOMBIE_HIP * e[4], ZOMBIE_HIP - ZOMBIE_HIP * e[5], -ZOMBIE_HIP * e[6]);
     _cu.multiplyMatrices(_cb, _cl).toArray(bodies, i * 16);
@@ -4534,10 +4555,13 @@ function poseCrowd(s, i, step) {
       if (a === 0) s.arm = lean + reach;
       _cl.makeRotationFromEuler(_ce.set(reach, 0, side * (after ? .03 : .07))).setPosition(side * .205, .06, 0);
       _cm.multiplyMatrices(_cu, _cl).toArray(arms, (i * 2 + a) * 16);
-      _cl.makeRotationFromEuler(_ce.set(seat ? SEATED[seat.kind].legs : -swing * stride * (a === s.limp ? .55 : 1) + legs0, 0, side * (seat ? .1 : .03))).setPosition(side * .1, ZOMBIE_HIP, 0);
+      // a cottonmouth hanging off the sleeve of one of them: its head's got hold halfway down, and the rest hangs. With reduced motion it only hangs.
+      if (s.snake > 0 && !seat && a === (s.who ? s.who.id : s.look) % 2) hangSnake(_cm, s, step);
+      _cl.makeRotationFromEuler(_ce.set(seat ? SEATED[seat.kind].legs : -swing * stride * (a === s.limp ? (sore ? SORE.limp : .55) : 1) + legs0, 0, side * (seat ? .1 : .03))).setPosition(side * .1, ZOMBIE_HIP, 0);
       _cm.multiplyMatrices(_cb, _cl).toArray(legs, (i * 2 + a) * 16);
     }
     // how far gone they are comes from a number they already have, since asking for a new one would change what everyone does after it. Anyone who's burnt down is past the line, and nobody else.
+    const wet = wetOf(s); crowdWet.setX(i, wet); crowdLimbWet.setX(i * 2, wet); crowdLimbWet.setX(i * 2 + 1, wet);
     const far = s.far ??= farOf(s.phase / 6.28, !!s.who && s.quiet === false, BURNT_LINE), hot = after ? 1 : st === CURIOUS || st === TRAILING ? .42 : st === STUNNED ? .2 : 0, flip = s.limp;
     crowdZ.setXYZW(i, look, far, hot, flip); zombieLine(far, hot, _cc).toArray(crowdLine.array, i * 3);
     for (let a = 0; a < 2; a++) { crowdLimbZ.setXYZW(i * 2 + a, look, far, hot, flip); _cc.toArray(crowdLimbLine.array, (i * 2 + a) * 3); }
@@ -4672,6 +4696,69 @@ function cottonmouth() {
 }
 const SNAKES = [new Moccasin(6, 11), new Moccasin(-5, -7), new Moccasin(9, -3), new Moccasin(-8, 15), new Moccasin(-11, 0)];
 const deckSnake = new Moccasin(6, 0, true);
+
+// A cottonmouth hanging off the sleeve of someone the river's had: one shape for all of them, and an instance each. Its head has hold of the cloth halfway down an arm, and the rest of it hangs in
+// a loose S. It swings a little on the 12 fps step, and with reduced motion it just hangs. When it lets go it falls, lies a moment and slithers off, and that's all there is to it. Sixteen
+// is more than there'll be on a screen, and with none it's no draw calls at all.
+const SNAKE = { long: .8, at: [0, -.42, .06], max: 16, fall: 15, lies: .6, slither: 1.1, gone: 1.3, shrinks: .3 };
+// Its paint's its own: dark saddles across an olive brown, with its head the same and a cream mouth, which is the white they're named for. It carries a little light of its own, the way what
+// everyone has on does, so that it isn't just a black shape in the dark.
+const crowdSnakeTex = canvasFor(64, 64, (g) => {
+  g.fillStyle = '#7a6a3c'; g.fillRect(0, 0, 48, 64);
+  g.fillStyle = '#211910'; g.fillRect(0, 4, 48, 22); g.fillRect(0, 38, 48, 11);
+  g.fillStyle = '#e3dabb'; g.fillRect(48, 0, 16, 64);
+}, true);
+crowdSnakeTex.wrapS = THREE.ClampToEdgeWrapping;
+const crowdSnakeMat = new THREE.MeshToonMaterial({ map: crowdSnakeTex, emissiveMap: crowdSnakeTex, emissive: 0xffffff, emissiveIntensity: .6, gradientMap: toonGrad });
+const crowdSnakeGeo = (() => {
+  const N = 20, R = 7, sw = new Sweep(N, R, crowdSnakeMat), pts = [], radii = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    pts.push(new THREE.Vector3(Math.sin(t * 5.4) * .05 * t, -t * SNAKE.long, .02 + Math.sin(t * 3.1) * .03 * t));
+    radii.push(t < .1 ? .03 + t * .15 : .05 * (1 - Math.pow(t, 1.5)) + .006);
+  }
+  sw.update(pts, radii);
+  const body = sw.geo.clone(), uv = body.attributes.uv;
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= R; j++) uv.setXY(i * (R + 1) + j, .03 + j / R * .66, i / N * 2.4);
+  // and its head is a flat spade, pointing up at the cloth, with its mouth open in the cream
+  const spade = sphGeo.clone().scale(.052, .088, .032).translate(0, .02, .02), su = spade.attributes.uv;
+  for (let k = 0; k < su.count; k++) su.setXY(k, .3, .3);
+  const mouth = sphGeo.clone().scale(.03, .042, .016).translate(0, .066, .045), mu = mouth.attributes.uv;
+  for (let k = 0; k < mu.count; k++) mu.setXY(k, .88, .5);
+  return mergeGeometries([body, spade, mouth]);
+})();
+const crowdSnakes = crowdMesh(crowdSnakeGeo, crowdSnakeMat, SNAKE.max), crowdSnakeLine = crowdMesh(crowdSnakeGeo, outlineMat(INK, 1.5, 0), SNAKE.max, crowdSnakes);
+crowdSnakes.visible = crowdSnakeLine.visible = false;
+const _sn = new THREE.Matrix4(), _sr = new THREE.Matrix4(), _se = new THREE.Euler(), _sq = new THREE.Quaternion(), _sv = new THREE.Vector3(), _ss = new THREE.Vector3(), fallen = [];
+let snakeN = 0;
+function hangSnake(arm, s, step) {
+  if (snakeN >= SNAKE.max) return;
+  const k = reduceMotion ? 0 : Math.sin(step * .8 + s.phase * 2);
+  _sr.makeRotationFromEuler(_se.set(k * .2, 0, k * .12)).setPosition(...SNAKE.at);
+  s.snakeAt = snakeN;
+  _sn.multiplyMatrices(arm, _sr).toArray(crowdSnakes.instanceMatrix.array, snakeN++ * 16);
+}
+// The snake lets go. With reduced motion there's nothing to see: it's just not there any more.
+function dropSnake(s) {
+  if (reduceMotion) return;
+  if (fallen.length >= 6) fallen.shift();
+  fallen.push({ x: s.x, y: s.y + .85 * s.size * TOWN_SCALE, z: s.z, yaw: s.yaw, vy: 0, floor: s.y, t: 0 });
+}
+// on the step, after the ones hanging: whatever's falling, lying or slithering off
+function drawFallen() {
+  for (let i = fallen.length - 1; i >= 0; i--) {
+    const f = fallen[i]; f.t += STEP_T;
+    if (f.t > SNAKE.gone) { fallen.splice(i, 1); continue; }
+    const grounded = f.y <= f.floor + .04;
+    if (!grounded) { f.vy -= SNAKE.fall * STEP_T; f.y = Math.max(f.floor + .04, f.y + f.vy * STEP_T); }
+    else if (f.t > SNAKE.lies) { f.x += Math.sin(f.yaw) * SNAKE.slither * STEP_T; f.z += Math.cos(f.yaw) * SNAKE.slither * STEP_T; f.y = floorAt(f.x, f.z) + .04; }
+    if (snakeN >= SNAKE.max) continue;
+    // hanging till it's nearly down, and turning to lie along the ground with its head leading, and shrinking out of sight at the end
+    const lie = grounded ? 1 : Math.max(0, Math.min(1, 1 - (f.y - f.floor - .04) / .6)), k = Math.min(1, (SNAKE.gone - f.t) / SNAKE.shrinks);
+    _sq.setFromEuler(_se.set(lie * Math.PI / 2, f.yaw, 0, 'YXZ'));
+    _sn.compose(_sv.set(f.x, f.y, f.z), _sq, _ss.setScalar(Math.max(.05, k))).toArray(crowdSnakes.instanceMatrix.array, snakeN++ * 16);
+  }
+}
 
 // the lantern from the legend: a guide light with nobody holding it
 const ghost = new THREE.Group(); scene.add(ghost);
@@ -5322,6 +5409,16 @@ const crowdRand = (() => { let s = 20260214; return () => (s = (s * 16807) % 214
 // A step asks for the floor it's on three times, and that's the most expensive thing they do
 let floorX = NaN, floorZ = NaN, floorY = 0;
 const floorOnce = (x, z) => { if (x !== floorX || z !== floorZ) { floorX = x; floorZ = z; floorY = floorAt(x, z); } return floorY; };
+// Nobody dies of the river. The cottonmouths have whoever goes in after a lure, or is thrown in by the train, and the current takes them, and src/river.js says where
+// they come up: downstream, on the bank they can walk home from, and not in a pond or against a fence. The water here is the same as the horde's.
+const RIVER = createRiver(MAP.river);
+const comeUp = surfacing(RIVER, {
+  water: (x, z) => floorOnce(x, z) < WATER.level(x, z) - .1,
+  pond: (x, z) => !!WATER.in(x, z),
+  depth: (x, z) => WATER.level(x, z) - floorOnce(x, z),
+  floorAt: floorOnce,
+  blocked: (x, z, y) => blocked(x, z, y),
+});
 // Who each of them is and what they remember of him is in src/agents.js and data/folks.json
 const folks = createFolks(await (await fetch('data/folks.json')).json(), { store: saveStore, looks: LOOKS.crowd });
 addEventListener('pagehide', () => folks.save());
@@ -5336,14 +5433,8 @@ const horde = createHorde({
   level: (x, z) => WATER.level(x, z),
   floorAt: floorOnce,
   rand: crowdRand,
-  // along the streets they first came out on, too far off for him to see it happen
-  comeFrom(p) {
-    for (let tries = 0; tries < 30; tries++) {
-      const [id, a, b] = CROWD_STREETS[Math.floor(crowdRand() * CROWD_STREETS.length)], s0 = MAP.sOn(id, ...a), s1 = MAP.sOn(id, ...b), q = MAP.along(id, s0 + (s1 - s0) * crowdRand());
-      if (Math.hypot(q.x - p.x, q.z - p.z) > horde.T.active) return [q.x, q.z];
-    }
-    return null;
-  },
+  // where the river brings someone up, downstream on the bank they can walk home from, which is src/river.js's
+  comeUp,
   // on down whichever street they're nearest
   wander(s) {
     if (MAP.roadGrid.nearest(s.x, s.z) === Infinity) return [s.x + (crowdRand() - .5) * 20, s.z + (crowdRand() - .5) * 20];
@@ -5351,7 +5442,7 @@ const horde = createHorde({
     return [p.x + (crowdRand() - .5) * 8, p.z + (crowdRand() - .5) * 8];
   },
 }, {}, {
-  thrown(s, hit) { SFX.play('hit.flesh', { x: s.x, z: s.z }); spray(s.x, s.y + 1, s.z, hit.kills ? (FEW ? 6 : 12) : 3, .1, 5, .22, .95, .45, hit.vx * .05, hit.vz * .05); },
+  thrown(s, hit) { SFX.play('hit.flesh', { x: s.x, z: s.z }); spray(s.x, s.y + 1, s.z, hit.hard ? (FEW ? 6 : 12) : 3, .1, 5, .22, .95, .45, hit.vx * .05, hit.vz * .05); },
   splash(s) { addRipple(s.x, s.z, .4, 0); SFX.play('splash.small', { x: s.x, z: s.z }); },
   spotted(s) { susFlash = s; susFlashUntil = time + .9; toast('One of them sees through it.'); SFX.play('groan.hunt', { x: s.x, z: s.z }); glitch(.3, .15); },
   grab() { shambling = false; SFX.play('groan.grab'); SFX.play('hurt', { gain: .6 }); SFX.say('grabbed'); S.mode = 'grabbed'; HP.kind = 'struggle'; HP.speed = 0; player.kb.set(0, 0); if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35); },
@@ -5363,6 +5454,10 @@ const horde = createHorde({
   },
   // the cottonmouths have got someone who went into the water after something
   bitten(s) { addRipple(s.x, s.z, .6, 1); spray(s.x, WATER.level(s.x, s.z) + .1, s.z, FEW ? 4 : 8, .07, 2.6, .55, .8, .85); SFX.play('snake.strike', { x: s.x, z: s.z, gain: .8 }); SFX.play('splash.small', { x: s.x, z: s.z }); },
+  // and the river's done with them, a little way downstream: up out of the water, soaked, with a snake on a sleeve
+  surfaced(s) { addRipple(s.x, s.z, .5, 0); if (!reduceMotion) spray(s.x, WATER.level(s.x, s.z) + .1, s.z, FEW ? 4 : 8, .07, 2.6, .55, .8, .85); SFX.play('splash.small', { x: s.x, z: s.z, gain: .9 }); },
+  // and the snake lets go of the sleeve
+  drop(s) { dropSnake(s); },
 });
 // where they start: along the streets of town, thickest on US 80
 const CROWD_STREETS = [['us_80', atTrue(-615, -18), atTrue(185, 0), 56], ['church_st', atTrue(-1098, -379), atTrue(-281, -199), 20], ['adams_st', atTrue(-283, -23), atTrue(-285, -338), 20]];
@@ -5402,7 +5497,7 @@ function fillHomes(dt) {
     if (h.out || Math.hypot(h.s.pts[0][0] - P.x, h.s.pts[0][1] - P.z) > HOME_SEE) continue;
     h.out = true;
     const who = folks.person(h.id), d = wallsOf(h.s, TOWN_Y).doors[0];
-    if (!d || who.gone) continue;
+    if (!d) continue;
     let nx = d.nx, nz = d.nz; if (houseAt(d.x + nx * 1.5, d.z + nz * 1.5) === h.s) { nx = -nx; nz = -nz; }
     const door = [d.x + nx * 1.3, d.z + nz * 1.3], inside = [d.x - nx * 1.5, d.z - nz * 1.5];
     if (blocked(door[0], door[1], TOWN_Y) || floorOnce(door[0], door[1]) < WATER.level(door[0], door[1]) - .1) continue;
@@ -5576,7 +5671,7 @@ const traffic = createTraffic({
   person(kind) {
     for (let tries = 0; tries < TRAFFIC_PEOPLE[kind]; tries++) {
       const who = folks.person(TRAFFIC_ID[kind] + trafficTurn[kind]++ % TRAFFIC_PEOPLE[kind]);
-      if (!who.gone && !who.body && !VEHICLES.some((v) => v.fig?.who === who)) { who.calm = true; return who; }
+      if (!who.body && !VEHICLES.some((v) => v.fig?.who === who)) { who.calm = true; return who; }
     }
     return folks.person(TRAFFIC_ID[kind] + TRAFFIC_PEOPLE[kind] + trafficTurn[kind]++);
   },
@@ -6303,19 +6398,22 @@ function trainHorn(g, tr) {
   playNew('train.horn', { x: tr.cars[0].x, z: tr.cars[0].z });
   // long, and long again
   after(4.6, () => { if (trains.train === tr) playNew('train.horn', { x: tr.cars[0].x, z: tr.cars[0].z }); });
-  // They come to it, and it's the last thing some of them do. Whoever's lived with it all their life knows better, and that goes for anyone it's fooled often enough.
+  // They come to it, and some of them end up thrown clear of the tracks for it. Whoever's lived with it all their life knows better, and that goes for anyone it's fooled often enough.
   if (g.road && folkOut) horde.lure(g.x, g.z, TRAIN_LURE, (trains.T.horn + tr.length + 30) / tr.speed, false, 'train');
 }
-// Someone in its way: { where they end up, how they fly }. Off the front of it that's the end of them, and off the side they're only thrown clear.
-const trainHit = { x: 0, z: 0, vx: 0, vz: 0, vy: 0, kills: false, seconds: 0, spin: 0 };
+// Someone in its way: { where they end up, how they fly, how long they lie there }. It throws them clear of the tracks, off the front of it further and harder than off the side,
+// and they lie in the ditch a good while, longer than anything else keeps them down. Then they get up sore and go home. Nobody dies of it.
+const trainHit = { x: 0, z: 0, vx: 0, vz: 0, vy: 0, hard: false, seconds: 0, spin: 0 };
 function trainThrows(x, z, y) {
   if (y < TOWN_Y - 2) return null;
   const c = trains.at(x, z, .3);
   if (!c) return null;
   const tr = trains.train, side = trains.side(c, x, z), ax = c.fz * side, az = -c.fx * side, along = (x - c.x) * c.fx + (z - c.z) * c.fz, front = c === tr.cars[0] && along > c.len / 2 - 2.5, r = trainRand(), H = trainHit;
   H.x = c.x + c.fx * along + ax * (c.half + .5); H.z = c.z + c.fz * along + az * (c.half + .5);
-  const ahead = front ? tr.speed * (.6 + r * .35) : 0, off = front ? 7 + r * 6 : 4 + r * 2;
-  H.vx = c.fx * ahead + ax * off; H.vz = c.fz * ahead + az * off; H.vy = front ? 5 + r * 5 : 2.5; H.kills = front; H.seconds = front ? 30 : 3 + r * 2; H.spin = front ? 8 + r * 8 : 3;
+  const ahead = front ? tr.speed * (.6 + r * .35) : 0, off = front ? 7 + r * 6 : 7 + r * 2;
+  H.vx = c.fx * ahead + ax * off; H.vz = c.fz * ahead + az * off; H.vy = front ? 5 + r * 5 : 2.5; H.hard = front; H.seconds = DOWN_FOR.train[+front] + r * (front ? 10 : 6);
+  // with reduced motion they're thrown, and land, and don't turn over on the way
+  H.spin = reduceMotion ? 0 : front ? 8 + r * 8 : 3;
   return H;
 }
 function trainHitsVehicle(v, c, tr) {
@@ -6381,7 +6479,7 @@ function faceNearest() {
   const P = player.pos, fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), cone = aimT > 0 ? SWING_CONE.mouse : SWING_CONE.stick;
   let best = null, bd = Infinity;
   for (const s of horde.active) {
-    if (s.flat > 0 || s.under !== undefined || s.thrown || s.dead !== undefined) continue;
+    if (s.flat > 0 || s.under !== undefined || s.thrown) continue;
     const dx = s.x - P.x, dz = s.z - P.z, d = Math.hypot(dx, dz);
     if (d > SWING_REACH || d < .05 || (dx * fx + dz * fz) / d < cone) continue;
     const k = d - (s.state >= HUNTING && s.state <= GRABBING ? 1 : 0);
@@ -6470,7 +6568,7 @@ function throwLure(kind) {
   lureDirty = true;
   return true;
 }
-// It's come down. It's the same wherever it does, except that in the water all it does is splash, and whoever goes in after it doesn't come back.
+// It's come down. It's the same wherever it does, except that in the water all it does is splash, and whoever goes in after it goes under, and comes up again downstream.
 function landLure(kind, x, y, z) {
   const L = LURES[kind], fl = floorAt(x, z), level = WATER.level(x, z), wet = fl < level - .1;
   if (folkOut) horde.lure(x, z, L.reach, L.seconds, wet, kind);
@@ -7216,7 +7314,12 @@ if (TEST) {
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : hammer) },
     compound: { JAM, JAM_SHED, DECK, LAWN, spot: screenSpot, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach },
     lures: { LYING, lyingNear, flying, popping, opened, ALARMS, lureSpots, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
-    horde, folks, traffic, homes: HOMES, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf, castHips: (id) => 180 - THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(NPCS[id].rig.hm.quaternion.w)))),
+    horde, folks, traffic, homes: HOMES, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf,
+    // the river's, for the tests: which way it flows and where it brings someone up, and what's drawn of someone soaked: how soaked the graphics card has them, the snakes on sleeves and the ones falling
+    river: { path: RIVER, comeUp, wetOn: (s) => { const i = crowdShown.indexOf(s); return i < 0 ? null : crowdWet.getX(i); }, snakes: () => ({ drawn: crowdSnakes.count, shown: crowdSnakes.visible && crowdGroup.visible, falling: fallen.length, geometry: crowdSnakeGeo.attributes.position.count, calls: [crowdSnakes, crowdSnakeLine].filter((m) => m.count > 0).length }), arm: (s) => (s.who ? s.who.id : s.look) % 2,
+      // where the snake is on the sleeve it hangs from, which doesn't change at all with reduced motion
+      relative: (s) => { const i = crowdShown.indexOf(s); if (i < 0 || !(s.snake > 0) || s.snakeAt === undefined) return null; const a = (s.who ? s.who.id : s.look) % 2; return new THREE.Matrix4().fromArray(crowdArms.instanceMatrix.array, (i * 2 + a) * 16).invert().multiply(new THREE.Matrix4().fromArray(crowdSnakes.instanceMatrix.array, s.snakeAt * 16)).toArray(); } },
+    downFor: { table: DOWN_FOR, truck: downByTruck }, castHips: (id) => 180 - THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(NPCS[id].rig.hm.quaternion.w)))),
     mutters: () => mutterSlots.filter((m) => m.s && !m.e.hidden).map((m) => ({ says: m.e.textContent, id: m.s.who.id, opacity: +m.e.style.opacity, transform: m.e.style.transform, box: m.e.getBoundingClientRect().toJSON() })),
     objective(t, id) { streetObjective(t, id); },
     // A north-up picture of the map for tools/map-overlay.mjs, plainly lit, without what's placed around the camera. Play doesn't recover from it.

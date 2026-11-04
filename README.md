@@ -22,6 +22,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `src/looks.js`: draws what everyone but the hero had on, from `data/looks.json`, and how far it's gone through them
 - `src/structures.js`: turns every real building's footprint into walls, windows, doors and a roof, in pieces that can break
 - `src/damage.js`: what breaks, what burns and what comes down with it
+- `src/river.js`: the river to follow downstream, and where someone it's had comes up on the bank
 - `reference/stuckeys-bridge.html`: the scene the game grew out of
 - `docs/art-direction.md`: how it should look
 - `data/roads.json`: the road graph of real Chunky, MS, generated from Census TIGER/Line data
@@ -50,7 +51,7 @@ Skip to town on the title card, or `index.html#free`, goes straight to free play
 - `tools/play-lanes.mjs`: drives up a lane and a drive in Chrome, and checks what's on them (`npm run lanes`)
 - `tools/play-drive.mjs`: drives every kind of vehicle in Chrome, on the roads and off them, into walls and through the crowd (`npm run drive`)
 - `tools/play-field.mjs`: walks onto the ball field and tries its fence and gates, on foot and in a pickup (`npm run field`)
-- `tools/play-lures.mjs`: moves the crowd with what he can throw: off US 80, off his back, into the river, and round someone who won't thank him for it (`npm run lures`)
+- `tools/play-lures.mjs`: moves the crowd with what he can throw: off US 80, off his back, into the river and out again downstream, and round someone who won't thank him for it (`npm run lures`)
 - `tools/play-compound.mjs`: goes round the compound on Pine Forest Rd: up its drive, in every door, plays what's in the shed with the crowd listening, swims the pool and watches the screen.
 - `tools/play-yard.mjs`: goes round the yard off True Light Rd: up its drive, across the pool, keeps the ball up six times with real taps, takes the bat, bounces on the trampoline and drives the coupe away (`npm run yard`)
 - `tools/play-stumble.mjs`: goes and finds what's only there for anyone who stumbles on it: the computer in the back of the trailer, the green pool, the road up past where the map used to stop and the stone in the cemetery (`npm run stumble`)
