@@ -1,5 +1,6 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Chunky 2026</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2307050b'/%3E%3Crect x='8' y='6' width='16' height='21' rx='2.5' fill='%23ec803a'/%3E%3Crect x='8' y='12' width='16' height='9' fill='%23e3285c'/%3E%3Cellipse cx='16' cy='7' rx='8' ry='2.4' fill='%23f1e6cf'/%3E%3C/svg%3E">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -223,9 +224,6 @@ body.talking #mute,body.talking #levels,body.talking #levelsBox{visibility:hidde
     <p class="keys"><span class="k">The mouse looks · WASD or arrows move · Shift runs · Space jumps · E uses · click swings · right click throws · M is the map · N is the sound</span><span class="t">Left thumb moves · the buttons say what they do · drag to look</span></p>
   </div>
 </div>
-<div class="panel" id="fail" hidden>
-  <div class="pbox"><h2 id="failH"></h2><p id="failP"></p><button class="big" id="retry">Try again</button></div>
-</div>
 <div class="panel" id="end" hidden>
   <div class="pbox"><h2>You came down.<br>You crossed over.<br><span>You got beans.</span></h2><p>Chapter 2 · Supply and Demand · soon</p><button class="big" id="again">Keep walking</button><p class="credit">Buildings from USA Structures by ORNL and FEMA, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, changed to fit the game. Roads from the US Census. Roof colours from USDA NAIP.</p></div>
 </div>
@@ -275,6 +273,7 @@ import { createSigns, dayOf, paintSign } from './src/signs.js';
 import { createPantry, PANTRY } from './src/pantry.js';
 import { createTalk, talkUrl, inDistress, changesNothing, heardAs, LIMITS as TALK_LIMITS } from './src/talk.js';
 import { makeLight, stepLight, lightAt } from './src/light.js';
+import { FEVER, feverAt, wakesAt } from './src/fever.js';
 
 const $ = (id) => document.getElementById(id);
 // Every version of the work link, and of a local server, comes from the same address, so a browser that kept the last one's data would mix it with this
@@ -4855,7 +4854,7 @@ function poseCrowd(s, i, step) {
     // what's coming off them goes down with them, out of the middle of them as they lie, kneel or stand folded over, with the glow on the ground under that
     if (!seat) { _cp.set(0, AURA_UP / TOWN_SCALE - 1.43, 0).applyMatrix4(downed ? _cb : _cu); _cm.makeScale(1, Math.max(.1, (_cp.y - s.y) / AURA_UP), 1).setPosition(_cp.x, s.y, _cp.z); }
     else _cm.makeTranslation(px, seat.y, pz);
-    _cm.toArray(auras, i * 16); crowdAuraZ.setXYZ(i, far, hot + grip * FLARE, look);
+    _cm.toArray(auras, i * 16); crowdAuraZ.setXYZ(i, far, s.ring ? 1 + FLARE * RING.glow : hot + grip * FLARE, look);
   }
 }
 
@@ -5158,9 +5157,9 @@ const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
 const FSV = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }`;
 const gifMat = new THREE.ShaderMaterial({
   depthTest: false, depthWrite: false,
-  uniforms: { tScene: { value: null }, tPrev: { value: null }, tMask: { value: maskRT.texture }, uMaskOn: { value: 0 }, uTime: { value: 0 }, uFrame: { value: 0 }, uBurst: G.uBurst, uHold: { value: 0 }, uFine: { value: 0 }, uSeed: { value: 0 }, uPxScale: G.uPxScale, uHurt: { value: 0 }, uDream: { value: 0 }, uTint: { value: 0 }, uFade: { value: 1 } },
+  uniforms: { tScene: { value: null }, tPrev: { value: null }, tMask: { value: maskRT.texture }, uMaskOn: { value: 0 }, uTime: { value: 0 }, uFrame: { value: 0 }, uBurst: G.uBurst, uHold: { value: 0 }, uFine: { value: 0 }, uSeed: { value: 0 }, uPxScale: G.uPxScale, uHurt: { value: 0 }, uDream: { value: 0 }, uTint: { value: 0 }, uFade: { value: 1 }, uSwell: { value: 0 }, uSwellAt: { value: new THREE.Vector2(.5, .5) } },
   vertexShader: FSV,
-  fragmentShader: `uniform sampler2D tScene,tPrev,tMask; uniform float uMaskOn,uTime,uFrame,uBurst,uHold,uFine,uSeed,uPxScale,uHurt,uDream,uTint,uFade; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tScene,tPrev,tMask; uniform float uMaskOn,uTime,uFrame,uBurst,uHold,uFine,uSeed,uPxScale,uHurt,uDream,uTint,uFade,uSwell; uniform vec2 uSwellAt; varying vec2 vUv;
     float h2(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
     float b2(vec2 a){ a=floor(a); return fract(dot(a,vec2(.5,a.y*.75))); }
     float bayer8(vec2 a){ return b2(.25*a)*.0625+b2(.5*a)*.25+b2(a); }
@@ -5178,6 +5177,8 @@ const gifMat = new THREE.ShaderMaterial({
       vec2 c=uv-.5; col*=1.-dot(c,c)*.85; col=mix(col,vec3(col.r*1.4+.08,col.g*.6,col.b*.7),uHurt);
       // holds read the finished last frame, so they come after the vignette or they'd darken every frame
       col=mix(col,texture2D(tPrev,uv+vec2(0.,.003)).rgb,uHold*step(.42,h2(blk*1.7+floor(st*.5)))*bg);
+      // a light that swells till it's all there is, with what's in front of it still showing through
+      if(uSwell>0.){ float g=1.-smoothstep(0.,.06+1.6*uSwell*uSwell,length(uv-uSwellAt)); col=mix(col,vec3(1.,.93,.96),min(.88,g*(.35+.65*uSwell))); }
       // it leans hot and cyan, and drags what was there a moment ago along behind it
       if(uTint>0.){ float lum=dot(col,vec3(.3,.59,.11)); col=mix(col,mix(vec3(.02,.33,.36),vec3(.95,.12,.32),smoothstep(.08,.5,lum))*(.32+.3*uTint+lum*1.7),.6*uTint); }
       if(uDream>0.) col=mix(col,texture2D(tPrev,(uv-.5)*.982+.5).rgb,.62*uDream);
@@ -5568,7 +5569,7 @@ let toastT = 0, cardT = 0;
 // game-clock timers, so story beats wait for the game when the tab sleeps or a test holds the clock
 const timers = [];
 function after(sec, fn) { timers.push({ at: time + sec, fn }); }
-function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); t.classList.toggle('low', !!S.flags.town); toastT = 2.2; }
+function toast(msg) { if (S.mode === 'fail') return; const t = $('toast'); t.textContent = msg; t.classList.add('show'); t.classList.toggle('low', !!S.flags.town); toastT = 2.2; }
 function card(h, p, dur = 3.2) { $('cardH').innerHTML = h; $('cardP').textContent = p || ''; $('card').classList.add('show'); cardT = dur; }
 const hudCache = {};
 // What the objective points at, if anything: { road: id } for the nearest part of a street, or { x, z }.
@@ -5678,23 +5679,148 @@ function hurt(dir, kind) {
   S.hp -= 1; player.inv = 1.4; cam.shake = .5; flash(); glitch(.9, .35); SFX.play('snake.strike'); SFX.play('hurt');
   const l = Math.hypot(dir.x, dir.y) || 1; player.kb.set(dir.x / l * 4, dir.y / l * 4);
   addRipple(player.pos.x, player.pos.z, .35, 1);
-  if (S.hp <= 0) fail(kind === 'deck' ? 'Cottonmouth on the boards.' : 'The cottonmouths got you.', kind === 'deck' ? 'Jump it next time.' : `Keep moving. Hold ${fastWord(touchUI)} to get away.`);
+  if (S.hp <= 0) die('snake');
 }
-function fail(h, p) {
-  SFX.play('fail'); SFX.say('failed');
-  S.mode = 'fail'; $('failH').textContent = h; $('failP').textContent = p; $('fail').hidden = false; prompt(null);
-  setTimeout(() => $('retry').focus(), 50);
+// ---------------- when a try ends it's the fever from the bite, full of whatever got him, and he comes to where he starts again. src/fever.js has when each part of it
+// happens, and docs/art-direction.md what it looks like. There isn't a word in any of it, and a tap skips to where he comes to.
+let died = null, deaths = 0;
+// what is whatever did it: the vehicle that hit him, or where the fire, the blast or what came down was
+function die(by, what = null) {
+  if (S.mode === 'fail') return;
+  deaths++;
+  SFX.play('dream.swell');
+  S.mode = 'fail'; prompt(null); objective(null); hudVitals(); feverLeft = 0;
+  // and nothing that was up on the screen stays there
+  toastT = 0; $('toast').classList.remove('show'); cardT = 0; $('card').classList.remove('show');
+  const P = player.pos;
+  died = { by, t: 0, x: P.x, y: P.y, z: P.z, yaw: player.yaw, turn: cam.yaw, from: camera.position.clone(), lv: WATER.level(P.x, P.z), placed: false, then: null, at: what ? { x: what.x, y: what.y ?? P.y, z: what.z } : null, v: null };
+  HP.kind = by === 'river' ? 'swim' : 'down'; HP.down = 0; HP.speed = 0; player.kb.set(0, 0);
+  if (by === 'crowd') horde.ring(P.x, P.z, RING.n, RING.r);
+  // The vehicle that hit him is his fever's till it's over, and then it's put back the way it was. It goes over the way it was going: went is
+  // forwards or backwards along itself.
+  if (by === 'wreck' && what?.K) {
+    const v = what, l = v.loose; v.held = true;
+    died.v = v; died.pose = { x: v.x, y: v.y, z: v.z, yaw: v.yaw, pitch: v.pitch, roll: v.roll };
+    died.went = Math.sign(l ? l.vx * Math.sin(v.yaw) + l.vz * Math.cos(v.yaw) : v.f) || 1;
+    // and its middle, which it turns about, as it was and as it goes
+    died.mid0 = new THREE.Vector3(0, v.K.wheel * 2, 0).applyEuler(_wreckTurn.set(v.pitch, v.yaw, v.roll)).add(_deathLook.set(v.x, v.y, v.z));
+    died.mid = died.mid0.clone();
+  }
 }
-$('retry').addEventListener('click', () => {
-  $('fail').hidden = true; S.hp = 3; player.inv = 1;
+// In the dark, he's put where he starts again, lying there, and his heart's the first thing. The fever's still in the sky as he comes to, the way it is on the bridge.
+function comeToAgain() {
+  const d = died; d.placed = true; endStaging();
+  S.hp = 3; player.inv = 1; player.kb.set(0, 0); player.vy = 0; player.grounded = true; cam.snap = true; cam.pitch = .42;
+  feverLeft = 1; heartT = 0; HP.kind = 'down'; HP.down = 1;
   if (S.flags.town) {
-    S.mode = 'town'; HP.kind = 'run'; player.grounded = true; cam.snap = true;
     // once they're out, back on the church steps, where they won't come
     if (crowdOut) { const [x, z] = churchAt(68.5, -3); player.pos.set(x, floorAt(x, z), z); horde.calm(); } else onWakeBridge();
-    townObjective();
+    d.then = () => { S.mode = 'town'; player.grounded = true; townObjective(); };
   }
-  else if (S.flags.bridgeStarted) startBridge(); else startSwim(true);
-});
+  else if (S.flags.bridgeStarted) { resetPlanks(); player.pos.set(-24.5, ROAD_TOP, 0); player.yaw = Math.PI / 2; cam.yaw = player.yaw + Math.PI; d.then = startBridge; }
+  // in the river he's swimming already
+  else { startSwim(true); S.mode = 'fail'; HP.kind = 'swim'; d.then = () => { S.mode = 'swim'; }; }
+}
+function stepDeath(dt) {
+  const d = died, still = reduceMotion, f = feverAt(d.t += dt, still), u = gifMat.uniforms;
+  if (f.part === 'fever') {
+    feverTo(f.heat); u.uDream.value *= DREAMY[d.by] ?? 1; u.uFade.value = f.fade; stageDeath(d, f.k, dt);
+    // he goes down on the 12 fps step, the way he does from the bite, and with reduced motion he's down already
+    if (HP.kind === 'down') HP.down = still ? 1 : sstep(0, FEVER.fall, Math.floor(d.t * 12) / 12);
+    return;
+  }
+  if (!d.placed) comeToAgain();
+  u.uFade.value = f.fade;
+  if (f.part === 'dark') return;
+  // up on the 12 fps step, from about a third of the way through
+  const w = d.t - wakesAt(still), long = (still ? FEVER.still : FEVER).wake;
+  if (HP.kind === 'down') HP.down = 1 - sstep(long * .35, long, Math.floor(w * 12) / 12);
+  if (f.part === 'up') { const then = d.then; died = null; if (HP.kind === 'down') HP.kind = 'run'; then(); }
+}
+// a tap, a click or a key skips the fever to where he comes to, and does nothing else
+function skipFever(e) {
+  if (!died || died.placed || e.repeat) return;
+  died.t = Math.max(died.t, wakesAt(reduceMotion) - .001); e.preventDefault(); e.stopImmediatePropagation();
+}
+addEventListener('pointerdown', skipFever, true);
+addEventListener('keydown', skipFever, true);
+// What's in each one, as it plays, k from 0 to 1. With reduced motion it's the same scene held still: no rising or turning, no stretching and no bobbing.
+// The crowd: as many as are near stand round him, folded over, looking down, with what's coming off them filling the sky. n of them, r metres out, and how hot.
+const RING = { n: 7, r: .8, glow: 1.6 };
+// how much the picture warps and smears in each, where the camera's close enough that all of it would leave nothing to see
+const DREAMY = { crowd: .5, train: .75, wreck: .5 };
+// A blast or a fire: the flash becomes the sky, and it stays that colour while the smoke goes up through it. What came down and a wreck have a pale
+// sky too, for it to be seen against.
+const SKY_FLASH = { blast: new THREE.Color('#fff0f5'), fire: new THREE.Color('#ffc9a0'), hit: new THREE.Color('#d8c6bc'), wreck: new THREE.Color('#bcd9e0') }, SKY_PARTS = ['uTop', 'uMid', 'uLow', 'uHor'];
+const SKY_WAS = Object.fromEntries(SKY_PARTS.map((p) => [p, sky.material.uniforms[p].value.clone()]));
+let trainStretch = 1;
+function stageDeath(d, k) {
+  const still = reduceMotion, u = gifMat.uniforms;
+  // under the water, and his hood comes up once
+  if (d.by === 'river') player.pos.y = d.lv - .95 + (still ? .5 : .62 * Math.sin(Math.PI * sstep(.3, .75, k)));
+  // the boxcars keep going by, stretching, and its light swells till it's all there is
+  if (d.by === 'train') {
+    trainStretch = still ? 1 : 1 + 2.4 * sstep(.05, 1, k); u.uSwell.value = .1 + .9 * sstep(.25, 1, k);
+    const tr = trains.train, nose = tr?.cars[0];
+    if (nose) { _deathAt.set(nose.x, RAIL_TOP + TRAIN_LAMPS.head[1], nose.z).project(camera); if (_deathAt.z < 1 && Math.abs(_deathAt.x) < 1.4 && Math.abs(_deathAt.y) < 1.4) u.uSwellAt.value.set(_deathAt.x * .5 + .5, _deathAt.y * .5 + .5); }
+  }
+  const flashed = SKY_FLASH[d.by];
+  if (flashed) for (const p of SKY_PARTS) sky.material.uniforms[p].value.lerpColors(SKY_WAS[p], flashed, sstep(0, .25, k));
+  // a wreck: the truck goes up off him and over, end over end, slowly, turning about its middle, WRECK.up metres up and WRECK.on along
+  if (d.v) {
+    const v = d.v, o = d.pose, w = still ? 0 : k, fx = Math.sin(o.yaw) * d.went, fz = Math.cos(o.yaw) * d.went;
+    const a = o.pitch + d.went * WRECK.turns * 2 * Math.PI * sstep(0, 1, w), up = WRECK.up * Math.sin(Math.PI / 2 * sstep(0, .55, w));
+    d.mid.set(d.mid0.x + fx * WRECK.on * w, d.mid0.y + up, d.mid0.z + fz * WRECK.on * w);
+    _deathAt.set(0, v.K.wheel * 2, 0).applyEuler(_wreckTurn.set(a, o.yaw, o.roll));
+    v.x = d.mid.x - _deathAt.x; v.y = d.mid.y - _deathAt.y; v.z = d.mid.z - _deathAt.z; v.yaw = o.yaw; v.pitch = a; v.roll = o.roll;
+    vehDirty = true;
+  }
+}
+const WRECK = { up: 3.4, on: 7, turns: 1 };
+function endStaging() {
+  trainStretch = 1; gifMat.uniforms.uSwell.value = 0; gifMat.uniforms.uSwellAt.value.set(.5, .5); camera.up.set(0, 1, 0);
+  for (const p of SKY_PARTS) sky.material.uniforms[p].value.copy(SKY_WAS[p]);
+  horde.unring();
+  // and the truck's back where it was, for whoever's driving it
+  const v = died?.v;
+  if (v) { Object.assign(v, died.pose); v.held = false; vehDirty = true; }
+}
+const _deathAt = new THREE.Vector3(), _deathLook = new THREE.Vector3(), _wreckTurn = new THREE.Euler(0, 0, 0, 'YXZ');
+// Where the camera is: cut to it at the hit, and with reduced motion it stays where it starts
+function deathCamera(d) {
+  const k = reduceMotion ? 0 : Math.min(1, d.t / FEVER.scene), H = heroRoot.position, turn = d.turn + k * (d.by === 'crowd' ? .35 : 1.4), wob = reduceMotion ? 0 : Math.sin(Math.floor(time * 12) * .17) * 2.4;
+  let fov = 55;
+  if (d.by === 'crowd') {
+    // from where he's lying, looking straight up through them, rising a little and turning
+    camera.up.set(Math.sin(turn), 0, Math.cos(turn));
+    // wide enough across that the ring's there on a phone stood on end too
+    camera.position.set(H.x, H.y + .22 + .4 * sstep(0, 1, k), H.z); camera.lookAt(H.x, H.y + 30, H.z); fov = Math.max(92, 2 * Math.atan(1.05 / camera.aspect) * 180 / Math.PI) - 10 * k;
+  } else if (d.by === 'train') {
+    // rising off him, looking at whatever's going by
+    const tr = trains.train; let best = null, far = Infinity;
+    if (tr) for (const c of tr.cars) { const f = Math.hypot(c.x - H.x, c.z - H.z); if (f < far) { far = f; best = c; } }
+    _deathLook.set(best ? best.x : H.x, RAIL_TOP + 2, best ? best.z : H.z);
+    const ax = _deathLook.x - H.x, az = _deathLook.z - H.z, l = Math.hypot(ax, az) || 1;
+    camera.position.set(H.x - ax / l * 2.5, H.y + 1 + 5 * sstep(0, 1, k), H.z - az / l * 2.5); camera.lookAt(_deathLook); fov = 62 + 10 * k;
+  } else if (d.by === 'river') {
+    // up out of the water, looking down on where he went under
+    camera.position.set(H.x + Math.sin(turn) * 2.6, d.lv - .5 + 5.2 * sstep(0, .8, k), H.z + Math.cos(turn) * 2.6); camera.lookAt(H.x, d.lv, H.z); fov = 60 + 8 * k;
+  } else if (d.v) {
+    // side on to it, low by where he's lying and rising, so it's end over end, against a horizon that won't hold still
+    const o = d.pose, fx = Math.sin(o.yaw) * d.went, fz = Math.cos(o.yaw) * d.went, rock = reduceMotion ? 0 : .2 * Math.sin(d.t * 2.3) + .1 * Math.sin(d.t * 3.9 + 1);
+    camera.position.set(o.x + fz * 7 - fx * 1.5, H.y + .8 + 2.2 * sstep(0, 1, k), o.z - fx * 7 - fz * 1.5);
+    camera.up.set(-fx * Math.sin(rock), Math.cos(rock), -fz * Math.sin(rock)); camera.lookAt(d.mid); fov = 60 + 8 * k;
+  } else if (SKY_FLASH[d.by]) {
+    // rising off him, from the far side of him to what got him, looking at it and up what's coming off it into the flash, where the smoke goes
+    const at = d.at ?? H, ax = at.x - H.x, az = at.z - H.z, a = (Math.hypot(ax, az) > .5 ? Math.atan2(-ax, -az) : turn) + (reduceMotion ? 0 : .5 * k);
+    camera.position.set(H.x + Math.sin(a) * 3, H.y + 1.6 + 2.4 * sstep(0, 1, k), H.z + Math.cos(a) * 3);
+    camera.lookAt(_deathLook.set(at.x, H.y + .4 + 6 * sstep(.15, .9, k), at.z)); fov = 58 + 12 * k;
+  } else {
+    // the cottonmouths: the bite's, straight up off him, looking down and turning
+    camera.position.set(H.x + Math.sin(turn) * 4.6, H.y + 3 + 11 * sstep(0, .8, k), H.z + Math.cos(turn) * 4.6); camera.lookAt(H.x, H.y + .4, H.z); fov = 55 + 8 * k;
+  }
+  camera.fov = fov + wob * Math.min(1, k * 6); camera.updateProjectionMatrix();
+}
 
 // ---------------- dialogue: the words and what they do are in data/cast.json, and their own words, when there are any, come through src/talk.js
 const ACTIONS = { sweep: () => startSweep() };
@@ -6089,7 +6215,7 @@ const horde = createHorde({
   free() { SFX.play('hit.flesh'); S.mode = 'town'; HP.kind = 'run'; player.inv = 1.2; prompt(null); glitch(.4, .2); },
   overrun() {
     SFX.play('hurt'); S.mode = 'town'; HP.kind = 'run'; player.inv = 1.4; prompt(null); S.hp -= 1; if (!reduceMotion) cam.shake = .5; flash(); glitch(.9, .35);
-    if (S.hp <= 0) { fail('They dragged you off.', `Keep moving. Mash ${press('FREE')} to break free.`); return; }
+    if (S.hp <= 0) { die('crowd'); return; }
     if (S.beans > 0) { S.beans -= 1; toast('-1 beans'); }
   },
   // the river's done with whoever the train threw in, a little way downstream: up out of the water, soaked, with a snake on a sleeve
@@ -6364,7 +6490,7 @@ const traffic = createTraffic({
     v.y = floorAt(v.x, v.z); settle(v, floorAt);
     const near = Math.hypot(v.x - P.x, v.z - P.z);
     if (near < 8) folks.close(c.who, 1 / 30);
-    if (!driving && S.mode === 'town' && Math.abs(P.y - v.y) < 1.4 && v.f > 3 && inVehicle(v, P.x, P.z, .3)) hurtBy('hit', P.x - v.x, P.z - v.z, 7);
+    if (!driving && S.mode === 'town' && Math.abs(P.y - v.y) < 1.4 && v.f > 3 && inVehicle(v, P.x, P.z, .3)) hurtBy('wreck', P.x - v.x, P.z - v.z, 7, v);
   },
   roadNear(x, z) { const d = MAP.roadGrid.nearest(x, z, (r) => r.lane); return d < MAP.roadGrid.reach ? MAP.roadGrid.seg.owner : null; },
   laneNear(x, z) { const d = MAP.roadGrid.nearest(x, z, (r) => !unpaved(r)); return d < 40 ? MAP.roadGrid.seg.owner : null; },
@@ -6699,7 +6825,7 @@ function catchTree(t) {
 function heatFrom(b) {
   if (b.owner?.barrel) return;
   const P = player.pos, d = Math.hypot(P.x - b.x, P.z - b.z), hot = b.size * .75 + .3;
-  if (S.mode === 'town' && d < hot && Math.abs(P.y + 1 - b.y) < b.size + 1.4) hurtBy('fire', P.x - b.x, P.z - b.z);
+  if (S.mode === 'town' && d < hot && Math.abs(P.y + 1 - b.y) < b.size + 1.4) hurtBy('fire', P.x - b.x, P.z - b.z, 6, b);
   const low = b.y < b.floor + 2.5;
   if (low && folkOut) horde.knock(b.x, b.z, b.size + .4, 1.2, 'fire');
   for (const v of vehShown) {
@@ -6845,7 +6971,7 @@ function shock(x, y, z, r, power, skip, fire) {
   }
   if (folkOut) { horde.knock(x, z, r, DOWN_FOR.blast, 'blast'); horde.noise(x, z, r * 9, 6, 'blast'); }
   const P = player.pos, d = Math.hypot(P.x - x, P.z - z), reach = r * .8;
-  if (S.mode === 'town' && d < reach && Math.abs(P.y - y) < r) { const k = 1 - d / reach; player.vy = Math.max(player.vy, 2.5 + 5 * k); player.grounded = false; hurtBy(fire ? 'blast' : 'hit', P.x - x, P.z - z, 8 + 20 * k); }
+  if (S.mode === 'town' && d < reach && Math.abs(P.y - y) < r) { const k = 1 - d / reach; player.vy = Math.max(player.vy, 2.5 + 5 * k); player.grounded = false; hurtBy(fire ? 'blast' : 'hit', P.x - x, P.z - z, 8 + 20 * k, { x, y, z }); }
 }
 function thud(x, y, z, r, power) {
   shock(x, y, z, r, power, null, false);
@@ -6871,15 +6997,16 @@ function blastCan(x, y, z) {
   const fl = floorAt(x, z);
   for (let i = 0; i < 4; i++) { const a = i * 1.57 + wreckRand(), e = 1 + wreckRand() * 1.8, px = x + Math.cos(a) * e, pz = z + Math.sin(a) * e; if (floorAt(px, pz) > WATER.level(px, pz) - .1) burnAt(px, fl + .04, pz, .7 + wreckRand() * .5, 7 + wreckRand() * 7); }
 }
-// Fire and blasts knock him about whenever. They only cost him once the hearts are showing, which is once the crowd's out.
-function hurtBy(kind, dx, dz, force = 6) {
+// Fire and blasts knock him about whenever. They only cost him once the hearts are showing, which is once the crowd's out. kind is what the fever
+// calls it, if it's the last of them, and what is the thing that did it: the vehicle, or where the fire, the blast or what came down was.
+function hurtBy(kind, dx, dz, force = 6, what = null) {
   SFX.play('hurt');
   if (player.inv > 0 || S.mode !== 'town') return;
   const l = Math.hypot(dx, dz) || 1; player.kb.set(dx / l * force, dz / l * force); player.inv = 1.4;
   if (!reduceMotion) cam.shake = Math.max(cam.shake, .5); flash(); glitch(.9, .35);
   if (crowdOut) {
     S.hp -= 1;
-    if (S.hp <= 0) { fail(kind === 'blast' ? 'You went up with it.' : kind === 'hit' ? 'It came down on you.' : 'You burned.', 'Give it more room.'); return; }
+    if (S.hp <= 0) { die(kind, what); return; }
   }
 }
 
@@ -6909,6 +7036,7 @@ function toss(v, vx, vz, vy) {
 function updateLoose(dt) {
   for (let i = loose.length - 1; i >= 0; i--) {
     const v = loose[i], l = v.loose, sp = Math.hypot(l.vx, l.vz);
+    if (v.held) continue;
     l.vy -= 15 * dt; v.y += l.vy * dt;
     if (l.clear > 0) l.clear -= dt;
     const nx = v.x + l.vx * dt, nz = v.z + l.vz * dt, hit = rimHit(v, nx, nz, v.y + .6, blockedInTown);
@@ -6923,7 +7051,7 @@ function updateLoose(dt) {
     const P = player.pos;
     if (sp > 3) {
       if (folkOut) horde.knock(v.x, v.z, v.K.length / 2 + .3, downByTruck(sp), 'truck');
-      if (!driving && Math.abs(P.y - v.y) < 1.4 && inVehicle(v, P.x, P.z, .3)) hurtBy('hit', P.x - v.x, P.z - v.z, 7);
+      if (!driving && Math.abs(P.y - v.y) < 1.4 && inVehicle(v, P.x, P.z, .3)) hurtBy('wreck', P.x - v.x, P.z - v.z, 7, v);
     }
     v.yaw += l.turn * dt; v.pitch += l.pitch * dt; v.roll += l.roll * dt;
     const fl = floorAt(v.x, v.z);
@@ -7007,7 +7135,7 @@ function drawTrain() {
     const n = trainUsed[c.kind], b = trainBodies[c.kind];
     if (n >= TRAIN_CAP[c.kind]) continue;
     trainUsed[c.kind]++;
-    _m.compose(_tl.set(c.x, RAIL_TOP, c.z), _tq.setFromAxisAngle(UP, c.yaw), _ts.set(1, 1, 1)).toArray(b.instanceMatrix.array, n * 16);
+    _m.compose(_tl.set(c.x, RAIL_TOP, c.z), _tq.setFromAxisAngle(UP, c.yaw), _ts.set(1, 1, trainStretch)).toArray(b.instanceMatrix.array, n * 16);
     b.setColorAt(n, c.paint); trainSeeds[c.kind].array[n] = c.seed;
   }
   for (const k in TRAIN_CAP) { const b = trainBodies[k], n = trainUsed[k]; b.count = trainLines[k].count = n; b.visible = trainLines[k].visible = n > 0; if (n) { b.instanceMatrix.needsUpdate = true; b.instanceColor.needsUpdate = true; trainSeeds[k].needsUpdate = true; } }
@@ -7120,7 +7248,7 @@ function trainGotHim(c, tr) {
   SFX.play('hit.flesh', { gain: 1.3 }); SFX.play('hurt');
   if (!reduceMotion) cam.shake = .9;
   flash(); glitch(.9, .5);
-  after(1.1, () => { trainGot = false; if (S.mode === 'town' || S.mode === 'grabbed') fail('The train got you.', "It can't stop. You get the horn and about twenty seconds."); });
+  after(1.1, () => { trainGot = false; if (S.mode === 'town' || S.mode === 'grabbed') die('train'); });
 }
 let trainLoud = false;
 function updateTrains(dt) {
@@ -7519,7 +7647,7 @@ const clock = new THREE.Clock();
 // ================================================================ what he hears
 const METAL_PROPS = new Set(['tractor', 'bin', 'sign', 'pump', 'icebox', 'cooler', 'tank', 'car', 'dumpster', 'barrel', 'canopy', 'trailer', 'boxcar', 'cart', 'bleachers', 'net', 'trampoline', 'propane', 'signal', 'cabinet', 'siding']);
 const VEHICLE_LOOPS = ['engine.car', 'engine.pickup', 'engine.quad', 'engine.golf', 'vehicle.road', 'vehicle.dirt', 'vehicle.skid'];
-const SCORE = { title: 'title', hang: 'hang', fall: 'fall', land: 'bank', bridge: 'run', bitten: 'bite', dream: 'dream', wake: 'wake', grabbed: 'grabbed', fail: 'failed', end: 'end' };
+const SCORE = { title: 'title', hang: 'hang', fall: 'fall', land: 'bank', bridge: 'run', bitten: 'bite', dream: 'dream', wake: 'wake', grabbed: 'grabbed', fail: 'dream', end: 'end' };
 const FEVER_QUIET = { bitten: .25, dream: 0, wake: .5 };
 // Its own random numbers, because the game's are seeded for the opening
 const soundRand = randomFrom(2026);
@@ -7587,7 +7715,8 @@ function soundTick(dt, M) {
   SFX.update(P.x, P.z, cam.yaw);
   if (!SFX.unlocked || boardOpen) return;
   if (townFull && folkOut) goingBy(P);
-  SFX.music(SCORE[M] ?? (M === 'swim' && !S.flags.town ? 'river' : time < huntedUntil ? 'chase' : 'town'));
+  // when a try ends it's the fever's music, out of tune, and coming to it's the bridge's
+  SFX.music(M === 'fail' && died?.placed ? 'wake' : SCORE[M] ?? (M === 'swim' && !S.flags.town ? 'river' : time < huntedUntil ? 'chase' : 'town'));
   // his feet, once a stride
   if (M === 'land' || M === 'bridge' || M === 'town') {
     const stride = Math.floor(HP.phase / Math.PI);
@@ -7765,7 +7894,7 @@ function tick(dt, draw = true) {
     // into the water from the bank or bridge
     const lv = WATER.level(player.pos.x, player.pos.z);
     if (player.pos.y < lv + .05 && f2 < lv - .3) {
-      if (M === 'bridge') fail('The Chunky takes you back.', 'Jump the gaps. Don\'t stop running.');
+      if (M === 'bridge') die('river');
       else { if (S.flags.town) SFX.play('splash.small'); swimY = lv; S.mode = 'swim'; HP.kind = 'swim'; objective(S.flags.town ? 'Swim to the bank.' : 'Swim to the west bank. Follow the lantern.'); }
     }
     if (M === 'land') {
@@ -7776,7 +7905,7 @@ function tick(dt, draw = true) {
       stepPlanks(dt);
       deckSnake.update(dt);
       ghost.position.lerp(new THREE.Vector3(Math.min(player.pos.x + 5, 23), DECK_TOP + 1.7, 0), Math.min(1, dt * 2));
-      if (player.pos.y < DECK_TOP - 2.5 && Math.abs(player.pos.x) < 20.5) fail('The Chunky takes you back.', 'Jump the gaps. Don\'t stop running.');
+      if (player.pos.y < DECK_TOP - 2.5 && Math.abs(player.pos.x) < 20.5) die('river');
       if (player.pos.x > 21.5 && player.pos.y > ROAD_TOP - .3) startBitten();
     }
     if (M === 'town') {
@@ -7849,6 +7978,7 @@ function tick(dt, draw = true) {
     HP.down = 1 - sstep(2.1, WAKE_UP, Math.floor(wakeT * 12) / 12);
     if (wakeT >= WAKE_UP) { HP.kind = 'run'; startTown(); }
   }
+  if (M === 'fail' && died) stepDeath(dt);
   // it takes a while to leave him
   if (feverLeft > 0) { feverLeft = Math.max(0, feverLeft - dt * FEVER_FADES); feverTo(feverLeft * feverLeft * .8); }
   if (M === 'drive') updateDrive(dt);
@@ -7864,7 +7994,7 @@ function tick(dt, draw = true) {
   if (S.mode === 'drive') {
     _v.set(driving.K.seat[0], driving.K.seat[1], driving.K.seat[2]).applyMatrix4(toBody(driving)); heroRoot.position.copy(_v);
     heroRoot.rotation.set(driving.pitch, driving.yaw, driving.roll); hero.body.position.set(0, 0, 0); hero.body.rotation.set(0, 0, 0);
-  } else if (M === 'drive' || M === 'swim' || M === 'land' || M === 'bridge' || M === 'bitten' || M === 'dream' || M === 'wake' || M === 'town' || M === 'grabbed' || M === 'sweep' || M === 'dialog' || M === 'end' || (M === 'fail' && !S.flags.bridgeStarted)) {
+  } else if (M === 'drive' || M === 'swim' || M === 'land' || M === 'bridge' || M === 'bitten' || M === 'dream' || M === 'wake' || M === 'town' || M === 'grabbed' || M === 'sweep' || M === 'dialog' || M === 'end' || M === 'fail') {
     heroRoot.position.copy(player.pos); heroRoot.rotation.set(0, player.yaw, 0);
     if (HP.kind === 'swim') { hero.body.position.set(0, .2, 0); hero.body.rotation.set(.95, 0, Math.sin(HP.phase) * .08); }
     else if (HP.kind === 'down') { const d = HP.down, e = d * d; hero.body.position.set(0, HERO_HIPS + (.3 - HERO_HIPS) * Math.min(1, d * 1.08), 0); hero.body.rotation.set(.3 * (1 - d) + 1.46 * e, 0, Math.sin(Math.floor(time * 12) * .9) * .05 * (1 - d) + .16 * e); }
@@ -7902,10 +8032,13 @@ function tick(dt, draw = true) {
     camera.position.lerpVectors(dreamFrom, _dream, sstep(0, .14, k));
     _dreamLook.set(H.x, H.y + .4, H.z).lerp(_dreamFar.set(H.x + 74 * on + 130, H.y + 7, 0), sstep(.34, .78, k)); camera.lookAt(_dreamLook);
     camera.fov = 55 + up * 8 + on * 12 + Math.sin(Math.floor(time * 12) * .17) * 2.4 * Math.min(1, k * 6) * (reduceMotion ? 0 : 1); camera.updateProjectionMatrix();
+  } else if (M === 'fail' && died && !died.placed) {
+    deathCamera(died);
   } else {
+    if (camera.up.y !== 1) camera.up.set(0, 1, 0);
     const swim = M === 'swim' || (M === 'fail' && !S.flags.bridgeStarted) || M === 'fall';
     const car = S.mode === 'drive' ? driving : null, carSpeed = car ? speedOf(car) : 0;
-    const lying = M === 'bitten' || M === 'wake' ? HP.kind === 'down' ? HP.down : 0 : 0;
+    const lying = M === 'bitten' || M === 'wake' || M === 'fail' ? HP.kind === 'down' ? HP.down : 0 : 0;
     const tgt = car ? new THREE.Vector3(car.x, car.y + car.K.camLook, car.z) : heroRoot.position.clone().add(new THREE.Vector3(0, swim ? .55 : 1.55 - lying * 1.15, 0));
     const moving = Math.hypot(input.x, input.y) > .1;
     // In something with an engine it swings round behind it by itself, once it's moving
@@ -8153,7 +8286,7 @@ if (TEST) {
     },
     npcs: Object.fromEntries(Object.entries(NPCS).map(([k, n]) => [k, { x: n.root.position.x, z: n.root.position.z }])), doors: { rocky: ROCKY_DOOR, bobby: BOBBY_DOOR }, tank: tankProp, pickups: PICKUPS, vanWords,
     vehicles: VEHICLES, vehShown, driving: () => driving, getIn, getOut, kinds: KINDS, vehicleFits, vehicleInReach,
-    wreck: { strike, blast, blastCan, damage, breakProp, props: PROPS, falling, swing, burnAt, burners, catchTree, treesNear, treeBlocks, fellTree, gasCans: GAS_CANS, wreckVehicle, explodeVehicle, startFree, housesNear, trees: (x, z, r) => { const out = []; treesNear(x, z, r, (t) => out.push(t)); return out; } },
+    wreck: { strike, blast, blastCan, thud, toss, damage, breakProp, props: PROPS, falling, swing, burnAt, burners, catchTree, treesNear, treeBlocks, fellTree, gasCans: GAS_CANS, wreckVehicle, explodeVehicle, startFree, housesNear, trees: (x, z, r) => { const out = []; treesNear(x, z, r, (t) => out.push(t)); return out; } },
     openMap, closeMap, updateMini, mapState: () => ({ open: mapOpen, cam: mapCam, mini: !$('mini').hidden, name: $('miniName').hidden ? '' : $('miniName').textContent }), mapCamTo(c) { mapCam = { ...mapCam, ...c }; drawFullMap(); },
     pause() { paused = true; },
     resume() { if (paused) { paused = false; clock.getDelta(); requestAnimationFrame(loop); } },
@@ -8161,11 +8294,20 @@ if (TEST) {
     // the same as step without drawing, for walking long distances
     sim(seconds = 1 / 60, dt = 1 / 60) { paused = true; for (let i = 0, n = Math.max(1, Math.round(seconds / dt)); i < n; i++) tick(dt, false); return this.state(); },
     state() {
-      return { mode: S.mode, time, hp: S.hp, beans: S.beans, people: people.snapshot(), items: { ...S.items }, flags: { ...S.flags }, kind: HP.kind, cut: HP.cut, pos: player.pos.toArray(), yaw: player.yaw, stamina: player.stamina, grounded: player.grounded, hero: heroRoot.position.toArray(), cam: camera.position.toArray(), burst: burstOn, uBurst: G.uBurst.value, obj: $('obj').textContent, toast: $('toast').classList.contains('show') ? $('toast').textContent : '', card: $('card').classList.contains('show') ? $('cardH').textContent : '', prompt: $('prompt').hidden ? '' : $('prompt').textContent, drive: driving ? { kind: driving.kind, x: driving.x, y: driving.y, z: driving.z, yaw: driving.yaw, f: driving.f, s: driving.s, speed: speedOf(driving), hp: driving.hp, wrecked: driving.wrecked, drowned: driving.drowned, grounded: driving.grounded } : null, dialog: $('dialog').hidden ? null : { who: $('dWho').textContent, say: $('dSay').textContent, opts: [...$('dOpts').children].map(b => b.textContent), heard: $('dHeard').hidden ? '' : $('dHeard').textContent, care: !$('dCare').hidden, typing: !$('dType').hidden, waiting: $('dSay').classList.contains('waiting') } };
+      return { mode: S.mode, fever: died ? died.by : null, time, hp: S.hp, beans: S.beans, people: people.snapshot(), items: { ...S.items }, flags: { ...S.flags }, kind: HP.kind, cut: HP.cut, pos: player.pos.toArray(), yaw: player.yaw, stamina: player.stamina, grounded: player.grounded, hero: heroRoot.position.toArray(), cam: camera.position.toArray(), burst: burstOn, uBurst: G.uBurst.value, obj: $('obj').textContent, toast: $('toast').classList.contains('show') ? $('toast').textContent : '', card: $('card').classList.contains('show') ? $('cardH').textContent : '', prompt: $('prompt').hidden ? '' : $('prompt').textContent, drive: driving ? { kind: driving.kind, x: driving.x, y: driving.y, z: driving.z, yaw: driving.yaw, f: driving.f, s: driving.s, speed: speedOf(driving), hp: driving.hp, wrecked: driving.wrecked, drowned: driving.drowned, grounded: driving.grounded } : null, dialog: $('dialog').hidden ? null : { who: $('dWho').textContent, say: $('dSay').textContent, opts: [...$('dOpts').children].map(b => b.textContent), heard: $('dHeard').hidden ? '' : $('dHeard').textContent, care: !$('dCare').hidden, typing: !$('dType').hidden, waiting: $('dSay').classList.contains('waiting') } };
     },
+    // after a try's ended: what got him, how far into it, and whether he's been put where he starts again. revive() ends it on the spot and puts the picture back, and moves nobody.
+    fever: () => (died ? { by: died.by, t: died.t, placed: died.placed, part: feverAt(died.t, reduceMotion).part } : null),
+    revive() { if (died && !died.placed) endStaging(); died = null; feverLeft = 0; feverTo(0); gifMat.uniforms.uFade.value = 1; camera.up.set(0, 1, 0); },
+    deaths: () => deaths,
+    // what's on the picture while it plays: the boxcars' stretch, the light's swell, the fever, the dark, the top of the sky and which way's up
+    deathLook: () => { const u = gifMat.uniforms; return { stretch: trainStretch, swell: u.uSwell.value, dream: u.uDream.value, tint: u.uTint.value, fade: u.uFade.value, sky: sky.material.uniforms.uTop.value.getHexString(), up: camera.up.toArray(), fov: camera.fov, truck: died?.v ? { y: died.v.y, pitch: died.v.pitch, held: !!died.v.held, mid: died.mid.toArray() } : null }; },
+    // ends a try as if that had got him, for the checks of the ones that are a long way to set up, with what did it if it matters
+    die: (by, what) => die(by, what),
+    skip() { if (died && !died.placed) died.t = Math.max(died.t, wakesAt(reduceMotion) - .001); },
     // phases by name, set up the way play reaches them
     jump(phase) {
-      $('title').hidden = true; $('fail').hidden = true; $('end').hidden = true;
+      $('title').hidden = true; $('end').hidden = true; __game.revive();
       if (phase === 'hang') startHang();
       else if (phase === 'swim') { startHang(); cardT = 0; $('card').classList.remove('show'); startSwim(true); }
       else if (phase === 'land') { S.mode = 'land'; HP.kind = 'run'; player.pos.set(-20, ROAD_TOP, 2); player.grounded = true; player.yaw = Math.PI / 2; cam.yaw = player.yaw + Math.PI; cam.snap = true; heroRoot.quaternion.identity(); nooseRing.visible = knot.visible = false; S.removedNoose = true; objective('Get up to the road.'); }

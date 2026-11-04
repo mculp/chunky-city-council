@@ -36,7 +36,7 @@ const setup = () => {
       s.y = G.floorAt(s.x, s.z); s.tx = s.x; s.tz = s.z;
     }
     for (; i < all.length; i++) { const s = all[i], f = i % 2 ? 1 : -1; s.x = a.x + f * (900 + i); s.z = a.z + 500 + i; s.y = G.floorAt(s.x, s.z); s.tx = s.x; s.tz = s.z; s.quiet = true; }
-    G.S.hp = 3; G.S.mode = 'town'; G.player.inv = 0; H.T.grabReach = 0; document.getElementById('fail').hidden = true;
+    G.S.hp = 3; G.S.mode = 'town'; G.player.inv = 0; H.T.grabReach = 0; G.revive();
   };
   // standing on the road at t along it, across it by so many metres, facing wherever
   window.stand = (t, across, yaw) => { const p = us80(t); G.place(p.x, p.z + across); G.player.yaw = yaw; G.look(yaw + Math.PI, .3); G.S.mode = 'town'; G.HP.speed = 0; };

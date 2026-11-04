@@ -361,8 +361,19 @@ export function createHorde(world, tuning = {}, on = {}) {
   }
   h.calm = () => {
     if (h.grab) h.grab = null;
-    for (const s of all) { s.state = SHAMBLE; s.alert = 0; s.timer = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; s.moving = 0; s.sent = false; s.rouse = null; s.rank = 0; s.cool = 0; s.reaching = 0; }
+    for (const s of all) { s.state = SHAMBLE; s.alert = 0; s.timer = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; s.moving = 0; s.sent = false; s.rouse = null; s.rank = 0; s.cool = 0; s.reaching = 0; s.ring = null; }
   };
+  // When they've dragged him off: the nearest n stand round where he went down, folded over and looking down at him, and stay there till unring() or calm()
+  h.ring = (x, z, n, r) => {
+    const near = active.filter((s) => s.under === undefined && !s.thrown && !(s.flat > 0)).sort((a, b) => hypot(a.x - x, a.z - z) - hypot(b.x - x, b.z - z)).slice(0, n);
+    near.forEach((s, i) => {
+      const a = i / near.length * 6.283 + .4;
+      s.x = s.tx = x + Math.sin(a) * r; s.z = s.tz = z + Math.cos(a) * r; s.y = world.floorAt(s.x, s.z); s.yaw = Math.atan2(x - s.x, z - s.z);
+      s.state = SHAMBLE; s.moving = 0; s.reaching = 0; s.ring = { x, z };
+    });
+    return near;
+  };
+  h.unring = () => { for (const s of all) s.ring = null; };
   // Only the ones nearby are out. Someone put back isn't thought about or looked for while they're away, and is brought out again just as they were: their state, where they were, and
   // everything they remember, which is src/agents.js's and has nothing to do with whether they're out. It's the same body, so nothing is asked of anyone's random numbers.
   h.remove = (s) => {
@@ -636,6 +647,7 @@ export function createHorde(world, tuning = {}, on = {}) {
         continue;
       }
       if (s.thrown) { fly(s, dt); continue; }
+      if (s.ring) { s.moving = 0; continue; }
       s.next -= dt;
       // and up the moment the time they're down for is over, rather than whenever they next look around
       if (s.flat > 0 && (s.flat -= dt) <= 0 && s.state === STUNNED) { s.timer = 0; s.next = 0; }

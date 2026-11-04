@@ -38,8 +38,9 @@ export function edgeTurn(x, width, band = 72, fastest = 2.4) {
   const left = band - x, right = band - (width - x), k = Math.max(left, right, 0) / band;
   return k <= 0 ? 0 : Math.sign(left - right) * k * k * fastest;
 }
-// What has to have a cursor to click on, and what there's nothing to look around in, because it's the story's camera
-const CURSOR = new Set(['title', 'dialog', 'fail', 'end']), STORY_CAMERA = new Set(['title', 'hang', 'bitten', 'dream', 'wake']);
+// What has to have a cursor to click on, and what there's nothing to look around in, because it's the story's camera. When a try ends it's the
+// fever's, and a click anywhere skips it, so he keeps the mouse through it.
+const CURSOR = new Set(['title', 'dialog', 'end']), STORY_CAMERA = new Set(['title', 'hang', 'bitten', 'dream', 'wake', 'fail']);
 export const needsCursor = (mode, open = false) => open || CURSOR.has(mode);
 export const mouseLooks = (mode, open = false) => !needsCursor(mode, open) && !STORY_CAMERA.has(mode);
 

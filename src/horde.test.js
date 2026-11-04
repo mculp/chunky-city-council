@@ -478,6 +478,20 @@ test('far from the player they wait', () => {
   assert.equal(h.active.length, 0); assert.equal(s.x, 500);
 });
 
+test('when they drag him down, the nearest stand round him looking down at him, and stay there till they\'re let go', () => {
+  const h = createHorde(field()), crowd = [h.add(3, 0), h.add(-4, 1), h.add(0, 5), h.add(1, -2), h.add(14, 14)];
+  run(h, still, 1 / 30);
+  const ring = h.ring(0, 0, 4, .8);
+  assert.equal(ring.length, 4); assert.ok(!ring.includes(crowd[4]), 'the furthest isn\'t one of them');
+  const stood = () => ring.every((s) => Math.abs(Math.hypot(s.x, s.z) - .8) < 1e-9 && Math.cos(s.yaw - Math.atan2(-s.x, -s.z)) > .999 && s.ring);
+  assert.ok(stood(), '.8 m out, facing him');
+  // wherever he is meanwhile, and however long, they don't move
+  run(h, { ...still, x: 6, z: 6 }, 3);
+  assert.ok(stood(), ring.map((s) => [s.x, s.z, s.state]).join(' '));
+  h.unring(); assert.ok(ring.every((s) => s.ring === null));
+  h.ring(0, 0, 4, .8); h.calm(); assert.ok(crowd.every((s) => s.ring === null), 'and calming them lets them go too');
+});
+
 describe('shambling with them', () => {
   const act = (over = {}) => ({ ...still, acting: true, ...over });
   // along x, at the pace, past whoever's there

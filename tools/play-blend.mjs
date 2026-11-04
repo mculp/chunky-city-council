@@ -24,7 +24,7 @@ await g(() => {
   const a0 = G.map.sOn('us_80', ...G.map.fromTrue(-600, -20)), a1 = a0 + Math.sign(G.map.sOn('us_80', ...G.map.fromTrue(-500, -21)) - a0) * 80;
   window.us80 = (t) => G.map.along('us_80', a0 + (a1 - a0) * t);
   window.tOf = (x, z) => (G.map.sOn('us_80', x, z) - a0) / (a1 - a0);
-  window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; document.getElementById('fail').hidden = true; };
+  window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; G.revive(); };
   // n of them either side of the road, 3 to 6 m off its middle, and everyone else a long way off. They're all ones who've burnt down and come for him on sight,
   // which is who shambling's for. The ones who've gone quiet wouldn't look twice at him anyway: npm run quiet has them.
   window.crowdOnRoad = (n = 30) => {

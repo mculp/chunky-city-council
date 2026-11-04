@@ -24,7 +24,7 @@ const helpers = () => {
   const a0 = G.map.sOn('us_80', ...G.map.fromTrue(-600, -20)), a1 = a0 + Math.sign(G.map.sOn('us_80', ...G.map.fromTrue(-500, -21)) - a0) * 80;
   window.us80 = (t) => G.map.along('us_80', a0 + (a1 - a0) * t);
   window.tOf = (x, z) => (G.map.sOn('us_80', x, z) - a0) / (a1 - a0);
-  window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; document.getElementById('fail').hidden = true; };
+  window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; G.revive(); };
   // who came out gone quiet, and who came out burnt down
   window.quiet = H.all.filter((s) => s.quiet === true);
   window.burnt = H.all.filter((s) => s.quiet === false);

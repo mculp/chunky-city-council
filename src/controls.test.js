@@ -154,8 +154,9 @@ test('without the mouse taken, it keeps turning up against either side, and not 
 });
 
 test('talking, the map and the cards need a cursor, and the story\'s own camera isn\'t looked around with', () => {
-  for (const mode of ['title', 'dialog', 'fail', 'end']) assert.ok(needsCursor(mode), mode);
-  for (const mode of ['land', 'bridge', 'town', 'drive', 'swim', 'hang', 'fall', 'grabbed', 'sweep', 'bitten', 'dream', 'wake']) assert.ok(!needsCursor(mode), mode);
+  for (const mode of ['title', 'dialog', 'end']) assert.ok(needsCursor(mode), mode);
+  // and the fever when a try ends is the story's, with nothing to click on, so he keeps the mouse through it
+  for (const mode of ['land', 'bridge', 'town', 'drive', 'swim', 'hang', 'fall', 'grabbed', 'sweep', 'bitten', 'dream', 'wake', 'fail']) assert.ok(!needsCursor(mode), mode);
   assert.ok(needsCursor('town', true), 'the map');
   for (const mode of ['land', 'bridge', 'town', 'drive', 'swim', 'fall', 'grabbed', 'sweep']) assert.ok(mouseLooks(mode), mode);
   for (const mode of ['title', 'hang', 'bitten', 'dream', 'wake', 'dialog', 'fail', 'end']) assert.ok(!mouseLooks(mode), mode);

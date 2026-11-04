@@ -37,6 +37,7 @@
     "lore": "node tools/play-lore.mjs",
     "toni": "node tools/play-toni.mjs",
     "talk": "node tools/play-talk.mjs",
+    "deaths": "node tools/play-deaths.mjs",
     "lanes": "node tools/play-lanes.mjs",
     "sound": "node tools/play-sound.mjs",
     "sound:make": "node tools/make-sound.mjs",

@@ -151,19 +151,21 @@ r = await g(() => {
   return { held, mode: G.S.mode, hp: G.S.hp, beans: G.S.beans };
 });
 check('held for seven seconds costs a heart and a can', r.held === 'grabbed' && r.mode === 'town' && r.hp === 2 && r.beans === 2, r);
+// a frame at a time once one's on him, since he comes to by himself a few seconds after
 r = await g(() => {
   const G = __game, H = G.horde, P = G.player.pos;
-  for (let i = 0; i < 4 && G.S.mode !== 'fail'; i++) {
+  for (let i = 0; i < 4 && !G.fever(); i++) {
     H.all.forEach((z) => { z.state = 0; z.x = P.x + 90; z.z = P.z + 90; }); G.sim(2, 1 / 30);   // the moment he gets after each one
-    H.add(P.x + .6, P.z).state = 2; G.sim(7.5, 1 / 30);
+    H.add(P.x + .6, P.z).state = 2;
+    for (let n = 0; n < 225 && !G.fever(); n++) G.sim(1 / 30, 1 / 30);
   }
-  return { mode: G.S.mode, hp: G.S.hp, shown: !document.getElementById('fail').hidden, say: document.getElementById('failH').textContent };
+  return { mode: G.S.mode, hp: G.S.hp, fever: G.fever() };
 });
-check('and with none left they drag him off', r.mode === 'fail' && r.shown && r.say === 'They dragged you off.', r);
+check('and with none left they drag him down, into their fever', r.mode === 'fail' && r.fever?.by === 'crowd', r);
 await snap('05-dragged-off');
-await page.click('#retry');
-r = await g(() => { const G = __game; G.step(.1); const P = G.player.pos; return { mode: G.S.mode, hp: G.S.hp, church: G.horde.inSanctuary(P.x, P.z), hunting: states()[2] + states()[3] + states()[4] }; });
-check('trying again puts him on the church steps, safe, with the crowd calmed down', r.mode === 'town' && r.hp === 3 && r.church && r.hunting === 0, r);
+await page.mouse.click(195, 422);
+r = await g(() => { const G = __game; G.step(1 / 30, 1 / 30); const skipped = G.fever()?.placed; for (let n = 0; n < 300 && G.fever(); n++) G.sim(1 / 30, 1 / 30); const P = G.player.pos; return { skipped, mode: G.S.mode, hp: G.S.hp, church: G.horde.inSanctuary(P.x, P.z), hunting: states()[2] + states()[3] + states()[4] }; });
+check('a click goes to where he comes to, on the church steps, safe, with the crowd calmed down', r.skipped && r.mode === 'town' && r.hp === 3 && r.church && r.hunting === 0, r);
 
 // ---------------- the church
 r = await g(() => {

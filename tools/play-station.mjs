@@ -127,8 +127,10 @@ check('and there\'s nothing left to bar it with', smashed.act !== 'Bar the door'
 
 // ---- it brings them in at night, until it's broken. A shambler goes for a light it's near about one time in three, and they're shuffling, so it takes a while to show.
 // One round comes to about 6 of 24 with the light and 1 without, give or take 1 either way, by whatever's been rolled before. So it's three of each, taken in turns.
+// He's a hundred metres off, out of their sight and nothing to them, but near enough that they're out, so the light's all they've got to go for.
+// Any nearer and the ones who've burnt down come for him and drag him down, and he comes to on the church steps, where they're too far off to be out.
 const light = await g(() => {
-  const G = __game, H = G.horde, S = G.station, spot = S.spot; G.place(...loc(53, 40));
+  const G = __game, H = G.horde, S = G.station, spot = S.spot; G.place(...loc(53, 110));
   const round = () => {
     H.calm(); H.all.slice(0, 24).forEach((s, i) => { const a = i / 24 * 6.283; s.x = s.homeX = spot.x + Math.cos(a) * 26; s.z = s.homeZ = spot.z + Math.sin(a) * 26; s.y = G.floorAt(s.x, s.z); s.lead = null; s.state = 0; s.alert = 0; s.timer = 0; s.tx = s.x; s.tz = s.z; });
     let close = 0; const secs = 70; for (let t = 0; t < secs; t += 1 / 5) { G.sim(1 / 5, 1 / 30); for (const s of H.all.slice(0, 24)) if (Math.hypot(s.x - spot.x, s.z - spot.z) < 10) close++; } return close / (secs * 5);

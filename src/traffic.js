@@ -217,6 +217,8 @@ export function createTraffic(world, tuning = {}) {
     if (riders.length < T.riders && (nextRider -= dt) <= 0) { setOff(p); nextRider = T.every[0] + world.rand() * (T.every[1] - T.every[0]); }
     for (let i = cars.length - 1; i >= 0; i--) {
       const c = cars[i], v = c.v;
+      // the one that hit him is in his fever till it's over, and stays where it is
+      if (v.held) continue;
       if (v.loose || v.wrecked || v.drowned || v.hp < v.K.hp) { t.letGo(c, 'hit'); continue; }
       drive(c, dt, p);
       if (hypot(v.x - p.x, v.z - p.z) > T.gone) { cars.splice(i, 1); world.remove(v); }

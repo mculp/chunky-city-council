@@ -28,7 +28,7 @@ const start = () => g(() => {
     G.horde.calm(); const [ax, az] = road(0);
     G.horde.all.forEach((s, i) => { const f = i % 2 ? 1 : -1; s.x = s.tx = s.homeX = ax + f * (900 + i); s.z = s.tz = s.homeZ = az + 500 + i; s.y = G.floorAt(s.x, s.z); s.state = 0; s.flat = 0; s.lead = null; });
     window.stand(0);
-    G.S.hp = 3; G.S.mode = 'town'; G.player.inv = 0; document.getElementById('fail').hidden = true;
+    G.S.hp = 3; G.S.mode = 'town'; G.player.inv = 0; G.revive();
   };
   window.stand = (m) => { const [x, z] = road(m), [ex, ez] = road(m + 10), yaw = Math.atan2(ex - x, ez - z); G.place(x, z); G.player.yaw = yaw; G.look(yaw + Math.PI, .3); G.HP.speed = 0; };
   // someone like this, who isn't already spoken for and doesn't go along with anybody

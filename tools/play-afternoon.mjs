@@ -45,7 +45,7 @@ const setup = () => {
   // everybody else a long way off, nothing remembered, nothing noted, and nobody able to lay a hand on him while it's measured
   window.empty = () => {
     H.calm(); H.noises.length = 0; H.looks.length = 0; G.folks.forget(); G.roused.log.length = 0; G.traffic.on = false; G.traffic.clear();
-    G.S.hp = 3; G.S.mode = 'town'; G.player.inv = 0; H.T.grabReach = 0; document.getElementById('fail').hidden = true;
+    G.S.hp = 3; G.S.mode = 'town'; G.player.inv = 0; H.T.grabReach = 0; G.revive();
   };
   // Watching every step of the crowd's: who is after him at once, and for each one that comes for him, whether it stopped and turned to him first, how long that took, how much it flared
   // and what woke it, and whether anything on the screen said so. take() says what's been seen since the last time and starts again.

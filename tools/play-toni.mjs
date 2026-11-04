@@ -18,7 +18,7 @@ const setUp = () => {
   const G = __game; G.pause(); G.jump('town'); G.S.flags.town = true; G.S.flags.ended = G.S.flags.arrived = true; G.step(.1);
   document.getElementById('card').style.display = 'none';
   window.G = G; window.Tn = G.toni; window.R = G.toni.road; window.T = 1 / 30; window.P = () => G.player.pos;
-  window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; document.getElementById('fail').hidden = true; document.getElementById('dialog').hidden = true; };
+  window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; G.revive(); document.getElementById('dialog').hidden = true; };
   // a point on Gallatin St, s along it from in front of the house and o out from its middle towards her side
   window.gal = (s, o = -1.2) => R.at(R.s0 + s, o);
   // with the stick, the way a player would: turn to it and push, and let go

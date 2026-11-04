@@ -23,7 +23,7 @@ const helpers = () => {
   document.getElementById('card').style.display = 'none';
   G.bringOutCrowd();
   window.G = G; window.H = G.horde; window.F = G.folks; window.T = 1 / 30; window.P = () => G.player.pos; window.Snd = G.sound;
-  window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; document.getElementById('fail').hidden = true; };
+  window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; G.revive(); };
   // stood on US 80 west of town, facing along it, with everyone else a long way off and nobody remembering anything
   const a0 = G.map.sOn('us_80', ...G.map.fromTrue(-600, -20)), p = G.map.along('us_80', a0 + 40), q = G.map.along('us_80', a0 + 41), yaw = Math.atan2(q.x - p.x, q.z - p.z);
   window.clear = () => {

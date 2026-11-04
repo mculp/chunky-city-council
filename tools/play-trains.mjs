@@ -29,7 +29,8 @@ const setup = () => {
   window.across = () => R.RAIL.nearest(P().x, P().z).d;
   window.gate = (road) => TR.gates.find((c) => c.road === road);
   window.done = () => { TR.clear(); G.stick(0, 0); G.player.inv = 0; G.player.kb.set(0, 0); };
-  window.alive = () => G.S.mode !== 'fail';
+  // nothing's ended a try since the last one meant to, which he'd have come to from by now
+  window.dead = G.deaths(); window.alive = () => G.deaths() === window.dead;
 };
 await g(setup);
 
@@ -111,12 +112,12 @@ check('on the tracks, it blows for him', hit.blast && hit.still, hit);
 check('it doesn\'t stop, and he goes flying off to one side', hit.got && hit.up > .5 && hit.moved > 5 && hit.off > 1.6, hit);
 await g(() => G.step(.05, 1 / 24));
 await snap('2-hit');
-const end = await g(async () => { G.sim(1, T); return { mode: G.S.mode, says: document.getElementById('failH').textContent, more: document.getElementById('failP').textContent, hidden: document.getElementById('fail').hidden }; });
-check('and that\'s that', end.mode === 'fail' && !end.hidden && /train/i.test(end.says), end);
+const end = await g(async () => { G.sim(1, T); return { mode: G.S.mode, fever: G.fever() }; });
+check('and that\'s that: the train\'s fever', end.mode === 'fail' && end.fever?.by === 'train', end);
 await snap('3-got');
-await page.tap('#retry');
-const back = await g(() => { G.sim(.2, T); return { mode: G.S.mode, off: across(), got: R.got() }; });
-check('try again, and he\'s somewhere else', back.mode === 'town' && back.off > 5 && !back.got, back);
+await page.touchscreen.tap(195, 422);
+const back = await g(() => { G.step(T, T); const skipped = G.fever()?.placed; for (let n = 0; n < 300 && G.fever(); n++) G.sim(T, T); window.dead = G.deaths(); return { skipped, mode: G.S.mode, off: across(), got: R.got() }; });
+check('a tap, and he comes to somewhere else', back.skipped && back.mode === 'town' && back.off > 5 && !back.got, back);
 await g(() => done());
 
 // ---- the trestles

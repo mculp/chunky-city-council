@@ -150,6 +150,18 @@ Between the end of the bridge run and the edge of town there isn't a word, and n
 - **He comes to.** Face down on the planks of the Chunky River Bridge, with the fever still in the sky. It takes a few seconds more to leave him.
 - **Reduced motion.** The same scene with a still camera: the tint and the fade, no warping, no shake and no glitch, in under half the time.
 
+### When a try ends
+
+Every death is that fever, full of whatever got him, and there isn't a word in any of it. He goes down on the 12 fps step, the fever comes up, and about five seconds after the hit he's playing again where he starts, with the fever still in the sky and his heart the first thing heard in the dark. A tap, a click or a key goes straight to him coming to. `src/fever.js` has when each part happens.
+
+- **The crowd.** They stand round him in a ring, folded over and looking down, glowing hotter than anything else in the game. The camera's where he lies, looking straight up through them, wide enough that the ring's there on a phone stood on end, and turning slowly. It's warped half as much, because it's close.
+- **The train.** The camera rises off him beside the nearest car. The boxcars keep going by and stretch to three times their length, and the train's light swells from where its lamp is until it's nearly all there is.
+- **A wreck.** Whatever on wheels hit him goes up off him and over, end over end, slowly, the way it was going. It's seen side on against a pale sky, from low by where he's lying, and the horizon rocks. When he comes to, it's back where it was.
+- **A blast, a fire, or something heavy coming down.** The flash becomes the sky: pale pink for a blast, orange for a fire, dust for what came down. The camera rises off him from the far side of what got him, looking at it and up into the smoke coming off it, which the fever bends into rows.
+- **The cottonmouths.** The bite's, rising straight up off him, looking down and turning.
+- **The river.** He goes under, and his hood comes up once while the camera comes up out of the water over where he went in. On the bridge run he comes to at the start of it, and the run starts again.
+- **Reduced motion.** The same scenes held still: no rising or turning, no stretching, no tumbling and no rocking, with him down from the start.
+
 ## Sound
 
 The night comes first: crickets one here and one there with quiet between them, the river, and frogs near water, all of it thin enough that a footstep carries. Nothing under it is a loop or a hiss. The music is slow and has a lot of room in it, a low drone and a slide guitar a long way off, and it only gets a pulse when something's after him.

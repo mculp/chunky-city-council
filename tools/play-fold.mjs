@@ -23,7 +23,7 @@ const helpers = () => {
   document.getElementById('card').style.display = 'none';
   G.bringOutCrowd(); G.traffic.on = false; G.traffic.clear();
   window.G = G; window.H = G.horde; window.T = 1 / 30;
-  window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; document.getElementById('fail').hidden = true; };
+  window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; G.revive(); };
   // in the middle of town for long enough for the people at home round about to come out
   land(); G.place(...G.map.fromTrue(0, 0)); G.step(1.5, T);
   window.quiet = H.all.filter((s) => s.quiet === true);

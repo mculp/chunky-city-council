@@ -24,7 +24,7 @@ const setUp = () => g(() => {
   const G = __game; G.pause(); G.jump('town'); G.S.flags.town = G.S.flags.arrived = true; G.step(.1);
   document.getElementById('card').style.display = 'none';
   window.G = G; window.C = G.church; window.T = 1 / 30; window.P = () => G.player.pos;
-  window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; document.getElementById('fail').hidden = true; document.getElementById('dialog').hidden = true; };
+  window.land = () => { G.S.mode = 'town'; G.HP.kind = 'run'; G.player.vy = 0; G.player.grounded = true; G.player.inv = 0; G.player.kb.set(0, 0); G.S.hp = 3; G.revive(); document.getElementById('dialog').hidden = true; };
   // the church's own axes: u along its north wall, v down the nave, from its middle
   const [ox, oz] = C.at(0, 0), [ux, uz] = C.at(1, 0), [vx, vz] = C.at(0, 1);
   window.uv = () => { const dx = P().x - ox, dz = P().z - oz; return [dx * (ux - ox) + dz * (uz - oz), dx * (vx - ox) + dz * (vz - oz)]; };
