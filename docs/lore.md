@@ -126,9 +126,9 @@ Word for word, with the street addresses taken out, as everywhere in this file, 
 
 - The net stands in the yard where the picture shows the grass worn, which is a guess. There's a ball and nobody on the other side of the net. The stick gets him under it, a ring shows where it's coming down, and the button bumps it up again, each one coming down a bit further off.
 - Six in a row is the side quest, because they played six on six. It takes the bat.
-- The gear's red with a plain bird on it and no name, so that it isn't anybody's logo: a pennant and a jersey on the wall of the little shed, a cap, a bat with red tape on the grip, a bigger pennant on the big building where it can be seen from the net, and somebody's cap on a post of the net. He doesn't wear any of it, because how he looks is the owner's own. The sign over the bat is mine.
+- The gear's the Cardinals' own: the two birds on the bat with the name under them on a red felt pennant and across a white home jersey on the wall of the little shed, StL on a red cap, a bat with red tape on the grip, a bigger pennant on the big building where it can be seen from the net, and somebody's StL cap on a post of the net. He doesn't wear any of it, because how he looks is the owner's own. The sign over the bat is mine.
 - The bat reaches a bit further than a hammer, and that's all it does.
-- The coupe's white, long and low with a fastback, with the bar left over the seats and the two panels out of the roof, and no make or badge on it. There's only one, it and Miss Bobby's church van are the only things in the game that aren't rusting, and it's the fastest thing on the road. His head comes up through the roof.
+- The car's a white Camaro from 1991 or 1992, the boxier shape from before '93, which is the one the owner picked. It's built off a photo of a white one taken side on, against the real one's length and height, and laid over the photo to check: the pointed nose with two lamps in each corner, one great bubble of glass at the back for the hatch, a wing on the deck, and the tail lamps across the back in red, amber and clear. The panels are out of the roof, with the bar left down the middle. It has the bow tie on its nose and RS on the bumper and low on each door. There's only one, it, ETB2k4's '99 and Miss Bobby's church van are the only things in the game that aren't rusting, and it's one of the fastest things on the road. He sits down low in it, and the top of his head shows where the panels are out.
 - The light on a pole isn't on the picture. It's there so that the net can be seen at night, and its light brings the crowd, the same as the gas station's canopy.
 - The trampoline's on the picture, and it works.
 - The walls can't be seen from above, so their colors are guesses.
@@ -136,8 +136,7 @@ Word for word, with the street addresses taken out, as everywhere in this file, 
 **In the game, the trailer:** it's there, second from the left in the row nearest the ball field, white with dark shutters and a stained deck at the door, which is how it looks from the road. Anyone can walk in. Nothing says whose it is. Decided around it:
 
 - The computer's in the back, still on: a tube monitor, a beige tower, speakers, a keyboard and a rack of discs with nothing on their spines. Its glow can be seen on the floor coming down the length of the place, and the button goes right up to the glass.
-- The messenger on the screen is invented, because the real one's a trademark. It's called ChunkyNet Messenger, with the orange warning triangle where a logo would go, and it's one line to change.
-- Its list says People (0/41), with nobody online and 41 offline, and not one name. The window beside it is an away message, the old default, with its button. The 41 and the time on the clock, 2:47 AM, are mine.
+- The screen's AIM: the Buddy List, with the running man where a screen name would be, and its groups, Buddies (0/41), Family (0/0) and Co-Workers (0/0), and Offline (41/41) folded shut, so nobody's online and there isn't a name on it. The window beside it is an away message, the old default, with its button. The 41 and the time on the clock, 2:47 AM, are mine.
 - A bed, a couch, some kitchen and two posters with nothing on them anyone would know. None of that's from anything.
 
 The community pool's there too, directly west of the park, as green as it is from above, with the low grey-roofed building on its east side and the big patch of bare ground north of them.
@@ -237,9 +236,9 @@ Asked who David and ETB2004 are:
 
 > David is a vagrant who wanders around town, you can find him stripping copper from buildings and trading it for beans. Or you can trade beans for copper.
 
-> ETB2k4 drives a 99 green [make of car] and has spiky hair and lives on the murphey compound (he's from 2004 so he's just an astral projection) he always has a lot of beans and chemistry equipment set up in his cabin. we need to fix the layout of the murphey compound also. it's missing a cabin and the cinema and art studio are in the wrong spots
+> ETB2k4 drives a 99 green camaro and has spiky hair and lives on the murphey compound (he's from 2004 so he's just an astral projection) he always has a lot of beans and chemistry equipment set up in his cabin. we need to fix the layout of the murphey compound also. it's missing a cabin and the cinema and art studio are in the wrong spots
 
-**In the game:** neither of them is in it yet. The cabin, the cinema and the studio are where the owner said they are now, under A compound above.
+**In the game:** neither of them is in it yet, but ETB2k4's car is: a green '99 Camaro, parked at the top of the hill above his cabin, looking down at it. It isn't on the aerial, because he's from 2004 and so's it. It's built off a photo of a '96 taken side on, which is the same shape, long and low and pointed, with the big swept-back lamps the '98 got, CAMARO on the tail and a wing on the deck, and the panels are out of its roof as well. It's a little quicker than the white one, as the real one is, and it doesn't rust. The cabin, the cinema and the studio are where the owner said they are now, under A compound above.
 
 ## The truck stop
 

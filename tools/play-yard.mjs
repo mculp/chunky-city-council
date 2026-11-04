@@ -1,5 +1,6 @@
 // Goes round the yard off True Light Rd on a phone-sized page, with the game's own movement and real taps: up the measured drive from the road, round the house, swims the pool, gets stopped by the net,
-// keeps the ball up six times in a row with the stick and the button, takes the bat that gets him, bounces on the trampoline, gets in the coupe and drives it out. Then the yard light and the crowd.
+// keeps the ball up six times in a row with the stick and the button, takes the bat that gets him, bounces on the trampoline, gets in the white Camaro, sits down low in it with the roof over
+// his head, and drives it out. Then the yard light and the crowd.
 //
 //   npm i && npm run yard [-- --shots dir]
 import { mkdirSync } from 'node:fs';
@@ -55,7 +56,7 @@ check("the two that aren't on the aerial are gone", built.notGone.length === 0, 
 check('the house is L-shaped and the big building has its notch', built.house === 74875999 && built.houseNotch === null && built.big === 74725728 && built.bigNotch === null && built.shed === 75175622, built);
 check('True Light Rd is one road, with no barricade across it near the drive', built.road === 1 && built.bars === 0, built);
 check('the pool and the farm pond are there', built.pool && built.pond, built);
-check('one coupe, where it was left, and it\'s white', built.coupe.length === 1 && built.coupe[0].d < .5 && built.coupe[0].r > .6 && built.coupe[0].g > .6 && built.coupe[0].b > .5, built.coupe);
+check('one Camaro, where it was left, and it\'s white', built.coupe.length === 1 && built.coupe[0].d < .5 && built.coupe[0].r > .6 && built.coupe[0].g > .6 && built.coupe[0].b > .5, built.coupe);
 check('the white truck and car are by the little shed', built.white.every((d) => d < 1), built.white);
 
 // ---------------- up the drive from the road, on foot, and round the house
@@ -69,14 +70,14 @@ const drive = await g(async () => {
 check(`he walks the ${Math.round(drive.long)} m up the drive with nothing in the way`, drive.r.off < 1.2 && !drive.stuck, drive);
 check('it is road the whole way', drive.off === 0, drive.off);
 
-// ---------------- the coupe
+// ---------------- the Camaro
 const coupe = await g(() => {
   const G = __game, v = G.vehicles.find((o) => o.kind === 'coupe'), a = v.yaw + Math.PI / 2, off = v.K.width / 2 + 1;
   G.place(v.x + Math.sin(a) * off, v.z + Math.cos(a) * off); G.sim(.2, .1);
   return { act: G.S.act, button: buttonSays() };
 });
-check('it says to get in the coupe, and nothing else about it', coupe.act === 'Get in the coupe' && coupe.button.replace(/\s/g, '') === 'GETIN', coupe);
-await snap('coupe');
+check('it says to get in the Camaro, and nothing else about it', coupe.act === 'Get in the Camaro' && coupe.button.replace(/\s/g, '') === 'GETIN', coupe);
+await snap('camaro');
 
 // ---------------- the pool
 const pool = await g(() => {
@@ -197,16 +198,29 @@ check('the ball makes enough noise to be heard, a bit', bump.heard === 18, bump)
 const out = await g(() => { const G = __game, Y = G.yard; G.wreck.breakProp(Y.pole, 0, 1); G.sim(.2, .2); return { on: Y.on(), lit: G.horde.lights.includes(Y.spot) }; });
 check('breaking the pole puts it out, and they lose interest', !out.on && !out.lit, out);
 
-// ---------------- out in the coupe, by the real drive
+// ---------------- out in the Camaro, by the real drive
 const away = await g(() => {
-  const G = __game, v = G.vehicles.find((o) => o.kind === 'coupe'), a = v.yaw + Math.PI / 2, off = v.K.width / 2 + 1;
+  const G = __game, T = G.THREE, v = G.vehicles.find((o) => o.kind === 'coupe'), a = v.yaw + Math.PI / 2, off = v.K.width / 2 + 1;
   G.horde.all.length = 0; G.place(v.x + Math.sin(a) * off, v.z + Math.cos(a) * off); G.sim(.2, .1);
-  G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); G.sim(1 / 30, 1 / 30);
+  G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); G.sim(.5, 1 / 30); G.step(1 / 30);
+  // How high he reaches in it, sat where it's parked: him on his own, drawn side on and square to it, and the rows he covers read off as metres above the ground under it. It's 1.28 m to
+  // the roof and the bottom of it's 0.18 m up.
+  const r = G.renderer, cam = new T.OrthographicCamera(-1.5, 1.5, 1.5, -1.5, .1, 20), hid = [];
+  const his = (o) => { for (let p = o; p; p = p.parent) if (p === G.heroRoot) return true; return false; };
+  G.scene.traverse((o) => { if ((o.isMesh || o.isPoints || o.isLine || o.isSprite) && o.visible && !his(o)) { o.visible = false; hid.push(o); } });
+  const side = v.yaw - Math.PI / 2; cam.position.set(v.x + Math.sin(side) * 8, v.y + .75, v.z + Math.cos(side) * 8); cam.lookAt(v.x, v.y + .75, v.z);
+  const clear = r.getClearAlpha(); r.setClearAlpha(0); r.render(G.scene, cam); r.setClearAlpha(clear);
+  const W = r.domElement.width, H = r.domElement.height, cv = Object.assign(document.createElement('canvas'), { width: W, height: H }), x2 = cv.getContext('2d'); x2.drawImage(r.domElement, 0, 0);
+  for (const o of hid) o.visible = true;
+  const px = x2.getImageData(0, 0, W, H).data; let high = H, low = -1;
+  for (let i = 3; i < px.length; i += 4) if (px[i] > 20) { const row = Math.floor(i / 4 / W); high = Math.min(high, row); low = Math.max(low, row); }
+  const up = (row) => +(2.25 - row * 3 / H).toFixed(2), head = up(high), under = up(low);
   const inIt = G.driving()?.kind, x0 = v.x, z0 = v.z; G.key('w', true); let top = 0; for (let i = 0; i < 90; i++) { G.sim(1 / 30, 1 / 30); top = Math.max(top, v.f); } G.key('w', false);
-  return { inIt, moved: +Math.hypot(v.x - x0, v.z - z0).toFixed(1), top: +top.toFixed(1), hp: v.hp, sound: v.K.sound };
+  return { inIt, head, under, moved: +Math.hypot(v.x - x0, v.z - z0).toFixed(1), top: +top.toFixed(1), hp: v.hp, sound: v.K.sound };
 });
+check('he sits down low in it, with his head under the roof and nothing of him under the floor', away.head > 1 && away.head < 1.29 && away.under > .18, away);
 check('he gets in it and it goes', away.inIt === 'coupe' && away.moved > 10 && away.top > 8, away);
-await snap('in-the-coupe');
+await snap('in-the-camaro');
 
 check('no console errors', errors.length === 0, errors);
 console.log(failed ? `${failed} failed` : 'all ok');

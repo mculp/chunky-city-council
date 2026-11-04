@@ -3,7 +3,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=IBM+Plex+Mono:wght@400;600&family=Lobster&display=swap">
 <style>
 /* Layout: full-screen WebGL game. HUD pinned to the top edge, prompts above the thumbs, dialogue and touch controls pinned to the bottom. One dark world by choice. */
 :root{
@@ -3422,6 +3422,74 @@ function onTrampoline(was) {
   player.pos.y = top; player.vy = 8.4; playNew('tramp.spring', { x: TRAMP.x, z: TRAMP.z });
   return true;
 }
+// ---- the St. Louis Cardinals, as the owner asked for: their gear in the little shed, on the big building and on the net's post
+const CARDS = { RED: '#b8243a', DEEP: '#7f1626', NAVY: '#13294b', GOLD: '#f2cd2e', CLOTH: '#f3efe4', FELT: '#a82a2a' };
+// The two birds on the bat with the name under it, in a box 1000 across and 600 down, traced over the home jersey's. edge puts white round all of it, for red cloth.
+function birdsOnTheBat(g, edge = false) {
+  const path = (pts) => { g.beginPath(); pts.forEach((p, i) => (i === 0 ? g.moveTo(p[0], p[1]) : p.length === 2 ? g.lineTo(p[0], p[1]) : g.quadraticCurveTo(p[0], p[1], p[2], p[3]))); g.closePath(); };
+  const out = (w) => { g.lineWidth = w; g.strokeStyle = CARDS.NAVY; g.stroke(); };
+  // the bat, its barrel on the left and its knob on the right, rising to the right
+  const bat = (white) => {
+    const [ax, ay, bx, by] = [82, 425, 986, 255], len = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / len, uy = (by - ay) / len;
+    const along = [[0, 30], [.06, 31], [.35, 27], [.6, 16], [.85, 9.5], [.95, 9], [.965, 17], [1, 18]], at = (t, w) => [ax + ux * len * t - uy * w, ay + uy * len * t + ux * w];
+    g.beginPath(); along.forEach(([t, w], i) => (i ? g.lineTo(...at(t, w)) : g.moveTo(...at(t, w)))); for (const [t, w] of [...along].reverse()) g.lineTo(...at(t, -w));
+    g.arc(ax, ay, 30, Math.atan2(-ux, uy), Math.atan2(ux, -uy), true); g.closePath();
+    if (white) { g.lineWidth = 46; g.strokeStyle = CARDS.CLOTH; g.stroke(); return; }
+    out(10); g.fillStyle = CARDS.GOLD; g.fill();
+  };
+  // a cardinal perched with its feet at x, y, facing right unless it's flipped, and leaning over by lean
+  const bird = (x, y, flip, lean, white) => {
+    g.save(); g.translate(x, y); g.rotate(lean); g.scale(flip ? -1 : 1, 1);
+    path([[-34, -268], [-2, -262, 14, -246], [34, -250, 50, -232], [80, -198], [54, -186], [86, -156, 72, -110], [62, -50, 16, -6], [-10, -4], [-40, 6, -66, 34], [-200, 150], [-214, 136], [-224, 148], [-234, 120], [-140, -10, -92, -96], [-62, -150, -48, -196], [-40, -222, -46, -238], [-46, -256, -34, -268]]);
+    if (white) { g.lineWidth = 50; g.strokeStyle = CARDS.CLOTH; g.stroke(); g.restore(); return; }
+    out(14); g.fillStyle = CARDS.RED; g.fill();
+    g.fillStyle = CARDS.DEEP; path([[-46, -170], [4, -150, 2, -96], [-6, -40, -64, 8], [-140, 82], [-168, 96], [-120, 0, -96, -86], [-80, -150, -46, -170]]); g.fill();
+    g.beginPath(); g.moveTo(-50, -120); g.quadraticCurveTo(-46, -60, -96, -6); g.moveTo(-74, -132); g.quadraticCurveTo(-76, -76, -120, -20); g.moveTo(-150, 70); g.lineTo(-206, 134); out(4);
+    g.fillStyle = CARDS.NAVY; path([[14, -230], [50, -236], [80, -198], [54, -186], [42, -164], [20, -172], [6, -202]]); g.fill();
+    g.fillStyle = CARDS.GOLD; path([[46, -232], [82, -198], [52, -186], [40, -208]]); g.fill();
+    g.fillStyle = '#e8e8e8'; g.beginPath(); g.arc(30, -214, 6, 0, 7); g.fill();
+    g.beginPath(); g.moveTo(10, -10); g.lineTo(18, 12); g.moveTo(-6, -8); g.lineTo(-2, 12); out(7);
+    g.restore();
+  };
+  const word = (white) => {
+    g.save(); g.translate(158, 548); g.scale(.93, 1); g.font = `227px ${CARDS_FONT}`; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    if (white) { g.lineWidth = 52; g.strokeStyle = CARDS.CLOTH; g.strokeText('Cardinals', 0, 0); g.restore(); return; }
+    g.lineWidth = 17; g.strokeStyle = CARDS.NAVY; g.strokeText('Cardinals', 0, 0); g.fillStyle = CARDS.RED; g.fillText('Cardinals', 0, 0); g.restore();
+  };
+  g.save(); g.lineJoin = g.lineCap = 'round';
+  for (const white of edge ? [true, false] : [false]) { bat(white); bird(212, 349, false, 0, white); bird(795, 267, true, -.12, white); word(white); }
+  g.restore();
+}
+// The name's in Lobster, which comes with the page's other fonts. Each of these is drawn now in whatever's there, and again once it's come.
+const CARDS_FONT = '"Lobster", Georgia, serif', cardsDrawn = [];
+function cardsTex(w, h, draw) {
+  const t = textTex([''], w, h, 'rgba(0,0,0,0)', '#000', '12px sans-serif', { after: (g) => { g.clearRect(0, 0, w, h); draw(g); } });
+  cardsDrawn.push([t, draw]);
+  return t;
+}
+document.fonts?.load(`100px ${CARDS_FONT}`).then(() => { for (const [t, draw] of cardsDrawn) { const g = t.image.getContext('2d'); g.clearRect(0, 0, t.image.width, t.image.height); draw(g); t.needsUpdate = true; } }, () => {});
+// a red felt pennant, white at the pole
+const pennantTex = cardsTex(512, 256, (g) => {
+  g.fillStyle = CARDS.FELT; g.beginPath(); g.moveTo(0, 4); g.lineTo(508, 128); g.lineTo(0, 252); g.fill();
+  g.fillStyle = CARDS.CLOTH; g.fillRect(0, 4, 24, 248);
+  g.save(); g.translate(40, 62); g.scale(.22, .22); birdsOnTheBat(g, true); g.restore();
+});
+// the home jersey: white, with red piping round the neck, down the front and at the sleeves, and the birds on the bat across the chest
+const jerseyTex = cardsTex(256, 256, (g) => {
+  g.fillStyle = CARDS.CLOTH; g.beginPath(); for (const [i, [x, y]] of [[96, 14], [160, 14], [236, 60], [214, 108], [196, 96], [196, 250], [60, 250], [60, 96], [42, 108], [20, 60]].entries()) { if (i) g.lineTo(x, y); else g.moveTo(x, y); } g.closePath(); g.fill();
+  g.strokeStyle = CARDS.RED; g.lineWidth = 5; g.lineJoin = 'round'; g.beginPath(); g.moveTo(96, 14); g.lineTo(128, 50); g.lineTo(160, 14); g.moveTo(128, 50); g.lineTo(128, 250); g.moveTo(236, 60); g.lineTo(214, 108); g.moveTo(20, 60); g.lineTo(42, 108); g.stroke();
+  g.save(); g.translate(62, 84); g.scale(.132, .132); birdsOnTheBat(g); g.restore();
+});
+// and on the front of a red cap, StL in white
+const stlTex = cardsTex(128, 96, (g) => {
+  g.font = 'bold 88px Georgia, "Times New Roman", serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.lineJoin = 'round';
+  for (const [t, x, y, k] of [['S', 40, 80, 1], ['L', 90, 88, 1], ['t', 64, 72, .62]]) {
+    g.save(); g.translate(x, y); g.scale(k, k); g.lineWidth = 12; g.strokeStyle = CARDS.NAVY; g.strokeText(t, 0, 0); g.fillStyle = CARDS.CLOTH; g.fillText(t, 0, 0); g.restore();
+  }
+});
+const stlMat = new THREE.MeshStandardMaterial({ map: stlTex, roughness: 1, alphaTest: .4 });
+// on src/things.js's cap, standing at x, y: up against the front of the crown, leaning back with it
+const stlOn = (x = 0, y = 0) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(.09, .068), stlMat); m.position.set(x, y + .064, .094); m.rotation.x = -.24; return m; };
 // ---- the net, in a worn patch of the yard, and a ball to keep up. What it does is in src/volley.js. Where the net stands is a guess from the worn patch.
 const COURT = makeCourt(...atTrue(-1512.5, -783.5), -10), BALL = makeBall(COURT, -4, 1);
 BALL.y += Y0;
@@ -3437,7 +3505,7 @@ const NET_YAW = (() => {
   for (const u of [-9, 9]) F.box(rope, u, .02, 0, .05, .025, 9, 0);
   flushBuckets(90);
   const [ax, az] = F.at(0, -4.8), [bx, bz] = F.at(0, 4.8), [x, z] = F.at(0, 0);
-  thing(here, 'net', volleyNet(9.6, 2.35), x, z, F.yaw + Math.PI / 2, 2, { walls: [[ax, az, bx, bz, Y0 + 2.35, .06]], chip: '#7c7b80' });
+  thing(here, 'net', volleyNet(9.6, 2.35), x, z, F.yaw + Math.PI / 2, 2, { walls: [[ax, az, bx, bz, Y0 + 2.35, .06]], chip: '#7c7b80' }).objs[0].add(stlOn(-4.8, 2.45));
   here.add(ballMesh, ballRing); ballRing.visible = false;
   return F.yaw;
 })();
@@ -3479,29 +3547,13 @@ let yardOn = true, yardPole = null;
   }, { rigid: true, foot: F.at(0, 0), chip: '#5a4632', broke() { yardOn = false; glow.visible = false; const i = horde.lights.indexOf(yardSpot); if (i >= 0) horde.lights.splice(i, 1); } });
   flushBuckets(110);
 }
-// ---- the little shed: red gear with no name on it, and a bat. The bird's just a bird.
-const drawBird = (g, x, y, k, color = '#f1e6cf') => {
-  g.save(); g.translate(x, y); g.scale(k, k); g.fillStyle = color;
-  g.beginPath(); g.ellipse(0, 6, 30, 18, -.3, 0, 7); g.fill();
-  g.beginPath(); g.arc(24, -12, 13, 0, 7); g.fill();
-  for (const pts of [[16, -20, 28, -38, 34, -18], [36, -14, 50, -9, 36, -4], [-24, 14, -56, 28, -48, 10]]) { g.beginPath(); g.moveTo(pts[0], pts[1]); g.lineTo(pts[2], pts[3]); g.lineTo(pts[4], pts[5]); g.fill(); }
-  g.restore();
-};
-const pennantTex = textTex([''], 256, 128, 'rgba(0,0,0,0)', '#000', '12px sans-serif', { after: (g) => {
-  g.clearRect(0, 0, 256, 128); g.fillStyle = '#a82a2a'; g.beginPath(); g.moveTo(0, 2); g.lineTo(254, 64); g.lineTo(0, 126); g.fill();
-  g.fillStyle = '#f1e6cf'; g.fillRect(0, 2, 14, 124); drawBird(g, 76, 64, .72);
-} });
-const jerseyTex = textTex([''], 128, 128, 'rgba(0,0,0,0)', '#000', '12px sans-serif', { after: (g) => {
-  g.clearRect(0, 0, 128, 128); g.fillStyle = '#a82a2a'; g.beginPath(); for (const [i, [x, y]] of [[46, 8], [82, 8], [118, 34], [104, 56], [92, 46], [92, 124], [36, 124], [36, 46], [24, 56], [10, 34]].entries()) { if (i) g.lineTo(x, y); else g.moveTo(x, y); } g.fill();
-  g.strokeStyle = '#f1e6cf'; g.lineWidth = 3; g.beginPath(); g.moveTo(46, 8); g.lineTo(64, 28); g.lineTo(82, 8); g.moveTo(64, 28); g.lineTo(64, 124); g.moveTo(118, 34); g.lineTo(104, 56); g.moveTo(10, 34); g.lineTo(24, 56); g.stroke();
-  drawBird(g, 80, 54, .22);
-} });
+// ---- the little shed: the Cardinals' gear, which is above, and a bat
 const flatOn = (into, map, F, u, y, v, w, h, turn = 0) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map, roughness: 1, alphaTest: .4, side: THREE.DoubleSide })), [x, z] = F.at(u, v); m.position.set(x, Y0 + y, z); m.rotation.y = F.yaw + turn; into.add(m); return m; };
 const GEAR_SHED = 75175622, BAT_AT = (() => {
   const F = tilted(-1507.4, -810.9, 6.5), room = nearHere(-1505, -806, 70), yaw = F.yaw;
   flatOn(room, pennantTex, F, 3.1, 2.3, .28, 1.5, .75); flatOn(room, jerseyTex, F, 1.3, 1.5, .28, 1.2, 1.2);
   flatOn(room, textTex(['6 IN A ROW', 'TAKES THE BAT'], 256, 128, '#b9a27c', '#2a2226', '34px Impact, "Arial Black", sans-serif'), F, 4.75, 1.72, .28, .8, .4);
-  { const [x, z] = F.at(3.1, .36); thing(room, 'cap', cap(), x, z, yaw, .3, { y: 1.5, chip: '#a82a2a' }); }
+  { const [x, z] = F.at(3.1, .36); thing(room, 'cap', cap(), x, z, yaw, .3, { y: 1.5, chip: '#a82a2a' }).objs[0].add(stlOn()); }
   { const [x, z] = F.at(5.2, 4.4); thing(room, 'bench', workbench(3), x, z, yaw - Math.PI / 2, 1.5, { solid: [3, .7, 1], chip: '#6a5238' }); }
   [[.6, 6.4, .3, 1], [.6, 7.6, -.2, .8]].forEach(([u, v, t, k]) => { const [x, z] = F.at(u, v); thing(room, 'crate', crate(.9 * k, .7 * k, .8 * k), x, z, yaw + t, 1, { solid: [.8 * k, .7 * k, .7 * k], chip: '#b9ad92' }); });
   F.beam([3, 2.75, 3.4], [3, 2.4, 3.4], .012, .012, poleMat, 0); F.box(lit('#ffe9c8', 1.7), 3, 2.34, 3.4, .08, .1, .08, 0);
@@ -3529,7 +3581,18 @@ const crtTex = textTex([''], CRT_W * 2, CRT_H, '#0d5d63', '#000', '12px sans-ser
   const panel = (x, y, w, h, fill = '#c8c4b8') => { g.fillStyle = fill; g.fillRect(x, y, w, h); g.fillStyle = '#f2efe6'; g.fillRect(x, y, w, 2); g.fillRect(x, y, 2, h); g.fillStyle = '#56534c'; g.fillRect(x, y + h - 2, w, 2); g.fillRect(x + w - 2, y, 2, h); };
   const say = (t, x, y, px = 20, color = INKY, bold = false, align = 'left') => { g.font = `${bold ? 'bold ' : ''}${px}px ${FONT}`; g.fillStyle = color; g.textAlign = align; g.fillText(t, x, y); };
   const windowAt = (x, y, w, h, title, px = 18) => { panel(x, y, w, h); g.fillStyle = '#12296e'; g.fillRect(x + 4, y + 4, w - 8, 28); say(title, x + 10, y + 25, px, PAPER, true); panel(x + w - 27, y + 8, 20, 20); say('x', x + w - 17, y + 24, 15, INKY, true, 'center'); };
-  const open = (x, y) => { g.fillStyle = INKY; g.beginPath(); g.moveTo(x, y - 11); g.lineTo(x + 13, y - 11); g.lineTo(x + 6.5, y - 2); g.closePath(); g.fill(); };
+  const open = (x, y, color = INKY) => { g.fillStyle = color; g.beginPath(); g.moveTo(x, y - 11); g.lineTo(x + 13, y - 11); g.lineTo(x + 6.5, y - 2); g.closePath(); g.fill(); };
+  const shut = (x, y, color = INKY) => { g.fillStyle = color; g.beginPath(); g.moveTo(x + 2, y - 13); g.lineTo(x + 11, y - 6.5); g.lineTo(x + 2, y); g.closePath(); g.fill(); };
+  // AIM's running man, yellow inside a thick black line, in a box k across
+  const runner = (x, y, k) => {
+    g.save(); g.translate(x, y); g.scale(k / 100, k / 100); g.lineCap = g.lineJoin = 'round';
+    const limbs = [[[56, 32], [42, 56]], [[56, 32], [70, 44], [82, 36]], [[56, 32], [40, 40], [28, 30]], [[42, 56], [60, 66], [56, 88]], [[42, 56], [28, 72], [10, 74]]];
+    for (const [w, c, r] of [[22, INKY, 17], [12, '#f6c933', 13]]) {
+      g.strokeStyle = c; g.lineWidth = w; for (const pts of limbs) { g.beginPath(); pts.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py))); g.stroke(); }
+      g.fillStyle = c; g.beginPath(); g.arc(62, 16, r, 0, 7); g.fill();
+    }
+    g.restore();
+  };
   for (const [ox, caret] of [[0, true], [CRT_W, false]]) {
     g.save(); g.translate(ox, 0); g.fillStyle = '#0d5d63'; g.fillRect(0, 0, CRT_W, CRT_H);
     panel(0, CRT_H - 32, CRT_W, 32); say('2:47 AM', CRT_W - 14, CRT_H - 10, 18, INKY, false, 'right');
@@ -3538,14 +3601,17 @@ const crtTex = textTex([''], CRT_W * 2, CRT_H, '#0d5d63', '#000', '12px sans-ser
     g.fillStyle = PAPER; g.fillRect(24, 98, 252, 84); say('I am away from my', 32, 128, 23); say('computer right now.', 32, 160, 23);
     if (caret) { g.fillStyle = INKY; g.fillRect(238, 141, 3, 24); }
     panel(96, 192, 108, 32); say("I'm Back", 150, 215, 20, INKY, false, 'center');
-    // and everyone they knew
-    windowAt(298, 12, 204, 330, 'ChunkyNet Messenger', 16);
-    g.fillStyle = '#e8842a'; g.beginPath(); g.moveTo(400, 44); g.lineTo(420, 76); g.lineTo(380, 76); g.closePath(); g.fill(); g.fillStyle = INKY; g.fillRect(398, 54, 4, 12); g.fillRect(398, 69, 4, 4);
-    g.fillStyle = PAPER; g.fillRect(308, 84, 184, 200);
-    open(314, 112); say('People (0/41)', 332, 112, 20, INKY, true);
-    open(328, 146); say('Online (0)', 346, 146, 20);
-    open(328, 180); say('Offline (41)', 346, 180, 20);
-    for (const [i, t] of ['Send', 'Chat', 'Info'].entries()) { panel(308 + i * 62, 294, 58, 38); say(t, 337 + i * 62, 320, 18, INKY, false, 'center'); }
+    // and everyone they knew: AIM's buddy list, with the running man where the name would be and the offline ones folded away, so there isn't a name on it
+    windowAt(298, 12, 204, 330, '', 16); runner(305, 17, 26); say('Buddy List', 336, 37, 17, PAPER, true);
+    for (const [t, x] of [['My AIM', 308], ['People', 380], ['Help', 446]]) say(t, x, 62, 15);
+    panel(372, 72, 92, 26); say('List Setup', 418, 91, 15, INKY, false, 'center');
+    g.fillStyle = '#d4d0c8'; g.fillRect(304, 70, 68, 30); g.fillStyle = '#f2efe6'; g.fillRect(304, 70, 68, 2); g.fillRect(304, 70, 2, 30); say('Online', 338, 91, 16, INKY, true, 'center');
+    g.fillStyle = PAPER; g.fillRect(308, 104, 184, 168);
+    for (const [i, [t, gone]] of [['Buddies (0/41)'], ['Family (0/0)'], ['Co-Workers (0/0)'], ['Offline (41/41)', true]].entries()) {
+      const y = 132 + i * 34, c = gone ? '#7d7a74' : INKY;
+      (gone ? shut : open)(314, y, c); say(t, 332, y, 18, c, true);
+    }
+    for (const [i, t] of ['IM', 'Chat', 'Info'].entries()) { panel(308 + i * 62, 290, 58, 38); say(t, 337 + i * 62, 316, 18, INKY, false, 'center'); }
     // the tube: darker at the corners, and lines
     const v = g.createRadialGradient(CRT_W / 2, CRT_H / 2, CRT_H * .55, CRT_W / 2, CRT_H / 2, CRT_W * .72); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.26)'); g.fillStyle = v; g.fillRect(0, 0, CRT_W, CRT_H);
     g.fillStyle = 'rgba(0,0,0,.14)'; for (let y = 0; y < CRT_H; y += 3) g.fillRect(0, y, CRT_W, 1);
@@ -5764,7 +5830,7 @@ function updateCrowd(dt, M) {
 // ================================================================ vehicles
 // How they handle and where they're parked is in src/vehicles.js, and what they're built from is in src/vehiclemodels.js.
 // One mesh for each kind and one for every wheel, with their outlines: ten draw calls, however many are about.
-const VEH_CAP = { car: 8, pickup: 8, quad: 7, golf: 3, coupe: 1, van: 1 }, VEH_SEE = 170, VEH_BURNT = new THREE.Color('#1c1618');
+const VEH_CAP = { car: 8, pickup: 8, quad: 7, golf: 3, coupe: 1, coupe99: 1, van: 1 }, VEH_SEE = 170, VEH_BURNT = new THREE.Color('#1c1618');
 const vehGroup = new THREE.Group(); vehGroup.visible = false; scene.add(vehGroup);
 const vehMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .72, metalness: .18 });
 // Paint is the only pure white in the vertices, so that's what takes each one's colour. It's rusting through in patches, each its own way, except where its seed's below zero.
@@ -5800,6 +5866,26 @@ const vehWheelLines = vehMesh(vehGeos.wheel.line, outlineMat(INK, 1.4), VEH_WHEE
 const vanWords = new THREE.Group(), vanWordsMat = new THREE.MeshStandardMaterial({ map: textTex(SIGN_SHEET.churches.find((c) => c.id === 'baptist').name, 1024, 284, 'rgba(0,0,0,0)', '#23324f', '84px Bungee, Impact, sans-serif'), transparent: true, depthWrite: false, roughness: .8 });
 vanWords.matrixAutoUpdate = false; vanWords.visible = false; vehGroup.add(vanWords);
 for (const s of [-1, 1]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(2.6, .72), vanWordsMat); m.position.set(s * 1.15, 1, .1); m.rotation.y = s * Math.PI / 2; vanWords.add(m); }
+// The Camaros' badges, where the real ones have them. The white '91's bow tie is on the point of its nose between the lamps, and it says RS in silver on the bumper behind, on the right,
+// and low down on each door. ETB2k4's '99 has its bow tie on the nose and CAMARO on the panel between the tail lamps. They go where each one goes, like the van's words.
+const bowTieTex = textTex([''], 128, 52, 'rgba(0,0,0,0)', '#000', '12px sans-serif', { after: (g) => {
+  g.clearRect(0, 0, 128, 52); g.beginPath(); for (const [i, [x, y]] of [[10, 14], [44, 14], [48, 3], [80, 3], [76, 14], [122, 14], [114, 38], [80, 38], [76, 49], [44, 49], [48, 38], [2, 38]].entries()) { if (i) g.lineTo(x, y); else g.moveTo(x, y); } g.closePath();
+  g.lineJoin = 'round'; g.lineWidth = 6; g.strokeStyle = '#c9ccd2'; g.stroke(); g.fillStyle = '#26407a'; g.fill();
+} });
+const silverTex = (word, w, font) => textTex([''], w, 64, 'rgba(0,0,0,0)', '#000', '12px sans-serif', { after: (g) => {
+  g.clearRect(0, 0, w, 64); g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; if ('letterSpacing' in g && word.length > 2) g.letterSpacing = '14px';
+  g.lineJoin = 'round'; g.lineWidth = 5; g.strokeStyle = '#4c4b50'; g.strokeText(word, w / 2 + 7 * (word.length > 2), 34); g.fillStyle = '#d4d6da'; g.fillText(word, w / 2 + 7 * (word.length > 2), 34);
+} });
+const camaroWordTex = silverTex('CAMARO', 512, '600 50px Arial, Helvetica, sans-serif'), rsTex = silverTex('RS', 128, 'italic 700 50px Arial, Helvetica, sans-serif');
+const camaroBadges = {};
+for (const [kind, marks] of Object.entries({
+  coupe: [[bowTieTex, .12, .05, 0, .55, 2.389, 0], [rsTex, .1, .05, -.6, .45, -2.322, Math.PI + .21], [rsTex, .1, .05, .92, .21, -.39, Math.PI / 2], [rsTex, .1, .05, -.92, .21, -.39, -Math.PI / 2]],
+  coupe99: [[bowTieTex, .12, .05, 0, .44, 2.456, 0], [camaroWordTex, .42, .052, 0, .745, -2.458, Math.PI]],
+})) {
+  const b = new THREE.Group();
+  for (const [map, w, h, x, y, z, turn] of marks) { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map, roughness: .5, metalness: .3, alphaTest: .4 })); m.position.set(x, y, z); m.rotation.y = turn; b.add(m); }
+  b.matrixAutoUpdate = false; b.visible = false; vehGroup.add(b); camaroBadges[kind] = b;
+}
 
 // Where they are: where the real buildings say, and a few where the game needs one
 // a building's own drive stops at its wall, so it's the road that drive comes from that counts
@@ -5813,7 +5899,7 @@ function vehicleFits(kind, x, z, yaw) {
   }
   return true;
 }
-// Nothing gets parked at the compound on Pine Forest Rd but what's on the aerial
+// Nothing gets parked at the compound on Pine Forest Rd but what's on the aerial, and ETB2k4's car
 const VEH_SET = [
   // the first one you come to, on the shoulder just past the Chunky River Bridge, and pointing into town
   (() => { const r = 'griffis_fountain_rd', [x, z] = atTrue(-336.76, 490.37), p = MAP.along(r, MAP.sOn(r, x, z) - 34); return ['quad', p.x + p.nx * 5, p.z + p.nz * 5, Math.atan2(-p.tx, -p.tz), .12]; })(),
@@ -5821,7 +5907,9 @@ const VEH_SET = [
   ['pickup', ...gasAt(60.8, 9.2), 0, .3], ['car', PLACES.hall.x + 52.2, PLACES.hall.z - 11, -Math.PI / 2, .2],
   // at the compound on Pine Forest Rd: a white truck by the deck, a dark car along the drive, and two white trucks by the long building
   ['pickup', ...atTrue(1034.1, 640.5), .56, .76], ['car', ...atTrue(1000.6, 652.6), 2.6, .635], ['pickup', ...atTrue(1028.6, 669.1), .1, .76], ['pickup', ...atTrue(1031.9, 669.9), .1, .3],
-  // off True Light Rd: the white coupe where you come round the house, nose out and with no rust on it, and a white truck and a white car by the little shed
+  // and ETB2k4's green '99, which isn't on the aerial: he's from 2004, and so's it. It's at the top of the hill above his cabin, looking down at it, and it doesn't rust.
+  ['coupe99', ...atTrue(1039, 617), 2.45, -1],
+  // off True Light Rd: the white Camaro where you come round the house, nose out and with no rust on it, and a white truck and a white car by the little shed
   ['coupe', ...atTrue(-1541, -787), -1.84, -1], ['pickup', ...atTrue(-1506.9, -796.7), 3.05, .76], ['car', ...atTrue(-1503.6, -797.2), 3.05, .3],
   // at the farm south of the bridge, the white truck by the house
   ['pickup', ...atTrue(-684.7, 1733), .2, .76],
@@ -5923,13 +6011,14 @@ function drawVehicles(step) {
   if (!driving && !vehDirty && !moving) return;
   for (const k in VEH_CAP) vehUsed[k] = 0;
   let w = 0;
-  vanWords.visible = false;
+  vanWords.visible = false; for (const k in camaroBadges) camaroBadges[k].visible = false;
   for (const v of vehShown) {
     const K = v.K, i = vehUsed[v.kind]; if (i >= VEH_CAP[v.kind]) continue;
     vehUsed[v.kind]++;
     toBody(v).toArray(vehBodies[v.kind].instanceMatrix.array, i * 16);
     if (vehDirty) { _vc.copy(v.paint).lerp(VEH_BURNT, v.wrecked ? .94 : (1 - v.hp / K.hp) * .55); vehBodies[v.kind].setColorAt(i, _vc); vehSeeds[v.kind].array[i] = v.tone; }
     if (v.kind === 'van') { vanWords.matrix.copy(_vb); vanWords.matrixWorldNeedsUpdate = true; vanWords.visible = !v.wrecked; vanWordsMat.color.setScalar(1 - (1 - v.hp / K.hp) * .55); }
+    const badges = camaroBadges[v.kind]; if (badges) { badges.matrix.copy(_vb); badges.matrixWorldNeedsUpdate = true; badges.visible = !v.wrecked; }
     for (let a = 0; a < 2; a++) for (const s of [-1, 1]) {
       _ve.set(v.shownSpin, a ? 0 : -v.steer, 0);
       _vl.makeRotationFromEuler(_ve).scale(_vs.set(K.tread, K.wheel, K.wheel)).setPosition(s * K.track, K.wheel - (v.wrecked ? .1 : 0), K.axles[a]);

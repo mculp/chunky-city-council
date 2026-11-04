@@ -41,11 +41,19 @@ const built = await g(async () => {
   const lanes = G.map.lanes.filter((l) => measured.includes(l.id)).map((l) => l.id); window.measured = measured;
   const parked = [[1034.1, 640.5], [1000.6, 652.6], [1028.6, 669.1], [1031.9, 669.9]].filter(([x, z]) => { const [wx, wz] = true2(x, z); return G.vehicles.some((v) => Math.hypot(v.x - wx, v.z - wz) < 1); }).length;
   const spots = [[1034.1, 640.5], [1000.6, 652.6], [1028.6, 669.1], [1031.9, 669.9]].map(([x, z]) => { const [wx, wz] = true2(x, z); return +Math.min(...G.vehicles.map((v) => Math.hypot(v.x - wx, v.z - wz))).toFixed(1); });
-  return { want: ids.length, found: found.length, lanes, parked, spots, jam: G.compound.JAM.map((j) => j.name) };
+  // ETB2k4's '99: where it was left, its own green, and which way it's looking and how far up the hill it is from the middle of the cabin
+  const cabin = G.structures.find((s) => s.id === 900019).pts, cx = cabin.reduce((a, p) => a + p[0], 0) / cabin.length, cz = cabin.reduce((a, p) => a + p[1], 0) / cabin.length, [nx, nz] = true2(1039, 617);
+  const ninetyNine = G.vehicles.filter((v) => v.kind === 'coupe99').map((v) => {
+    const off = Math.atan2(cx - v.x, cz - v.z) - v.yaw;
+    return { d: +Math.hypot(v.x - nx, v.z - nz).toFixed(1), paint: v.paint.getHexString(), turn: +Math.abs(Math.atan2(Math.sin(off), Math.cos(off))).toFixed(2), above: +(G.hills.at(v.x, v.z) - G.hills.at(cx, cz)).toFixed(1) };
+  });
+  return { want: ids.length, found: found.length, lanes, parked, spots, ninetyNine, jam: G.compound.JAM.map((j) => j.name) };
 });
 check('every building is in the game', built.found === built.want, built);
 check('the drive and what comes off it are the measured ones', built.lanes.length === 5, built.lanes);
 check('the truck, the car and the two trucks are parked where they were', built.parked === 4, built.spots);
+const n99 = built.ninetyNine[0];
+check('ETB2k4\'s green \'99 is up the hill from the cabin, where it was left, looking down at it', built.ninetyNine.length === 1 && n99.d < .5 && n99.paint === '2f5d48' && n99.turn < .3 && n99.above > 1, built.ninetyNine);
 check('the room has drums, a guitar, a bass and a keyboard', built.jam.join() === 'drums,guitar,bass,keyboard', built.jam);
 
 // ---------------- up the drive from the road, on foot

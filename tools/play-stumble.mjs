@@ -79,11 +79,11 @@ await tap(); await g(() => __game.step(.8, 1 / 24));
 const moved = await g(() => { const G = __game, S = G.stumble, was = S.looking(); G.key('s', true); G.sim(.1, 1 / 30); G.key('s', false); G.step(1.4, 1 / 24); return { was, now: S.looking(), shown: G.heroRoot.visible }; });
 check('and it stops when he moves', moved.was && !moved.now && moved.shown, moved);
 
-// ---------------- nothing's named. A look through what the page and the sheet actually say
+// ---------------- a look through what the page and the sheet actually say
 {
   const html = readFileSync('index.html', 'utf8'), block = html.slice(html.indexOf('===== the second trailer'), html.indexOf('===== the community pool')), stone = JSON.parse(readFileSync('data/stone.json', 'utf8'));
   check('the words on the stone are only ever the owner\'s', stone.words === '', stone);
-  check('the messenger is the invented one', /ChunkyNet Messenger/.test(block), null);
+  check('the screen is the Buddy List, with nobody on it', /Buddy List/.test(block) && /Offline \(41\/41\)/.test(block) && !/ChunkyNet/.test(block), null);
 }
 
 // ---------------- break it and it's over

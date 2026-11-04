@@ -15,7 +15,7 @@ export const LURES = {
 };
 // A car alarm is noise, like a crash. It's only heard for the first few seconds of its 15, while all there is to play for it is a siren, and that's how long it rouses anyone.
 // Its lights go on and off for all 15.
-export const ALARM = { reach: 80, seconds: 15, sounds: 5, kinds: new Set(['car', 'pickup', 'coupe']) };
+export const ALARM = { reach: 80, seconds: 15, sounds: 5, kinds: new Set(['car', 'pickup', 'coupe', 'coupe99']) };
 
 // the order they come up in. Gas after the rest, because it's the loudest way to make a point.
 const ORDER = ['bottle', 'crackers', 'fluid', 'gas'];
