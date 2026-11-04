@@ -37,6 +37,11 @@ export function buildHills(data, map) {
   const { cols, rows, dx, dz } = data, { heights: v, far } = decodeHills(data), wx = new Float64Array(4), wz = new Float64Array(4);
   const [x0, z0] = map ? map.toWorld(data.x0, data.z0) : [data.x0, data.z0];
   const weights = (w, f) => { const f2 = f * f, f3 = f2 * f; w[0] = (1 - 3 * f + 3 * f2 - f3) / 6; w[1] = (4 - 6 * f2 + 3 * f3) / 6; w[2] = (1 + 3 * f + 3 * f2 - 3 * f3) / 6; w[3] = f3 / 6; };
+  // Ground somebody cut and filled flat where it's steeper than a pixel can hold: level across its box, and back to the land by `edge` metres out of it
+  const terraces = (data.terraces ?? []).map((t) => {
+    const [ax, az] = map ? map.toWorld(t.x0, t.z0) : [t.x0, t.z0], [bx, bz] = map ? map.toWorld(t.x1, t.z1) : [t.x1, t.z1];
+    return { x0: Math.min(ax, bx), z0: Math.min(az, bz), x1: Math.max(ax, bx), z1: Math.max(az, bz), edge: t.edge, at: t.at };
+  });
   const at = (x, z) => {
     const fx = (x - x0) / dx - .5, fz = (z - z0) / dz - .5, i = Math.floor(fx), j = Math.floor(fz);
     weights(wx, fx - i); weights(wz, fz - j);
@@ -46,6 +51,10 @@ export function buildHills(data, map) {
       let r = 0;
       for (let a = 0; a < 4; a++) r += wx[a] * v[row + Math.max(0, Math.min(cols - 1, i + a - 1))];
       sum += wz[b] * r;
+    }
+    for (const t of terraces) {
+      const k = Math.min(1, Math.hypot(Math.max(t.x0 - x, 0, x - t.x1), Math.max(t.z0 - z, 0, z - t.z1)) / t.edge);
+      sum += (t.at - sum) * (1 - k * k * (3 - 2 * k));
     }
     return sum;
   };
@@ -67,7 +76,7 @@ export function buildHills(data, map) {
   };
   // the skyline: a height every few pixels, in metres, and how far apart they are
   const skyline = { cols: data.coarse.cols, rows: data.coarse.rows, x0: x0 + dx / 2, z0: z0 + dz / 2, dx: dx * data.coarse.stride, dz: dz * data.coarse.stride, heights: Float32Array.from(far, (q) => q / data.quantum) };
-  return { cols, rows, x0, z0, dx, dz, heights: v, at, slope, follow, skyline };
+  return { cols, rows, x0, z0, dx, dz, heights: v, at, slope, follow, skyline, terraces };
 }
 
 export async function loadHills(url, map) {

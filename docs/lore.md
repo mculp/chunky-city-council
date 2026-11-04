@@ -159,9 +159,10 @@ Asked which buildings on a numbered picture from above were the cabin, the cinem
 
 **In the game:** it's there, shaped from the public aerial, and the real drive in with it, which the road data hadn't got. Nothing in the game says whose it is, and where it is isn't written next to the name here. Decided around it:
 
-- Which building's which is read off the picture. The big one with the pool is the mom and dad's, the long one across the gravel from it is the cabin, the white one by the fenced lawn is the art studio, and the lawn is the outdoor theater. The cabin's more to the west of the big house than north of it, so that's waiting on a yes. Since then the owner's said it's missing a cabin and the cinema and art studio are in the wrong spots, under David and ETB2k4 below, and where they really are, above. The game hasn't caught up yet, and what the long building, the white one and the fenced lawn are is still being asked.
-- The theater has a screen at the lawn's open end and two rows of lawn chairs, and a projector at the far end runs a film's countdown over and over, because any film would be somebody's. Its light brings the crowd, the same as the gas station's canopy, so they end up standing on the lawn. Breaking the projector ends it.
-- The studio has an easel, a bench of paint and canvases against the wall. The paintings are invented, and they aren't of anything.
+- Which building's which is from what's said above. The big one with the pool is the mom and dad's. The cabin is down the hill north of it, under the trees by the river, where it can only be seen from above with the leaves off, so it's measured off its roof on a satellite picture from then. Its door faces south, and its south and east walls are mostly window. At first the long building across the gravel from the big house was taken for the cabin, the white one by the fenced lawn for the studio and the lawn for the theater. What those three are hasn't been said, so there's nothing in them.
+- The ground the cabin, its decks and the studio are on is cut flat into the hill, and the decks are a step up off it, all of them on the plan above. The one on the cabin's south side has the swing, looking out east over the river, with a rail along the side the land falls away.
+- The cinema is on the deck that runs west from the cabin's door, about 6 m square, which is the 20 feet above. The screen is at its far end, there are two rows of lawn chairs, and a projector by the cabin runs a film's countdown over and over, because any film would be somebody's. Its light brings the crowd, the same as the gas station's canopy, so they end up standing round the deck. Breaking the projector ends it.
+- The studio is the little building at the end of the deck south of the cinema, measured off its roof the same way. Its door is in the side that faces the deck, so he crosses the deck to it facing south-west and goes in. Inside, the easel is turned to the door, there's a bench of paint, and there are canvases against the wall. The paintings are invented, and they aren't of anything.
 - The room in the shed has drums, a guitar, a bass, a keyboard, amps, mic stands, a couch and moving blankets on the back wall. The button plays whichever one he's by, one hit at a time, and it's loud enough for the crowd to come. There aren't any songs in it.
 - The walls can't be seen from above, so their colors are guesses.
 - The digger, the boat, the propane tank and the parked trucks are all on the picture. They aren't anyone's in particular, and the tank goes up if it's broken.
@@ -226,7 +227,7 @@ Asked who David and ETB2004 are:
 
 > ETB2k4 drives a 99 green [make of car] and has spiky hair and lives on the murphey compound (he's from 2004 so he's just an astral projection) he always has a lot of beans and chemistry equipment set up in his cabin. we need to fix the layout of the murphey compound also. it's missing a cabin and the cinema and art studio are in the wrong spots
 
-**In the game:** neither of them is in it yet. Where the cabin, the cinema and the studio really are is under A compound above, and isn't built yet.
+**In the game:** neither of them is in it yet. The cabin, the cinema and the studio are where the owner said they are now, under A compound above.
 
 ## The truck stop
 

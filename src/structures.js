@@ -327,15 +327,16 @@ export function writeStructure(sheet, s, base = 0) {
     if (fellIn(s, p, i)) { missing.add(i); return; }
     sheet.upright(p.ax, p.az, p.bx, p.bz, p.nx, p.nz, p.y0, p.y1, WALL_THICK, 0, { ...base0, kind: p.kind, panel: i, color: shade(wall, tone * (.94 + k * .12)), lowDark: .72, noBottom: true, pattern, edge: p.edge });
   });
-  // windows
+  // windows. A wall that faces the way `glass` says is mostly glass: every length of it has the biggest window that'll go in it.
   const smallWindows = s.use === 'shed' || s.use === 'farm';
   const plate = s.use === 'shop' || s.use === 'office' || s.use === 'public' || s.use === 'hall';
+  const facing = (p) => (Math.abs(p.nx) > Math.abs(p.nz) ? (p.nx > 0 ? 'east' : 'west') : p.nz > 0 ? 'south' : 'north');
   panels.forEach((p, i) => {
     if (p.kind !== 'wall' || missing.has(i)) return;
-    const len = Math.hypot(p.bx - p.ax, p.bz - p.az), k = hash2(seed, 200 + i);
-    if (len < 1.5 || k < (smallWindows ? .88 : p.edge === s.door ? .15 : .4)) return;
+    const len = Math.hypot(p.bx - p.ax, p.bz - p.az), k = hash2(seed, 200 + i), glass = !!s.glass?.includes(facing(p));
+    if (len < 1.5 || (!glass && k < (smallWindows ? .88 : p.edge === s.door ? .15 : .4))) return;
     for (let floor = 0; floor < (s.floors ?? 1); floor++) {
-      const mobile = s.walls === 'mobile', wide = Math.min(len - .5, plate && p.edge === s.door ? 2.2 : mobile ? 1 : 1.05), high = plate && p.edge === s.door ? 1.75 : mobile ? .85 : 1.25, sill = base + floor * 2.75 + (plate && p.edge === s.door ? .55 : mobile ? 1.25 : .9);
+      const mobile = s.walls === 'mobile', wide = glass ? len - .5 : Math.min(len - .5, plate && p.edge === s.door ? 2.2 : mobile ? 1 : 1.05), high = glass || (plate && p.edge === s.door) ? 1.75 : mobile ? .85 : 1.25, sill = base + floor * 2.75 + (glass || (plate && p.edge === s.door) ? .55 : mobile ? 1.25 : .9);
       const ex = (p.bx - p.ax) / len, ez = (p.bz - p.az) / len, mx = (p.ax + p.bx) / 2, mz = (p.az + p.bz) / 2;
       const boarded = !lit && hash2(seed, 300 + i) < hurt * 2.4;
       sheet.upright(mx - ex * wide / 2, mz - ez * wide / 2, mx + ex * wide / 2, mz + ez * wide / 2, p.nx, p.nz, sill, sill + high, WALL_THICK + .03, .03, { ...base0, kind: 'window', on: i, color: boarded ? shade([.3, .22, .14], .8 + k * .5) : trim, pattern: boarded ? PATTERN.BOARDS : PATTERN.WINDOW, glow: lit, unit: true });

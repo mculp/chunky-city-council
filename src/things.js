@@ -78,6 +78,15 @@ export function couch(color = '#5a3f33') {
     ...both((s) => box(s * .42, .44, .06, .78, .1, .66, '#6b4e3f')), box(.4, .47, .1, .5, .12, .4, '#7f2c22'),
   ];
 }
+// a bench hung on chains from an A-frame of its own, the way one stands out on a deck
+export function porchSwing(seat = '#8a6a48') {
+  return [
+    ...both((s) => [bar([s * 1.2, 0, -.6], [s * 1.2, 2.15, 0], .08, WOOD), bar([s * 1.2, 0, .6], [s * 1.2, 2.15, 0], .08, WOOD), bar([s * 1.2, .5, -.45], [s * 1.2, .5, .45], .05, WOOD)]).flat(),
+    box(0, 2.19, 0, 2.62, .1, .12, WOOD),
+    ...both((s) => [bar([s * .72, 2.14, 0], [s * .72, .52, .2], .015, STEEL), bar([s * .72, 2.14, 0], [s * .72, .62, -.22], .015, STEEL)]).flat(),
+    box(0, .48, 0, 1.5, .07, .5, seat), box(0, .74, -.25, 1.5, .44, .06, seat), ...both((s) => box(s * .74, .62, 0, .06, .18, .48, seat)),
+  ];
+}
 // the three legs of an easel and the ledge a canvas stands on: the canvas is its own
 export function easel() {
   return [

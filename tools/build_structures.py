@@ -588,7 +588,7 @@ def main():
         note = s["note"]
         look = looks_of(s["use"], s["sqm"], seed)
         if note.get("seen"):
-            for k in ("walls", "roof", "roofMat", "floors", "porch", "carport", "open", "shutters", "condition", "steep", "doors", "bays", "lit", "trimColor", "doorColor", "eaves", "pitch", "gableColor", "band", "vent", "cross"):
+            for k in ("walls", "roof", "roofMat", "floors", "porch", "carport", "open", "shutters", "condition", "steep", "doors", "bays", "lit", "trimColor", "doorColor", "eaves", "pitch", "gableColor", "band", "vent", "cross", "glass"):
                 if k in note:
                     look[k] = note[k]
             look["wallColor"] = note.get("wallColor", look.get("wallColor") if look["walls"] == note.get("walls", look["walls"]) else None)

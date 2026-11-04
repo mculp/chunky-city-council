@@ -51,10 +51,10 @@ check('in town the far land shows, and the bridge he wakes on is still at the bo
 
 // ---------------- what's drawn is what the code says, times however many times their real height they're being drawn
 await g(() => { window.drawnHills = () => {
-  const G = __game, K = G.THREE, R = G.renderer, U = G.hills.uniforms, N = 256, pts = new Float32Array(N * 4);
+  const G = __game, K = G.THREE, R = G.renderer, U = G.hills.uniforms, N = 256, pts = new Float32Array(N * 4), t = G.hills.terraces[0], e = t.edge;
   for (let i = 0; i < N; i++) {
-    // all over the map, as a golden-ratio walk so that it's the same every time
-    const [x, z] = true2(-5000 + 20000 * ((i * .6180339887) % 1), -8000 + 17000 * ((i * .7548776662) % 1));
+    // all over the map, as a golden-ratio walk so that it's the same every time, and the last 32 across the ground that's been cut flat by the cabin on Pine Forest Rd and its edge
+    const [x, z] = i < N - 32 ? true2(-5000 + 20000 * ((i * .6180339887) % 1), -8000 + 17000 * ((i * .7548776662) % 1)) : [t.x0 - e + (t.x1 - t.x0 + 2 * e) * ((i * .6180339887) % 1), t.z0 - e + (t.z1 - t.z0 + 2 * e) * ((i * .7548776662) % 1)];
     pts[i * 4] = x; pts[i * 4 + 1] = z;
   }
   const where = new K.DataTexture(pts, N, 1, K.RGBAFormat, K.FloatType); where.needsUpdate = true;
@@ -70,12 +70,16 @@ await g(() => { window.drawnHills = () => {
   box.add(quad); U.uHillHere.value = 0;
   R.setRenderTarget(target); R.render(box, new K.OrthographicCamera(-1, 1, 1, -1, 0, 1)); R.readRenderTargetPixels(target, 0, 0, N, 1, out); R.setRenderTarget(null);
   U.uHillHere.value = was;
-  let worst = 0, high = 0;
-  for (let i = 0; i < N; i++) { const h = G.hills.at(pts[i * 4], pts[i * 4 + 1]) * U.uHillScale.value; worst = Math.max(worst, Math.abs(out[i * 4] - h)); high = Math.max(high, out[i * 4]); }
-  return { worst, high, k: U.uHillScale.value };
+  let worst = 0, high = 0; const flat = [];
+  for (let i = 0; i < N; i++) {
+    const h = G.hills.at(pts[i * 4], pts[i * 4 + 1]) * U.uHillScale.value; worst = Math.max(worst, Math.abs(out[i * 4] - h)); high = Math.max(high, out[i * 4]);
+    if (pts[i * 4] > t.x0 && pts[i * 4] < t.x1 && pts[i * 4 + 1] > t.z0 && pts[i * 4 + 1] < t.z1) flat.push(out[i * 4]);
+  }
+  return { worst, high, k: U.uHillScale.value, flat: flat.length, level: Math.max(...flat) - Math.min(...flat), at: t.at * U.uHillScale.value, drawn: flat[0] };
 }; });
 const gpu = await g(() => drawnHills());
 check(`the graphics card and the code agree on the land's height: ${(gpu.worst * 100).toFixed(1)} cm out at worst, over land up to ${gpu.high.toFixed(0)} m`, gpu.worst < .05 && gpu.high > 30 && gpu.k === 1, gpu);
+check(`and where it's been cut flat by the cabin on Pine Forest Rd, the graphics card draws it flat at ${gpu.at.toFixed(2)} m, ${(gpu.level * 100).toFixed(1)} cm out across ${gpu.flat} points`, gpu.flat >= 8 && gpu.level < .01 && Math.abs(gpu.drawn - gpu.at) < .01, gpu);
 
 // ---------------- the switch the owner's trying them taller with, a tap at a time, standing where he is
 const says = () => g(() => document.getElementById('hillsAB').textContent);

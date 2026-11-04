@@ -165,6 +165,28 @@ test('nearly every building stands on ground that has been levelled for it', () 
   assert.ok(leaning <= 12, `${leaning} lean more than 8%`);
 });
 
+test('ground that has been cut and filled flat is level across its box, and goes back to the land without a step', () => {
+  const bare = buildHills({ ...hills, terraces: [] });
+  assert.ok(hills.terraces.length > 0 && hills.terraces.length <= 2, 'the graphics card has room for two');
+  for (const t of hills.terraces) {
+    for (let x = t.x0; x <= t.x1; x += .5) for (let z = t.z0; z <= t.z1; z += .5) assert.ok(Math.abs(H.at(x, z) - t.at) < 1e-6, `${H.at(x, z)} at ${x}, ${z}`);
+    // out past its edge it's the land as it was, and on the way there it's somewhere between the two, a little at a time
+    const cx = (t.x0 + t.x1) / 2, cz = (t.z0 + t.z1) / 2;
+    let steepest = 0;
+    for (let a = 0; a < 64; a++) {
+      const dx = Math.cos(a / 32 * Math.PI), dz = Math.sin(a / 32 * Math.PI);
+      let was = H.at(cx, cz);
+      for (let s = .05; s < 30; s += .05) {
+        const x = cx + dx * s, z = cz + dz * s, h = H.at(x, z), land = bare.at(x, z), out = Math.hypot(Math.max(t.x0 - x, 0, x - t.x1), Math.max(t.z0 - z, 0, z - t.z1));
+        if (out >= t.edge) assert.ok(Math.abs(h - land) < 1e-9, `${h} at ${x}, ${z}, where the land's ${land}`);
+        else assert.ok(h >= Math.min(t.at, land) - 1e-9 && h <= Math.max(t.at, land) + 1e-9, `${h} at ${x}, ${z}`);
+        steepest = Math.max(steepest, Math.abs(h - was) / .05); was = h;
+      }
+    }
+    assert.ok(steepest < 1.5, `it gets as steep as ${steepest}`);
+  }
+});
+
 test('a road or lane stays on the land once it has the points it needs', () => {
   let was = 0, now = 0, worst = 0;
   for (const line of everyLine) {

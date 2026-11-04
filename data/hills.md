@@ -47,6 +47,8 @@ Chestnut St is the one place the land goes below the floodplain. It's straight u
 
 One place wants two things at once. The compound on Pine Forest Rd stands on a real bluff about 20 m over the river, with a pool 72 m from the water, and the lookup reaches two pixels, so at this resolution it can't be level and have the river flat. So where a building's on a bluff the land can come up from 20 m off the river, and steeply, which lifts the river itself by up to 2.2 m under that one bluff. The river's bed is 3 m down, so it's still under water. The river's sheet is one flat quad, so `uRiverUp` brings it up to him if he's swimming there.
 
+Down the hill from that compound, the cabin, its decks and the little studio stand on the steepest of that bluff, 40 m from the river, where a 30 m pixel can't hold flat ground and the river at its foot as well. Levelling them the usual way left 2.3 m of fall across the cabin. So `TERRACES` in the builder has a box of ground there that somebody's cut and filled flat, and it's the lookup that levels it, the same way in `src/hills.js` and on the graphics card. Across the box it's the height the land is drawn at by the cabin's door, and it's back to the land by 7 m out of it, along a curve that's flat at both ends, so there's no crease where it starts or where it stops. It's a box and a height in the file, not pixels, so nothing else on the map moves for it, and the buildings inside it aren't levelled the usual way. The graphics card has room for two, and they're off with the rest of the hills until he wakes at the edge of town.
+
 Everywhere else the river can be seen, the land's within 13 cm of the bottom. Well away from any road the river's coarser, and higher, and nobody's near enough for that to show.
 
 ## The land past the fog
@@ -69,6 +71,7 @@ The owner's choosing between the hills as they really are and taller ones, so th
 | `source` | Who it's from, the service, when it was fetched, the sha256 of what came back and the licence |
 | `elevation` | The lowest and highest ground on the map over sea level, and the highest over the floodplain, before any of the above |
 | `dips` | Where the land goes below the floodplain: the place `x`, `z`, how far from it it's all the way down (`core`) and back up (`edge`), and how far down (`depth`), in metres |
+| `terraces` | Ground that's been cut and filled flat where it's steeper than a pixel can hold: the box from `x0`, `z0` to `x1`, `z1`, the height across it (`at`), and how far out of it the land's back to its own (`edge`), in metres. At most two. |
 | `x0`, `z0` | The outer corner of the first pixel, in true metres. Each height is at the middle of its pixel. |
 | `dx`, `dz`, `cols`, `rows` | How far apart they are, and how many |
 | `quantum` | How many steps to a metre |

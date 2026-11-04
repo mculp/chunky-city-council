@@ -1,5 +1,6 @@
 // Goes round the compound on Pine Forest Rd on a phone-sized page, with the game's own movement and real taps: up the measured drive from the road, in through every door, plays what's in the shed
-// with the crowd listening, swims the pool, watches the screen, and breaks the projector and the tank. Then that a still of the screen is all there is for anyone who's asked for less motion.
+// with the crowd listening, swims the pool, goes down the hill to the cabin and along its decks past the swing to the cinema and the studio, watches the screen, and breaks the projector
+// and the tank. Then that a still of the screen is all there is for anyone who's asked for less motion.
 //
 //   npm i && npm run compound [-- --shots dir]
 import { mkdirSync } from 'node:fs';
@@ -35,7 +36,7 @@ await g(() => {
 // ---------------- what's there
 const built = await g(async () => {
   const measured = (await (await fetch('data/lanes.json')).json()).lanes.filter((l) => l.measured && Math.hypot(l.points[0][0] - 1000, l.points[0][1] - 660) < 400).map((l) => l.id);
-  const G = __game, ids = [75099630, 75190940, 900004, 900005, 900006, 900007, 900009, 900010, 900011, 900012, 900013];
+  const G = __game, ids = [75099630, 75190940, 900004, 900005, 900006, 900007, 900009, 900010, 900011, 900012, 900013, 900019, 900020];
   const found = ids.filter((id) => G.structures.some((s) => s.id === id));
   const lanes = G.map.lanes.filter((l) => measured.includes(l.id)).map((l) => l.id); window.measured = measured;
   const parked = [[1034.1, 640.5], [1000.6, 652.6], [1028.6, 669.1], [1031.9, 669.9]].filter(([x, z]) => { const [wx, wz] = true2(x, z); return G.vehicles.some((v) => Math.hypot(v.x - wx, v.z - wz) < 1); }).length;
@@ -61,16 +62,16 @@ await snap('yard');
 
 // ---------------- no woods where it's been cleared
 const clear = await g(() => {
-  const G = __game, trees = G.wreck.trees, D = G.compound.DECK, L = G.compound.LAWN, spots = { deck: D.at(7.7, 4.6), lawn: L.at(5, 5.9) }, out = {};
+  const G = __game, trees = G.wreck.trees, C = G.compound, D = C.DECK, L = C.LAWN, spots = { deck: D.at(7.7, 4.6), lawn: L.at(5, 5.9), cinema: C.CINEMA.at(3, 3), cabin: true2(1058.6, 598.8), studio: true2(1045.9, 600.4) }, out = {};
   for (const [k, [x, z]] of Object.entries(spots)) { G.place(x, z); G.sim(.1, .1); out[k] = trees(x, z, 6).length; }
   return out;
 });
-check('no trees on the deck or the lawn', clear.deck === 0 && clear.lawn === 0, clear);
+check('no trees on the deck, the lawn, or the cabin\'s decks', Object.values(clear).every((n) => n === 0), clear);
 
 // ---------------- in through every door
 const doors = await g(() => {
   const G = __game, P = G.player.pos, out = {};
-  for (const id of [75099630, 75190940, 900004, 900005, 900006, 900007, 900009, 900011, 900013]) {
+  for (const id of [75099630, 75190940, 900004, 900005, 900006, 900007, 900009, 900011, 900013, 900019, 900020]) {
     const d = doorsOf(id); G.place(...d.out); G.sim(.1, .1); const r = walkTo([d.in], .4, 6); const inside = G.structures.find((s) => s.id === id), hit = G.houseAt(P.x, P.z)?.id;
     out[id] = { off: r.off, hit, ok: hit === id && inside != null };
   }
@@ -123,9 +124,32 @@ check('the water stands a little under the deck, and the pool has a floor well u
 check('he goes in, swims it and climbs out the other side', pool.modes.includes('swim') && pool.mode === 'town' && pool.out === 'out' && pool.off < 1.2, pool);
 await snap('pool');
 
+// ---------------- down the hill to the cabin, onto its deck and in, then along the decks past the swing to the cinema, and on to the studio and in
+await g(() => {
+  const G = __game, P = G.player.pos, [x, z] = true2(1050, 621); G.place(x, z); G.sim(.2, .2);
+  window.stand = () => ({ up: +(P.y - G.groundH(P.x, P.z)).toFixed(2), under: G.surfaceUnder(), deck: G.compound.onDeck(P.x, P.z), hit: G.houseAt(P.x, P.z)?.id ?? null });
+});
+// the rail's along the side of the deck that looks out over the river, so it's up onto the next one along from the cabin, and along to its door
+const downHill = await g(() => ({ ...walkTo([true2(1053, 602), true2(1053, 599), doorsOf(__game.compound.CABIN).out], .5, 40), ...stand() }));
+check('he walks down the hill from the yard to the cabin and steps up onto its deck, which is wood underfoot', downHill.off < .8 && downHill.deck && Math.abs(downHill.up - .3) < .05 && downHill.under === 'wood', downHill);
+const inCabin = await g(() => ({ ...walkTo([doorsOf(__game.compound.CABIN).in], .4, 8), ...stand() }));
+check('  and in through its door', inCabin.hit === 900019, inCabin);
+const toCinema = await g(() => ({ ...walkTo([doorsOf(__game.compound.CABIN).out, true2(1053, 598.6), true2(1049, 596.4)], .5, 30), ...stand() }));
+check('  and out again, and west along the decks to the cinema', toCinema.off < .8 && toCinema.deck && Math.abs(toCinema.up - .3) < .05, toCinema);
+const toStudio = await g(() => ({ ...walkTo([true2(1045.9, 598.6), doorsOf(__game.compound.STUDIO).out], .5, 30), ...stand() }));
+check('  and on south along the deck to the studio\'s door', toStudio.off < .8 && toStudio.deck, toStudio);
+const inStudio = await g(() => ({ ...walkTo([doorsOf(__game.compound.STUDIO).in], .4, 8), ...stand() }));
+check('  and in', inStudio.hit === 900020, inStudio);
+const things = await g(() => {
+  const G = __game, C = G.compound, props = G.wreck.props, swing = props.find((p) => p.kind === 'swing'), inStudio = (k) => props.filter((p) => p.kind === k && G.houseAt(p.cx, p.cz)?.id === C.STUDIO).length;
+  return { swing: !!swing && C.onDeck(swing.cx, swing.cz), canvases: inStudio('canvas'), easel: inStudio('easel'), bench: inStudio('bench') };
+});
+check('the swing is out on the deck', things.swing, things);
+check('the studio has the easel, the bench and six canvases', things.easel === 1 && things.bench === 1 && things.canvases === 6, things);
+
 // ---------------- the screen
 const film = await g(() => {
-  const G = __game, C = G.compound, [x, z] = C.LAWN.at(5, 7); G.place(x, z); G.sim(.2, .2); G.step(.1);
+  const G = __game, C = G.compound, [x, z] = C.CINEMA.at(3.05, 3), [sx, sz] = C.CINEMA.at(3.05, .3); G.place(x, z); G.look(Math.atan2(x - sx, z - sz)); G.sim(.2, .2); G.step(.1);
   const frames = new Set(), flick = new Set();
   for (let i = 0; i < 40; i++) { G.step(.2); frames.add(C.frame().toFixed(3)); flick.add(C.flick().toFixed(3)); }
   return { frames: frames.size, flick: flick.size, on: C.on(), lit: G.horde.lights.includes(C.spot) };
@@ -136,12 +160,13 @@ check('the crowd goes for its light', film.lit, film);
 await snap('screen');
 const crowd = await g(() => {
   const G = __game, C = G.compound, h = G.horde;
-  // one that's wandered near it goes and stands in it
-  const s = h.all.find((a) => a.state !== undefined); s.x = C.spot.x + 22; s.z = C.spot.z + 8; s.state = 0;
+  // a few that have wandered near it from the yard and the bank, each of whom might go and stand in it, or might not
+  const from = [[4, 22], [12, 18], [22, 8], [-4, 22], [17, 14], [8, 21]], near = h.all.filter((a) => a.state !== undefined && !a.home).slice(0, from.length);
+  near.forEach((s, i) => { s.x = C.spot.x + from[i][0]; s.z = C.spot.z + from[i][1]; s.state = 0; s.timer = 0; });
   for (let i = 0; i < 40 * 30; i++) G.sim(1 / 30, 1 / 30);
-  return { d: +Math.hypot(s.x - C.spot.x, s.z - C.spot.z).toFixed(1) };
+  return near.map((s) => ({ d: +Math.hypot(s.x - C.spot.x, s.z - C.spot.z).toFixed(1), state: s.state }));
 });
-check('someone who wanders near ends up watching', crowd.d < 22, crowd);
+check('of a few who wander near, someone ends up watching, for the light and not for him', crowd.some((s) => s.d < 10 && s.state === 0), crowd);
 const off = await g(() => { const G = __game, C = G.compound, was = C.projector.hp; G.wreck.breakProp(C.projector, 0, 1); G.sim(.2, .2); return { on: C.on(), lit: G.horde.lights.includes(C.spot), was }; });
 check('break the projector and that is the end of it', !off.on && !off.lit, off);
 
@@ -154,6 +179,12 @@ const tank = await g(() => {
 });
 check('the tank goes up when it goes', tank.down && tank.played.some((n) => /blast|boom|explo/.test(n)), tank);
 
+// ---------------- and how the cabin and its decks look, standing in a few places, for anyone who's asked for pictures. Nothing's checked after this but the console.
+if (shots) for (const [name, from, to] of [['cabin', [1053, 611], [1058.6, 593.3]], ['swing', [1053.6, 598.8], [1060.7, 598.8]], ['studio-door', [1045.4, 599.2], [1044.9, 606]], ['studio', [1044.9, 604.4], [1044.9, 608]]]) {
+  await g(([from, to]) => { const G = __game, P = G.player.pos, [x, z] = true2(...from), [tx, tz] = true2(...to); G.place(x, z); G.look(Math.atan2(x - tx, z - tz)); G.step(.8, 1 / 30); }, [from, to]);
+  await snap(name);
+}
+
 check('no errors on the console', errors.length === 0, errors);
 await close();
 
@@ -161,7 +192,7 @@ await close();
 {
   const { page, errors, close } = await serveAndOpen({ touch: true, viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
   const still = await page.evaluate(() => {
-    const G = __game, C = G.compound; G.pause(); G.jump('town'); G.S.flags.town = true; G.step(.1); const [x, z] = C.LAWN.at(5, 7); G.place(x, z); G.sim(.2, .2);
+    const G = __game, C = G.compound; G.pause(); G.jump('town'); G.S.flags.town = true; G.step(.1); const [x, z] = C.CINEMA.at(3.05, 3); G.place(x, z); G.sim(.2, .2);
     const frames = new Set(), flick = new Set(); for (let i = 0; i < 30; i++) { G.step(.2); frames.add(C.frame().toFixed(3)); flick.add(C.flick().toFixed(3)); }
     return { frames: frames.size, flick: flick.size };
   });

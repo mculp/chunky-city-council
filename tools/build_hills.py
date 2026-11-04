@@ -74,6 +74,11 @@ DIPS = (
     # the foot of Chestnut St, where it comes up off Griffis Fountain Rd and out of the river bottoms, with a pond beside it
     {"at": (-282.0, 327.9), "core": 60, "edge": 105, "depth": 2.6, "pond": (22, 75)},
 )
+TERRACES = (
+    # the cabin down the hill on Pine Forest Rd, its decks and the studio, 40 m from the river on a bluff too steep for a 30 m pixel to hold
+    # ground flat there and the river at its foot as well. So the lookup flattens a box: level with the ground at the cabin's door, back to the land by `edge`.
+    {"box": (1041.5, 588.0, 1062.5, 608.5), "level": (1058.6, 597.5), "edge": 7},
+)
 
 
 def sstep(a, b, x):
@@ -133,6 +138,17 @@ class Grid:
         a, c = max(0.0, min(1.0, fx - i)), max(0.0, min(1.0, fz - j))
         k, v = j * self.cols + i, self.v
         return (v[k] * (1 - a) + v[k + 1] * a) * (1 - c) + (v[k + self.cols] * (1 - a) + v[k + self.cols + 1] * a) * c
+
+
+def drawn_at(g, x, z):
+    """The height the game draws here: the cubic spline in src/hills.js, where Grid.at is the straight-line one the build works in."""
+    def weights(f):
+        f2, f3 = f * f, f * f * f
+        return ((1 - 3 * f + 3 * f2 - f3) / 6, (4 - 6 * f2 + 3 * f3) / 6, (1 + 3 * f + 3 * f2 - 3 * f3) / 6, f3 / 6)
+    fx, fz = (x - g.x0) / g.dx - .5, (z - g.z0) / g.dz - .5
+    i, j = math.floor(fx), math.floor(fz)
+    wx, wz = weights(fx - i), weights(fz - j)
+    return sum(wz[b] * sum(wx[a] * g.v[max(0, min(g.rows - 1, j + b - 1)) * g.cols + max(0, min(g.cols - 1, i + a - 1))] for a in range(4)) for b in range(4))
 
 
 def read_tiff(body):
@@ -478,6 +494,9 @@ def footprints(structures, ponds):
             pools.append((x, z, max(math.hypot(a - x, b - z) for a, b in p["ring"]), len(pools)))
     out = list(pools)
     for b in structures["structures"] + structures["extras"]:
+        # one on a terrace has its level ground already
+        if any(t["box"][0] <= b["x"] <= t["box"][2] and t["box"][1] <= b["z"] <= t["box"][3] for t in TERRACES):
+            continue
         group = next((pool[3] for pool in pools if math.hypot(b["x"] - pool[0], b["z"] - pool[1]) < BY_THE_POOL), None)
         out.append((b["x"], b["z"], max(math.hypot(x, z) for x, z in b["ring"]), group))
     return out
@@ -535,6 +554,7 @@ def build(body, fetched, sha, roads, lanes, water, structures):
         "source": {"name": ATTRIBUTION, "service": SERVICE, "fetched": fetched, "sha256": sha, "licence": "Public domain"},
         "elevation": {"lowest": round(min(dem.v), 1), "highest": round(max(dem.v), 1), "highestOverFloodplain": round(high, 1)},
         "dips": [{"x": d["at"][0], "z": d["at"][1], "core": d["core"], "edge": d["edge"], "depth": d["depth"]} for d in DIPS],
+        "terraces": [{"x0": t["box"][0], "z0": t["box"][1], "x1": t["box"][2], "z1": t["box"][3], "edge": t["edge"], "at": round(drawn_at(H, *t["level"]), 2)} for t in TERRACES],
         "x0": round(H.x0, 3), "z0": round(H.z0, 3), "dx": round(H.dx, 4), "dz": round(H.dz, 4), "cols": H.cols, "rows": H.rows,
         "quantum": QUANTUM,
         "coarse": coarse,
