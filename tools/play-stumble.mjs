@@ -1,13 +1,13 @@
 // Goes and finds what's only there for anyone who stumbles on it, on a phone-sized page, with the game's own movement and real taps. In from School St to the second trailer from the left, down its length to the computer in the back,
 // up to the screen and away again. Across the green pool. Then in a pickup up the road past where the map used to stop, on foot up the gravel loop and through the gate, between the stones to the
-// slab with words on it, the northernmost, which the owner picked, and READ all along it. Nothing's marked. Last, the owner's clip, which is theirs to add, played from a stand-in for it: once
-// from the stone when it's read, with the night noise and the crowd dipped under it, quieter walking off, with the sound button and the effects slider, and nothing at all without it.
+// slab with words on it, the northernmost, which the owner picked, and READ all along it. Nothing's marked. Last, the owner's clip, played from a stand-in for it, so a check never plays theirs:
+// once from the stone when it's read, with the night noise and the crowd dipped under it, quieter walking off, with the sound button and the effects slider, and nothing at all without it.
 //
 //   npm i && npm run stumble [-- --shots dir]
 import { mkdirSync, readFileSync } from 'node:fs';
 import { serveAndOpen } from './browser.mjs';
 
-// A stand-in for the owner's clip, since it's theirs to add: a soft tone, as a WAV, which Chrome plays whatever it's called
+// A stand-in for the owner's clip, so a check never plays theirs: a soft tone, as a WAV, which Chrome plays whatever it's called
 function standIn(seconds, rate = 22050) {
   const n = Math.floor(seconds * rate), b = Buffer.alloc(44 + n * 2);
   b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
@@ -18,7 +18,8 @@ function standIn(seconds, rate = 22050) {
 
 const at = process.argv.indexOf('--shots'), shots = at > 0 ? process.argv[at + 1] : null;
 if (shots) mkdirSync(shots, { recursive: true });
-const { page, errors, close } = await serveAndOpen({ touch: true, viewport: { width: 390, height: 844 } });
+// with no clip of the owner's, as there wasn't until they added it, so reading the stone plays nothing here
+const { page, errors, close } = await serveAndOpen({ touch: true, viewport: { width: 390, height: 844 }, overrides: { '/audio/music/stone.mp3': null } });
 let failed = 0;
 const check = (name, ok, got) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ' -- got ' + JSON.stringify(got)}`); if (!ok) failed++; };
 const g = (fn, arg) => page.evaluate(fn, arg);
@@ -173,7 +174,7 @@ const read = await g(() => { const says = promptSays(), words = __game.stumble.s
 check(read.theirs ? 'it says the owner\'s words, exactly' : 'it says there are words from a song on it, which are the owner\'s to fill in', read.read && read.right, read);
 // with no clip of the owner's there, which is how it is until they add one, it's asked for once and nothing plays
 const silent = await g(async () => { await new Promise((r) => setTimeout(r, 500)); const G = __game, s = G.sound.state(); return { unlocked: s.unlocked, clip: s.clips[G.stumble.STONE_CLIP] ?? null, clipping: s.clipping }; });
-check('with no clip of the owner\'s there yet, reading it plays nothing', silent.unlocked && silent.clip?.there === false && !silent.clip.playing && silent.clipping === 0, silent);
+check('with no clip of the owner\'s there, reading it plays nothing', silent.unlocked && silent.clip?.there === false && !silent.clip.playing && silent.clipping === 0, silent);
 await snap('the-stone');
 const typed = await g(() => { const G = __game, S = G.stumble; S.sheet.words = 'A LINE FROM THE SHEET'; G.sim(.1, 1 / 30); const says = promptSays(); S.sheet.words = ''; return says; });
 check('and whatever goes on the sheet is what it says', typed === 'A LINE FROM THE SHEET', typed);
