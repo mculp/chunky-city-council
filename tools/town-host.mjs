@@ -3,8 +3,10 @@
 // how many are in town (CHUNKY-169), one going, the hero's link, a page on another site turned away, and someone coming back after the
 // Worker's been stopped and started again, to where they were, with what they had and with what the cast remember of them, which is
 // kept on its own, and then a thousand more coming and going, after which whoever'd been away longest comes back as someone new, with
-// what the cast remembered of them gone from where it was kept. What the town does is tested in server/town.test.js and
-// server/host.test.js, and npm run net plays it in the game.
+// what the cast remembered of them gone from where it was kept. And wearing your own rektguy (CHUNKY-170), against a stand-in for the
+// chain: a phone pairing with a wallet and coming in wearing its rektguy, seen by its handle and its picture had by it, whoever wears
+// the owner's own being the hero, that kept after the stop and the start, and gone with them once the town's let them go. What the
+// town does is tested in server/town.test.js, server/host.test.js and server/wallet.test.js, and npm run net plays it in the game.
 //
 //   npm run town:host
 import assert from 'node:assert/strict';
@@ -13,8 +15,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import WebSocket from 'ws';
 import { encodePose, decodeMessage, say } from '../src/net.js';
+import { chainStandIn } from './chain-stand-in.mjs';
 import { wranglerDev } from './wrangler-dev.mjs';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
@@ -22,9 +26,18 @@ const HERO = 'a-secret-only-the-owner-has-1386', BUILD = { at: 1, world: 'the-sa
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, what, ms = 10000) => { const end = Date.now() + ms; while (!fn()) { if (Date.now() > end) throw new Error(`timed out waiting for ${what}`); await sleep(20); } };
 
+// Ethereum as far as the wallet needs it, on a port of its own: two wallets made up for this, one with rektguy 7 and one with the
+// owner's own, and a picture of each
+const wallet = privateKeyToAccount(generatePrivateKey()), owners = privateKeyToAccount(generatePrivateKey());
+const PNG = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 3, 8, 6);
+const chain = await chainStandIn({ owners: { 7: wallet.address, 1386: owners.address }, base: 'ipfs://QmMeta/', ipfs: {
+  'QmMeta/7': JSON.stringify({ image: 'ipfs://QmArt/7.png' }), 'QmArt/7.png': PNG, 'QmMeta/1386': JSON.stringify({ image: 'ipfs://QmArt/1386.png' }), 'QmArt/1386.png': PNG,
+} }).listen();
+
 const kept = mkdtempSync(join(tmpdir(), 'chunky-town-'));
 // The Worker as wrangler dev runs it, with what it keeps in `kept`, so it's still there after a stop and a start
-const dev = wranglerDev({ cwd: ROOT, args: ['--config', 'server/wrangler.jsonc', '--persist-to', kept, '--var', `CHUNKY_HERO:${createHash('sha256').update(HERO).digest('hex')}`] });
+const dev = wranglerDev({ cwd: ROOT, args: ['--config', 'server/wrangler.jsonc', '--persist-to', kept, '--var', `CHUNKY_HERO:${createHash('sha256').update(HERO).digest('hex')}`,
+  '--var', `ETH_RPC_URL:${chain.rpc}`, '--var', `IPFS_GATEWAY:${chain.gateway}`] });
 const start = async () => `ws://127.0.0.1:${await dev.start()}/town`, stop = () => dev.stop();
 
 // A phone, on a page at chunky.ms unless it's said where: it says hello as soon as it's open
@@ -48,6 +61,15 @@ function phone(url, { key, name = 'Junebug', hero, origin = 'https://chunky.ms' 
 const sees = (p, who, x, z) => p.snaps.at(-1)?.some((q) => q.id === who.id && Math.abs(q.x - x) < .01 && Math.abs(q.z - z) < .01);
 // how many are in town, as the title card on a page at online.chunky.ms asks before anyone's said who they are
 const hereOf = (url, origin = 'https://online.chunky.ms') => fetch(`${url.replace(/^ws/, 'http')}/here`, { headers: { Origin: origin } });
+// the wallet's side of the town, as the phone and the wallet's page at online.chunky.ms ask it
+const http = (url) => url.replace(/^ws/, 'http').replace(/\/town$/, '');
+const askWallet = async (url, what, body) => (await fetch(`${http(url)}/wallet/${what}`, { method: 'POST', headers: { 'Content-Type': 'text/plain', Origin: 'https://online.chunky.ms' }, body: JSON.stringify(body) })).json();
+async function signIn(url, key, who) {
+  const { code } = await askWallet(url, 'pair', { key });
+  const { words } = await askWallet(url, 'words', { code, address: who.address });
+  assert.deepEqual(await askWallet(url, 'signed', { code, signature: await who.signMessage({ message: words }) }), { done: true });
+  return askWallet(url, 'waiting', { code, key });
+}
 
 try {
   let url = await start();
@@ -85,8 +107,25 @@ try {
   assert.equal((await hereOf(url, 'https://elsewhere.example')).status, 403);
   console.log('a page on another site is turned away, and isn\'t told how many are in town');
 
-  for (const p of [b, h, n]) p.ws.close();
-  await until(() => [b, h, n].every((p) => p.closed !== null), 'everyone to have gone');
+  // a phone pairs with a wallet, and comes in wearing its rektguy
+  const told = await signIn(url, 'w'.repeat(32), wallet);
+  assert.equal(told.wearing, told.rekt[0]);
+  const w = phone(url, { key: 'w'.repeat(32), name: 'Pearl' });
+  await until(() => w.id, 'the one wearing their own to be let in');
+  assert.equal(w.welcome().rekt, told.wearing);
+  await until(() => b.words.some((m) => m.t === 'who' && m.players.some((q) => q.id === w.id && q.rekt === told.wearing)), 'the others to see what they\'re wearing');
+  const picture = await fetch(`${http(url)}/rektguy/${told.wearing}`);
+  assert.equal(picture.headers.get('content-type'), 'image/png');
+  assert.deepEqual([...new Uint8Array(await picture.arrayBuffer())], [...PNG]);
+  await signIn(url, 'o'.repeat(32), owners);
+  const o = phone(url, { key: 'o'.repeat(32), name: 'Moss' });
+  await until(() => o.id, 'the one wearing the owner\'s own to be let in');
+  assert.deepEqual([o.welcome().hero, o.welcome().rekt], [true, undefined]);
+  assert.equal((await fetch(`${http(url)}/wallet/pair`, { method: 'POST', headers: { Origin: 'https://elsewhere.example' }, body: '{}' })).status, 403);
+  console.log('a phone pairs with a wallet and comes in wearing its rektguy, which everyone sees by its handle and its picture, and whoever wears the owner\'s own is the hero');
+
+  for (const p of [b, h, n, w, o]) p.ws.close();
+  await until(() => [b, h, n, w, o].every((p) => p.closed !== null), 'everyone to have gone');
   await sleep(500);
   await stop(); url = await start();
   const back = phone(url, { key: 'a'.repeat(32) });
@@ -95,7 +134,8 @@ try {
   assert.deepEqual([had?.x, had?.z, had?.beans, had?.items?.bottle], [5, 6, 4, 1]);
   assert.deepEqual(back.welcome().minds, { coop: { notes: [], said: ['Hey.'], visits: 1 } });
   assert.deepEqual(n.welcome().minds, {});
-  console.log('stopped and started again, someone coming back finds where they were, what they had, and Coop remembering them');
+  assert.deepEqual(await askWallet(url, 'mine', { key: 'w'.repeat(32) }), { rekt: told.rekt, wearing: told.wearing });
+  console.log('stopped and started again, someone coming back finds where they were, what they had, Coop remembering them, and what they wear of their own');
 
   // a thousand more come and go, twenty at a time, so that they're the thousand the town keeps
   back.ws.close();
@@ -111,10 +151,12 @@ try {
   await until(() => forgotten.id, 'the one away longest to come back');
   assert.equal(forgotten.welcome().saved, null);
   assert.deepEqual(forgotten.welcome().minds, {});
-  console.log('a thousand more come and go, and whoever\'d been away longest comes back as someone new, with Coop not remembering them');
+  assert.deepEqual(await askWallet(url, 'mine', { key: 'w'.repeat(32) }), { rekt: [], wearing: null });
+  console.log('a thousand more come and go, and whoever\'d been away longest comes back as someone new, with Coop not remembering them, and their wallet forgotten');
   console.log('town host: all good');
 } finally {
   for (const p of phones) p.ws.terminate();
   await stop();
+  await chain.close();
   rmSync(kept, { recursive: true, force: true });
 }

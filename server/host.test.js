@@ -87,6 +87,26 @@ test('where what the cast remember of someone can\'t be read, they\'re let go to
   assert.equal(a.killed, true); assert.equal(host.here, 0);
 });
 
+test('what someone\'s wearing of their own is asked for by the hash of their key, and whoever\'s wearing rektguy 1386 is the hero', async () => {
+  const hashOf = (key) => createHash('sha256').update(key).digest('hex'), asked = [];
+  const worn = { [hashOf('a'.repeat(32))]: { id: 7, handle: 'w'.repeat(22) }, [hashOf('o'.repeat(32))]: { id: 1386, handle: 'o'.repeat(22) } };
+  const { phone, hello } = setup({ rektOf: async (k) => { asked.push(k); return worn[k] ?? null; } });
+  const a = phone(), o = phone(), n = phone();
+  await hello(a, { key: 'a'.repeat(32) }); await hello(o, { key: 'o'.repeat(32), name: 'Dee' }); await hello(n, { key: 'n'.repeat(32), name: 'Lou' });
+  const welcome = (s) => s.words().find((m) => m.t === 'welcome');
+  assert.deepEqual([welcome(a).rekt, welcome(a).hero], ['w'.repeat(22), false]);
+  assert.deepEqual([welcome(o).rekt, welcome(o).hero], [undefined, true], 'the owner\'s own is the hero, in the hero\'s own look');
+  assert.deepEqual([welcome(n).rekt, welcome(n).hero], [undefined, false]);
+  assert.deepEqual(asked, ['a', 'o', 'n'].map((c) => hashOf(c.repeat(32))));
+});
+
+test('where what someone\'s wearing can\'t be read, they come in in a look of the town\'s', async () => {
+  const { host, phone, hello } = setup({ rektOf: async () => { throw new Error('nothing there'); } });
+  const a = phone(); await hello(a, { key: 'a'.repeat(32) });
+  assert.equal(host.here, 1);
+  assert.equal('rekt' in a.words().find((m) => m.t === 'welcome'), false);
+});
+
 test('one phone that\'s behind with what it\'s sent is skipped for a beat, and the rest still get theirs', async () => {
   const { host, phone, hello } = setup();
   const a = phone(), b = phone();

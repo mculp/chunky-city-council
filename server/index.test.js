@@ -5,7 +5,10 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { startServer } from './index.js';
+import { createChain } from './chain.js';
+import { chainStandIn } from '../tools/chain-stand-in.mjs';
 import { encodePose, decodeMessage, say, NET_MAX } from '../src/net.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -258,6 +261,61 @@ test('it says how many are in town right now at /here, for the title card, count
     assert.deepEqual(await (await here(s.port)).json(), { here: 1 }, 'and one who leaves isn\'t counted');
     a.ws.close(); quiet.ws.close();
   } finally { await s.close(); }
+});
+
+// ---------------- wearing your own rektguy (CHUNKY-170), with a stand-in for the chain and a wallet made up for the test
+const PAGE = 'http://localhost:8000', PNG = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4);
+function standInChain(owners) {
+  const s = chainStandIn({ owners, base: 'ipfs://QmMeta/', ipfs: Object.fromEntries(Object.keys(owners).flatMap((id) => [[`QmMeta/${id}`, JSON.stringify({ image: `ipfs://QmArt/${id}.png` })], [`QmArt/${id}.png`, PNG]])) });
+  return createChain({ rpc: ['http://chain.stand-in/'], gateway: 'http://chain.stand-in/ipfs/', fetch: s.fetch });
+}
+const askWallet = (port, what, body, origin = PAGE) => fetch(`http://localhost:${port}/wallet/${what}`, { method: 'POST', headers: { 'Content-Type': 'text/plain', Origin: origin }, body: JSON.stringify(body) });
+async function signIn(port, key, wallet) {
+  const { code } = await (await askWallet(port, 'pair', { key })).json();
+  const { words } = await (await askWallet(port, 'words', { code, address: wallet.address })).json();
+  assert.deepEqual(await (await askWallet(port, 'signed', { code, signature: await wallet.signMessage({ message: words }) })).json(), { done: true });
+  return (await askWallet(port, 'waiting', { code, key })).json();
+}
+
+test('a phone on this machine pairs with a wallet, comes in wearing its rektguy, and everyone sees it by its handle', async () => {
+  const me = privateKeyToAccount(generatePrivateKey()), owner = privateKeyToAccount(generatePrivateKey());
+  const s = await startServer({ port: 0, quiet: true, chain: standInChain({ 7: me.address, 1386: owner.address }) });
+  try {
+    const told = await signIn(s.port, 'me-on-my-phone-0170', me);
+    assert.equal(told.wearing, told.rekt[0]);
+    const a = client(s.port, { key: 'me-on-my-phone-0170' }), b = client(s.port, { name: 'Dee' }); await Promise.all([a.in(), b.in()]);
+    assert.equal(a.words.find((w) => w.t === 'welcome').rekt, told.wearing);
+    await until(() => b.words.some((w) => w.t === 'who' && w.players.some((p) => p.id === a.id && p.rekt === told.wearing)));
+    const picture = await fetch(`http://localhost:${s.port}/rektguy/${told.wearing}`);
+    assert.equal(picture.headers.get('content-type'), 'image/png');
+    assert.deepEqual([...new Uint8Array(await picture.arrayBuffer())], [...PNG]);
+    // and whoever's wearing the owner's own is the hero
+    await signIn(s.port, 'the-owners-phone-1386', owner);
+    const o = client(s.port, { key: 'the-owners-phone-1386', name: 'Lou' }); await o.in();
+    assert.deepEqual([o.words.find((w) => w.t === 'welcome').hero, o.words.find((w) => w.t === 'welcome').rekt], [true, undefined]);
+    assert.equal((await askWallet(s.port, 'pair', { key: 'me-on-my-phone-0170' }, 'https://elsewhere.example')).status, 403, 'and only pages on this machine are answered');
+    for (const c of [a, b, o]) c.ws.close();
+  } finally { await s.close(); }
+});
+
+test('what\'s kept of a wallet is kept with the town, and goes with whoever the town lets go of', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'chunky-town-')), save = join(dir, 'town.json'), me = privateKeyToAccount(generatePrivateKey());
+  try {
+    const chain = standInChain({ 7: me.address });
+    const s = await startServer({ port: 0, quiet: true, save, saveEvery: 50, keeps: 1, chain });
+    let wearing;
+    try { ({ wearing } = await signIn(s.port, 'me-on-my-phone-0171', me)); await sleep(200); } finally { await s.close(); }
+    const again = await startServer({ port: 0, quiet: true, save, saveEvery: 50, keeps: 1, chain });
+    try {
+      assert.deepEqual(await (await askWallet(again.port, 'mine', { key: 'me-on-my-phone-0171' })).json(), { rekt: [wearing], wearing });
+      // they come and go, and then someone else does, which is one more than it keeps
+      const a = client(again.port, { key: 'me-on-my-phone-0171' }); await a.in(); a.ws.close(); await sleep(100);
+      const b = client(again.port); await b.in(); b.ws.close();
+      await sleep(200);
+      assert.deepEqual(await (await askWallet(again.port, 'mine', { key: 'me-on-my-phone-0171' })).json(), { rekt: [], wearing: null });
+    } finally { await again.close(); }
+    assert.equal(readFileSync(save, 'utf8').toLowerCase().includes(me.address.toLowerCase().slice(2)), false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('closing it closes everyone and lets the port go', async () => {

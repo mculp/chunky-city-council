@@ -16,6 +16,8 @@ import { checkName } from '../src/names.js';
 
 const EDGE = 40000;   // metres from Stuckey's Bridge, well past anything on the map
 const KINDS_MOST = 32, EACH_MOST = 999, KEY = /^[0-9a-f]{64}$/, ITEM = /^[a-z][a-z0-9_]{0,23}$/i;
+// a rektguy someone's wearing of their own, by the handle that's all anyone's told of it (server/wallet.js)
+const HANDLE = /^[\w-]{16,64}$/;
 // About 1.1 KB each at most, as Cloudflare keeps them, and a few bytes for each place a vehicle's left, against its 2 MB for a
 // value. The game parks at most one vehicle by each building, which is far fewer than that.
 const KEEPS = 1000, VEHICLES_MOST = 4096;
@@ -84,7 +86,7 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
     }
   }
 
-  const roster = () => ({ t: 'who', players: [...here.values()].map((p) => ({ id: p.id, name: p.name, look: p.look, hero: p.hero })) });
+  const roster = () => ({ t: 'who', players: [...here.values()].map((p) => ({ id: p.id, name: p.name, look: p.look, hero: p.hero, ...(p.rekt && { rekt: p.rekt }) })) });
   const carList = () => [...cars].sort((a, b) => a[0] - b[0]).map(([v, c]) => ({ v, ...c }));
   const leaveCar = (p, at) => {
     riders.delete(p.ride);
@@ -106,8 +108,9 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
 
   return {
     get dirty() { return dirty; },
-    // `minds` is what the cast remember of them, from wherever that's kept, unless the town still has it from a moment ago
-    join({ keyHash, name, look, hero, build: theirs, minds: kept } = {}) {
+    // `minds` is what the cast remember of them, from wherever that's kept, unless the town still has it from a moment ago. `rekt`
+    // is the handle of a rektguy of their own they're wearing, which the hero never is: he's in his own.
+    join({ keyHash, name, look, hero, rekt, build: theirs, minds: kept } = {}) {
       if (!KEY.test(keyHash ?? '')) return { no: no('key') };
       const named = checkName(name);
       if (!named.ok) return { no: no('name', named.why) };
@@ -127,7 +130,7 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
 
       while (here.has(next)) next = next % 65535 + 1;
       const id = next; next = next % 65535 + 1;
-      const p = { id, keyHash, name: named.name, look: Number.isInteger(look) && look >= 0 && look < 256 ? look : 0, hero: hero === true, pose: new Uint8Array(POSE_BYTES), placed: false, heard: clock(), ride: 0, last: null };
+      const p = { id, keyHash, name: named.name, look: Number.isInteger(look) && look >= 0 && look < 256 ? look : 0, hero: hero === true, rekt: hero !== true && typeof rekt === 'string' && HANDLE.test(rekt) ? rekt : null, pose: new Uint8Array(POSE_BYTES), placed: false, heard: clock(), ride: 0, last: null };
       here.set(id, p);
       const before = saved.get(keyHash);
       // back before they were forgotten where what the cast remember of them is kept, so it stays
@@ -136,7 +139,7 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
       makeRoom();
       const back = before && 'x' in before ? { x: before.x, y: before.y, z: before.z, yaw: before.yaw, beans: before.beans, items: before.items, gas: before.gas } : null;
       if (!minds.has(keyHash)) minds.set(keyHash, tidyMinds(kept));
-      out.push({ to: id, msg: { t: 'welcome', id, name: p.name, look: p.look, hero: p.hero, saved: back, minds: minds.get(keyHash), cars: carList() } });
+      out.push({ to: id, msg: { t: 'welcome', id, name: p.name, look: p.look, hero: p.hero, ...(p.rekt && { rekt: p.rekt }), saved: back, minds: minds.get(keyHash), cars: carList() } });
       out.push({ to: 'all', msg: roster() });
       return { id, out };
     },

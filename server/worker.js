@@ -5,16 +5,22 @@
 //   npx wrangler@4.154.0 deploy --config server/wrangler.jsonc
 //
 // The owner's OpenRouter key is the Worker's secret OPENROUTER_KEY, and only the owner puts it in. CAP_USD is the month's cap.
-// CHUNKY_HERO is the sha256, in hex, of the secret in the hero's link, and it's a secret too.
+// CHUNKY_HERO is the sha256, in hex, of the secret in the hero's link, and it's a secret too. Wearing your own rektguy (CHUNKY-170)
+// asks Ethereum's public nodes, unless ETH_RPC_URL names the owner's own, which is a secret if it has a key in it, and IPFS_GATEWAY
+// is where the pictures come through, ipfs.io's unless it's said.
 import { DurableObject } from 'cloudflare:workers';
 import { createTalk, OPENROUTER_URL } from './talk.js';
 import { createTown } from './town.js';
 import { createHost, MOST } from './host.js';
+import { createChain, GATEWAY, RPCS } from './chain.js';
+import { createWalletRoutes, walletKey } from './wallet.js';
 import { NET_RATE } from '../src/net.js';
 
 const KEEP_EVERY = 5000;   // ms between the town being kept while anyone's in it
-// the pages the town and the words answer, which are the game's own
-const pagesOf = (env) => (env.ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean);
+// the pages the town and the words answer, which are the game's own; and the nodes the chain's asked of
+const listOf = (s) => (s ?? '').split(',').map((o) => o.trim()).filter(Boolean), pagesOf = (env) => listOf(env.ORIGINS);
+// made the first time anyone comes, in the eastern US, which is nearest Mississippi
+const townOf = (env) => env.TOWN.get(env.TOWN.idFromName('chunky'), { locationHint: 'enam' });
 
 // What the month's lines have cost, by month, in one place for every copy of the Worker. While it reads and writes what it keeps,
 // nothing else runs in it, so two lines finishing at once are both counted.
@@ -29,18 +35,25 @@ export class Bill extends DurableObject {
 
 // The town everyone shares: server/host.js on Cloudflare's sockets, beating twenty times a second while anyone's here. It's kept
 // every few seconds and once everyone's gone, and then it rests until someone comes, when what was kept is taken back out first.
+// The wallet's side of it is here too, beside the town in its storage, where a pairing waits while the player's off in their wallet
+// app, and asking the chain gets the half a minute a Durable Object has for each ask where the Worker would have a hundredth of it.
 export class Town extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.town = createTown();
+    const chain = createChain({ rpc: listOf(env.ETH_RPC_URL).length ? listOf(env.ETH_RPC_URL) : RPCS, gateway: env.IPFS_GATEWAY || GATEWAY });
+    this.wallet = createWalletRoutes({ store: ctx.storage, chain, pages: pagesOf(env) });
     // what the cast remember of each of them is kept on its own, beside the town, since everyone's together would be too much for one
-    this.host = createHost({ town: this.town, heroHash: env.CHUNKY_HERO ?? '', mindsOf: (k) => ctx.storage.get(`mind:${k}`) });
+    this.host = createHost({ town: this.town, heroHash: env.CHUNKY_HERO ?? '', mindsOf: (k) => ctx.storage.get(`mind:${k}`), rektOf: (k) => this.wallet.wearing(k) });
     this.phones = new Map();   // Cloudflare's socket → what the host knows it as
     this.beating = null; this.keptAt = 0; this.unkept = false;
     ctx.blockConcurrencyWhile(async () => { const kept = await ctx.storage.get('town'); if (kept) this.town.load(kept); });
   }
 
-  fetch() {
+  // the wallet's side of the town and the pictures, and otherwise a phone coming in over a WebSocket
+  async fetch(request) {
+    const answer = await this.wallet(request);
+    if (answer) return answer;
     const [phone, here] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(here);
     // one the town lets go of is forgotten here as it's closed, whether or not it ever says it's closed
@@ -94,10 +107,12 @@ export class Town extends DurableObject {
   // without holding up what's going to the phones until it's written
   keep() {
     this.keptAt = Date.now();
-    const failed = (e) => console.error(`Couldn't keep the town: ${e.message}`), minds = this.town.keepMinds(), gone = this.town.forgotten();
-    // whoever the town's let go of is forgotten here too, a hundred and twenty-eight to a delete, which is as many as one takes
+    const failed = (e) => console.error(`Couldn't keep the town: ${e.message}`), minds = this.town.keepMinds();
+    // whoever the town's let go of is forgotten here too, with any wallet of theirs, a hundred and twenty-eight keys to a delete,
+    // which is as many as one takes
+    const gone = this.town.forgotten().flatMap((k) => [`mind:${k}`, walletKey(k)]);
     for (let i = 0; i < gone.length; i += 128) {
-      try { this.ctx.storage.delete(gone.slice(i, i + 128).map((k) => `mind:${k}`), { allowUnconfirmed: true }).catch(failed); }
+      try { this.ctx.storage.delete(gone.slice(i, i + 128), { allowUnconfirmed: true }).catch(failed); }
       catch (e) { failed(e); }
     }
     // whoever's memories changed, as many to a put, and any that don't go go next time
@@ -118,11 +133,19 @@ let talk = null;
 export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
+    // The wallet's side of the town, whose pages it answers itself, and the pictures. What asks the chain, the words and the
+    // signature, can only be asked so often from one address.
+    if (pathname.startsWith('/wallet/') || pathname.startsWith('/rektguy/')) {
+      if (/^\/wallet\/(pair|words|signed)$/.test(pathname) && !(await env.PLACE.limit({ key: request.headers.get('cf-connecting-ip') ?? '' })).success) {
+        const origin = request.headers.get('origin');
+        return new Response('Slow down a little.', { status: 429, headers: origin && pagesOf(env).includes(origin) ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {} });
+      }
+      return townOf(env).fetch(request);
+    }
     if (pathname === '/town' || pathname === '/town/here') {
       const origin = request.headers.get('origin');
       if (origin && !pagesOf(env).includes(origin)) return new Response('Chunky only talks to Chunky.', { status: 403 });
-      // made the first time anyone comes, in the eastern US, which is nearest Mississippi
-      const town = env.TOWN.get(env.TOWN.idFromName('chunky'), { locationHint: 'enam' });
+      const town = townOf(env);
       // how many are in town right now, which the title card asks before anyone's said who they are
       if (pathname === '/town/here') return Response.json({ here: await town.here() }, { headers: { 'Cache-Control': 'no-store', ...(origin && { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' }) } });
       if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('This is the town, over a WebSocket.', { status: 426 });

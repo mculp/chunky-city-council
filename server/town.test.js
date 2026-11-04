@@ -296,6 +296,26 @@ test('nobody else is the hero', () => {
   assert.equal(to(r.out, r.id)[0].hero, false);
 });
 
+// ---------------- wearing your own rektguy (CHUNKY-170)
+const HANDLE = 'r'.repeat(22);
+test('someone wearing their own rektguy is welcomed in it, and everyone sees it by its handle alone', () => {
+  const t = createTown(), a = t.join(hello({ rekt: HANDLE }));
+  assert.equal(to(a.out, a.id)[0].rekt, HANDLE);
+  const b = t.join(hello());
+  assert.deepEqual(to(b.out, 'all')[0].players.map((p) => p.rekt), [HANDLE, undefined]);
+  assert.equal('rekt' in to(b.out, b.id)[0], false, 'and nothing\'s said of it for someone in a look of the town\'s');
+});
+
+test('a handle that isn\'t one is no rektguy, and the hero\'s in the hero\'s own look', () => {
+  for (const rekt of ['short', 42, { a: 1 }, 'x'.repeat(65), 'not a handle at all!!']) {
+    const t = createTown(), a = t.join(hello({ rekt }));
+    assert.equal('rekt' in to(a.out, a.id)[0], false, JSON.stringify(rekt));
+  }
+  const t = createTown(), h = t.join(hello({ hero: true, rekt: HANDLE }));
+  assert.equal('rekt' in to(h.out, h.id)[0], false);
+  assert.equal('rekt' in to(h.out, 'all')[0].players[0], false);
+});
+
 // ---------------- vehicles
 test('a vehicle someone drives is theirs until they get out, and stays where they leave it, for everyone', () => {
   const t = createTown(), a = inTown(t);

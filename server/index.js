@@ -5,6 +5,7 @@
 //
 // CHUNKY_HERO is the sha256, in hex, of the secret in the hero's link, so that only a phone with that link is him. CHUNKY_SAVE is
 // where the town's kept between runs, data/raw/town.json if it isn't said. --talk answers the characters' words at /talk as well.
+// Wearing your own rektguy asks Ethereum's public nodes, or ETH_RPC_URL's, and IPFS_GATEWAY's for the pictures (server/chain.js).
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
@@ -14,6 +15,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createTown } from './town.js';
 import { createHost, MOST } from './host.js';
 import { createTalk } from './talk.js';
+import { createMemoryStore, createWalletRoutes, walletKey } from './wallet.js';
+import { createChain } from './chain.js';
 import { NET_PORT, NET_RATE } from '../src/net.js';
 
 // The characters' words, for trying the game's side of them without spending anything: the talk server's own rules, from server/talk.js,
@@ -32,45 +35,52 @@ function cannedTalk({ line = LINE, quiet = null } = {}) {
   });
 }
 
-export async function startServer({ port = NET_PORT, rate = NET_RATE, max, keeps, silence = 5000, helloWithin = 5000, save = null, saveEvery = 5000, heroHash = '', talk = false, quiet = false } = {}) {
+// `chain` is what's asked whose signature it is and what a wallet holds (server/chain.js), and with none, a wallet can't be checked
+export async function startServer({ port = NET_PORT, rate = NET_RATE, max, keeps, silence = 5000, helloWithin = 5000, save = null, saveEvery = 5000, heroHash = '', talk = false, chain = null, quiet = false } = {}) {
   // what the cast remember of everyone, by the hash of their key: in the same file as the town here, beside what it keeps itself,
   // as the town for everyone keeps them each on their own
-  let minds = {};
-  const town = createTown({ max, keeps }), host = createHost({ town, heroHash, silence, helloWithin, mindsOf: async (k) => (Object.hasOwn(minds, k) ? minds[k] : null) });
+  let minds = {}, kept = null;
+  const town = createTown({ max, keeps });
   const words = talk ? cannedTalk(talk === true ? {} : talk) : null;
 
   // A town that's been kept is taken back out. One that can't be read is left as it is for someone to look at, not written over.
   if (save) {
     mkdirSync(dirname(save), { recursive: true });
     if (existsSync(save)) {
-      try { const kept = JSON.parse(readFileSync(save, 'utf8')); town.load(kept); if (kept?.minds && typeof kept.minds === 'object') minds = kept.minds; }
+      try { kept = JSON.parse(readFileSync(save, 'utf8')); town.load(kept); if (kept?.minds && typeof kept.minds === 'object') minds = kept.minds; }
       catch (e) { throw new Error(`The town kept in ${save} can't be read, so it's been left as it is: ${e.message}`); }
     }
   }
+  // What's kept of each wallet, beside the town, as the town for everyone keeps it in its own storage. A pairing's only for now.
+  const forNow = ([k]) => k.startsWith('pair:'), wallets = createMemoryStore((Array.isArray(kept?.wallets) ? kept.wallets : []).filter((e) => Array.isArray(e) && typeof e[0] === 'string' && !forNow(e)));
+  const wallet = createWalletRoutes({ store: wallets, chain, pages: onThisMachine });
+  const host = createHost({ town, heroHash, silence, helloWithin, mindsOf: async (k) => (Object.hasOwn(minds, k) ? minds[k] : null), rektOf: (k) => wallet.wearing(k) });
   // written beside it and moved over it, so it's never half kept
-  let unsaved = false;
+  let unsaved = false, walletsKept = JSON.stringify(wallets.entries().filter((e) => !forNow(e)));
   function store() {
     if (!save) return;
-    const changed = town.keepMinds();
+    const changed = town.keepMinds(), gone = town.forgotten();
     for (const [k, m] of changed) minds[k] = m;
-    for (const k of town.forgotten()) delete minds[k];
-    if (!(town.dirty || unsaved || changed.length)) return;
-    try { writeFileSync(`${save}.tmp`, JSON.stringify({ ...town.dump(), minds })); renameSync(`${save}.tmp`, save); unsaved = false; }
+    for (const k of gone) delete minds[k];
+    wallets.delete(gone.map(walletKey));
+    const walletsNow = wallets.entries().filter((e) => !forNow(e)), walletsSaid = JSON.stringify(walletsNow);
+    if (!(town.dirty || unsaved || changed.length || walletsSaid !== walletsKept)) return;
+    try { writeFileSync(`${save}.tmp`, JSON.stringify({ ...town.dump(), minds, wallets: walletsNow })); renameSync(`${save}.tmp`, save); unsaved = false; walletsKept = walletsSaid; }
     catch (e) { unsaved = true; console.error(`Couldn't keep the town in ${save}: ${e.message}`); }
   }
 
   // The town's a WebSocket. Anything else asked of it is how many are in town, for the title card, which any page can ask as any
-  // page can join, or /talk when it's answering that, or nothing.
+  // page can join; the wallet's side of it, and the pictures, for pages on this machine; /talk when it's answering that; or nothing.
+  const asked = (req) => new Request(`http://localhost${req.url}`, { method: req.method, headers: req.headers, body: req.method === 'POST' ? Readable.toWeb(req) : undefined, duplex: 'half' });
+  const answer = async (res, a) => { res.writeHead(a.status, Object.fromEntries(a.headers)); res.end(Buffer.from(await a.arrayBuffer())); };
   const http = createServer(async (req, res) => {
+    const { pathname } = new URL(req.url, 'http://here');
     try {
-      const { pathname } = new URL(req.url, 'http://here');
       if (pathname === '/here') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify({ here: host.here })); return; }
+      if (pathname.startsWith('/wallet/') || pathname.startsWith('/rektguy/')) { await answer(res, await wallet(asked(req))); return; }
       if (!words || pathname !== '/talk') { res.writeHead(426, { 'Content-Type': 'text/plain' }); res.end('This is the town, over a WebSocket.'); return; }
-      const asked = new Request(`http://localhost${req.url}`, { method: req.method, headers: req.headers, body: req.method === 'POST' ? Readable.toWeb(req) : undefined, duplex: 'half' });
-      const answer = await words(asked);
-      res.writeHead(answer.status, Object.fromEntries(answer.headers));
-      res.end(Buffer.from(await answer.arrayBuffer()));
-    } catch (e) { if (!res.headersSent) res.writeHead(500); res.end(); console.error(`/talk went wrong: ${e.message}`); }
+      await answer(res, await words(asked(req)));
+    } catch (e) { if (!res.headersSent) res.writeHead(500); res.end(); console.error(`${pathname} went wrong: ${e.message}`); }
   });
   const wss = new WebSocketServer({ server: http, maxPayload: MOST });
   await new Promise((ok, no) => { http.once('error', no); http.listen(port, ok); });
@@ -117,6 +127,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     port: +args.find((a) => /^\d+$/.test(a)) || NET_PORT,
     talk: args.includes('--talk'),
     heroHash: process.env.CHUNKY_HERO ?? '',
+    chain: createChain({ rpc: process.env.ETH_RPC_URL ? process.env.ETH_RPC_URL.split(',').map((u) => u.trim()).filter(Boolean) : undefined, gateway: process.env.IPFS_GATEWAY || undefined }),
     save: process.env.CHUNKY_SAVE || join(fileURLToPath(new URL('..', import.meta.url)), 'data', 'raw', 'town.json'),
   });
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => s.close().then(() => process.exit(0)));
