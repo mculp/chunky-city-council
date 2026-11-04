@@ -265,7 +265,7 @@ import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVe
 import { vehicleGeometries, doorGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
 import { makeLine, createTrains } from './src/trains.js';
 import { trainGeometries, TRAIN_LAMPS, gateArm } from './src/trainmodels.js';
-import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, feedBin, stockTank, frog, frogThroat, frogLids } from './src/things.js';
+import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, dumpTrailer, discHarrow, logPile, dumpster, skid, feedBin, stockTank, frog, frogThroat, frogLids } from './src/things.js';
 import { CEMETERY, layGraves, graveSolid, onSlab, slabHead, fromCemetery } from './src/graves.js';
 import { FRONTAGE, GRASS_PINES, woodsAlong, fenceAlong, inWoods } from './src/frontage.js';
 import { createSong } from './src/song.js';
@@ -3585,14 +3585,15 @@ const STUDIO = 900020, CABIN = 900019;
 // drive, as far as which anyone after him gives up at the road. The kids on four-wheelers turn round at the road, and the river doesn't bring anyone up on its bank.
 const GROUNDS = (() => { const [x0, z0] = atTrue(855.5, 572), [x1, z1] = atTrue(1088, 739); return { x0, z0, x1, z1, out: atTrue(850, 737), on: (x, z) => x > x0 && x < x1 && z > z0 && z < z1 }; })();
 // ---- the taxidermy sign at the road. The owner asked for it by name, so it's the one thing here that says whose it is, as it's carved on the listing's photo from
-// February 2018: two tall timber posts and a crossbar, a plain oval plaque hanging from the bar, and under that a board of weathered grey-green planks in a timber frame,
-// with the family's name in an arc over a buck and a doe and TAXIDERMY on a ribbon. The real one has the phone number on its last plank, and here that plank's bare. It's
-// 1.4 times life, as the other signs are, so it reads from the road. It stands across Pine Forest Rd from the drive, at the front of the cleared lot there, facing the mouth of
-// the drive, as it does on Street View from October 2024.
+// February 2018: two tall timber posts and a crossbar, a plain round plaque hanging from the bar and a little red birdhouse sat on it, and under them a board of weathered
+// grey-green planks in a timber frame, with the family's name in an arc over a buck and a doe and TAXIDERMY on a ribbon. The real one has the phone number on its last
+// plank, and here that plank's bare. It's 1.4 times life, as the other signs are, so it reads from the road. It stands across Pine Forest Rd from the drive, at the front
+// of the cleared lot there, side-on to the road with its board running east and west and the carving on both faces, so that it's read coming either way.
 const TAXIDERMY_SIGN = (() => {
-  const words = ['MURPHEY', 'TAXIDERMY'], [x, z] = atTrue(844.6, 736.2), [mx, mz] = atTrue(851.6, 736.3), nx = (mx - x) / Math.hypot(mx - x, mz - z), nz = (mz - z) / Math.hypot(mx - x, mz - z);
+  // one face looks north and the other south
+  const words = ['MURPHEY', 'TAXIDERMY'], [x, z] = atTrue(839, 724), nx = 0, nz = -1;
   const ex = nz, ez = -nx, yaw = Math.atan2(nx, nz), q = new THREE.Quaternion().setFromAxisAngle(UP, yaw);
-  const at = (u, w) => [x + ex * u + nx * w, z + ez * u + nz * w], foot = Math.min(groundH(x, z), Y0), here = nearHere(845, 736, 160);
+  const at = (u, w) => [x + ex * u + nx * w, z + ez * u + nz * w], foot = Math.min(groundH(x, z), Y0), here = nearHere(839, 724, 160);
   const wood = '#a8743f', cut = '#33251a', serif = 'Georgia, "Times New Roman", serif';
   const face = textTex([], 1024, 800, '#76836f', wood, `700 104px ${serif}`, { after: (g) => {
     // seven planks, each its own grey-green, weathered along the grain, with dark gaps between them
@@ -3631,23 +3632,62 @@ const TAXIDERMY_SIGN = (() => {
     const word = [...words[1]];
     word.forEach((ch, i) => { const t = .08 + .84 * i / (word.length - 1), [px, py] = on(t), dx = 2 * (1 - t) * (C[0] - P0[0]) + 2 * t * (P1[0] - C[0]), dy = 2 * (1 - t) * (C[1] - P0[1]) + 2 * t * (P1[1] - C[1]); g.save(); g.translate(px, py); g.rotate(Math.atan2(dy, dx)); g.fillText(ch, 0, 0); g.restore(); });
   } });
-  // its face is lit a little, so it reads from the road at dusk. It and the plaque come down with the rest.
-  const board = new THREE.Mesh(new THREE.PlaneGeometry(2.13, 1.67), new THREE.MeshStandardMaterial({ map: face, emissiveMap: face, emissive: '#ffffff', emissiveIntensity: .35, roughness: 1 }));
-  { const [fx, fz] = at(0, .045); board.position.set(fx, Y0 + 2.695, fz); board.rotation.y = yaw; here.add(board); }
-  const plaque = outline(new THREE.Mesh(new THREE.CylinderGeometry(.5, .5, .07, 28).rotateX(Math.PI / 2).scale(1.33, .78, 1), new THREE.MeshStandardMaterial({ color: '#9a5c38', roughness: .8 })), INK, 1.1);
+  // its faces are lit a little, so they read from the road at dusk. They, the plaque and the birdhouse come down with the rest.
+  const boardMat = new THREE.MeshStandardMaterial({ map: face, emissiveMap: face, emissive: '#ffffff', emissiveIntensity: .35, roughness: 1 }), boardPlane = new THREE.PlaneGeometry(2.13, 1.67);
+  const faces = [1, -1].map((side) => { const m = new THREE.Mesh(boardPlane, boardMat), [fx, fz] = at(0, side * .045); m.position.set(fx, Y0 + 2.695, fz); m.rotation.y = side > 0 ? yaw : yaw + Math.PI; here.add(m); return m; });
+  const plaque = outline(new THREE.Mesh(new THREE.CylinderGeometry(.39, .39, .07, 28).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#9a5c38', roughness: .8 })), INK, 1.1);
   { const [px, pz] = at(0, 0); plaque.position.set(px, Y0 + 4.14, pz); plaque.rotation.y = yaw; here.add(plaque); }
+  // The birdhouse, sat on the bar off to one side with its hole to the south: red, with a dark pitched roof and a peg under the hole, and as wide as the bar's deep.
+  const birdhouse = new THREE.Group();
+  {
+    const W = .22, H = .24, D = .21, pitch = .6, eave = W / 2 + .05, ridge = H + W / 2 * Math.tan(pitch), red = new THREE.MeshStandardMaterial({ color: '#b3322a', roughness: .8 }), shingle = new THREE.MeshStandardMaterial({ color: '#5b3b2c', roughness: .9 });
+    const end = new THREE.Shape([new THREE.Vector2(-W / 2, 0), new THREE.Vector2(W / 2, 0), new THREE.Vector2(W / 2, H), new THREE.Vector2(0, ridge), new THREE.Vector2(-W / 2, H)]);
+    birdhouse.add(outline(new THREE.Mesh(new THREE.ExtrudeGeometry(end, { depth: D, bevelEnabled: false }).translate(0, 0, -D / 2), red), INK, 1.1));
+    for (const side of [1, -1]) {
+      const r = outline(new THREE.Mesh(new THREE.BoxGeometry(eave / Math.cos(pitch), .025, D + .07), shingle), INK, 1.1);
+      r.position.set(side * (eave / 2 + Math.sin(pitch) * .0125), ridge - eave / 2 * Math.tan(pitch) + Math.cos(pitch) * .0125, 0); r.rotation.z = -side * pitch; birdhouse.add(r);
+    }
+    const hole = new THREE.Mesh(new THREE.CircleGeometry(.036, 14), new THREE.MeshBasicMaterial({ color: '#140c08' })); hole.position.set(0, H * .62, D / 2 + .003); birdhouse.add(hole);
+    const peg = new THREE.Mesh(new THREE.CylinderGeometry(.008, .008, .07, 6).rotateX(Math.PI / 2), shingle); peg.position.set(0, H * .36, D / 2 + .035); birdhouse.add(peg);
+    const [hx, hz] = at(.8, 0); birdhouse.position.set(hx, Y0 + 4.9, hz); here.add(birdhouse);
+  }
   const timber = new THREE.MeshStandardMaterial({ color: '#8a6a46', roughness: 1 }), planks = new THREE.MeshStandardMaterial({ color: '#6f7b68', roughness: 1 });
   const prop = breakable('sign', 3, () => {
     for (const u of [-1.18, 1.18]) { const [px, pz] = at(u, 0); addBox(timber, px, (foot + Y0 + 4.9) / 2, pz, .21, Y0 + 4.9 - foot, .21, 1.1, q); }
     { const [cx, cz] = at(0, 0); addBox(timber, cx, Y0 + 4.8, cz, 3.08, .2, .2, 1.1, q); }
-    for (const u of [-.42, .42]) { const [hx, hz] = at(u, 0); addBox(poleMat, hx, Y0 + 4.615, hz, .03, .17, .03, 0, q); }
+    // the round plaque's hangers, down to a little inside its edge
+    for (const u of [-.2, .2]) { const [hx, hz] = at(u, 0); addBox(poleMat, hx, Y0 + 4.58, hz, .03, .24, .03, 0, q); }
     { const [bx, bz] = at(0, 0); addBox(planks, bx, Y0 + 2.695, bz, 2.27, 1.81, .06, 1, q); }
-    for (const [u, y, su, sy] of [[0, 3.585, 2.35, .11], [0, 1.805, 2.35, .11], [-1.12, 2.695, .11, 1.89], [1.12, 2.695, .11, 1.89]]) { const [fx, fz] = at(u, .03); addBox(timber, fx, Y0 + y, fz, su, sy, .12, 1, q); }
+    // the frame stands proud of the planks on both faces
+    for (const [u, y, su, sy] of [[0, 3.585, 2.35, .11], [0, 1.805, 2.35, .11], [-1.12, 2.695, .11, 1.89], [1.12, 2.695, .11, 1.89]]) { const [fx, fz] = at(u, 0); addBox(timber, fx, Y0 + y, fz, su, sy, .18, 1, q); }
     const [ax, az] = at(-1.18, 0), [bx, bz] = at(1.18, 0), w = [ax, az, bx, bz, Y0 + 3.64, .12]; PROP_WALLS.push(w); PROP.walls.push(w);
-    PROP.objs.push(board, plaque);
+    PROP.objs.push(...faces, plaque, birdhouse);
   }, { rigid: true, chip: '#6f7b68', foot: [x, z] });
   flushBuckets(160);
-  return { x, z, nx, nz, prop, board, plaque, words };
+  return { x, z, nx, nz, prop, board: faces[0], faces, plaque, birdhouse, words };
+})();
+// ---- what's on the lot across the road from the drive, from the aerial: a green tractor with yellow rims at the south end of a line with a rusty red dump trailer and a
+// rusty disc harrow behind it, logs stacked to dry east and west, a dark blue dumpster with a white label, a cream tractor out on the grass, a long low skid, and a patch of
+// light grey gravel. Mown grass runs north from the sign along the road with a few pines in it (src/frontage.js), and along the road south of it. There's no shed.
+clearing(828, 626, 846, 702, 3, true); clearing(836, 742, 846, 770, 3, true);
+const SIGN_LOT = (() => {
+  const lot = nearHere(828, 745, 200), at = {};
+  // each where it stands, in true metres, turned so its front faces that way, and how big it is to walk or drive into: across it, along it and how high
+  const put = (kind, parts, tx, tz, yaw, hp, [w, d, top], chip) => { const [x, z] = atTrue(tx, tz), y = groundH(x, z) - Y0; return (at[kind] ??= []).push(thing(lot, kind, parts, x, z, yaw, hp, { y, solid: [w, d, top + y], chip })); };
+  // the tractor facing south, with the trailer's tongue up to its drawbar and the harrow behind that
+  put('tractor', tractor(), 815, 733, 0, 5, [1.7, 2.4, 1.6], '#3e6b38');
+  put('trailer', dumpTrailer(), 815, 728.8, 0, 4, [2.1, 3.4, 1.4], '#7e3a26');
+  put('harrow', discHarrow(), 815, 724.8, 0, 3, [2.6, 1.5, .7], '#7a3f25');
+  put('logs', logPile(), 823, 727, 0, 6, [5.8, 2, .9], '#5a4330');
+  put('dumpster', dumpster(), 825, 760, Math.PI / 2, 2.5, [1.95, 1.3, 1.3], '#1f3554');
+  put('tractor', tractor('#d8d2bd'), 842, 761, Math.PI, 5, [1.7, 2.4, 1.6], '#d8d2bd');
+  put('skid', skid(), 829, 766, 0, 2, [1.4, 6, .32], '#7d7466');
+  // the gravel, lighter than the lanes', in a rough round patch
+  const [gx, gz] = atTrue(820, 752), edge = [];
+  for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2, r = 1 + (hash(i, 7, 975) - .5) * .3; edge.push(new THREE.Vector2(Math.cos(a) * 4.5 * r, Math.sin(a) * 3.2 * r)); }
+  const gravel = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(edge)).rotateX(-Math.PI / 2), triplanar(stoneTex, .25, { roughness: 1, color: '#b9b5ab', polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  gravel.position.set(gx, groundH(gx, gz) + .03, gz); lot.add(gravel);
+  return { ...at, gravel };
 })();
 // ================================================================ the yard off True Light Rd
 // Its buildings are in data/structures.json and its pool's in data/water.json. This is what's round them: the oval of concrete, the trampoline, the yard light, the net and the gear in the little shed. Where everything but the net goes was measured on the aerial, in true metres.
@@ -9391,7 +9431,7 @@ if (TEST) {
     THREE, hills: { at: HILLS.at, slope: HILLS.slope, follow: HILLS.follow, terraces: HILLS.terraces, tracks: HILLS.tracks, here: () => HILL.uHillHere.value, uniforms: HILL, flat: hillsFlat, skyline },
     stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, STONE_CLIP, WORDS_SLAB, GRAVE_TURN, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead, song, fromCemetery: (x, z) => fromCemetery(x, z, CEMETERY_EDGE) },
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : castIron) },
-    compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, screen: () => screenMesh, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach, sign: TAXIDERMY_SIGN, front: FRONT },
+    compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, screen: () => screenMesh, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach, sign: TAXIDERMY_SIGN, front: FRONT, lot: SIGN_LOT },
     lures: { LYING, lyingNear, flying, popping, ALARMS, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
     horde, folks, traffic, homes: HOMES, putBack, HOME: { SEE: HOME_SEE, PUT: HOME_PUT }, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, horns: hornLog, blasts: () => blastsBlown, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, kept: putBack.length, roused: horde.active.filter((s) => s.state === ROUSED).length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf,
     // the river's, for the tests: which way it flows and where it brings someone up, and what's drawn of someone soaked: how soaked the graphics card has them, the snakes on sleeves and the ones falling

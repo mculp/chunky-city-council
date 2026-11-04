@@ -10,7 +10,7 @@ import { fromCemetery } from './graves.js';
 export const BRIDGE = [6843.067, 7797.433];
 // [west, north, east, south]
 const BOXES = [
-  [840, 570, 1090, 742],        // the compound on Pine Forest Rd, from the road with its sign to past the river
+  [835, 570, 1090, 742],        // the compound on Pine Forest Rd, from its sign across the road to past the river
   [-1600, -830, -1490, -745],   // the yard off True Light Rd
   [-730, 1630, -440, 1780],     // the farm's yard
   [-12, -526, 44, -468],        // a home, its barn and its yard, from the road

@@ -17,7 +17,7 @@ test('the world\'s middle is where the map puts Stuckey\'s Bridge, in true metre
 
 // Where things are built at each of them, in true metres, from index.html and the data
 const SET_ASIDE = {
-  'the compound on Pine Forest Rd, its sign at the road, its house and its cabin by the river': [[844.6, 736.2], [1030, 625], [1045, 588]],
+  'the compound on Pine Forest Rd, its sign at the road, its house and its cabin by the river': [[839, 724], [1030, 625], [1045, 588]],
   'the yard off True Light Rd, the house and the propane tank out back': [[-1549, -768], [-1520, -816]],
   'a home, its barn and the drive in off the road': [[-1.04, -504.27], [33.93, -484.37], [34, -471.6]],
   'the trailer with the computer in it, and its deck': [[-359.91, -574.58], [-356.5, -572.2]],
@@ -57,7 +57,7 @@ test('everywhere else breaks as it always has: the bridge, the gas station, and 
 });
 
 test('the world\'s metres are true metres less where the bridge is', () => {
-  for (const [x, z] of [[844.6, 736.2], [-254.5, 200], [BRIDGE[0] + 53, BRIDGE[1] + 10]]) assert.equal(aside.world(x - BRIDGE[0], z - BRIDGE[1]), aside.at(x, z));
+  for (const [x, z] of [[839, 724], [-254.5, 200], [BRIDGE[0] + 53, BRIDGE[1] + 10]]) assert.equal(aside.world(x - BRIDGE[0], z - BRIDGE[1]), aside.at(x, z));
 });
 
 test('without the farm\'s own data, its yard\'s still set aside, and the rest of it is up to whoever has the data', () => {

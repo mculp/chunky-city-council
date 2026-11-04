@@ -82,28 +82,68 @@ check('it is gravel from end to end', drive.off === 0, drive.off);
 await g(() => __game.step(.1));
 await snap('yard');
 
-// ---------------- the taxidermy sign across the road from the drive, facing it. What's carved on it is only checked for what it isn't: there's a name, the word, and no number.
-// Then he walks into it and it stops him, and a truck driven into it from the road knocks it down.
+// ---------------- the taxidermy sign across the road from the drive, side-on to the road with its board running east and west and the carving on both faces, so that it's
+// read coming either way, with the round plaque hanging from its bar and the birdhouse sat on it. What's carved on it is only checked for what it isn't: there's a name, the
+// word, and no number. Then he walks into it and it stops him, and a truck driven into one of its faces knocks it down.
 const sign = await g(() => {
   const G = __game, S = G.compound.sign, P = G.player.pos, T = 1 / 30, mouth = G.map.lanes.filter((l) => measured.includes(l.id)).sort((a, b) => b.length - a.length)[0].pts[0];
-  const ends = [-1.2, 1.2].map((u) => [S.x + S.nz * u, S.z - S.nx * u]), front = (d) => [S.x + S.nx * d, S.z + S.nz * d];
-  const out = { mouth: +Math.hypot(S.x - mouth[0], S.z - mouth[1]).toFixed(1), off: ends.every(([x, z]) => !G.onRoad(x, z)), faces: G.onRoad(...front(7)) && !G.onRoad(...front(-7)), named: S.words.length === 2 && S.words[0].length > 2, word: S.words[1] === 'TAXIDERMY', number: S.words.some((w) => /\d/.test(w)), lit: S.board.material.emissiveIntensity > 0 };
+  const ends = [-1.2, 1.2].map((u) => [S.x + S.nz * u, S.z - S.nx * u]), front = (d) => [S.x + S.nx * d, S.z + S.nz * d], V = G.THREE.Vector3, box = (o) => new G.THREE.Box3().setFromObject(o);
+  // which way the road runs past it, from the nearest stretch of it
+  const road = G.map.roadById.get('pine_forest_rd').pts; let near = Infinity, along = null;
+  for (let i = 1; i < road.length; i++) {
+    const [ax, az] = road[i - 1], [bx, bz] = road[i], l = Math.hypot(bx - ax, bz - az), t = Math.max(0, Math.min(1, ((S.x - ax) * (bx - ax) + (S.z - az) * (bz - az)) / (l * l))), d = Math.hypot(S.x - ax - (bx - ax) * t, S.z - az - (bz - az) * t);
+    if (d < near) { near = d; along = [(bx - ax) / l, (bz - az) / l]; }
+  }
+  // the way each face looks, as a compass bearing, and how far that is from straight along the road, in degrees
+  const looks = S.faces.map((m) => new V(0, 0, 1).applyQuaternion(m.quaternion)), deg = (r) => +(r * 180 / Math.PI).toFixed(1);
+  const pb = box(S.plaque), bb = box(S.birdhouse), fb = box(S.faces[0]);
+  const out = {
+    mouth: +Math.hypot(S.x - mouth[0], S.z - mouth[1]).toFixed(1), off: ends.every(([x, z]) => !G.onRoad(x, z)),
+    bearings: looks.map((n) => (deg(Math.atan2(n.x, -n.z)) + 360) % 360), offRoad: Math.max(...looks.map((n) => deg(Math.acos(Math.min(1, Math.abs(n.x * along[0] + n.z * along[1])))))),
+    both: S.faces.length === 2 && looks[0].dot(looks[1]) < -.999 && S.faces.every((m) => m.material === S.faces[0].material && !!m.material.map),
+    named: S.words.length === 2 && S.words[0].length > 2, word: S.words[1] === 'TAXIDERMY', number: S.words.some((w) => /\d/.test(w)), lit: S.faces.every((m) => m.material.emissiveIntensity > 0),
+    // as tall as it's wide
+    round: +Math.abs((pb.max.y - pb.min.y) - Math.max(pb.max.x - pb.min.x, pb.max.z - pb.min.z)).toFixed(3),
+    // sat on the bar, above the top of the board and between the posts
+    perched: bb.min.y > fb.max.y + 1 && Math.hypot((bb.min.x + bb.max.x) / 2 - S.x, (bb.min.z + bb.max.z) / 2 - S.z) < 1.2,
+  };
   G.place(...front(3)); G.sim(.1, .1); walkTo([front(-1)], .3, 3); out.stopped = +((P.x - S.x) * S.nx + (P.z - S.z) * S.nz).toFixed(2);
   G.place(...front(5)); G.player.yaw = Math.atan2(-S.nx, -S.nz); G.look(Math.atan2(S.nx, S.nz), .05); G.step(1, T);
   return out;
 });
 await snap('sign');
-check(`the taxidermy sign stands across the road from the drive, ${sign.mouth} m from its mouth, off the road, facing it, and lit a little`, sign.mouth < 12 && sign.off && sign.faces && sign.lit, sign);
-check('  carved with a name and TAXIDERMY, and no number', sign.named && sign.word && !sign.number, { named: sign.named, word: sign.word, number: sign.number });
+check(`the taxidermy sign stands across the road from the drive, ${sign.mouth} m from its mouth, off the road and lit a little`, sign.mouth < 20 && sign.off && sign.lit, sign);
+check(`  side-on to the road, with a face looking each way along it: they look ${sign.bearings.join('° and ')}°, within ${sign.offRoad}° of the way the road runs`, sign.both && sign.bearings.some((b) => Math.min(b, 360 - b) < 1) && sign.bearings.some((b) => Math.abs(b - 180) < 1) && sign.offRoad < 25, sign);
+check('  carved with a name and TAXIDERMY on both faces, and no number', sign.both && sign.named && sign.word && !sign.number, { both: sign.both, named: sign.named, word: sign.word, number: sign.number });
+check(`  with the round plaque hanging from its bar (${sign.round} m between how tall and how wide it is) and the birdhouse sat on it`, sign.round < .02 && sign.perched, sign);
 check(`  walking into it stops him ${sign.stopped} m short of it`, sign.stopped > .1 && sign.stopped < 1, sign.stopped);
 const knocked = await g(() => {
-  const G = __game, S = G.compound.sign, T = 1 / 30, v = G.vehicles.find((o) => o.kind === 'pickup' && !o.wrecked), [x, z] = [S.x + S.nx * 14, S.z + S.nz * 14];
+  // from far enough off across the lot's dirt to be going as fast as off the road
+  const G = __game, S = G.compound.sign, T = 1 / 30, v = G.vehicles.find((o) => o.kind === 'pickup' && !o.wrecked), [x, z] = [S.x + S.nx * 24, S.z + S.nz * 24];
   G.getIn(v); v.x = x; v.z = z; v.y = G.floorAt(x, z); v.yaw = Math.atan2(-S.nx, -S.nz); v.f = v.s = 0; G.sim(T, T);
   let t = 0; for (; t < 5 && !S.prop.down; t += T) { G.stick(0, 1); G.sim(T, T); }
   G.stick(0, 0); for (let k = 0; k < 30; k++) G.sim(T, T); G.getOut(true); G.sim(.2, .2);
   return { down: S.prop.down, t: +t.toFixed(1) };
 });
-check(`  and a truck driven into it from the road knocks it down (${knocked.t} s)`, knocked.down, knocked);
+check(`  and a truck driven into one of its faces knocks it down (${knocked.t} s)`, knocked.down, knocked);
+
+// ---------------- what's on the lot round the sign, where it is on the aerial: the green tractor at the south end of a line with the dump trailer and the disc harrow north of it,
+// the logs lying east and west, the dumpster, the cream tractor on the grass, the skid and the gravel, each within a metre of where it was measured, and no shed
+const lot = await g(() => {
+  const G = __game, L = G.compound.lot, at = (p) => p.objs[0].position, off = (p, tx, tz) => { const [x, z] = true2(tx, tz); return +Math.hypot(at(p).x - x, at(p).z - z).toFixed(2); };
+  const [green, cream] = L.tractor, [trailer] = L.trailer, [harrow] = L.harrow, [logs] = L.logs, [bin] = L.dumpster, [skid] = L.skid;
+  const [x0, z0] = true2(805, 696), [x1, z1] = true2(846, 770), [gx, gz] = true2(820, 752);
+  return {
+    off: { green: off(green, 815, 733), trailer: off(trailer, 815, 728.8), harrow: off(harrow, 815, 724.8), logs: off(logs, 823, 727), bin: off(bin, 825, 760), cream: off(cream, 842, 761), skid: off(skid, 829, 766), gravel: +Math.hypot(L.gravel.position.x - gx, L.gravel.position.z - gz).toFixed(2) },
+    // in a line north and south, the tractor at the south end facing south
+    line: Math.abs(at(green).x - at(trailer).x) < .1 && Math.abs(at(trailer).x - at(harrow).x) < .1 && at(green).z > at(trailer).z && at(trailer).z > at(harrow).z && Math.abs(green.objs[0].rotation.y) < .01,
+    eastWest: Math.abs(Math.sin(logs.objs[0].rotation.y)) < .01,
+    shed: G.structures.filter((s) => s.pts.some(([x, z]) => x > x0 && x < x1 && z > z0 && z < z1)).length,
+  };
+});
+const lotOff = Object.values(lot.off);
+check(`the lot has the green tractor, the dump trailer and the disc harrow in a line north from it, the logs, the dumpster, the cream tractor, the skid and the gravel, within ${Math.max(...lotOff)} m of where they were measured`, lotOff.every((d) => d < 1) && lot.line, lot);
+check('  the logs lie east and west, and there\'s no shed', lot.eastWest && lot.shed === 0, lot);
 
 // ---------------- the woods along the road in front of it. Off the road flat out into them anywhere along the frontage but the drive, square on and at an angle, a pickup is
 // stopped in them, and a four-wheeler and a golf cart, which are narrow enough to get between the trees, are stopped at the fence in front of them. Then the pickup turns in

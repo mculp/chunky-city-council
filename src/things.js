@@ -147,6 +147,52 @@ export function tractor(color = '#3e6b38') {
 export function utilityTrailer() {
   return [box(0, .62, -.25, 1.3, .08, 2.3, '#55524c'), ...both((s) => [box(s * .63, .86, -.25, .05, .42, 2.3, '#c9c8bf'), cylX(s * .72, .32, -.25, .32, .16, '#17151a', 10)]).flat(), box(0, .86, -1.38, 1.3, .42, .05, '#c9c8bf'), box(0, .86, .88, 1.3, .42, .05, '#c9c8bf'), bar([-.4, .6, .9], [0, .44, 1.9], .06, '#55524c'), bar([.4, .6, .9], [0, .44, 1.9], .06, '#55524c')];
 }
+// A farm dump trailer gone to rust: a steel tub on two axles, with an A-frame tongue to the front and the ram that tips it under the tub
+export function dumpTrailer(color = '#7e3a26') {
+  const DARK = '#5a291b', RUST = '#a3542c', IRON = '#2b2522';
+  return [
+    box(0, .78, -.2, 1.9, .06, 3.4, DARK), ...both((s) => [box(s * .92, 1.08, -.2, .06, .6, 3.4, color), box(s * .94, 1.4, -.2, .1, .06, 3.44, DARK), box(s * .955, .98, .35, .01, .34, .8, RUST), box(s * .955, 1.18, -1.2, .01, .2, .5, RUST)]).flat(),
+    box(0, 1.14, 1.47, 1.9, .72, .06, color), box(0, 1.05, -1.87, 1.9, .54, .06, color), box(0, 1.34, -1.9, 1.94, .06, .1, DARK),
+    ...both((s) => [box(s * .5, .62, -.1, .12, .14, 3.6, IRON), box(s * .98, .78, -.15, .26, .05, 1.5, DARK), ...[-.55, .25].flatMap((z) => [cylX(s * .98, .36, z, .36, .2, '#17151a', 12), cylX(s * 1.09, .36, z, .14, .02, '#6a6660', 8)])]).flat(),
+    ...both((s) => bar([s * .5, .6, 1.5], [0, .5, 2.6], .07, IRON)), box(0, .5, 2.65, .12, .1, .22, IRON), bar([.22, .62, 2.05], [.22, 0, 2.05], .05, IRON), bar([0, .6, 1.25], [0, .74, .3], .07, '#3a3836'),
+  ];
+}
+// An old disc harrow, rusted: four gangs of dished discs on a square frame, two angled one way in front and two the other way behind, and an A-frame hitch
+export function discHarrow(color = '#7a3f25') {
+  const FRAME = '#4f3022', UP = new THREE.Vector3(0, 1, 0);
+  // discs along a shaft from a to b, each square to it
+  const gang = (a, b, n) => {
+    const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), q = new THREE.Quaternion().setFromUnitVectors(UP, B.clone().sub(A).normalize()), out = [bar(a, b, .04, FRAME)];
+    for (let i = 0; i < n; i++) { const p = A.clone().lerp(B, (i + .5) / n); out.push(painted(new THREE.CylinderGeometry(.27, .2, .04, 12).applyQuaternion(q).translate(p.x, p.y, p.z), color)); }
+    return out;
+  };
+  return [
+    box(0, .66, .72, 2.6, .1, .1, FRAME), box(0, .66, -.72, 2.6, .1, .1, FRAME), ...both((s) => box(s * 1.25, .66, 0, .1, .1, 1.54, FRAME)),
+    ...both((s) => [...gang([s * 1.2, .3, .52], [s * .06, .3, .3], 5), ...gang([s * 1.2, .3, -.4], [s * .06, .3, -.62], 5), bar([s * .7, .66, .72], [s * .7, .3, .42], .05, FRAME), bar([s * .7, .66, -.72], [s * .7, .3, -.5], .05, FRAME)]).flat(),
+    ...both((s) => bar([s * .62, .66, .72], [0, .56, 1.8], .06, FRAME)), box(0, .56, 1.85, .12, .1, .2, FRAME),
+  ];
+}
+// Logs stacked to dry, lying along x: four on the ground and three in the grooves between them, each a little longer or shorter, with their cut ends showing
+export function logPile(bark = '#5a4330', cut = '#b89a6e') {
+  const LOGS = [[-.78, .26, .26, 5.6, .2], [-.26, .24, .24, 6, -.3], [.24, .27, .27, 5.2, .1], [.76, .23, .23, 5.8, -.15], [-.52, .65, .22, 5.4, .35], [-.02, .67, .25, 4.8, -.2], [.5, .64, .21, 5, .05]];
+  return LOGS.flatMap(([z, y, r, long, dx]) => [cylX(dx, y, z, r, long, bark, 9), cylX(dx + long / 2 + .01, y, z, r * .9, .02, cut, 9), cylX(dx - long / 2 - .01, y, z, r * .9, .02, cut, 9)]);
+}
+// A front-load dumpster with two black lids, pockets in its sides for the truck's forks, and a plain white label on its front
+export function dumpster(color = '#1f3554') {
+  const DARK = '#16253c';
+  return [
+    box(0, .66, 0, 1.9, 1.16, 1.25, color), box(0, 1.27, 0, 1.96, .06, 1.31, DARK), ...both((s) => [box(s * .48, 1.32, -.02, .92, .05, 1.27, '#1a1a1e'), box(s * .99, .86, 0, .06, .2, .9, DARK), box(s * .75, .05, 0, .12, .1, 1.22, DARK)]).flat(),
+    box(0, .8, .63, .72, .34, .01, '#e8e6e0'),
+  ];
+}
+// A low timber skid: two long runners with their ends cut up at the front, and planks across them
+export function skid(long = 6, color = '#7d7466') {
+  const n = Math.round(long / .3);
+  return [
+    ...both((s) => [box(s * .55, .13, -.15, .2, .26, long - .3, color), bar([s * .55, .13, long / 2 - .3], [s * .55, .3, long / 2], .2, color)]).flat(),
+    ...Array.from({ length: n }, (_, i) => box(0, .29, -long / 2 + .2 + i * (long - .5) / (n - 1), 1.4, .05, .22, i % 3 ? color : '#6b6356')),
+  ];
+}
 // A galvanised feed bin on legs with a cone for a top and a cone for a bottom
 export function feedBin(color = '#a9acab') {
   return [...[[-.9, -.9], [.9, -.9], [-.9, .9], [.9, .9]].map(([x, z]) => bar([x, 0, z], [x * .9, 1.7, z * .9], .09, '#6c6e6e')), painted(new THREE.CylinderGeometry(1.3, .22, 1.1, 12).translate(0, 1.6, 0), '#8e9190'), cyl(0, 3.3, 0, 1.3, 2.3, color, 14), painted(new THREE.ConeGeometry(1.34, .8, 14).translate(0, 4.85, 0), '#bcbfbe'), box(0, 5.3, 0, .36, .1, .36, '#7c7e7e')];
