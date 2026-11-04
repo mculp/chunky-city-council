@@ -52,10 +52,10 @@ check('US 80 in front of it is clear', road === 0, road);
 // ---- reading from the back as well
 await g((i) => faceSign(i, 10, true), 1); await snap('sign-back');
 
-// ---- three swings of the hammer and it goes over, and it stays over
+// ---- three swings of the skillet and it goes over, and it stays over
 await g(() => faceSign(0, 1.6));
 const swung = await g(() => { const G = __game, s = G.churchSigns.list[0]; G.look(G.player.yaw + Math.PI); const hits = []; for (let k = 0; k < 6 && !s.prop.down; k++) { G.key('f', true); G.sim(1 / 30, 1 / 30); G.key('f', false); G.sim(.8, 1 / 30); hits.push(s.prop.hp); } G.step(1.4); return { hits, down: s.prop.down }; });
-check('a hammer knocks it over in a few swings', swung.down && swung.hits.length >= 2, swung);
+check('the skillet knocks it over in a few swings', swung.down && swung.hits.length >= 2, swung);
 await snap('sign-down');
 const lit = await g(() => { const G = __game, s = G.churchSigns.list[0]; G.step(1); return { bright: s.mat.color.r, glow: s.glow.visible }; });
 check('and it goes dark', lit.bright < .3 && !lit.glow, lit);
@@ -94,7 +94,7 @@ check('and the road past it is clear', charlie.road === 0, charlie);
 check('you can\'t walk through its pole', charlie.solid, charlie);
 await snap('charlie-from-road');
 const felled = await g(() => { const G = __game, a = C.fish.position.toArray(); G.place(C.x + .9, C.z); G.look(Math.atan2(.9, 0)); for (let k = 0; k < 4 && !C.marker.down; k++) { G.key('f', true); G.sim(1 / 30, 1 / 30); G.key('f', false); G.sim(.9, 1 / 30); } G.step(2); const b = C.fish.position.toArray(); return { down: C.marker.down, fell: a[1] - b[1] }; });
-check('a hammer brings it down, and the fish with it', felled.down && felled.fell > 1, felled);
+check('the skillet brings it down, and the fish with it', felled.down && felled.fell > 1, felled);
 await snap('charlie-down');
 
 // ---- Robby's: the trailer that burned down, in the clearing off Chestnut St where the owner says it all happened. He said these words the once.
@@ -198,7 +198,7 @@ check('and the trailer stops him walking into it', stops.w.d > 2 && stops.x < -1
 const piers = await g(() => { const G = __game, list = G.wreck.props.filter((p) => p.kind === 'pier' && Math.hypot(p.cx - R.lot.x, p.cz - R.lot.z) < 10); return list.length; });
 check('the piers are one at a time', piers >= 12, piers);
 const hit = await g(() => { const G = __game, list = G.wreck.props.filter((p) => p.kind === 'pier' && Math.hypot(p.cx - R.lot.x, p.cz - R.lot.z) < 10), p = list.find((o) => !o.down && o.hp === o.max && o.cz > R.lot.z + 3), standing = () => list.filter((o) => !o.down).length, had = standing(); G.place(p.cx - 1.2, p.cz); G.look(Math.atan2(-1.2, 0)); for (let k = 0; k < 3 && !p.down; k++) { G.key('f', true); G.sim(1 / 30, 1 / 30); G.key('f', false); G.sim(.9, 1 / 30); } return { down: p.down, had, left: standing() }; });
-check('and a hammer takes one down and leaves the rest', hit.down && hit.left === hit.had - 1, hit);
+check('and the skillet takes one down and leaves the rest', hit.down && hit.left === hit.had - 1, hit);
 
 // and a pickup goes through the memorial
 const memorial = await g(() => {

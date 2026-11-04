@@ -5,7 +5,7 @@
 // dropped and written again, because a piece is known by its place in the building.
 import { Sheet, writeStructure, wallsOf, hash2 } from './structures.js';
 
-// How many swings of the hammer, near enough
+// How many swings of the skillet, near enough
 const WALLS = { mobile: 1.2, plank: 1.5, siding: 2, metal: 2.5, stucco: 3, block: 4, brick: 4.5 };
 const TOUGH = { lintel: 1.2, door: .5, window: .25, shutter: .25, kudzu: .2, bay: 1.5, post: 1, roof: 1.5, gable: 2, porch: 1, carport: 1, vent: .4 };
 // Brick and block crumble where they stand. Everything else comes down in sheets.

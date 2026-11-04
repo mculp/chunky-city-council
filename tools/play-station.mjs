@@ -115,14 +115,14 @@ check('he can take them down and walk out', !down.barred && !down.seen && !down.
 await g(() => { const G = __game; G.horde.calm(); for (const s of G.horde.all) s.x += 900; });
 r = await g(() => walk([[49, 4.6], [49, 5.8], [50, 6.1]], .5, 8)); check('and out he goes', r.off < 1 && !(await g(() => inside())), r);
 
-// ---- a hammer goes through them, and that's the end of them
+// ---- the skillet goes through them, and that's the end of them
 const smashed = await g(() => {
   const G = __game, S = G.station, H = G.horde; H.calm(); G.S.mode = 'town'; G.HP.kind = 'run'; G.place(...loc(49.2, 4.6)); G.step(.1);
   G.key('e', true); G.sim(1 / 30, 1 / 30); G.key('e', false); G.sim(.2, 1 / 30);
   const up = S.barred(); G.player.yaw = 0; G.look(Math.PI, .4); let n = 0; for (; n < 40 && !S.bar.down; n++) { G.key('f', true); G.sim(1 / 30, 1 / 30); G.key('f', false); G.sim(.5, 1 / 30); }
   G.sim(.1, 1 / 30); const d = S.door; return { up, swings: n, down: S.bar.down, barred: S.barred(), stops: G.blocked(d.x, d.z, 6.2), act: G.S.act };
 });
-check(`a hammer goes through the boards: ${smashed.swings} swings`, smashed.up && smashed.down && !smashed.barred && !smashed.stops, smashed);
+check(`the skillet goes through the boards: ${smashed.swings} swings`, smashed.up && smashed.down && !smashed.barred && !smashed.stops, smashed);
 check('and there\'s nothing left to bar it with', smashed.act !== 'Bar the door', smashed);
 
 // ---- it brings them in at night, until it's broken. A shambler goes for a light it's near about one time in three, and they're shuffling, so it takes a while to show.

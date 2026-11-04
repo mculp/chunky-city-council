@@ -1,4 +1,4 @@
-// Wrecks the town with the game's own movement and real key presses: through houses in a pickup, over young trees and into big ones, a hammer
+// Wrecks the town with the game's own movement and real key presses: through houses in a pickup, over young trees and into big ones, the skillet
 // through a wall, a can through a window, cars going up and houses burning down, and then a check that it all stays that way.
 //
 //   npm i && npm run wreck
@@ -143,8 +143,8 @@ const out = await g(() => {
 check('wrecked with him in it, he has a moment to get out', out.wrecked && out.still, out);
 check('and if he doesn\'t it throws him clear', out.gone && !out.driving && out.mode === 'town' && out.thrown > 1, out);
 
-// ---------------- the hammer and the cans
-const hammer = await g(() => {
+// ---------------- the skillet and the cans
+const skillet = await g(() => {
   const t = target('siding'), x = t.p.x + t.ux * (t.wall - .5), z = t.p.z + t.uz * (t.wall - .5);
   G.place(x, z); G.player.yaw = Math.atan2(t.ux, t.uz); G.look(G.player.yaw + Math.PI); G.sim(.1, 1 / 30);
   const one = (() => { tapKey('f'); run(.6); return W.damage.gone(t.s); })(), cracked = W.damage.state(t.s).walls.some((w) => w.hp < w.max);
@@ -152,8 +152,8 @@ const hammer = await g(() => {
   const two = W.damage.gone(t.s), walked = walk(t.p.x + t.ux * (t.wall + 2), t.p.z + t.uz * (t.wall + 2), 5);
   return { one, cracked, two, walked };
 });
-check('one swing cracks a siding wall and it takes more to bring it down', hammer.one === 0 && hammer.cracked && hammer.two > 0, hammer);
-check('and he walks through the gap', hammer.walked.off < 1, hammer);
+check('one swing cracks a siding wall and it takes more to bring it down', skillet.one === 0 && skillet.cracked && skillet.two > 0, skillet);
+check('and he walks through the gap', skillet.walked.off < 1, skillet);
 const cans = await g(() => {
   const c = W.gasCans.find((q) => !q.got), n = G.S.gas; G.place(c.x + 3, c.z); walk(c.x, c.z, 3);
   const picked = { before: n, after: G.S.gas, got: c.got };

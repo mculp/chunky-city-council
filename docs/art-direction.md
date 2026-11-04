@@ -42,6 +42,7 @@ This approach came from a failed one. Flat shapes drawn in code and set against 
 - Hanging, his head lolls away from the rope. Swimming, it comes up out of the water.
 - Dark fists outlined in orange.
 - A long-neck bottle with a white chalk outline (`#f6f2ea`) and glowing cyan liquid (`#3ad9d2`). The label is black with an orange warning triangle and no lettering. The liquid stays level as the bottle tips, so it runs up into the neck.
+- **The skillet:** what he swings, only seen while he's swinging it. It's cast iron, about 30 cm across and 45 cm with its handle: a short flat handle with a hole in its end, and the little helper handle on the far side of the rim, which is what makes it read as cast iron and not just any frying pan. It's black iron worn grey on the rim and the bottom, lit by the world like everything else, so that it doesn't go missing against a road at night, with an ink line. He holds it in his right hand and swings it bottom first, over his shoulder and down, with his other arm out to the side for balance, and back the other way from over his other shoulder. In the frame it lands in, it's drawn on them: its bottom on the top of their head, or on their chest if their head's out of his reach.
 
 ## Everyone else
 

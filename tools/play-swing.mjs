@@ -6,8 +6,9 @@
 // it doesn't with reduced motion, though the glow still flares.
 //
 // Then the skillet (CHUNKY-171), on the phone with real taps. A tap turns him to whoever's in reach whichever way he's facing, the nearest, and one coming for him before
-// one that isn't. It lands every time from 0.4 to 2.8 m off, in front, beside and behind, stood still and reaching for him, with nobody else going down, and with a ray from
-// the camera getting to its head and to its chest past him as the pan lands, or its outline drawn through him, both on the screen. It goes over away from him, along the line
+// one that isn't. It lands every time from 0.4 to 2.8 m off, in front, beside and behind, stood still and reaching for him, with nobody else going down, with the middle of
+// the skillet's bottom on its head or its chest in the frame it lands in, and with a ray from the camera getting to its head and to its chest past him as the pan lands, or
+// its outline drawn through him, both on the screen. It goes over away from him, along the line
 // from him through it, and lands 1.5 to 3 m off, or short of another of them, a parked pickup or a house's wall right behind it. One coming for him stops at arm's length. A
 // ring of cast iron goes over the thud, and the one it lands on jolts back as the picture holds. Two coming at him at once, one either side, go down in two taps, the second
 // swinging back the other way. With reduced motion the camera stays where it was from him.
@@ -219,15 +220,17 @@ const skillet = () => {
   };
   // From a tap on, a step at a time with it drawn: whether it went down or got hold of him first, what could be seen of it the step before the pan landed on it, which way
   // he was facing then, where he was, where it stood and where it ended up, and whether anyone else went down. Where it's drawn as it goes over is the line from where it stood
-  // to where it lands.
+  // to where it lands. And how far the middle of the skillet's bottom was from the middle of its head and of its chest, as they were drawn where it stood, in the frame it
+  // landed in, and which of them the game says it landed on.
   window.swung = (s, others = []) => {
-    const stood = { x: s.x, z: s.z }; let seen = null, faced = null, me = null, t = 0;
+    const stood = { x: s.x, z: s.z }; let seen = null, faced = null, me = null, was = null, pan = null, t = 0;
     for (; t < 1.2 && !(s.flat > 0) && !H.grab; t += T) {
-      seen = sees(s); me = { x: P().x, z: P().z }; const a = G.player.yaw - Math.atan2(s.x - P().x, s.z - P().z); faced = Math.abs(Math.atan2(Math.sin(a), Math.cos(a)));
+      seen = sees(s); was = G.stance(s); me = { x: P().x, z: P().z }; const a = G.player.yaw - Math.atan2(s.x - P().x, s.z - P().z); faced = Math.abs(Math.atan2(Math.sin(a), Math.cos(a)));
       Object.assign(stood, { x: s.x, z: s.z });
       G.step(T, T);
     }
-    return { down: s.flat > 0, grab: !!H.grab, t: +t.toFixed(2), seen, faced: faced && +faced.toFixed(3), me, stood, landed: { x: s.x, z: s.z }, others: others.map((o) => o.flat > 0) };
+    if (s.flat > 0 && was?.headAt) { const b = G.skillet.bottom(), off = (p) => +Math.hypot(b[0] - p[0], b[1] - p[1], b[2] - p[2]).toFixed(2); pan = { head: off(was.headAt), chest: off(was.chestAt), on: G.skillet.lands()?.part ?? null }; }
+    return { down: s.flat > 0, grab: !!H.grab, t: +t.toFixed(2), seen, faced: faced && +faced.toFixed(3), me, stood, landed: { x: s.x, z: s.z }, pan, others: others.map((o) => o.flat > 0) };
   };
   window.heard = () => { const play = Snd.play, asked = []; Snd.play = function (name, o) { asked.push(name); return play.call(this, name, o); }; return () => { Snd.play = play; return asked; }; };
 };
@@ -282,6 +285,12 @@ check(`and nobody he didn't turn to goes down (${nobodyElse.length} of ${all.len
 const past = seen.filter((r) => r.seen.past).length, through = seen.filter((r) => !r.seen.past).length;
 check(`you see who you hit: as the pan lands its head and chest are on the screen, with nothing of him in the way of them (${past}) or its outline drawn through him (${through}), ${seen.length} of ${all.length}`, seen.length === all.length, show(all.filter((r) => !(r.seen?.head && r.seen?.chest))));
 check(`it goes over away from him, along the line from him through it, and lands 1.5 to 3 m off (${away.length} of ${landed.length})`, away.length === landed.length, show(landed.filter((r) => !(r.away && r.off < .35 && r.far >= 1.5 && r.far <= 3))));
+// The skillet's on them in the frame it lands in: the middle of its bottom against the outside of their head or their chest as they were drawn where they stood, which is
+// about 0.12 m from the middle of a head and 0.13 m from a chest's. It's within this much of one or the other, and never short of them.
+const PAN_ON = { head: .25, chest: .3 }, onIt = all.filter((r) => r.pan && (r.pan.head <= PAN_ON.head || r.pan.chest <= PAN_ON.chest));
+const panOff = (part) => all.filter((r) => r.pan?.on === part).map((r) => r.pan[part]), spread = (v) => (v.length ? `${Math.min(...v).toFixed(2)} to ${Math.max(...v).toFixed(2)} m` : 'never');
+console.log(`     as it lands, the middle of the skillet's bottom is ${spread(panOff('head'))} from the middle of their head the ${panOff('head').length} times it's on their head, and ${spread(panOff('chest'))} from their chest's the ${panOff('chest').length} times it's on that`);
+check(`the skillet lands on them: the middle of its bottom is within ${PAN_ON.head} m of the middle of their head or ${PAN_ON.chest} m of their chest's as it lands (${onIt.length} of ${all.length})`, onIt.length === all.length, all.filter((r) => !onIt.includes(r)).slice(0, 16).map((r) => `${r.kind} ${r.a.toFixed(1)} rad ${r.d}: ${JSON.stringify(r.pan)}`));
 
 // ---- through nothing: with another of them, a car or a wall right behind it, it doesn't go through, and with no room it drops where it stood
 // The pickup's side on 3.6 m ahead of him, so that its side is 1.2 m behind the one he swings at, and it goes back where it was after.
@@ -416,11 +425,12 @@ const calm = await g(() => {
 });
 check(`with reduced motion a swing still knocks it down, for ${calm.took} s, and the picture doesn't hold or tear`, calm.down && !calm.grab && !calm.torn && Math.abs(calm.took - 10) < .2, calm);
 await snap('5-reduced-motion-up-again');
-// and the camera doesn't swing about to show it, but stays where it was from him: one stood straight ahead of him, where it's behind him on the screen, and one off to his side
+// and the camera doesn't swing about to show it, but stays where it was from him: one stood straight ahead of him, where it's behind him on the screen, and one off to his side.
+// It follows him a little behind wherever he goes, which is in to them as he winds up, so where it is from him is taken once it's caught up with him.
 for (const a of [0, 1.6]) {
   await g((a) => { const [s] = only(1); put(s, a, 1.2); window.trial = [s]; G.sim(T, T); window.cam0 = { at: G.camera.position.clone().sub(P()), yaw: G.cam.yaw, pitch: G.cam.pitch }; }, a);
   await page.tap('#bA');
-  const kept = await g(() => { const r = swung(trial[0]); return { down: r.down, moved: +G.camera.position.clone().sub(P()).distanceTo(cam0.at).toFixed(3), turned: +(G.cam.yaw - cam0.yaw).toFixed(3), up: +(G.cam.pitch - cam0.pitch).toFixed(3) }; });
+  const kept = await g(() => { const r = swung(trial[0]); go(.6); return { down: r.down, moved: +G.camera.position.clone().sub(P()).distanceTo(cam0.at).toFixed(3), turned: +(G.cam.yaw - cam0.yaw).toFixed(3), up: +(G.cam.pitch - cam0.pitch).toFixed(3) }; });
   check(`with reduced motion the camera stays where it was from him for one ${a ? 'off to his side' : 'straight ahead'} (moved ${kept.moved} m)`, kept.down && kept.moved < .05 && kept.turned === 0 && kept.up === 0, kept);
 }
 // the flare is brightness and not movement, so reduced motion keeps it

@@ -139,7 +139,7 @@ check('beans', town.beans.includes('can.clink'), town.beans);
 check('and a gas can', town.gas.includes('can.slosh'), town.gas);
 await page.keyboard.down('f'); await g(() => run(.1)); await page.keyboard.up('f');
 const swung = await g(async () => { await run(.5); return Snd.state().heard; });
-check('the hammer swings', swung.includes('swing'), swung);
+check('the skillet swings', swung.includes('swing'), swung);
 
 // ---------------- driving
 const drive = await g(async () => {

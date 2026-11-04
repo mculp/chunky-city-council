@@ -234,7 +234,7 @@ check(`and not one of the ${alarm.quiet} who've gone quiet stops, looks or comes
 check('it\'s only noise for its first 5 seconds, while it carries on going off and its lights keep going', !alarm.heard.noisy && alarm.heard.lit === 1, alarm);
 check(`he hears it the whole time, fainter further off: ${alarm.heard.loud[20].toFixed(2)} at 20 m, ${alarm.heard.loud[60].toFixed(2)} at 60 m and ${alarm.heard.loud[170]} at 170 m`, alarm.heard.loud[20] > alarm.heard.loud[60] * 1.5 && alarm.heard.loud[60] > 0 && alarm.heard.loud[170] === 0 && alarm.heard.late > 0, alarm.heard);
 check('and it runs down after 30 s, and doesn\'t go again', alarm.after === 0 && alarm.glowsAfter === 0 && !alarm.again, alarm);
-const hammer = await g(() => {
+const skillet = await g(() => {
   crowdOnRoad([]);
   const parked = G.lures.VEHICLES.find((v) => v.kind === 'car' && G.lures.canAlarm(v) && Math.hypot(v.x - truck.x, v.z - truck.z) > 20 && Math.hypot(v.x - truck.x, v.z - truck.z) < 900);
   const yaw = Math.sin(parked.yaw), fx = Math.cos(parked.yaw), side = 1.9, x = parked.x + fx * side, z = parked.z - yaw * side;
@@ -243,7 +243,7 @@ const hammer = await g(() => {
   const on = G.lures.ALARMS.some((a) => a.v === parked), golf = G.lures.VEHICLES.find((v) => v.kind === 'golf');
   return { on, golf: G.lures.canAlarm(golf) };
 });
-check('so does a hammer, on a keyboard, and a golf cart hasn\'t got one', hammer.on && !hammer.golf, hammer);
+check('so does the skillet, on a keyboard, and a golf cart hasn\'t got one', skillet.on && !skillet.golf, skillet);
 await g(() => { const G = __game; G.step(16); });
 
 // ---- into the river: nobody follows a bottle into the water, and the bottle doesn't make them look either

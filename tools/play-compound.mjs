@@ -145,12 +145,12 @@ const again = await g(() => {
   G.key('e', true); G.step(.05); G.key('e', false); for (let i = 0; i < 20; i++) G.sim(1 / 30, 1 / 30);
   G.key('e', true); G.step(.05); G.key('e', false); for (let i = 0; i < 20; i++) G.sim(1 / 30, 1 / 30);
   const beats = played.filter((n) => n.startsWith('jam.'));
-  // and a hammer on it is loud too, and doesn't put it down right away
+  // and the skillet on it is loud too, and doesn't put it down right away
   const hp = drums.prop.hp; played.length = 0; G.key('f', true); G.step(.05); G.key('f', false); for (let i = 0; i < 18; i++) G.sim(1 / 30, 1 / 30);
   return { act, beats, hp, after: drums.prop.hp, down: drums.prop.down, hit: played.filter((n) => n.startsWith('jam.')) };
 });
 check('playing them straight off, the second beat is the cymbal', again.beats.length >= 2 && again.beats[0] === 'jam.drum' && again.beats[1] === 'jam.cymbal', again.beats);
-check('hitting the drums with the hammer sounds them and chips them', again.after < again.hp && !again.down && again.hit.length > 0, again);
+check('hitting the drums with the skillet sounds them and chips them', again.after < again.hp && !again.down && again.hit.length > 0, again);
 
 // ---------------- nobody in it: two minutes of him in the shed with the drums going now and then, and six of the crowd about the road by the drive, who'd have it that home's
 // up the drive. None of them comes in, and three flung in off the road walk back out to it. The crowd's only about within 150 m of him, so it's here by the road that this can happen at all.

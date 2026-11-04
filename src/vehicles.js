@@ -19,7 +19,7 @@ export const KINDS = {
 };
 
 export const GRAVITY = 15;
-// What one swing of a hammer's worth of damage takes out of something moving, in joules. A car at 15 m/s has about five of them.
+// What one swing of the skillet's worth of damage takes out of something moving, in joules. A car at 15 m/s has about five of them.
 export const SMASH_J = 30000;
 
 // Points round each one's edge, close enough together that a post can't get between them: [along, across], from the middle
