@@ -87,7 +87,7 @@ And whatever their mood:
 
 ## Gone quiet
 
-Most of the crowd have gone quiet. They stand folded over at the waist with their arms hanging and leave him be however close he walks. They can't make him out by sound, smell, touch or light, don't look twice when he shambles, and don't answer the swarm's call. A noise, a lure, a light, the church bell and the train's horn still bring them to look.
+Most of the crowd have gone quiet. They stand folded over at the waist with their arms hanging and leave him be however close he walks. They can't make him out by sound, smell, touch or light, don't look twice when he shambles, and don't answer the swarm's call. A noise, a lure, a light and the church bell still bring them to look. The train's horn doesn't.
 
 The rest have **burnt down**, and they come for him on sight, as the whole crowd used to. They're the furthest gone of anyone: 1 in 15 out to 1 km from the middle of town, rising smoothly to 1 in 5 at 3 km and beyond, by how far gone each of them is and where they come out. Nobody at home or driving is one. Nobody who's gone quiet looks as far gone as the least of them in town, and further out, where there are more of them, they're drawn at least that far gone.
 

@@ -155,7 +155,7 @@ The night comes first: wind, insects, the river and frogs near water, all of it 
 - **The rope snapping is the loudest silence in the game.** The music cuts as it goes, so there's only air and then the splash, and it comes back under the water.
 - **The bridge** gets drums and a pulse. **The bite** cuts everything dead. **The fever** takes the night away altogether and leaves the music going out of tune. **Waking** is his heart.
 - **The crowd** mutter to themselves. One that's noticed him says so, louder the closer it is, and the music turns on him until they've been gone a while. One that reaches for him groans once more as its hands go up, higher and shorter, since by then his hood is hiding it.
-- **The train** is heard before it's seen: a rumble from over a kilometre off, higher as it comes and lower as it goes, the horn short of every crossing and trestle, the crossing bell, and the wheels over the joints up close. Two short blasts mean it's seen him on the tracks.
+- **The train** is heard before it's seen: a rumble from over a kilometre off, higher as it comes and lower as it goes, the horn once, short of a crossing he's near, the crossing bell, and the wheels over the joints up close. Two short blasts mean it's seen him on the tracks.
 - **Nothing speaks for him.** His voice is the owner's to record. There's a place for each line, and no line exists until there's a recording of it.
 
 `data/sound.md` has how it's all kept.

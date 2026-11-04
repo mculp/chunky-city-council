@@ -162,7 +162,7 @@ const ref2 = await g(() => { const t = R.TRESTLES[0]; while (TR.train && TR.trai
 check('there\'s somewhere to stand clear of it halfway over', refuge.floor === 6.25 && ref2.alive && ref2.on && !ref2.got, { refuge, ref2 });
 await g(() => done());
 
-// ---- the crowd: the horn brings them, the train throws them clear, and nobody dies of it. They lie in the ditch longer than any swing keeps anyone down, get up sore and walk home.
+// ---- the crowd: the horn doesn't bring them, but whoever's on the tracks when it gets there is thrown clear, and nobody dies of it. They lie in the ditch longer than any swing keeps anyone down, get up sore and walk home.
 // This is played twice, with and without reduced motion, so it takes the page it's on and what to call it.
 const hitByTrain = async (pg, tag, picture) => {
   const e = (fn, arg) => pg.evaluate(fn, arg), out = {};
@@ -175,9 +175,14 @@ const hitByTrain = async (pg, tag, picture) => {
     G.sim(.5, T);
     const count0 = H.all.length;
     TR.send(1, c.s - 560);
+    // it blows for the crossing, and nobody's drawn to it
+    while (TR.train.head < c.s - 60) { G.player.inv = 0; G.sim(.1, T); }
+    const blew = R.horns.some((h) => h.road === 'chestnut_st' && h.blown), drawn = lot.filter((s) => s.tx === c.x && s.tz === c.z).length;
+    // so they're stood on it, across the tracks, the way someone always will be
+    lot.forEach((s, i) => { const [x, z] = along(c.s + (i - 7) * 1.1, i % 2 ? .6 : -.6); s.x = s.tx = x; s.z = s.tz = z; s.y = G.floorAt(x, z); });
     while (TR.train.head < c.s - 6) { G.player.inv = 0; G.sim(.1, T); }
-    const there = lot.filter((s) => Math.hypot(s.x - c.x, s.z - c.z) < 6).length;
-    return { there, count0, n: lot.length };
+    const there = lot.filter((s) => Math.hypot(s.x - c.x, s.z - c.z) < 9).length;
+    return { blew, drawn, there, count0, n: lot.length };
   }));
   await e(() => { G.look(-.2, .22); G.step(.2, 1 / 24); });
   Object.assign(out, await e(() => {
@@ -238,8 +243,8 @@ const hitByTrain = async (pg, tag, picture) => {
     };
   }));
   const r = out, slow = r.fastest <= 0.75 + .05;
-  console.log(`     ${tag}: ${r.there} came to the horn, ${r.thrown} thrown, none dead: lying ${Math.min(...r.down).toFixed(0)} to ${Math.max(...r.down).toFixed(0)} s, the last up ${r.upAfter.toFixed(0)} s later, ${r.onTheWay} of ${r.thrown} on their way home or there by ${r.fastest.toFixed(2)} m/s at most, and ${r.later} of ${r.count0} about at the end`);
-  check(`${tag}: the horn brings them to the crossing`, r.there >= 4, r);
+  console.log(`     ${tag}: ${r.drawn} drawn to the horn, ${r.there} stood on the crossing, ${r.thrown} thrown, none dead: lying ${Math.min(...r.down).toFixed(0)} to ${Math.max(...r.down).toFixed(0)} s, the last up ${r.upAfter.toFixed(0)} s later, ${r.onTheWay} of ${r.thrown} on their way home or there by ${r.fastest.toFixed(2)} m/s at most, and ${r.later} of ${r.count0} about at the end`);
+  check(`${tag}: the horn doesn't bring anyone to the crossing`, r.blew && r.drawn === 0, r);
   check(`${tag}: and it throws them clear of the tracks, ${r.thrown} of them`, r.thrown >= 4 && r.onTracks === 0 && r.away.every((d) => d > 3.5), r);
   check(`${tag}: nobody the train hits is gone, in the river or out of the crowd`, r.under === 0 && r.gone === 0 && r.later === r.count0 && r.now === r.count0, r);
   check(`${tag}: they lie there longer than any swing keeps anyone down, longer than a blast or a pickup flat out, ${r.longest} s`, r.down.every((d) => d > r.longest + 5) && r.seconds.every((d) => d > r.longest + 5), r);

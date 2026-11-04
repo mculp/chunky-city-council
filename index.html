@@ -6333,7 +6333,7 @@ function ram(x, z, y, speed, dirx, dirz, mass, self = null) {
 }
 
 // ---------------- the train. src/trains.js says where it is, and this is what it looks like and what it does.
-const TRAIN_CAP = { loco: 2, box: 26, hopper: 26, tank: 26 }, TRAIN_SEE = 240, TRAIN_NEAR = 150, TRAIN_LURE = 95, RAIL_TOP = Y0 + .25;
+const TRAIN_CAP = { loco: 2, box: 26, hopper: 26, tank: 26 }, TRAIN_SEE = 240, TRAIN_NEAR = 150, RAIL_TOP = Y0 + .25;
 const TRAIN_PAINTS = { loco: ['#46586a', '#5a4638', '#4b5a44', '#5e4c3e'], box: ['#7d5638', '#8c5636', '#5e6470', '#7f6a46', '#6b4234'], hopper: ['#9a9482', '#7e8488', '#8c8570'], tank: ['#3a3a42', '#4e4e58', '#6a6e74'] };
 const trainGeos = trainGeometries(), trainGroup = new THREE.Group(), trainBodies = {}, trainLines = {}, trainSeeds = {}, trainUsed = {};
 trainGroup.visible = false; scene.add(trainGroup);
@@ -6432,8 +6432,7 @@ function trainHorn(g, tr) {
   const blown = !tr.horned && !!g.road && Math.hypot(g.x - player.pos.x, g.z - player.pos.z) < trains.T.hornNear;
   hornLog.push({ road: g.road ?? null, at: time, blown, far: Math.round(Math.hypot(tr.cars[0].x - player.pos.x, tr.cars[0].z - player.pos.z)) }); if (hornLog.length > 200) hornLog.shift();
   if (blown) { tr.horned = true; playNew('train.horn', { x: tr.cars[0].x, z: tr.cars[0].z }); }
-  // They come to it, and some of them end up thrown clear of the tracks for it. Whoever's lived with it all their life knows better, and that goes for anyone it's fooled often enough.
-  if (g.road && folkOut) horde.lure(g.x, g.z, TRAIN_LURE, (trains.T.horn + tr.length + 30) / tr.speed, false, 'train');
+  // It doesn't bring anyone to the crossing. Only whoever's on the tracks when it gets there is thrown clear.
 }
 // Someone in its way: { where they end up, how they fly, how long they lie there }. It throws them clear of the tracks, off the front of it further and harder than off the side,
 // and they lie in the ditch a good while, longer than anything else keeps them down. Then they get up sore and go home. Nobody dies of it.
