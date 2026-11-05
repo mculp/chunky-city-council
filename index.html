@@ -1,4 +1,44 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<script>
+// chunky.ms/?net is online.chunky.ms now (CHUNKY-169). A phone that comes by the old address is sent on before anything else loads,
+// with what it keeps for the town: its key, name and look and the hero's link, which are all chunky.net.… That's kept for each address
+// apart, and without it they'd come in as someone new, with nobody remembering them. A word only this phone knows goes in front of it, and
+// in a cookie of its own for chunky.ms and everything under it, which only a page of chunky.ms's own can set, and only over https, which
+// __Secure- holds the browser to. online.chunky.ms takes in what came only with that word, so a link that anyone could post with a key they
+// know in it is never taken in, and only wherever it has nothing of its own. Each trip has its own cookie, so two tabs on their way at once
+// each come in as who they were. It comes off the address at once either way, as the hero's link does. src/together.test.js runs this as
+// it's written here.
+{
+  const here = location.hostname, q = new URLSearchParams(location.search), WORD = '__Secure-chunky.carry.';
+  const cookie = (word, age) => { document.cookie = `${WORD}${word}=1; Domain=chunky.ms; Path=/; Max-Age=${age}; Secure; SameSite=Lax`; };
+  if ((here === 'chunky.ms' || here === 'www.chunky.ms') && q.has('net')) {
+    const kept = {}, net = q.get('net');
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('chunky.net.')) kept[k] = localStorage.getItem(k); } } catch { /* it won't say */ }
+    try { if (location.hash.startsWith('#hero=')) kept[`chunky.net.hero@${net}`] = decodeURIComponent(location.hash.slice(6)); } catch { /* mangled */ }
+    if (net === '') q.delete('net');
+    let carry = '';
+    if (Object.keys(kept).length) {
+      const word = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+      cookie(word, 120);
+      carry = `#carry=${word}.${encodeURIComponent(JSON.stringify(kept))}`;
+    }
+    const rest = String(q);
+    location.replace(`https://online.chunky.ms/${rest ? `?${rest}` : ''}${carry}`);
+  } else if (here === 'online.chunky.ms' && location.hash.startsWith('#carry=')) {
+    try {
+      const h = location.hash.slice(7), dot = h.indexOf('.'), word = h.slice(0, dot);
+      if (/^[0-9a-f]{32}$/.test(word) && document.cookie.split(/;\s*/).includes(`${WORD}${word}=1`)) {
+        cookie(word, 0);
+        const came = JSON.parse(decodeURIComponent(h.slice(dot + 1)));
+        if (came && typeof came === 'object' && !Array.isArray(came)) {
+          for (const [k, v] of Object.entries(came)) if (k.startsWith('chunky.net.') && typeof v === 'string' && v.length <= 1024 && localStorage.getItem(k) === null) localStorage.setItem(k, v);
+        }
+      }
+    } catch { /* not taken in */ }
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+}
+</script>
 <title>Chunky 2026</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2307050b'/%3E%3Crect x='8' y='6' width='16' height='21' rx='2.5' fill='%23ec803a'/%3E%3Crect x='8' y='12' width='16' height='9' fill='%23e3285c'/%3E%3Cellipse cx='16' cy='7' rx='8' ry='2.4' fill='%23f1e6cf'/%3E%3C/svg%3E">
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -834,7 +874,7 @@ const OPENING_ROAD = MAP.opening.road;
 // where things stand, in true metres from town center, so that they move with the map if its bands change
 const atTrue = (x, z) => MAP.fromTrue(x, z);
 // What's by the railroad, and the siding in town between Mulberry St and Poplar St, which the boxcar's beside and the trains pass on in the
-// town everyone shares (CHUNKY-153). The woods keep off it, and what's drawn of it is further down, with the trains.
+// town everyone shares (CHUNKY-153). The woods keep off it, and what's drawn of it is further down, with the boxcar.
 const RAILROAD = await (await fetch('data/railroad.json')).json();
 const SIDING = makeSiding(RAIL, { ...RAILROAD.siding, west: atTrue(...RAILROAD.siding.west), east: atTrue(...RAILROAD.siding.east) });
 // The Chunky River Bridge on Griffis Fountain Rd, at the edge of town: one lane wide, 30.7 m long, where he comes to

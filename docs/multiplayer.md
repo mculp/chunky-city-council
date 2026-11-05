@@ -9,7 +9,7 @@ npm run net:server
 python3 -m http.server
 ```
 
-Open http://localhost:8000/?net in two windows and press Play in each. From a phone on the same network it's `http://<this machine's address>:8000/?net`, since the town is looked for on the same host as the page. `?net=ws://…` points at a town somewhere else. On the game's own site, which is https, `?net` alone is the town everyone shares on Cloudflare, `TOWN_URL` in `src/net.js`, since a page on https can't open a plain ws:// socket.
+Open http://localhost:8000/?net in two windows and press Play in each. From a phone on the same network it's `http://<this machine's address>:8000/?net`, since the town is looked for on the same host as the page. `?net=ws://…` points at a town somewhere else. On the game's own site, which is https, `?net` alone is the town everyone shares on Cloudflare, `TOWN_URL` in `src/net.js`, since a page on https can't open a plain ws:// socket. That's online.chunky.ms, and chunky.ms/?net sends a phone on there before anything else loads, with what it keeps for the town: its key, name and look and the hero's link. Each address keeps its own, so without them they'd come in as someone new, with nobody remembering them. online.chunky.ms takes them in wherever it has none of its own, and they come off the address straight away. It's the first thing in `index.html`, and `src/together.test.js` runs it as it's written there.
 
 The owner's link is `#hero=<secret>` on the end of the address, for a town started with `CHUNKY_HERO` set to the secret's sha256 in hex:
 
