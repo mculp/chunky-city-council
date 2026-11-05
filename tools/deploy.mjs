@@ -12,6 +12,8 @@
 // page names: tools/favicon.mjs makes it from index.html's own tab icon, there and then, so it's always the icon that's going up.
 // So does a version.txt, which is the commit and nothing else. A deploy needn't change index.html, and then index.html can't say
 // whether chunky.ms has changed over: on 2026-11-04 the new stone.mp3 was a 404 for a moment after index.html said it was live.
+// And a build.json, which says the same commit, how many commits it is and which day of building it's from, for the page's
+// "alpha (day N, build M)" (CHUNKY-184, tools/stamp.mjs). It's only on the site, so a page anywhere else goes without.
 // It goes to the game's own Vercel project as its live version, with this Mac's Vercel sign-in. The portfolio that used to be at
 // chunky.ms is in the other project, untouched.
 import { execFileSync } from 'node:child_process';
@@ -20,6 +22,7 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, wri
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { favicon, iconOf } from './favicon.mjs';
+import { stampOf } from './stamp.mjs';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const SITE = 'https://chunky.ms/', VERCEL = 'vercel@65.9.0', TEAM = 'team_ivvZR0r1i3i28k7gFppIlkzc', PROJECT = 'prj_v0aTWXr5ofi5Yzt0os3Lz04c9ntS';
@@ -47,8 +50,12 @@ const icon = iconOf(readFileSync(join(dir, 'index.html'), 'utf8'));
 if (icon) { const made = await favicon(icon); writeFileSync(join(dir, 'favicon.ico'), made); files.push(['favicon.ico', made.length]); }
 else console.log('no favicon.ico: index.html\'s icon isn\'t an SVG written into the page');
 writeFileSync(join(dir, 'version.txt'), `${sha}\n`); files.push(['version.txt', sha.length + 1]);
+// main's first commit is whichever it began from, the earliest if there's more than one
+const first = git('log', '--max-parents=0', '--format=%cI', sha).split('\n').sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+const stamp = `${JSON.stringify(stampOf({ sha, build: +git('rev-list', '--count', sha), at: git('log', '-1', '--format=%cI', sha), first }))}\n`;
+writeFileSync(join(dir, 'build.json'), stamp); files.push(['build.json', stamp.length]);
 const bytes = files.reduce((n, [, size]) => n + size, 0);
-console.log(`${what}: ${files.length} files, ${(bytes / 1048576).toFixed(1)} MB`);
+console.log(`${what}: ${files.length} files, ${(bytes / 1048576).toFixed(1)} MB, ${stamp.trim()}`);
 if (process.argv.includes('--dry')) { for (const [f] of files) console.log(`  ${f}`); rmSync(dir, { recursive: true, force: true }); process.exit(0); }
 
 // The project's named here rather than linked by hand, so nothing's asked
@@ -63,8 +70,8 @@ const want = createHash('sha256').update(readFileSync(join(dir, 'index.html'))).
 rmSync(dir, { recursive: true, force: true });
 const ask = (path, as) => fetch(`${SITE}${path}?deploy=${sha.slice(0, 8)}-${Date.now()}`, { cache: 'no-store' }).then((r) => (r.ok ? r[as]() : null)).catch(() => null);
 for (let running = 0; ;) {
-  const [page, version] = await Promise.all([ask('', 'arrayBuffer'), ask('version.txt', 'text')]);
-  const now = !!page && createHash('sha256').update(Buffer.from(page)).digest('hex') === want && version?.trim() === sha;
+  const [page, version, built] = await Promise.all([ask('', 'arrayBuffer'), ask('version.txt', 'text'), ask('build.json', 'text')]);
+  const now = !!page && createHash('sha256').update(Buffer.from(page)).digest('hex') === want && version?.trim() === sha && built === stamp;
   running = now ? running + 1 : 0;
   if (running === 3) { console.log(`${SITE} is serving ${what} (${((Date.now() - began) / 1000).toFixed(0)} s)`); break; }
   if (Date.now() - began > 120000) { console.error(`${SITE} still isn't serving ${sha.slice(0, 7)} after two minutes`); process.exit(1); }
