@@ -24,8 +24,20 @@ A light's props are found by breaking each prop near it that has anything to do 
 - **`parked`**, each `{ i, kind, K, x, z, yaw, y }`, which stops anyone within .3 m of it and under 1.4 m over it, kept by cells 16 m on a side as the game keeps them. **`park(i, x, z, yaw)`** is where one's been left since, and **`ride(i)`** takes one out while someone's in it.
 - **`lights`**, each `{ x, z, r, k }`.
 
+## The town's people
+
+`createCrowd(world, { folks, looks })` in `server/crowd.js` runs them in that world with `src/horde.js` and `src/agents.js`, for everyone in town at once, the way the game runs them round him:
+
+- The crowd's put out once anyone's in town, and only the once, along US 80, Church St and Adams St as the game puts it out (`STREETS`), and not within 35 m of anyone, in the water, in a house or anywhere nobody goes.
+- The people at home come out of their front doors once anyone's within 190 m of the house, some of them out in the yard already. Anyone who lives somewhere is put back once nobody's within 300 m of them, and comes out again just as they were as soon as anyone's within 190 m. All of it's looked at once a second, as the game does.
+- Whatever someone's driving isn't parked anywhere. It's in the way of anyone on foot where they've got it, though not of anyone thrown over it, and it's parked where they get out.
+
+`step(dt, players)` is a tenth of a second for everyone in town, as `horde.update` takes them, with each one's floor as `y`. It gives back what happened, each `{ t, id }` with the folks number of whoever it happened to, and for `grab`, `free` and `overrun` the `pid` of the player it was. `mash(pid)` is a press of A from the phone of whoever's held.
+
 ## Checks
 
 `npm run crowd` checks that the file's still what the game has, that the town's world has the compound on Pine Forest Rd's grounds and the church on Church St where the game has them and nowhere else, and that every house's door is where the game brings its people out of it. For that it goes round the county from house to house, every house within 150 m of somewhere he's stood, with the people at home brought out, and compares each one's door with the town's. `npm run crowd -- --write` writes the file again, after who lives where, what's parked where or a light has changed.
 
 `server/world.test.js` has the rest: that every parked vehicle stops anyone, and nobody over its roof, that one left somewhere else is there and one someone's in is nowhere, that everyone at home comes out of their own front door facing out, and that every light has the props that put it out.
+
+`server/crowd.test.js` has the town running them: the crowd out once and where it's put, the people at home out of their doors and put back and out again just as they were, someone burnt down getting hold of whoever's in town and letting go once they've fought free, told for the one it's about with two in town, a vehicle someone's driving where they've got it and parked where it's left, and everything else that happens told with who it happened to. None of it hangs on one run of random numbers.
