@@ -63,7 +63,7 @@ Then open http://localhost:8000.
 
 `npm test` runs `node --test` for data and logic. Name test files `*.test.js`.
 
-`npm run frames` plays the opening as it is and as it is on `origin/main`, or the commit it's given, and fails unless every frame is the same to the byte. It's for a change that isn't meant to touch the opening, and it's run by hand.
+`npm run frames` plays the opening as it is and as it is on `origin/main`, or the commit it's given, and fails unless every frame is the same to the byte. It's for a change that isn't meant to touch the opening, and it's run by hand. three.js takes four of `?test`'s seeded random numbers for every geometry, material and mesh's id, so anything new made after the particles' are seeded again, by the second `seedRandom()`, moves every ripple and splash in the opening, however far off it is. Make it before then. With nothing uncommitted, `npm run frames -- HEAD` is a control, the same to the byte unless the machine's at fault.
 
 `npm run check` runs everything below and `npm test` too, three at a time and longest first, and runs anything that fails again on its own. `-- --changed` runs only what the uncommitted changes, or the last commit, could break, `-- --dry` says what it would run, and `-- --at <commit>` checks a commit from a copy so the worktree can change meanwhile. Together, `--changed` is what that commit could break, or everything from `--changed <base>` to it.
 
