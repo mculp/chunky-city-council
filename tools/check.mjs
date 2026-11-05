@@ -44,9 +44,9 @@ const NEVER = new Set(['check', 'deploy', 'sound:make', 'sound:level', 'frames',
 const VARIANTS = { smoke: '--touch', sound: '--old' };
 // for --changed: the checks for a module besides any named after it, the checks that look after parts of index.html by
 // other names than their own, and names too common in index.html to mean a check
-const ALIASES = { vehicles: ['drive'], damage: ['wreck'], roads: ['walk'], mapview: ['net', 'keys', 'water'], fever: ['deaths', 'trains', 'horde'],
-  horde: ['fling'], agents: ['fling'], folks: ['fling'] };
-const LOOKS_AFTER = { fling: /poseCrowd|aura|shoe|\bhop|\bfl[iu]ng/i };
+const ALIASES = { vehicles: ['drive'], damage: ['wreck'], roads: ['walk', 'wet'], mapview: ['net', 'keys', 'water'], fever: ['deaths', 'trains', 'horde'],
+  horde: ['fling'], agents: ['fling'], folks: ['fling'], water: ['wet'], lanes: ['wet'], solids: ['wet'] };
+const LOOKS_AFTER = { fling: /poseCrowd|aura|shoe|\bhop|\bfl[iu]ng/i, wet: /\b(landH|pondGround|riverDist|groundH|floorAt|roadHalf|onRoad|TOWN_Y|channel)\b/ };
 const COMMON = new Set(['play', 'test', 'town', 'water']);
 
 // where it runs: here, or a copy of a commit with this worktree's installs and raw downloads linked in

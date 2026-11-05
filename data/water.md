@@ -74,6 +74,17 @@ A pond's height isn't in the file, because it comes from the ground around it, w
 - **The crowd:** keeps out of it, as it does the river.
 - **The maps:** both draw it in the river's colour, with no names.
 
+## In the town everyone shares
+
+The town has no page to ask, so `src/wet.js` has the water as the game does, over the town's flat ground (`data/solids.md`). Its heights are over that ground, so the river's surface is 6.15 m under it.
+
+- **The river** is the game's: wet to 16.5 m either side of its line, where its bank, coming down from the town at 24 m, is 0.1 m under its surface, and down to its bed 3 m under that. It's narrower at the Chunky River Bridge and follows the opening scene's channel at Stuckey's Bridge, which is a ruin by the time anyone's in town, with the river where its deck was. A road keeps its bed across it, and the bank comes up level under a road or the tracks.
+- **The banks** come down a step at a time that the crowd can climb, so someone thrown off a trestle falls as far as the game has them fall, and wades out up the same bank.
+- **A pond** stands where the game's would on flat ground: half a metre under the town, or lower where its shore comes down the river's bank. A pool stands 12 cm under the town. Each has the game's ground off its shore and under it.
+- **What it leaves out** is the land's rise and fall away from the water, and the buildings' pads. So where a building's pad or a road's bed meets a pond, the game's ground can stand over its water where the town's doesn't, in a few places in a pond's corner.
+
+`npm run wet` checks it against the game's own floor and water in town, and says where they differ, and `node --test src/wet.test.js` tests it on the real map.
+
 ## Regenerating
 
 ```sh
