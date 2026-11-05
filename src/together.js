@@ -254,8 +254,13 @@ export function together(G) {
     S.beans = had.beans ?? 0; S.gas = had.gas ?? 0;
     for (const k of Object.keys(S.items)) delete S.items[k];
     Object.assign(S.items, had.items ?? {});
-    keptWas = JSON.stringify({ beans: S.beans, items: S.items, gas: S.gas });
+    // and Miss Bobby's pantry as it is for them (CHUNKY-182), which a town from before it kept them doesn't say: full shelves, and
+    // steps that want sweeping
+    G.pantry.take(had.pantry ?? null);
+    keptWas = JSON.stringify(keeping());
   }
+  // what the town keeps of them: what they carry, and the pantry
+  const keeping = () => ({ beans: S.beans, items: { ...S.items }, gas: S.gas, pantry: G.pantry.kept() });
   // Each of them a little apart from the others, on a sunflower's spiral out from the start, and facing Coop. Each spot's checked on the
   // ground before anyone's put there: dry, inside nothing, near enough for him to turn to them, and nothing between them and him.
   function startSpot() {
@@ -292,9 +297,9 @@ export function together(G) {
     // down until they're halfway up, coming to, and down rolling out of something going too: a pose has no room for which way over
     // they are, so it's lying along the ground. On a trip from a ring it's that, from sitting down to getting up at the other end.
     else link.update(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: howNow(), ...holding() });
-    // what they carry goes whenever it changes, and what's broken a few times a second
-    const had = JSON.stringify({ beans: S.beans, items: S.items, gas: S.gas });
-    if (link.id && had !== keptWas) { keptWas = had; link.keep({ beans: S.beans, items: { ...S.items }, gas: S.gas }); }
+    // what they carry and the pantry go whenever they change, and what's broken a few times a second
+    const now = keeping(), had = JSON.stringify(now);
+    if (link.id && had !== keptWas) { keptWas = had; link.keep(now); }
     sayWrecks();
   }
 

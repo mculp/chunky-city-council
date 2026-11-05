@@ -104,8 +104,12 @@ Miss Bobby pays for sweeping her steps, at her house by the town hall, out of th
 - Until Chapter 1's done she always has his three, however empty the shelves are, because a run can't reach 12 without them. That's `pantry` reading 3 while it lasts. The cans still come off the shelves.
 - Once it's done, `swept` means the steps have been swept today, and comes off at midnight.
 - It's saved under `chunky.pantry.v1`, with the day it was last looked at, how many cans there were and the day the steps were last swept. "Forget everyone" wipes it with the rest.
+- While the steps want sweeping, "Sweep the steps." is one of his answers whenever he talks to her (CHUNKY-182): with her written lines, where it goes before the last of them unless it's there already, and with her own words, where it's never one that doesn't fit. It's the answer written on `bobbyBeans`, and `asksOf` in `index.html` is what says it's due. Her model's told it's the one thing she can ask him for, and once they're swept that day, it's told there's nothing.
+- Her box can come up under a thumb still on A once the steps are swept, and on a phone its last answer is over A, so an answer only takes a press that went down on it. A key, or the number that picks it, always does.
 
 Sweeping every day runs the shelves down to what comes in, so after a week it's 2 a day. Left alone for a few days, they're full again. Every number is in `PANTRY` in `src/pantry.js`.
+
+In the town everyone shares, each player has a pantry of their own, which pays them as their own story would once Chapter 1's done, since there are no chapters there. The town keeps it with the rest of what they have, as `pantry`, `{ day, stock, swept }`, and a player it has none for starts with full shelves and steps that want sweeping. The phone's own `chunky.pantry.v1` is the story's and isn't touched. Sweeping there pays from their pantry and warms Miss Bobby to them, as the story's `swept` does, and sets nothing of the story's: who she's warmed to is how she feels about them in the town (`data/talk.md`).
 
 ## Saving
 

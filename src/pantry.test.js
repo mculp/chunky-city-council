@@ -66,6 +66,28 @@ describe('the pantry', () => {
     assert.equal(createPantry({ store: big }).stock(DAY), PANTRY.most);
   });
 
+  test('in a town everyone shares, what\'s kept of one is taken by another, as it was', () => {
+    const a = createPantry();
+    a.sweep(DAY, 3); a.stock(DAY + 1);
+    const b = createPantry();
+    b.take(JSON.parse(JSON.stringify(a.kept())));
+    assert.deepEqual(b.kept(), { day: DAY + 1, stock: PANTRY.most - 3 + PANTRY.comesIn, swept: DAY });
+    assert.equal(b.owes(DAY + 1), 3, 'and pays as the first one would');
+    b.sweep(DAY + 1, 3);
+    assert.ok(b.sweptOn(DAY + 1) && !a.sweptOn(DAY + 1), 'each its own');
+  });
+
+  test('and taking nothing, or what isn\'t a pantry, is full shelves and steps that want sweeping', () => {
+    for (const kept of [null, undefined, 'x', { day: 'x' }, { day: DAY, stock: 40, swept: 'today' }]) {
+      const p = createPantry();
+      p.sweep(DAY, 3); p.take(kept);
+      assert.equal(p.stock(DAY), PANTRY.most, JSON.stringify(kept));
+      assert.equal(p.owes(DAY), 3, JSON.stringify(kept));
+    }
+    const p = createPantry(); p.take({ day: DAY, stock: -4, swept: DAY });
+    assert.equal(p.stock(DAY), 0); assert.equal(p.owes(DAY), 0);
+  });
+
   test('a clock that goes back gets nothing for it, there or on the way forward again', () => {
     const p = createPantry();
     p.sweep(DAY, 3);

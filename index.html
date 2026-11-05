@@ -6047,10 +6047,12 @@ Object.assign(S.flags, people.flags());
 // Their own words (CHUNKY-107): src/talk.js and data/talk.json. The game's own pages ask the talk server, and ?test asks nothing until a test says where.
 const talk = createTalk({ data: await (await fetch('data/talk.json')).json(), cast: people.data, store: saveStore, fetch: (...a) => window.fetch(...a) });
 if (!TEST) talk.on(talkUrl(talk.data, location));
-// The church's pantry: what's on its shelves comes and goes with the church signs' days. data/cast.md says how.
-const pantry = createPantry({ store: saveStore }), today = () => (signNow === null ? dayOf() : dayOf(new Date(signNow)));
-// What she'd give him for the steps. Until Chapter 1's done she always has his three, or he couldn't get to twelve.
-const pantryOwes = () => (S.flags.ended ? pantry.owes(today()) : PANTRY.pays);
+// The church's pantry: what's on its shelves comes and goes with the church signs' days. data/cast.md says how. In a town that's
+// shared each player has their own, which the town keeps with the rest of what they have, so it's on this phone only for the visit.
+const pantry = createPantry({ store: SHARED ? null : saveStore }), today = () => (signNow === null ? dayOf() : dayOf(new Date(signNow)));
+// What she'd give him for the steps. Until Chapter 1's done she always has his three, or he couldn't get to twelve. In a town that's
+// shared there's no Chapter 1, and it's as it is once it's done.
+const pantryOwes = () => (S.flags.ended || SHARED ? pantry.owes(today()) : PANTRY.pays);
 function fromPantry() { const n = pantryOwes(); pantry.sweep(today(), n); showPantry(); if (n) addBeans(n); }
 showPantry();
 
@@ -6628,6 +6630,17 @@ function deathCamera(d) {
 
 // ---------------- dialogue: the words and what they do are in data/cast.json, and their own words, when there are any, come through src/talk.js
 const ACTIONS = { sweep: () => startSweep() };
+// What someone can ask him to do right now (CHUNKY-182), which is always one of his answers while it is, whether they're saying their
+// written lines or their own words, in the story or online. Each is the answer data/cast.json has for it. Today it's only Miss Bobby's
+// steps, while they want sweeping: in the story as its lines have it, and in a town that's shared as each player's own pantry has it.
+const ASKS = { sweep: Object.values(people.data.dialogue).flatMap((n) => n.opts ?? []).find((o) => o.do === 'sweep') };
+const stepsDue = () => (SHARED ? pantry.owes(today()) > 0 : !(S.flags.ended ? pantry.sweptOn(today()) : S.flags.swept) && pantryOwes() > 0);
+const asksOf = (who) => (who === 'bobby' && stepsDue() ? ['sweep'] : []);
+// a line with what they can ask for among his answers where it isn't already, before the last of them
+function withAsks(node) {
+  const more = asksOf(node.whoId).map((k) => ASKS[k]).filter((a) => !node.opts.some((o) => o.do === a.do));
+  return more.length ? { ...node, opts: [...node.opts.slice(0, -1), ...more, ...node.opts.slice(-1)] } : node;
+}
 // This visit, while he's talking to someone: who, what's been said in their own words, what that's done to how they feel about him, what
 // they said last, to come back to, and whether they've stepped out of the game for him
 let convo = null;
@@ -6645,7 +6658,7 @@ const wouldSayNew = (who, line = people.line(who, played)) => talk.ready() && ta
 const talkAs = () => (net ? { name: net.name, hero: net.hero } : undefined);
 const wouldTalk = (who) => (net ? talk.ready() && talk.talks(who) : wouldSayNew(who));
 const onlineLine = (who) => ({ whoId: who, who: NPCS[who].name, say: writtenOpener(talk.data, who, { mind: talk.mind(who), as: talkAs() }), opts: [{ say: 'Later.' }], do: [] });
-const lineFor = (who) => (net ? onlineLine(who) : people.line(who, played));
+const lineFor = (who) => withAsks(net ? onlineLine(who) : people.line(who, played));
 // they look at whoever it is and dip their head once, over NOD_T seconds: the top half of them NOD_A further over about the hips, as
 // they stand over already, and back up, with their arms hung from wherever that puts their shoulders
 const NOD_T = .6, NOD_A = .2, nod = (who) => { NPCS[who].nodAt = time; };
@@ -6659,14 +6672,15 @@ function bow(n, a) {
   R.S.forEach((s, i) => { s.copy(rest.S[i]); if (a) s.sub(BOW_AT).applyQuaternion(_bow).add(BOW_AT); });
   hangArms(R);
 }
-// What's going on, for whoever he's talking to: his beans, what he's carrying, what's happened, and whether the crowd's out
-function talkHere() {
+// What's going on, for whoever he's talking to: his beans, what he's carrying, what's happened, whether the crowd's out, and what they can
+// ask him to do. Online all that's happened that's theirs is whether they've swept her steps today.
+function talkHere(who) {
   const H = talk.data.happened, carrying = [];
   if (S.gas) carrying.push(S.gas === 1 ? 'a gas can' : `${S.gas} gas cans`);
   for (const [k, name] of Object.entries(LOOT_NAMES)) if (S.items[k] > 0) carrying.push(`${S.items[k]} ${name.toLowerCase()}`);
   if (S.flags.bat) carrying.push('a bat with tape on the grip');
-  const happened = net ? [] : [...Object.keys(H.flags).filter((f) => S.flags[f]).map((f) => H.flags[f]), ...Object.keys(H.items).filter((k) => S.items[k] > 0).map((k) => H.items[k])];
-  return { beans: S.beans, carrying, happened, tonight: crowdOut ? talk.data.tonight : '' };
+  const happened = net ? (pantry.sweptOn(today()) ? [H.flags.swept] : []) : [...Object.keys(H.flags).filter((f) => S.flags[f]).map((f) => H.flags[f]), ...Object.keys(H.items).filter((k) => S.items[k] > 0).map((k) => H.items[k])];
+  return { beans: S.beans, carrying, happened, tonight: crowdOut ? talk.data.tonight : '', asks: asksOf(who) };
 }
 {
   const c = talk.data.care;
@@ -6676,9 +6690,9 @@ function talkHere() {
   $('dCall').hidden = $('dSms').hidden = !touchUI;
 }
 function openDialog(id) {
-  // after Chapter 1 her steps want sweeping again each day
-  if (S.flags.ended) S.flags.swept = pantry.sweptOn(today());
-  const node = net ? onlineLine(id) : people.line(id, played), who = node.whoId, fresh = S.mode !== 'dialog' || convo?.who !== who;
+  // after Chapter 1 her steps want sweeping again each day, which in a town that's shared is the player's pantry's, and not the story's
+  if (S.flags.ended && !net) S.flags.swept = pantry.sweptOn(today());
+  const node = withAsks(net ? onlineLine(id) : people.line(id, played)), who = node.whoId, fresh = S.mode !== 'dialog' || convo?.who !== who;
   if (toniTalking) { toniTalking = false; toni.later(); }
   if (net && fresh && !node.say && !talk.ready()) { nod(who); return; }
   if (fresh) { convo = { who, turns: [], moved: {}, last: null, care: false }; comeBack.delete(who); }
@@ -6703,7 +6717,11 @@ function setOpts(list) {
   const box = $('dOpts'); box.innerHTML = '';
   list.forEach((o, i) => {
     const b = document.createElement('button'); b.textContent = (touchUI ? '' : (i + 1) + '. ') + o.say;
-    b.addEventListener('click', o.act);
+    // A press that went down somewhere else isn't one of these, such as a thumb still on A as the box comes up under it after he's swept
+    // her steps, since on a phone its last answer is over A. A key, which is what a number picks it with, always is.
+    let pressed = false;
+    b.addEventListener('pointerdown', () => { pressed = true; });
+    b.addEventListener('click', (e) => { if (!e.detail || pressed) o.act(); });
     box.appendChild(b);
   });
   hudVitals();
@@ -6723,7 +6741,7 @@ function ownWords(node) {
   if (visit.last) { showOwn(node, visit.last); return; }
   waiting(true);
   const pre = early.get(who); early.delete(who);
-  (pre && time - pre.at < 90 ? pre.answer : talk.ask(who, { here: talkHere(), as: talkAs() })).then((got) => {
+  (pre && time - pre.at < 90 ? pre.answer : talk.ask(who, { here: talkHere(who), as: talkAs() })).then((got) => {
     if (convo !== visit || S.mode !== 'dialog') return;
     if (got.reply?.say) { took(who, got.reply); showOwn(lineFor(who), visit.last); } else sayWritten(node);
   });
@@ -6742,10 +6760,12 @@ function took(who, r, heard = null) {
   convo.last = { say: r.say, replies: r.replies };
 }
 // Their own words, and his answers: the written ones that lead somewhere, which always stay, then theirs, up to three in all, then Later.
+// What they can ask him to do is never one that doesn't fit.
 function showOwn(node, last) {
   waiting(false);
   $('dSay').textContent = last.say;
-  const routes = node.opts.filter((o) => o.to || o.do).slice(0, TALK_LIMITS.answers);
+  const led = node.opts.filter((o) => o.to || o.do), asked = led.filter((o) => o.do);
+  const routes = [...led.filter((o) => !o.do).slice(0, TALK_LIMITS.answers - asked.length), ...asked];
   setOpts([
     ...routes.map((opt) => ({ say: opt.say, act: () => { if (opt.do) { closeDialog(); ACTIONS[opt.do](); } else openDialog(opt.to); } })),
     ...last.replies.slice(0, TALK_LIMITS.answers - routes.length).map((t) => ({ say: t, act: () => answer(t) })),
@@ -6760,7 +6780,7 @@ function answer(text, typed = false) {
   if (typed && inDistress(text, talk.data)) { stepOut(); return; }
   $('dHeard').textContent = text; $('dHeard').hidden = false;
   waiting(true);
-  talk.ask(who, { here: talkHere(), turns: visit.turns, heard: text, as: talkAs() }).then((got) => {
+  talk.ask(who, { here: talkHere(who), turns: visit.turns, heard: text, as: talkAs() }).then((got) => {
     if (convo !== visit || S.mode !== 'dialog') return;
     if (got.reply?.care && typed) { stepOut(); return; }
     if (got.reply?.say) { took(who, got.reply, text); showOwn(lineFor(who), visit.last); return; }
@@ -6831,6 +6851,17 @@ function townObjective() {
 }
 // on her step, looking out
 function startSweep() { const s = byDoor(BOBBY_DOOR, .55, 0); S.mode = 'sweep'; S.sweep = 0; HP.kind = 'sweep'; player.pos.set(s.x, Y0 + .1, s.z); player.yaw = s.yaw; }
+// Her steps are swept, and it does what data/cast.json says. In a town that's shared the story's flags and meters stay the story's: the
+// pantry that pays is the player's own, and it's how she feels about whoever it is that moves.
+function sweptHers() {
+  const done = people.data.events.swept;
+  if (!net) { people.apply(done, played); return; }
+  for (const e of done) {
+    if (e.pantry) fromPantry();
+    else if (e.beans) addBeans(e.beans);
+    else if (e.meter) { const [who, m] = e.meter.split('.'); talk.feel(who, m, e.by); }
+  }
+}
 function endChapter() {
   if (driving) getOut(true);
   S.mode = 'end'; prompt(null); $('dialog').hidden = true;
@@ -9276,7 +9307,7 @@ function tick(dt, draw = true) {
       for (const who of talk.data.who) {
         const n = NPCS[who], d = n ? Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z) : Infinity;
         if (d > AWAY) comeBack.add(who);
-        else if (d < NEAR && comeBack.has(who) && wouldTalk(who)) { comeBack.delete(who); early.set(who, { at: time, answer: talk.ask(who, { here: talkHere(), as: talkAs() }) }); }
+        else if (d < NEAR && comeBack.has(who) && wouldTalk(who)) { comeBack.delete(who); early.set(who, { at: time, answer: talk.ask(who, { here: talkHere(who), as: talkAs() }) }); }
       }
       const ride = near ? null : vehicleInReach();
       const meat = !near && !ride && skillet.visible && Math.hypot(HEARTH.x - player.pos.x, HEARTH.z - player.pos.z) < 2.2;
@@ -9305,7 +9336,7 @@ function tick(dt, draw = true) {
   if (M === 'sweep') {
     if (input.a) S.sweep = Math.min(1, S.sweep + dt / 3.2);
     prompt(`Hold ${press('SWEEP')} to sweep`, S.sweep); HP.kind = 'sweep';
-    if (S.sweep >= 1) { prompt(null); S.mode = 'town'; HP.kind = 'run'; people.apply(people.data.events.swept, played); openDialog('bobby'); }
+    if (S.sweep >= 1) { prompt(null); S.mode = 'town'; HP.kind = 'run'; sweptHers(); openDialog('bobby'); }
   }
   // ---------------- held by the crowd: hauled along until he breaks free
   if (M === 'grabbed' && horde.grab) {
@@ -9567,6 +9598,8 @@ ghost.position.set(-17.5, 1.3, 7.5);
     hillUp, floorAt, onRoad, blocked: blockedInTown, markVehicle, toast, prompt, getOut, rattle,
     get time() { return time; }, get driving() { return driving; }, get swingT() { return swingT; },
     vehMoved() { vehDirty = true; },
+    // Miss Bobby's pantry as it is for whoever's playing, which the town keeps with the rest of what they have (CHUNKY-182)
+    pantry: { kept: () => pantry.kept(), take(kept) { pantry.take(kept); showPantry(); } },
     // once they're in, the trains run to the town's clock, and with ?test not until trains.go(), as in the story (CHUNKY-153)
     trainsOnline() { trainsOn = !TEST; },
     // straight into town, where they're put

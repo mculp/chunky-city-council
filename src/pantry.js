@@ -8,11 +8,13 @@ export const PANTRY = { most: 9, comesIn: 2, pays: 3 };
 
 export function createPantry({ store = null, key = 'chunky.pantry.v1' } = {}) {
   let stock = PANTRY.most, day = null, swept = null;
+  // A pantry as it was kept. Anything that isn't one counts as none: full shelves, and steps that want sweeping.
+  const take = (saved) => {
+    stock = PANTRY.most; day = null; swept = null;
+    if (Number.isInteger(saved?.day)) { day = saved.day; stock = Math.max(0, Math.min(PANTRY.most, saved.stock | 0)); swept = Number.isInteger(saved.swept) ? saved.swept : null; }
+  };
   // A save that can't be read counts as no save, and a browser that won't store anything just doesn't remember
-  try {
-    const saved = JSON.parse(store.getItem(key));
-    if (Number.isInteger(saved.day)) { day = saved.day; stock = Math.max(0, Math.min(PANTRY.most, saved.stock | 0)); swept = Number.isInteger(saved.swept) ? saved.swept : null; }
-  } catch { /* nothing saved */ }
+  try { take(JSON.parse(store.getItem(key))); } catch { /* nothing saved */ }
   const save = () => { try { store.setItem(key, JSON.stringify({ day, stock, swept })); } catch { /* not stored */ } };
   // what's come in since it was last looked at. A clock that's gone back gets nothing for it, so nothing comes in twice.
   const upTo = (today) => {
@@ -27,5 +29,9 @@ export function createPantry({ store = null, key = 'chunky.pantry.v1' } = {}) {
     // They're done: n come off the shelves, or whatever's left
     sweep(today, n) { upTo(today); stock = Math.max(0, stock - n); swept = today; save(); },
     forget() { stock = PANTRY.most; day = null; swept = null; try { store.removeItem(key); } catch { /* nothing to remove */ } },
+    // In a town everyone shares, each player's is the town's, kept with the rest of what they have (CHUNKY-182): what's kept, and
+    // taking what was
+    kept: () => ({ day, stock, swept }),
+    take(kept) { take(kept); save(); },
   };
 }

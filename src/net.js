@@ -3,7 +3,7 @@
 //
 // Where everyone is goes as bytes, twenty times a second each way: a pose from each phone, and from the server a snapshot of
 // everyone's. Everything else goes now and then as words, a JSON object with its kind in `t`:
-//   from a phone:   hello { key, name, look, hero?, build? }, keep { beans, items, gas },
+//   from a phone:   hello { key, name, look, hero?, build? }, keep { beans, items, gas, pantry: { day, stock, swept } },
 //                   mind { who, said } or { who, note, about, at } or { who, visit: true } or { who, trust, fear }, for what the
 //                   cast remember of them and how they feel about them, wreck { w: [...] } for what's broken (src/wrecks.js)
 //   from the town:  welcome { id, name, look, hero, rekt?, saved, minds, cars, wrecks }, who { players: [{ id, name, look, hero, rekt? }] },

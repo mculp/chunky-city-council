@@ -93,7 +93,7 @@ await tapOpt('Later.');
 r = await g(() => { near('bobby'); return G.talk.early(); });
 check('coming near her again, what she\'d say is asked before he says anything', r.includes('bobby'), r);
 r = await talkTap();
-const routes = r.opts.filter((o) => o === 'Can I get some beans?').length;
+const routes = r.opts.filter((o) => o === 'Can I get some beans?' || o === 'Sweep the steps.').length;
 check('then she says something new, with the written answers that lead somewhere, her own up to three, and Later.', r.say === LINE.say && r.opts.at(-1) === 'Later.' && r.opts.length === 4 && r.opts.slice(routes, 3).every((o, i) => o === LINE.replies[i]), r);
 check('and on a phone there\'s nothing to type in', !r.typing, r);
 await snap('1-miss-bobby-new-words');

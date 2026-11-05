@@ -188,11 +188,18 @@ function feelings(data, mind, as) {
   const F = data.online.feel, at = (list, v, low) => list[Math.max(0, Math.min(list.length - 1, Math.round(v ?? 0) - low))];
   return [at(F.trust, mind.trust, -3), at(F.fear, mind.fear, 0)].filter(Boolean).map((t) => spoken(t, as)).join(' ');
 }
+// What they can ask whoever it is to do right now, by what data/talk.json's asks call each of them, and that it's all they can ask, sell,
+// trade, play, teach or hire anyone for (CHUNKY-182). With nothing to ask, they're told so, so nobody offers what the game can't do.
+function asking(data, asks = [], as) {
+  const what = asks.map((k) => data.asks.what[k]).filter(Boolean);
+  return spoken(what.length ? data.asks.some.replace('{what}', () => listed(what)) : data.asks.none, as);
+}
 // Everything that goes with one line: who they are, the world, what's going on, what they remember of him and what they've said to him,
 // and how to answer, then this visit's talk so far and what he's just said, or that he's walked up. `here` is what's going on: his beans,
-// what he's carrying, what's happened and what's happening tonight. What they've said goes first, the oldest of it first, then their
-// oldest notes, then the start of this visit, until it all fits under the server's limit. Only the words around what's remembered, said
-// and carrying are said for whoever it is, never those themselves.
+// what he's carrying, what's happened, what's happening tonight and what they can ask him to do. What they've said goes first, the
+// oldest of it first, then their oldest notes, then the start of this visit, until it all fits under the server's limit. Only the words
+// around what's remembered, said and carrying are said for whoever it is, never those themselves. What's happened is the game's own
+// words, and said for whoever it is all through.
 export function messagesFor({ data, who, here = {}, mind = blankMind(), turns = [], heard = null, me = '', as }) {
   const p = data.people[who], beans = here.beans ?? 0, feel = feelings(data, mind, as);
   let said = mind.said.slice(-LIMITS.sent), notes = mind.notes.filter((n) => n.about === me).slice(-LIMITS.notes), talk = turns.slice(-LIMITS.turns);
@@ -207,8 +214,9 @@ export function messagesFor({ data, who, here = {}, mind = blankMind(), turns = 
       `${whoItIs(data, as)}${mind.visits ? ` ${spoken("{They've}", as)} been by to talk to you ${mind.visits === 1 ? 'once' : `${mind.visits} times`} before.` : ''}`,
       ...(feel ? [feel] : []),
       `${spoken('{They} {have}', as)} ${beans} ${beans === 1 ? 'can' : 'cans'} of beans${here.carrying?.length ? `, and ${spoken("{they're}", as)} carrying ${listed(here.carrying)}` : ''}.`,
-      ...(here.happened?.length ? [`What's happened: ${here.happened.join(' ')}`] : []),
+      ...(here.happened?.length ? [`What's happened: ${spoken(here.happened.join(' '), as)}`] : []),
       ...(here.tonight ? [here.tonight] : []),
+      asking(data, here.asks, as),
       ...(notes.length ? [spoken('What you remember about {them}:', as), ...notes.map((n) => `- ${n.text}`)] : []),
       ...(said.length ? [spoken("What you've already said to {them}, which you never say again:", as), ...said.map((s) => `- ${s}`)] : []),
       '',
