@@ -24,6 +24,7 @@ export const LIMITS = {
   ask: 5800,        // all of an ask's words, under the server's 6000
   wait: 3000,       // ms before the written line's said instead, a little over the server's own wait on the model
   typed: 160,       // what he can type, on a laptop
+  decide: 10000,    // ms before a side quest's choice is given up on, a little over the server's own 8 s wait on Jev
 };
 // Seconds they're left to their written lines, by why the server couldn't answer: it isn't working, the month's money is spent, this phone
 // asked too soon, it took too long, or the game asked for something it shouldn't
@@ -328,6 +329,21 @@ export function createTalk({ data, cast = null, store = null, fetch = globalThis
       } finally {
         clearTimeout(timer);
         if (!--asking) waiting.splice(0).forEach((r) => r());
+      }
+    },
+    // Jev's choice for a side quest (CHUNKY-163), from the same server's /decide: what src/quests.js asks, with this phone's key, and
+    // what Jev chose, which the server's checked against what was sent, or { quiet } and why. With nowhere to ask, it's off.
+    async decide(ask, { wait = LIMITS.decide } = {}) {
+      if (!url) return { quiet: 'off' };
+      const stop = new AbortController(), timer = setTimeout(() => stop.abort(), wait);
+      try {
+        const res = await fetch(new URL('decide', url), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ phone: phoneKey(), ...ask }), signal: stop.signal, credentials: 'omit', cache: 'no-store' });
+        const answer = await res.json();
+        return answer && typeof answer === 'object' && !Array.isArray(answer) ? answer : { quiet: 'off' };
+      } catch {
+        return { quiet: stop.signal.aborted ? 'slow' : 'off' };
+      } finally {
+        clearTimeout(timer);
       }
     },
   };

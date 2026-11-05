@@ -41,6 +41,7 @@
     "toni": "node tools/play-toni.mjs",
     "talk": "node tools/play-talk.mjs",
     "sweep": "node tools/play-sweep.mjs",
+    "fishing": "node tools/play-fishing.mjs",
     "deaths": "node tools/play-deaths.mjs",
     "fling": "node tools/play-fling.mjs",
     "bail": "node tools/play-bail.mjs",

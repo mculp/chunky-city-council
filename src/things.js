@@ -567,3 +567,39 @@ export function graveMarker({ kind, tone = 0, flowers = 0, w = 3, d = 3.4, words
 export function cemeteryStones(list, place) {
   return list.flatMap((g) => { const [x, z, ry] = place(g); return moved(graveMarker(g), { x, z, ry }); });
 }
+
+// ---- fishing (CHUNKY-112, and Coop's fishing hole in CHUNKY-163)
+// An old fiberglass rod, held by its cork grip, with a spinning reel under it, standing up its own y with its tip at ROD_TIP
+export const ROD_TIP = 2.1;
+export function fishingRod(blank = '#6b4a2e') {
+  return [
+    cyl(0, .02, 0, .02, .04, '#2a2629', 8), cyl(0, .17, 0, .017, .26, '#b98e5a', 8, .019), cyl(0, .33, 0, .012, .06, STEEL, 8),
+    cyl(0, 1.2, 0, .0035, ROD_TIP - .36, blank, 6, .01), cyl(0, ROD_TIP - .02, 0, .004, .04, '#c9c4b4', 6),
+    // the reel, hung on its foot under the rod
+    bar([0, .33, 0], [0, .3, -.045], .012, STEEL), cylZ(0, .3, -.07, .034, .04, '#3f3a40', 12), cylZ(0, .3, -.098, .02, .02, STEEL, 10),
+    ...[.62, 1.02, 1.42, 1.8].map((y) => blob(0, y, -.012, .007, .007, .007, '#c9c4b4', 5)),
+  ];
+}
+// A red and white bobber, floating on its middle
+export function bobber(r = .032) {
+  const half = (top, color) => painted(new THREE.SphereGeometry(r, 10, 4, 0, Math.PI * 2, top ? 0 : Math.PI / 2, Math.PI / 2), color);
+  return [half(true, '#c8352c'), half(false, '#efe9dc'), cyl(0, r + .012, 0, .004, .028, '#efe9dc', 5)];
+}
+// A channel catfish of `lb` pounds, slate on its back and pale under, with its whiskers, lying on its belly with its nose to +z. It's
+// about as long as one that weighs that much: a foot for a pound, and near three foot for twenty.
+export const catfishLong = (lb) => .36 * Math.max(1, lb) ** .3;
+export function catfish(lb = 4) {
+  const BACK = '#4e5a66', BELLY = '#d9d4c4', FIN = '#3d4650', L = catfishLong(lb);
+  const parts = [
+    blob(0, .5, 0, .5, .55, 2.6, BACK, 10), blob(0, .32, .1, .44, .3, 2.3, BELLY, 10),
+    blob(0, .46, 2.15, .62, .4, .9, BACK, 10), blob(0, .3, 2.25, .55, .22, .78, BELLY, 8),
+    // its eyes, wide on the flat of its head, and the whiskers off its mouth, the long ones at the corners
+    ...both((s) => blob(s * .42, .6, 2.45, .07, .07, .07, '#151216', 5)),
+    ...both((s) => bar([s * .4, .36, 2.85], [s * 1.25, .2, 2.45], .045, FIN)), ...both((s) => bar([s * .15, .22, 2.95], [s * .45, .02, 2.7], .035, FIN)),
+    // the fin on its back, the ones under it, and its tail, forked
+    painted(new THREE.CylinderGeometry(.04, .04, .9, 3).rotateX(-Math.PI / 2).scale(1, 9, 1).translate(0, 1.05, 1.1), FIN),
+    ...both((s) => bar([s * .38, .2, 1.5], [s * .95, .05, 1.05], .08, FIN)),
+    ...both((s) => bar([0, .5, -2.45], [s * .05, .5 + s * .55, -3.35], .1, FIN)), ...both((s) => bar([0, .5, -2.6], [0, .5 + s * .38, -3.1], .2, FIN)),
+  ];
+  return parts.map((g) => g.scale(L / 6.4, L / 6.4, L / 6.4));
+}

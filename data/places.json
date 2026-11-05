@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "shapes": ["fishing", "visit", "delivery", "lost", "dare"],
+  "kinds": ["river", "trestle", "pond", "church", "ballfield", "store", "public"],
+  "places": [
+    { "id": "under-us80-east", "name": "under the US 80 bridge, east of town", "kind": "river", "at": [645, -70], "shapes": ["fishing"] },
+    { "id": "trestle-near", "name": "the near trestle", "kind": "trestle", "at": [579, 79], "shapes": ["fishing", "dare"] },
+    { "id": "trestle-far", "name": "the far trestle", "kind": "trestle", "at": [1073, 191], "shapes": ["fishing", "dare"] },
+    { "id": "under-us80-far-east", "name": "the river under US 80, past the far trestle", "kind": "river", "at": [1751, -11], "shapes": ["fishing"] },
+    { "id": "creek-under-us80-west", "name": "the creek under US 80, out west", "kind": "river", "at": [-4512, 110], "shapes": ["fishing"] },
+    { "id": "trestle-west", "name": "the old trestle out west, where the bridge went down in 1863", "kind": "trestle", "at": [-4122, 735], "shapes": ["fishing", "dare", "visit"] },
+    { "id": "pond-us80-east", "name": "the pond in the woods off US 80, out east", "kind": "pond", "at": [4945, -205], "shapes": ["fishing", "dare"] },
+    { "id": "church-us80", "name": "the red brick church on US 80", "kind": "church", "at": [-327, -58], "shapes": ["visit", "delivery", "lost"] },
+    { "id": "church-church-st", "name": "the church on Church St", "kind": "church", "at": [-307, -230], "shapes": ["visit", "delivery", "lost"] },
+    { "id": "church-us11", "name": "the church out on US 11", "kind": "church", "at": [14810, 6724], "shapes": ["visit", "delivery"] },
+    { "id": "ball-field", "name": "the ball field", "kind": "ballfield", "at": [-378, -463], "shapes": ["visit", "lost", "dare"] },
+    { "id": "gas-station", "name": "the gas station", "kind": "store", "at": [-93, -44], "shapes": ["delivery", "visit"], "open": "coop" },
+    { "id": "post-office", "name": "the post office", "kind": "public", "at": [-20, -38], "shapes": ["lost", "delivery"] },
+    { "id": "town-hall", "name": "the town hall", "kind": "public", "at": [-58, -62], "shapes": ["lost", "delivery"] }
+  ]
+}

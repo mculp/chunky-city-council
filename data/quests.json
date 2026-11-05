@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "nights": 3,
+  "near": 400,
+  "jev": {
+    "coop": "Coop keeps the gas station in Chunky, Mississippi. On his walk tonight, along US 80 to the river bridge and back, he's thinking over something to do with a neighbor who's been coming by.",
+    "trips": ["The neighbor's never been out with him.", "The neighbor's been out with him once.", "The neighbor's been out with him {n} times."],
+    "done": "The last time he asked, the neighbor came.",
+    "missed": "The last time he asked, the neighbor said yes and never came.",
+    "lapsed": "The last time he asked, the neighbor never came."
+  },
+  "rounds": {
+    "coop": {
+      "way": [[-93, -44], [-84, -23], [41, -22], [180, -21], [331, -20], [395, -27], [477, -42], [557, -59], [661, -86]],
+      "day": [["0:00", "1:00", "counter"], ["1:00", "1:40", "walk", "BACK AT 6"], ["1:40", "6:00", "asleep", "BACK AT 6"], ["6:00", "24:00", "counter"]],
+      "sun": [["0:00", "1:00", "counter"], ["1:00", "1:40", "walk", "BACK AT NOON"], ["1:40", "10:00", "asleep", "BACK AT NOON"], ["10:00", "11:30", "church", "BACK AT NOON"], ["11:30", "12:00", "away", "BACK AT NOON"], ["12:00", "24:00", "counter"]]
+    }
+  },
+  "templates": {
+    "fishing": {
+      "who": "coop",
+      "night": [["21:00", "21:05", "away"], ["21:05", "22:00", "hole"], ["22:00", "22:10", "away"]],
+      "sign": "GONE FISHIN'",
+      "answers": { "yes": "I'll be there.", "no": "Not tonight." },
+      "lines": {
+        "ask": "Found a hole on my walk last night: {place}. Catfish rolling like hogs. I'm going back at nine. You coming?",
+        "yes": "Nine. Don't bring nothing. I got a spare.",
+        "no": "Offer's good three nights. After that the fish forget me.",
+        "came": "You came. Spare rod, and worms.",
+        "done": "That's me. Keep the rod. It never caught me nothing.",
+        "lapse": "Guess you got busy. Fish don't wait."
+      },
+      "notes": { "came": "Came fishing with me at {place}.", "missed": "Said yes to fishing at {place}, then never showed." },
+      "reward": { "rod": true, "worms": 6, "trust": 1 }
+    }
+  }
+}
