@@ -3,7 +3,8 @@
 // shared, and her model's told that's the one thing she can ask him for. Picking it sweeps them and pays from the pantry as data/cast.md
 // says, and once they're swept today she's told there's nothing to ask and the choice is gone. In a town that's shared the pantry that
 // pays is the player's own, which goes to the town with what they carry, and the story's pantry and how she feels about him in it are
-// as they were. The model's words are a stand-in's, a line at a time.
+// as they were, and when they come back into the town another time it's kept their pantry for them as they left it. The model's words
+// are a stand-in's, a line at a time.
 //
 //   npm i && npm run sweep [-- --shots dir]
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -112,13 +113,14 @@ await until(() => g(() => !document.getElementById('join').hidden));
 await page.tap('#joinName'); await page.keyboard.type('Dee');
 await page.tap('#joinGo');
 check('a newcomer comes into town', !!(await until(() => g(() => __game.S.mode === 'town' && !!window.__net?.you().id), 10000)), null);
-await g(() => {
+const helpers = () => g(() => {
   const G = window.G = __game, L = __net.link, keep = L.keep;
   // what goes to the town of what they have, as it went
   window.kept = []; L.keep = (s) => { kept.push(JSON.parse(JSON.stringify(s))); return keep.call(L, s); };
   window.near = () => { const n = G.npcs.bobby; G.place(n.x + G.talk.AWAY + 5, n.z); G.place(n.x + 1.5, n.z); };
   window.seen = () => { const d = G.state().dialog; return d && !d.waiting ? { ...d, opts: d.opts.map((o) => o.replace(/^\d\. /, '')) } : null; };
 });
+await helpers();
 const trustWas = await g(() => G.people.get('bobby', 'trust')), shelfWas = await g(() => localStorage.getItem('chunky.pantry.v1'));
 const talkOnline = async () => { await g(() => near()); await sleep(300); await page.tap('#bA'); return until(() => g(() => seen()), 4000); };
 const tapOnline = async (text) => { await page.locator('#dOpts button', { hasText: text }).first().tap(); await sleep(100); };
@@ -150,6 +152,20 @@ await g(() => G.talk.on(null));
 d = await talkOnline();
 check(`and talking to her again, nothing: "${d?.say}" ${d?.opts.join(' | ')}`, d?.say === TALK.online.lines.bobby.back && d.opts.join() === 'Later.', d);
 await snap('5-online-swept');
+await tapOnline('Later.');
+
+// ---------------- and back into the town another time, which has kept their pantry for them as they left it
+await page.reload();
+await until(() => g(() => !!window.__game?.resume), 30000);
+await g(() => __game.resume());
+await page.tap('#together');
+check('they come back into town as who they were, straight from Play', !!(await until(() => g(() => __game.S.mode === 'town' && window.__net?.you().name === 'Dee'), 10000)), null);
+await helpers();
+const back = await until(() => g(() => { const k = G.church.pantry.kept(); return k.swept === G.church.today() ? { kept: k, beans: G.S.beans, shelf: G.church.shown() } : null; }), 4000);
+check(`and the town's given them their pantry back as they left it: ${JSON.stringify(back)}`, back?.kept.stock === 6 && back.kept.day === went.pantry.day && back.beans === 3 && back.shelf === 6, back);
+d = await talkOnline();
+// her coming-back line's been said to them already, so it's the first of her lines for any time
+check(`so her steps are still swept today, and there's nothing to ask: "${d?.say}" ${d?.opts.join(' | ')}`, d?.say === TALK.online.lines.bobby.any[0] && d.opts.join() === 'Later.', d);
 await tapOnline('Later.');
 await shut(); await town.close();
 process.exit(failed ? 1 : 0);
