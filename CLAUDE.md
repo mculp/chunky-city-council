@@ -61,6 +61,8 @@ Then open http://localhost:8000.
 
 `npm run deploy` puts main up at https://chunky.ms, the game's own files and nothing else: `index.html` and the wallet's page `wallet.html`, `src/`, `data/` and `audio/`, without tests, Markdown or `data/raw/`. A favicon.ico made from the page's own icon goes with them, and a version.txt that's the commit, which it waits to see on chunky.ms three times running. It takes `--ref` for another commit and `--dry` to list the files.
 
+What's new in the game, written for players, is `changelog/entries.json`, newest first and by build, with the game's own shots for it in `changelog/img/`. `npm run changelog` makes the page and the feed for changelog.chunky.ms from them into `data/raw/changelog`, the newest build on top and the ones before it in an archive, and won't while anything in an entry is wrong, which `npm test` says first. What an entry is, and what stays out of one, is at the top of `tools/changelog.mjs`.
+
 ## Tests
 
 `npm test` runs `node --test` for data and logic. Name test files `*.test.js`.
