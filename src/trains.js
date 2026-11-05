@@ -99,9 +99,10 @@ export function makeSiding(line, { west, east, gap, ease }) {
 }
 
 // The timetable on its own, for the town as well as the page. Run n is in cycle floor(n / 2), which starts when its local comes to a stand:
-// the even runs are the locals going up the line, and the odd ones the freights coming down it.
-export function makeTimetable(line, siding, tuning = {}, T = TRAINS) {
-  const TT = { ...TIMETABLE, ...tuning }, V = T.speed, c = TT.crawl, a = TT.rate, L = line.length, B = TT.beyond;
+// the even runs are the locals going up the line, and the odd ones the freights coming down it. It's TRAINS as they are, whatever a phone's
+// tuned to draw, so a slow phone's trains are everyone's.
+export function makeTimetable(line, siding, tuning = {}) {
+  const T = TRAINS, TT = { ...TIMETABLE, ...tuning }, V = T.speed, c = TT.crawl, a = TT.rate, L = line.length, B = TT.beyond;
   // the local's nose stands short of the east switch, and it's crawling by the west one
   const stop = siding.s1 - siding.ease - 2, d2 = c * c / (2 * a), t2 = c / a, d1 = (V * V - c * c) / (2 * a), t1 = (V - c) / a;
   const tc = (stop - d2 - siding.s0) / c, tIn = (siding.s0 - d1 + B) / V + t1 + tc + t2, tUp = V / a, dUp = V * V / (2 * a);
@@ -151,7 +152,7 @@ export function createTrains(line, { crossings = [], posts = [], world, tuning =
   const T = { ...TRAINS, ...tuning }, on = (list) => list.map((c) => ({ c, n: line.nearest(c.x, c.z) })).filter(({ n }) => n.d < 6).map(({ c, n }) => { c.s = n.s; return c; });
   const gates = on(crossings), blowFor = [...gates, ...on(posts)];
   for (const g of gates) g.shut = false;
-  const plan = timetable && makeTimetable(line, timetable.siding, timetable, T);
+  const plan = timetable && makeTimetable(line, timetable.siding, timetable);
   const t = { T, line, gates, plan, train: null, trains: [], wait: T.first, runs: 0 }, A = {}, B = {};
   let clock = 0;
 
@@ -194,13 +195,15 @@ export function createTrains(line, { crossings = [], posts = [], world, tuning =
   t.clear = () => { if (t.train && !plan) done(); };
   t.soon = (seconds = 0) => { t.wait = seconds; };
 
-  // How near it is to him, and how fast that's changing, which is what the sound's made of, and whether it blows for him on the tracks ahead
+  // How near it is to him, and how fast that's changing, which is what the sound's made of, and whether it blows for him on the tracks ahead.
+  // It's all from the track it's on, which for one on the siding is the siding's wherever he's beside it.
   function near(tr, p, q, when) {
     const toHead = (q.s - tr.head) * tr.dir, toTail = (q.s - tr.head + tr.dir * tr.length) * tr.dir;
-    line.at(toHead > 0 ? tr.head : toTail < 0 ? tr.head - tr.dir * tr.length : q.s, A);
+    wheels(tr, toHead > 0 ? tr.head : toTail < 0 ? tr.head - tr.dir * tr.length : q.s, A);
     tr.gap = hypot(A.x - p.x, A.z - p.z); tr.ahead = toHead;
-    tr.closing = toHead > 0 ? tr.speed * toHead / (hypot(toHead, q.d) || 1) : toTail < 0 ? tr.speed * toTail / (hypot(toTail, q.d) || 1) : 0;
-    if (tr.speed > 1 && q.d < T.onIt && toHead > 0 && toHead < T.sees && when > tr.blastAt) { tr.blastAt = when + T.blastEvery; world.blast?.(tr); }
+    wheels(tr, q.s, B); const d = hypot(B.x - p.x, B.z - p.z);
+    tr.closing = toHead > 0 ? tr.speed * toHead / (hypot(toHead, d) || 1) : toTail < 0 ? tr.speed * toTail / (hypot(toTail, d) || 1) : 0;
+    if (tr.speed > 1 && d < T.onIt && toHead > 0 && toHead < T.sees && when > tr.blastAt) { tr.blastAt = when + T.blastEvery; world.blast?.(tr); }
     return toTail;
   }
 

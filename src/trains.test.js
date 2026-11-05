@@ -208,8 +208,8 @@ test('every kind of car has a size', () => {
 // crossing just short of the siding and one just past it.
 const MAIN = makeLine([[0, 0], [16566, 0]]);
 const SIDING = makeSiding(MAIN, { west: [4996.2, 0], east: [5145.5, 0], gap: 4.6, ease: 25 });
-const online = (hooks = {}) => createTrains(MAIN, {
-  crossings: [{ x: 4817, z: 0, road: 'before' }, { x: 5151, z: 0, road: 'past' }], timetable: { siding: SIDING },
+const online = (hooks = {}, tuning = {}) => createTrains(MAIN, {
+  crossings: [{ x: 4817, z: 0, road: 'before' }, { x: 5151, z: 0, road: 'past' }], timetable: { siding: SIDING }, tuning,
   world: { rand: () => { throw new Error('online, nothing comes from rand'); }, ...hooks },
 });
 const { epoch: E, every: P, stand: STAND, crawl: CRAWL } = TIMETABLE;
@@ -256,6 +256,36 @@ test('the local takes the switches at a crawl, stands as long as it says, and go
   assert.ok(west <= CRAWL + .01, `${west} m/s at the west switch`); assert.ok(east <= CRAWL + .01, `${east} m/s at the east switch`);
   assert.ok(Math.abs(stood[0] - A) < .1 && Math.abs(stood.at(-1) - stood[0] - STAND) < .2, 'from A for as long as it says');
   assert.ok(freightBy < A + STAND && freightBy > A + STAND - 5, 'and the freight\'s tail is past the east switch just before it goes');
+});
+
+test('a slow phone, which draws fewer cars in the story, has the same trains online as everyone else', () => {
+  const what = (t) => t.trains.map((tr) => [tr.run, tr.head.toFixed(6), tr.length.toFixed(3), tr.cars.map((c) => c.kind)]).sort((x, y) => x[0] - y[0]);
+  for (const k of [21, 22, 23]) {
+    const fast = online(), slow = online({}, { cars: [10, 16] }), now = E + k * P + STAND - 20;
+    fast.update(0, { x: 5100, z: 30 }, now); slow.update(0, { x: 5100, z: 30 }, now);
+    assert.equal(fast.trains.length, 2, 'the local standing and the freight coming');
+    assert.deepEqual(what(slow), what(fast));
+  }
+});
+
+test('one on the siding blows for him on the siding\'s track ahead of it, and not for him on the main track beside it', () => {
+  // the local pulling out, with its nose 2.4 m past where it stood, and him 10 m ahead of it, where the siding's 2.8 m over from the main track
+  const A = E + 23 * P, now = A + STAND + 4, s = 5131, over = SIDING.off(s), blown = (z) => {
+    const log = [], t = online({ blast: (tr) => log.push(tr.run) });
+    t.update(0, { x: s, z }, now);
+    assert.ok(local(t, 23).speed > 1 && Math.abs(local(t, 23).head - (s - 10.1)) < .01, 'pulling out');
+    return log;
+  };
+  assert.ok(over > 2.6 && over < 3, `${over.toFixed(2)} m over`);
+  assert.deepEqual(blown(-over), [46], 'on the siding\'s track');
+  assert.deepEqual(blown(0), [], 'on the main track beside it');
+});
+
+test('how near one on the siding is to him is from the siding\'s track', () => {
+  const t = online(), A = E + 25 * P;
+  t.update(0, { x: 5050, z: -SIDING.gap }, A + STAND / 2);
+  assert.equal(t.train, local(t, 25));
+  assert.ok(t.train.gap < .01, `stood on the siding beside the local, ${t.train.gap.toFixed(2)} m from it`);
 });
 
 test('two trains are never in the same place: they only pass where one of them\'s on the siding', () => {
