@@ -11,8 +11,11 @@ Nothing in the game, the data or this document says whose railroad it is. TIGER'
 | The track, and where it crosses the river | [Census TIGER/Line](https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html) 2025, as in `data/roads.md` | Public domain |
 | The crossings' masts, lamps, arms and the box beside them | Street View by eye at Chestnut St, written down here in words | |
 | What happened at the west trestle in 1863 | [Wikipedia](https://en.wikipedia.org/wiki/Chunky_Creek_train_accident) and the [Newton County Historical and Genealogical Society](https://nchgs.org/html/train_wreck_1863.html), in the marker's own words | |
+| The siding in town | Measured on the satellite: a straight bare bed on the north side of the tracks, from where Mulberry St comes down to them to just short of Poplar St, about 125 m | |
 
-No geometry comes from Google imagery, and no imagery's in the repo.
+No geometry comes from Google imagery, and no imagery's in the repo. The siding's ends were measured there and written down here as two points.
+
+TIGER's line runs about 4.7 m north of the real track at Poplar St. The siding is measured from the game's track, so it lands on the bed's bare ground, and if the track's ever moved onto the real one, the siding moves with it.
 
 At Chestnut St each side of the road has a grey mast with a crossbuck and a pair of red lamps, an arm that comes down across the lane, and there's a white metal box on one corner. Every one of the five road crossings gets the same. Nobody's published a drawing of the trestles that I could find, so they're timber on pile bents, by eye.
 
@@ -21,8 +24,21 @@ At Chestnut St each side of the road has a grey mast with a crossbuck and a pair
 - **One at a time.** It comes by near wherever he is: 75 seconds after he first gets to town, and then every 270 to 310 seconds, one way and then the other. A single track 16.5 km long can't keep two going opposite ways on a real clock without somewhere for them to pass, and on foot, one every five minutes or so near him is as good as a timetable. A server for more than one player would need a real one.
 - **Out of sight.** It starts 1.5 km up the line from him and it's gone once its tail's 1.1 km past him, or he's 2.4 km ahead of it. More than 3.2 km from the line, nobody'd know, so none comes.
 - **What it is.** One or two locomotives and 14 to 24 cars, or 10 to 16 on a slow phone: boxcars, covered hoppers and tank cars, with a lot of the same kind in a run. 22 m/s, about 50 mph.
-- **Only the through line runs.** The three short pieces of track off it don't get trains.
+- **Only the through line runs.** The three short pieces of track TIGER has off it are 11 to 17 km from town and don't get trains. In the story nothing uses the siding in town either.
 - With `?test` it stays away until `trains.go()`, so that every test that isn't about it is left alone.
+
+## Online
+
+In the town everyone shares, the trains run to a timetable, so it's the same train for everybody. `makeTimetable` in `src/trains.js` works out where every train is from the town's clock and nothing else, so only the clock goes over the wire, and the town can use it too.
+
+- **Two at once, one each way.** The one going east is a local: one locomotive and as many cars as stand clear of both the siding's switches, which is four, or five hoppers. The one going west is the through freight, as long as the story's, and it never waits.
+- **They pass on the siding in town.** The local slows to 6 m/s by the siding's west switch, by Mulberry St, crawls onto it and stands with its nose just short of the east switch, short of Poplar St, with its engine running. The freight comes out of the long single track east of town and goes by it. Its tail's past the east switch just before the local gathers speed and goes on east into the single track the freight's just left.
+- **How often.** A pair every 19½ minutes (`every`), the soonest the 11 km of single track east of town can take one each way, and a little over. The local stands half of that (`stand`), so trains come through town evenly: the local rolling in, then 9¾ minutes later the freight with the local pulling out behind it, then 9¾ minutes later the next local. Further out along the line the two go by closer together, and at the far ends two come by within about a minute every 19½ minutes.
+- **Where they come from.** 400 m past either end of the line, out past where anyone can walk, and that's where they go.
+- **What's in it.** Every run has a number, and what's in it comes from that number, so every phone builds the same train.
+- **The crossings go by when it'll get there.** A crossing shuts when the timetable will have a train on it within 13 seconds, and stays shut until the tail's 14 m past. So Poplar St's gates stay up while the local stands short of them and come down as it starts, as a real crossing's do. In the story, where nothing stops, that's the same thing as shutting 13 seconds' run short of it.
+- **The horn** is blown by the same rule, 420 m's run short of a crossing, which for the local is as it gets ready to go. Whether it's heard is each phone's own, for a crossing within 300 m of whoever's playing.
+- **A train that's standing** doesn't blow for anyone on the tracks.
 
 ## What it does
 
@@ -53,7 +69,10 @@ The old depot. It's gone, and nobody's said where it stood, so it isn't guessed 
 | `marker.title`, `marker.date` | string | What's across its top |
 | `marker.lines` | string[] | Its words as they're broken on the plaque |
 | `marker.words` | string | The same words in one piece, for when he reads it |
+| `siding.west`, `siding.east` | [x, z] | Its switches, on the game's track, in true metres from town center, +z south. The west one's 25 m short of where Mulberry St comes down, and the east one's at the bed's east end, about 5 m short of the middle of Poplar St |
+| `siding.gap` | number | Metres from the track to the siding at its fullest, on the left going east, which is north |
+| `siding.ease` | number | Metres it takes from each switch to get there |
 
 ## Checking it
 
-`npm test` checks the logic: the timetable, one at a time, the cars in order and round a bend, the crossings, the horn and what's at a spot. `npm run trains` goes and plays it, with reduced motion as well, including that nobody the train throws is lost.
+`npm test` checks the logic: the story's one at a time, the cars in order and round a bend, the crossings, the horn and what's at a spot. Online, it checks that the timetable gives every phone the same trains in the same places, that the local takes the switches at a crawl, stands as long as it says and goes once the freight's by, that the two only ever pass where one's on the siding, on the real line too, that a train comes through town evenly, that Poplar St's gates stay up while the local stands, and that the siding's on the bed and clear of Railroad St. `npm run trains` goes and plays it, with reduced motion as well, including that nobody the train throws is lost.

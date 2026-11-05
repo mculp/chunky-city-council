@@ -15,5 +15,11 @@
       "in after them and brought many out."
     ],
     "words": "Rain had the creek in flood and the bridge here out of line when a train bound for Vicksburg, most of it Confederate soldiers, went into the water in the dark. Nobody agrees how many died. Accounts run from twenty-six names to nearly a hundred. Choctaw soldiers from a camp nearby went in after them and brought many out."
+  },
+  "siding": {
+    "west": [-105.33, 81.98],
+    "east": [41.76, 56.35],
+    "gap": 4.6,
+    "ease": 25
   }
 }

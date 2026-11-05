@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { makeLine, createTrains, TRAINS, CARS } from './trains.js';
+import { makeLine, createTrains, makeSiding, makeTimetable, TRAINS, TIMETABLE, CARS } from './trains.js';
 
 const seeded = (seed = 7) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 // An L: 5 km east along z = 0, then 5 km south
@@ -202,4 +202,145 @@ test('there are no real railroad names anywhere in the data', () => {
 
 test('every kind of car has a size', () => {
   for (const K of Object.values(CARS)) { assert.ok(K.len > 10 && K.half > 1 && K.top > 3); assert.ok(K.truck * 2 < K.len); }
+});
+
+// Online, the timetable (CHUNKY-153). A straight line as long as the real one, with the siding as far along it as town's, and a road
+// crossing just short of the siding and one just past it.
+const MAIN = makeLine([[0, 0], [16566, 0]]);
+const SIDING = makeSiding(MAIN, { west: [4996.2, 0], east: [5145.5, 0], gap: 4.6, ease: 25 });
+const online = (hooks = {}) => createTrains(MAIN, {
+  crossings: [{ x: 4817, z: 0, road: 'before' }, { x: 5151, z: 0, road: 'past' }], timetable: { siding: SIDING },
+  world: { rand: () => { throw new Error('online, nothing comes from rand'); }, ...hooks },
+});
+const { epoch: E, every: P, stand: STAND, crawl: CRAWL } = TIMETABLE;
+const runIn = (t, from, to, p = { x: 5100, z: 30 }, dt = .05, each = () => {}) => { for (let now = from; now < to; now += dt) { t.update(dt, p, now); each(now); } };
+const local = (t, k) => t.trains.find((tr) => tr.run === 2 * k);
+
+test('online every phone has the same trains in the same places, from the town\'s clock and nothing else', () => {
+  const a = online(), b = online(), then = E + 3 * P + 600;
+  runIn(a, then - 300, then, { x: 5100, z: 30 }, 1 / 30);
+  a.update(0, { x: 5100, z: 30 }, then); b.update(0, { x: 0, z: 9000 }, then);
+  const what = (t) => t.trains.map((tr) => [tr.run, tr.head.toFixed(6), tr.cars.map((c) => `${c.kind} ${c.seed} ${c.x.toFixed(4)} ${c.z.toFixed(4)}`)]).sort((x, y) => x[0] - y[0]);
+  assert.equal(a.trains.length, 2);
+  assert.deepEqual(what(a), what(b));
+});
+
+test('a local stands on the siding with its engine running while the freight comes, the long way round', () => {
+  const t = online(), A = E + 5 * P;
+  t.update(0, { x: 5100, z: 30 }, A + STAND / 2);
+  const l = local(t, 5), f = t.trains.find((tr) => tr.run === 11);
+  assert.ok(l && f && t.trains.length === 2, 'one of each');
+  assert.equal(l.dir, 1); assert.equal(f.dir, -1);
+  assert.equal(l.speed, 0); assert.ok(l.standing && !f.standing);
+  assert.deepEqual(l.cars.map((c) => c.kind).filter((k) => k === 'loco'), ['loco']); assert.equal(l.cars[0].kind, 'loco');
+  assert.ok(l.cars.length - 1 >= 3 && l.cars.length - 1 <= 5, `a locomotive and ${l.cars.length - 1} cars`);
+  for (const c of l.cars) assert.ok(Math.abs(c.z + SIDING.gap) < 1e-6 && Math.abs(c.yaw - Math.PI / 2) < 1e-6, 'on the siding, to the left going up the line, square to it');
+  assert.ok(l.head - l.length >= SIDING.s0 + SIDING.ease && l.head <= SIDING.s1 - SIDING.ease, 'clear of both switches');
+  const cars = f.cars.filter((c) => c.kind !== 'loco').length;
+  assert.ok(cars >= TRAINS.cars[0] && cars <= TRAINS.cars[1], `and the freight's as long as ever: ${cars}`);
+  assert.ok(f.head > SIDING.s1, 'and still coming');
+  assert.equal(t.train, l, 'the one that counts for him is the nearest');
+});
+
+test('the local takes the switches at a crawl, stands as long as it says, and goes once the freight\'s by it', () => {
+  const t = online(), A = E + 7 * P;
+  let west = null, east = null, stood = [], freightBy = null;
+  runIn(t, A - 400, A + STAND + 120, undefined, .05, (now) => {
+    const l = local(t, 7), f = t.trains.find((tr) => tr.run === 15);
+    if (!l) return;
+    if (west === null && l.head >= SIDING.s0) west = l.speed;
+    if (east === null && l.head >= SIDING.s1) east = l.speed;
+    if (l.standing) stood.push(now);
+    if (freightBy === null && f && f.head + f.length < SIDING.s1 - SIDING.ease) freightBy = now;
+  });
+  assert.ok(west <= CRAWL + .01, `${west} m/s at the west switch`); assert.ok(east <= CRAWL + .01, `${east} m/s at the east switch`);
+  assert.ok(Math.abs(stood[0] - A) < .1 && Math.abs(stood.at(-1) - stood[0] - STAND) < .2, 'from A for as long as it says');
+  assert.ok(freightBy < A + STAND && freightBy > A + STAND - 5, 'and the freight\'s tail is past the east switch just before it goes');
+});
+
+test('two trains are never in the same place: they only pass where one of them\'s on the siding', () => {
+  const t = online();
+  let pairs = 0;
+  for (let now = E + 9 * P; now < E + 11 * P; now += .5) {
+    t.update(.5, { x: 0, z: 9000 }, now);
+    assert.ok(t.trains.length <= 2, `${t.trains.length} at once`);
+    if (t.trains.length < 2) continue;
+    const [a, b] = t.trains;
+    for (const c of a.cars) for (const d of b.cars) {
+      const dx = d.x - c.x, dz = d.z - c.z, along = Math.abs(dx * c.fx + dz * c.fz), across = Math.abs(dx * c.fz - dz * c.fx);
+      if (along < (c.len + d.len) / 2) { pairs++; assert.ok(across > c.half + d.half + .5, `${a.run} and ${b.run} meet ${((now - E) % P).toFixed(1)} s into the cycle`); }
+    }
+  }
+  assert.ok(pairs > 0, 'and they did pass');
+});
+
+test('one comes through town evenly: the local rolling in, then the freight with the local pulling out behind it', () => {
+  assert.equal(STAND, P / 2);
+  const t = online(), A = E + 13 * P, past = [];
+  runIn(t, A - 60, A + P, undefined, .05, (now) => {
+    for (const tr of t.trains) if (!past.some(([run]) => run === tr.run) && (5151 - tr.head) * tr.dir <= 0 && (5151 - tr.head) * tr.dir > -50) past.push([tr.run, now]);
+  });
+  const [freight, local_] = [past.find(([run]) => run % 2), past.find(([run]) => run % 2 === 0)];
+  assert.ok(freight[1] > A + STAND - 30 && freight[1] < A + STAND, `the freight goes over the road past the siding ${(freight[1] - A).toFixed(0)} s after the local stops`);
+  assert.ok(local_[1] > A + STAND && local_[1] < A + STAND + 30, `and the local ${(local_[1] - A).toFixed(0)} s after`);
+});
+
+test('a crossing\'s shut for whichever train will be on it within shutFor seconds, so it lifts while the local stands short of it', () => {
+  const t = online(), A = E + 17 * P, past = t.gates.find((g) => g.road === 'past'), before = t.gates.find((g) => g.road === 'before'), shut = [];
+  runIn(t, A - 400, A + STAND + 200, undefined, .05, (now) => { if (past.shut) shut.push(now); });
+  assert.ok(shut.every((now) => now > A + STAND - 60), 'up the whole time it stands, until the freight comes');
+  assert.ok(shut.length > 0 && shut.at(-1) > A + STAND, 'and down for the freight and the local going');
+  t.update(0, { x: 5100, z: 30 }, A + STAND / 2);
+  assert.equal(before.shut, false, 'and the one behind it\'s up too');
+  t.update(0, { x: 5100, z: 30 }, A - 50);
+  assert.ok(before.shut, 'once it\'s on it');
+});
+
+test('each train blows once for a crossing it comes to, and the local blows for the one past the siding as it goes, not as it stops', () => {
+  const log = [], t = online({ horn: (g, tr) => log.push([tr.run, g.road, now]) }), A = E + 19 * P;
+  let now = 0;
+  runIn(t, A - 400, A + STAND + 200, undefined, .05, (n) => { now = n; });
+  const blew = (run, road) => log.filter(([r, g]) => r === run && g === road);
+  for (const run of [38, 39]) for (const road of ['before', 'past']) assert.equal(blew(run, road).length, 1, `${run} for ${road}`);
+  assert.ok(blew(38, 'past')[0][2] > A + STAND - TRAINS.horn / TRAINS.speed, 'the local blows for the road past it as it gets ready to go');
+});
+
+test('what\'s in a run is the same wherever it\'s asked, and a local\'s as many cars as fit the siding', () => {
+  const a = makeTimetable(MAIN, SIDING), b = makeTimetable(MAIN, SIDING);
+  for (let n = 100; n < 140; n++) {
+    assert.deepEqual(a.consist(n), b.consist(n));
+    const { cars, length } = a.consist(n), locos = cars.filter((c) => c.kind === 'loco').length;
+    if (n % 2) { assert.ok(locos >= 1 && locos <= 2 && cars.length - locos >= TRAINS.cars[0] && cars.length - locos <= TRAINS.cars[1]); continue; }
+    assert.equal(locos, 1);
+    assert.ok(cars.length - 1 >= 3 && length <= a.stop - SIDING.s0 - SIDING.ease, `run ${n} is ${cars.length - 1} cars and ${length.toFixed(1)} m`);
+  }
+});
+
+test('on the real line the siding\'s on the bed between Mulberry St and Poplar St, beside the track and clear of Railroad St, and the timetable fits it', () => {
+  const roads = JSON.parse(readFileSync(new URL('../data/roads.json', import.meta.url), 'utf8')), rail = JSON.parse(readFileSync(new URL('../data/railroad.json', import.meta.url), 'utf8'));
+  const line = makeLine(roads.reference.railroad.lines[0].points), siding = makeSiding(line, rail.siding);
+  assert.ok(siding.s1 - siding.ease - siding.s0 > 95 && siding.s1 - siding.s0 < 160, `${(siding.s1 - siding.s0).toFixed(0)} m from switch to switch`);
+  const poplar = roads.reference.crossings.find((c) => c.road === 'poplar_st'), toPoplar = line.nearest(poplar.x, poplar.z).s - siding.s1;
+  assert.ok(toPoplar > 2 && toPoplar < 10, `the east switch is ${toPoplar.toFixed(1)} m short of Poplar St`);
+  const street = roads.roads.find((r) => r.id === 'railroad_st'), edges = roads.edges.filter((e) => street.edges.includes(e.id)).map((e) => e.points ?? e.pts);
+  for (let s = siding.s0 + siding.ease; s <= siding.s1 - siding.ease; s += 5) {
+    const q = line.at(s), x = q.x + q.tz * siding.gap, z = q.z - q.tx * siding.gap;
+    let near = Infinity;
+    for (const p of edges) for (let i = 1; i < p.length; i++) {
+      const [ax, az] = p[i - 1], [bx, bz] = p[i], dx = bx - ax, dz = bz - az, u = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)));
+      near = Math.min(near, Math.hypot(x - ax - dx * u, z - az - dz * u));
+    }
+    assert.ok(near > street.width / 2 + CARS.box.half + 3, `${near.toFixed(1)} m from Railroad St at ${s.toFixed(0)}`);
+  }
+  // and over two cycles nothing meets, with the real line's bends
+  const t = createTrains(line, { crossings: roads.reference.crossings.filter((c) => c.with === 'railroad'), timetable: { siding }, world: {} });
+  for (let now = E + 23 * P; now < E + 25 * P; now += 1) {
+    t.update(1, { x: 0, z: 0 }, now);
+    if (t.trains.length < 2) continue;
+    const [a, b] = t.trains;
+    for (const c of a.cars) for (const d of b.cars) {
+      const dx = d.x - c.x, dz = d.z - c.z;
+      if (Math.abs(dx * c.fx + dz * c.fz) < (c.len + d.len) / 2) assert.ok(Math.abs(dx * c.fz - dz * c.fx) > c.half + d.half + .5, `${a.run} and ${b.run} meet`);
+    }
+  }
 });
