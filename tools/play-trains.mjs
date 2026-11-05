@@ -203,7 +203,7 @@ const hitByTrain = async (pg, tag, picture) => {
     for (let k = 0; k < 30; k++) { G.sim(.1, T); watch(); }
     const still = H.active.filter((s) => s.under === undefined && R.RAIL.nearest(s.x, s.z).d < 1.5 && Math.hypot(s.x - c.x, s.z - c.z) < 60);
     const list = [...seen.keys()], wrong = list.filter((s) => s.who && s.who.hurt > 0);
-    const f = G.downFor, longest = Math.max(f.table.swing, f.table.blast, f.truck(1e3));
+    const f = G.downFor, longest = Math.max(f.swing(Math.max(...Object.values(f.swung))), f.table.blast, f.truck(1e3));
     return {
       thrown: list.length, onTracks: still.length, wrong: wrong.length, shunned: list.filter((s) => s.who?.shun).length, turned, spins: list.map((s) => seen.get(s).spin),
       longest, seconds: list.map((s) => seen.get(s).seconds), down: list.map((s) => seen.get(s).down), away: list.map((s) => seen.get(s).away),

@@ -190,8 +190,11 @@ async function open(reducedMotion) {
     const hit = await g(() => { const v = was, h = hits(v, three), r = after(v, { seconds: 8, each: () => { h.each(); } }); return { got: h.got, flat: three.map((s) => s.flat), r: { hp: r.hp, hp0: r.hp0, inv: r.inv, upAt: r.upAt } }; });
     if (flies) await snap('3-crowd');
     console.log(`     ${mph(speed)} mph into three of them: ${hit.got.map((h) => h ? `${mph(h.speed)} mph, ${h.flung ? 'flung' : 'knocked down'}` : 'missed').join('; ')}`);
-    check(flies ? 'empty, at 40 mph and up, it sends the crowd flying, as a driven truck does' : 'and slower, it knocks them down where they stood',
-      hit.got.every((h) => h && (flies ? h.flung && h.speed >= 17.9 : !h.flung && h.speed < 17.9)), hit);
+    // as hard as it's going and as heavy as it is, the same as a driven truck (CHUNKY-185): thrown from horde.T.throwFrom, and knocked over short
+    // of it, with a little either side of that for each hit being a little different
+    const from = await g(() => { const T = G.horde.T, m = was.K.mass; return T.throwFrom / (m / (m + T.body) * T.hard); }), near = (h) => Math.abs(h.speed / from - 1) < .06;
+    check(flies ? 'empty, at 40 mph and up, it sends the crowd flying, as a driven truck does' : `and slower, as hard as it's going, as a driven truck is: thrown from ${mph(from)} mph, and knocked over short of it`,
+      hit.got.every((h) => h && (flies ? h.flung && h.speed >= 17.9 : near(h) || h.flung === h.speed >= from)) && (flies || (hit.got.some((h) => h.flung) && hit.got.some((h) => !h.flung))), { ...hit, from });
     check('and none of it touches him', hit.r.hp === hit.r.hp0 && hit.r.inv === 0, hit.r);
     await g(() => { G.horde.calm(); G.horde.all.length = 0; G.step(.1, T); });
   }
@@ -360,8 +363,9 @@ async function open(reducedMotion) {
       const s = G.map.sOn('us_80', lay.x, lay.z) - dir * 24, p = G.map.along('us_80', s), fx = p.tx * dir, fz = p.tz * dir;
       c.road = G.map.roadById.get('us_80'); c.dir = dir; c.s = s; c.plan = null; c.off = c.want = 1.9;
       Object.assign(c.v, { x: p.x - fz * 1.9, z: p.z + fx * 1.9, y: G.floorAt(p.x - fz * 1.9, p.z + fx * 1.9), yaw: Math.atan2(fx, fz), f: 14, s: 0 });
-      const v = was; let hurtWhile = null, by = null;
-      const r = after(v, { each: (t, roll) => { if (hurtWhile === null && G.player.inv > 0) { hurtWhile = roll ? roll.phase : 'after'; by = Math.hypot(c.v.x - P().x, c.v.z - P().z); } } });
+      // what he was doing when it got him, the step before, since it's hit him the way it'd hit anyone and thrown him (CHUNKY-185)
+      const v = was; let hurtWhile = null, by = null, then = 'after';
+      const r = after(v, { each: (t, roll) => { if (hurtWhile === null && G.player.inv > 0) { hurtWhile = then; by = Math.hypot(c.v.x - P().x, c.v.z - P().z); } then = roll ? roll.phase : 'after'; } });
       return { mood: G.folks.mood(c.who), hurtWhile, by, hp: r.hp, hp0: r.hp0 };
     }, dry);
     await snap('9-traffic');

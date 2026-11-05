@@ -181,7 +181,7 @@ Nobody dies. Knocked down, they're down a while and get up again.
 - **The swing** lands 0.2 seconds after it starts, on anyone within 1.5 m of a point 0.9 m in front of him, or 1.9 m with the bat, so it reaches about 2.4 m. As it starts it turns him to the nearest one he could reach, within 2.8 m and sooner someone who's after him than someone who isn't, by up to a metre. On a phone that's anyone on his side of a right angle. With a mouse, where the camera looks is the aim, so it's only someone within 0.5 rad of it.
 - **Getting hold of him** takes them `windUp`, half a second of being within 0.95 m of him, with their hands coming up over their heads. A hit in that time stops it, and whoever's been reaching longest gets him first. So standing his ground and swinging at one coming straight at him lands first.
 - **The warning.** The camera's behind him, so one coming straight at him is behind his hood for those last metres and nobody can see it reach. `src/horde.js` tells the world once as each of them starts, with `world.reaching(s)`, and the page answers with one groan, higher and shorter than a hunter's, and with what's coming off them flaring as the hands go up: by `FLARE` (0.9) past the full glow of anyone after him, wider and hotter, so that it shows round his edges. It's brightness and not movement, so reduced motion keeps it. A hit or a grab ends it, and the next go starts it again.
-- **How long they're down**, getting up included, is `DOWN_FOR` in `index.html`: 10 seconds from a swing, whatever's in his hand, and 14 from a blast. A vehicle keeps them down 8 seconds and half a second more for every m/s it was doing, up to 20. A fire's still a second or so. **The train's longer than all of them**, and it's the next section.
+- **How long they're down**, getting up included, is `DOWN_FOR` in `index.html`. A swing's about 10 seconds, longer the heavier what he swung, by `downBySwing`: the bat's 10, the skillet's 11 and a branch's 8. A blast is 14. A vehicle keeps them down 8 seconds and half a second more for every m/s it was doing, up to 20. A fire's still a second or so. **The train's longer than all of them**, and it's the next section.
 - **Who comes for him after.** Knocked down by him, they get up and stop, turn to him and flare for a second like anyone else coming for him. Knocked down by something that isn't him, such as a fire, they hold nothing against him: whoever was after him never stopped, so they're straight back at him when they're up if that leaves no more than three, and give up if it doesn't, and anyone else goes back to what they were doing. Anyone who keeps away from him still does.
 - **Asking.** `horde.down(s)` says how long someone has left, and it's nothing for anyone on their feet. `horde.keepDown(s, seconds)` keeps them down at least that much longer, for anything that needs them to stay put, and says whether they were down. They're up again the moment it runs out.
 
@@ -195,17 +195,35 @@ Two things used to end someone for good, and nothing does now. Whatever's happen
 
 **The train** throws whoever it hits clear of the tracks, which is `trainThrows` in `index.html`. They lie where they land, in the ditch, for 30 to 36 seconds if it was the side of it and 45 to 55 if it was the front, longer than any swing or blast or pickup keeps anyone down, getting up included. Then they get up, and they're **sore**: whatever they were doing they've had enough of it, so even someone who was after him goes home, at 0.7 of their pace, with a limp, and for `soreFor`, 20 seconds more once they're there. The front throws them further and harder than the side. With reduced motion they don't turn over on the way. Nobody holds it against him, but they keep off the spot, as they do a fire, and `data/railroad.md` has the rest. Someone thrown off a trestle lands in the river.
 
-**Flung.** Anything he's driving at 40 mph or more (`flingFrom`, 17.9 m/s) sends whoever it hits flying instead of knocking them over, which is `fling` in `src/horde.js`:
+**How hard they're hit** (CHUNKY-185). Everything that hits anyone has a force, which is how fast it would send one of them. How they go comes from that and nothing else, with no line anywhere. It's `impact` in `src/horde.js`, with its numbers in `TUNING`:
 
-- **Where they go.** About one in three (`flungOver`) go up over the top of it and come down behind. The rest go off ahead of it, off whichever side of its middle they were on.
-- **How far.** The faster it's going, the higher and further: at 45 mph, about 1.3 to 3.2 m up and 14 to 29 m on. They bounce off the road once or twice (`bounces`), less each time, and come down in a heap however they land.
-- **No two alike.** Each flight's worked out from who they are and how many times it's happened to them, so it's a little different every time and nothing asks the random numbers.
-- **The vehicle.** It takes the hit as a crash, a little at a time, and goes on. It doesn't stop them in the air, but a wall does.
-- **Down, then home.** They lie there as long as anything driven keeps anyone down, 16 to 20 seconds from when they land, so he's long gone. Then they get up **sore** and go home, the same as from the train, and `horde.calm()` doesn't change that.
+- **The force.**
+  - A vehicle's force is how fast it's going, times its weight against theirs and a little more for coming off it: `mass / (mass + body) × hard`, with `body` 80 kg and `hard` 1.1. A pickup at 40 mph hits as hard as 18.9 m/s, and a four-wheeler at 40 as hard as 16.
+  - A swing's is the weight of what he swings, `SWUNG` in `index.html`: a branch 3.6, the bat 5.6 and the skillet 6.6. A little of it, `SWING_ROUND` (0.3), goes round the way the swing came down, from his side to the middle.
+  - A blast is 16 where it goes up and half that at its edge. A fire is 5.
+- **How they go.**
+  - Short of `over` (2.8 m/s) they stagger on their feet, as far as the ground lets them slide, and catch themselves. That's a pickup at 5 mph, or a car that nudges them.
+  - Short of `throwFrom` (7) they go over where they stood and slide. That's a pickup at 10 mph, or any swing.
+  - From there they're thrown, loose, tumbling over and over the harder it was. They go up off the ground at `1.4 × (v − 7)^0.65` m/s, bounce, and slide.
+  - A pickup at 25 mph throws them tumbling along the ground about 12 m. At 40 they fly, about 1.7 m up and 31 m on, and at 80, 6 m up and 117 m on.
+- **The ground.** Along it they slow by `grip` (10 m/s²) and `drag` (0.3 a second) of what they're going. That's how far they slide however they got there, so nothing jumps between staggering, going over, tumbling and flying. Coming down, the ground takes `scuff` (0.5) of how hard they land off what they're going along it. From `bounceFrom` (2.5 m/s) they bounce `bounce` (0.34) of it, less the softer they land.
+- **Which way.** The way it was going: a vehicle's way, and a little off whichever side of its middle they were on; a swing's away from him and round; and out from a blast. Walls stop them. Whatever threw them doesn't.
+- **No two alike.** Each one's worked out from who they are and how many times it's happened to them, so it's a little different every time, within 3% of how hard, and nothing asks the random numbers. Online, the town gets the same throw a phone would.
+- **The vehicle.** It takes each one as a crash, more the harder, loses 3% of its speed for each, and goes on. It doesn't stop them in the air, but a wall does.
+- **Down, then home.** Thrown by a vehicle, they lie there as long as anything driven keeps anyone down, so he's long gone. Then they get up **sore** and go home, the same as from the train, and `horde.calm()` doesn't change that. A swing or a blast doesn't send anyone home.
 - **It counts as him hitting them**, the same as a swing, and they remember it. If he's still about when they're up, they keep away from his truck or come for him like anyone else.
 - **What they say.** One who's gone quiet mutters on the way, over their head like the other mutters. It's one of the two lines in `flung`, by their number, even while they're keeping away from him.
 - **A shoe.** Now and then one loses a shoe, which lands somewhere else. Nothing else ever comes off anyone.
 - **Who flies.** Only the crowd and the people at home. The kids on four-wheelers can't be touched. The cast hop clear of anything coming at them at more than 4 m/s and hop back onto their spot once it's gone by.
+- **Him.** He goes the same way, by `struck` in `index.html` with the crowd's numbers.
+  - Nudged, he staggers on his feet and loses nothing.
+  - Harder, he goes over where he stands, the way it pushed him.
+  - Harder still, he's thrown, turning over in the air, and rolls along the ground till he's face down, a whole number of turns.
+  - He lies there a moment, longer the harder it was, up to 2.5 seconds, and gets up.
+  - Going over costs a heart once the hearts are showing. Nobody can get hold of him till he's up.
+  - Anything hard enough to put him over takes him whatever he's doing, rolling out of something or lying in the road. A nudge doesn't, while he's down.
+  - The train's in CHUNKY-186.
+- **Reduced motion.** They go just as far and just as quickly, without turning over or flailing.
 
 `docs/art-direction.md` says what it looks like, and `npm run fling` plays it on a phone.
 

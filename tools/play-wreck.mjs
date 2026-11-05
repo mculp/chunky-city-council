@@ -145,6 +145,8 @@ check('and if he doesn\'t it throws him clear', out.gone && !out.driving && out.
 
 // ---------------- the skillet and the cans
 const skillet = await g(() => {
+  // on his feet again first, since what threw him clear keeps him down as long as anything that hard would (CHUNKY-185)
+  for (let i = 0; i < 300 && G.hit.roll(); i++) G.sim(1 / 30, 1 / 30);
   const t = target('siding'), x = t.p.x + t.ux * (t.wall - .5), z = t.p.z + t.uz * (t.wall - .5);
   G.place(x, z); G.player.yaw = Math.atan2(t.ux, t.uz); G.look(G.player.yaw + Math.PI); G.sim(.1, 1 / 30);
   const one = (() => { tapKey('f'); run(.6); return W.damage.gone(t.s); })(), cracked = W.damage.state(t.s).walls.some((w) => w.hp < w.max);

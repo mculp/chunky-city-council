@@ -30,10 +30,10 @@ describe('knocked over', () => {
     assert.equal(h.knock(0, 0, 3, 2), 1); assert.equal(h.knock(0, 0, 3, 2), 0);
   });
 
-  test('a wall stops them being thrown through it', () => {
+  test('a wall stops them being thrown through it, with room to lie short of it', () => {
     const h = createHorde(field({ blocked: (x) => x > 2 })), s = h.add(1, 0);
     run(h, { ...still, x: 40 }, .05); h.knock(0, 0, 3, 2);
-    assert.equal(s.x, 1); assert.ok(s.flat > 0);
+    assert.ok(s.x >= 1 && s.x + TUNING.lieReach <= 2, `at ${s.x}`); assert.ok(s.flat > 0);
   });
 
   test('they get up, stand there for a second, and come for you', () => {
@@ -963,41 +963,68 @@ describe('they give up', () => {
   });
 });
 
-describe('hit with a truck at 40 mph', () => {
-  const MPH40 = TUNING.flingFrom, away = { ...still, x: -100 };
-  // where they first come down and how high they went on the way, at one speed, by who they are
-  const flight = (speed, look = 7) => {
-    const h = createHorde(field()), s = h.add(1, 0, { look });
+describe('hit, as hard as it was', () => {
+  const MPH = .44704, away = { ...still, x: 40, z: 90 };
+  // Where one comes to rest hit by something at mph, a pickup unless it says, how high it went and how far it rolled over on the way, whether it's down and
+  // whether it was thrown. Each is someone new, hit for the first time.
+  const hitBy = (mph, { look = 7, mass = 1900, z = 0, still: calm = false } = {}) => {
+    const h = createHorde(field()), s = h.add(1, z, { look });
     run(h, away, .05);
-    h.knock(0, 0, 3, 15, 'truck', { vx: speed, vz: 0 });
-    let top = 0; const from = s.x;
-    while (s.thrown && s.thrown.bounces === 0) { h.update(1 / 60, away); top = Math.max(top, s.y); }
-    return { top, far: Math.hypot(s.x - from, s.z), s, h };
+    h.knock(0, 0, 3, 15, 'truck', { vx: mph * MPH, vz: 0, mass, still: calm });
+    const from = { x: 1, z }; let top = 0, rolled = 0;
+    for (let t = 0; s.thrown && t < 30; t += 1 / 60) { h.update(1 / 60, away); top = Math.max(top, s.y); rolled = Math.max(rolled, Math.abs(s.tumble)); }
+    return { far: Math.hypot(s.x - from.x, s.z - from.z), top, rolled, down: s.flat > 0, flung: !!s.flung, s, h };
   };
 
-  test('at 40 mph and up they go flying, and slower they\'re knocked over as ever', () => {
-    const { s } = flight(MPH40 + .1);
-    assert.ok(s.flung && s.flop, 'flung'); assert.ok(s.flat > 0, 'and down');
-    const h = createHorde(field()), slow = h.add(1, 0);
-    run(h, away, .05);
-    assert.equal(h.knock(0, 0, 3, 15, 'truck', { vx: MPH40 - .5, vz: 0 }), 1);
-    assert.equal(slow.thrown ?? null, null); assert.ok(!slow.flung); assert.ok(slow.x > 1.5 && slow.x < 5, `knocked to ${slow.x}`); assert.equal(slow.y, 0);
+  test('hit by a pickup at every 5 mph from 5 to 80, how far they go rises smoothly with how fast it was going, with no line anywhere', () => {
+    const far = []; for (let mph = 5; mph <= 80; mph += 5) far.push(hitBy(mph).far);
+    for (let i = 1; i < far.length; i++) {
+      const more = far[i] - far[i - 1], before = i > 1 ? far[i - 1] - far[i - 2] : far[0];
+      assert.ok(more > 0, `${(i + 1) * 5} mph goes ${far[i].toFixed(1)} m, no further than ${far[i - 1].toFixed(1)}`);
+      assert.ok(more < before * 2.6 + .5, `from ${i * 5} to ${(i + 1) * 5} mph it's ${more.toFixed(1)} m more, against ${before.toFixed(1)} the 5 mph before: ${far.map((d) => d.toFixed(1)).join(' ')}`);
+    }
+    assert.ok(far[0] < .6 && far.at(-1) > 60, `from ${far[0].toFixed(2)} to ${far.at(-1).toFixed(0)} m`);
   });
 
-  test('the faster he\'s going, the higher and further they go', () => {
-    const a = flight(MPH40), b = flight(MPH40 * 1.5);
-    assert.ok(a.top > .5, `${a.top} m up at 40 mph`); assert.ok(a.far > 4, `and ${a.far} m`);
-    assert.ok(b.top > a.top + .5, `${b.top} against ${a.top} m up`); assert.ok(b.far > a.far * 1.3, `${b.far} against ${a.far} m`);
+  test('at walking pace one staggers and catches itself, at 10 mph it goes over, at 25 it tumbles along the ground, and from 40 up it flies', () => {
+    const nudge = hitBy(3);
+    assert.ok(!nudge.down && nudge.far > .05 && nudge.far < .4 && nudge.top === 0, `a nudge: ${JSON.stringify({ down: nudge.down, far: nudge.far })}`);
+    assert.equal(nudge.s.state, STUNNED, 'a moment unsteady'); run(nudge.h, away, 2); assert.notEqual(nudge.s.state, STUNNED, 'and steady again');
+    const ten = hitBy(10);
+    assert.ok(ten.down && !ten.flung && ten.top === 0 && ten.far > .6 && ten.far < 2, `10 mph: ${JSON.stringify({ down: ten.down, flung: ten.flung, far: ten.far })}`);
+    const tumble = hitBy(25);
+    assert.ok(tumble.down && tumble.flung && tumble.top < .7 && tumble.rolled > Math.PI && tumble.far > 6, `25 mph: ${JSON.stringify({ top: tumble.top, rolled: tumble.rolled, far: tumble.far })}`);
+    for (const mph of [40, 60, 80]) {
+      const f = hitBy(mph);
+      assert.ok(f.flung && f.top > 1 && f.far > 15, `${mph} mph: ${JSON.stringify({ top: f.top, far: f.far })}`);
+    }
+    assert.ok(hitBy(80).top > hitBy(40).top + 1, 'the harder, the higher');
   });
 
-  test('they bounce, less each time, and lie however they come down, then get up sore and go home', () => {
+  test('they go the way it was going, off their own side of its middle a little, and a lighter one sends them less far', () => {
+    for (const z of [.6, -.6]) {
+      const f = hitBy(45, { z }), drift = (f.s.z - z) / (f.s.x - 1);
+      assert.ok(f.s.x > 1 && Math.sign(f.s.z - z) === Math.sign(z) && Math.abs(drift) < .2, `off ${z}: to ${f.s.x.toFixed(1)}, ${f.s.z.toFixed(1)}`);
+    }
+    const quad = hitBy(40, { mass: 350 }), pickup = hitBy(40);
+    assert.ok(quad.far < pickup.far * .9, `a four-wheeler ${quad.far.toFixed(1)} m against a pickup's ${pickup.far.toFixed(1)}`);
+  });
+
+  test('with reduced motion they go just as far, without turning over or flailing', () => {
+    const calm = hitBy(50, { still: true }), wild = hitBy(50);
+    assert.ok(Math.abs(calm.far - wild.far) < .01, `${calm.far} against ${wild.far} m`); assert.equal(calm.rolled, 0);
+    assert.equal(calm.s.twist, 0); assert.equal(calm.s.flop.t, 0);
+  });
+
+  test('thrown, they bounce, less each time, slide, and lie however they stop, then get up sore and go home', () => {
     const bounced = [], h = createHorde(field(), {}, { bounce: (o, speed) => bounced.push(speed) }), s = h.add(1, 0);
     run(h, away, .05);
-    h.knock(0, 0, 3, 12, 'truck', { vx: MPH40 * 1.2, vz: 0 });
-    for (let t = 0; s.thrown && t < 5; t += 1 / 60) h.update(1 / 60, away);
+    h.knock(0, 0, 3, 12, 'truck', { vx: 55 * MPH, vz: 0, mass: 1900 });
+    let slid = 0, landed = null;
+    for (let t = 0; s.thrown && t < 10; t += 1 / 60) { h.update(1 / 60, away); if (s.thrown?.ground) { landed ??= s.x; slid = s.x - landed; } }
     assert.equal(s.thrown, null, 'down'); assert.equal(s.y, 0);
-    assert.ok(bounced.length >= 1 && bounced.length <= TUNING.bounces, `${bounced.length} bounces`);
-    for (let i = 1; i < bounced.length; i++) assert.ok(bounced[i] < bounced[i - 1], 'less each time');
+    assert.ok(bounced.length >= 1, `${bounced.length} bounces`); for (let i = 1; i < bounced.length; i++) assert.ok(bounced[i] < bounced[i - 1], 'less each time');
+    assert.ok(slid > 2, `and slid ${slid.toFixed(1)} m`);
     assert.ok(Math.abs(s.flop.land) <= Math.PI, 'and how far over they came down');
     const lying = { x: s.x, z: s.z, twist: s.twist, land: s.flop.land };
     run(h, away, 8);
@@ -1005,61 +1032,73 @@ describe('hit with a truck at 40 mph', () => {
     run(h, away, 6);
     assert.equal(h.down(s), 0, 'up'); assert.equal(s.flop, null); assert.equal(s.twist, 0);
     assert.equal(s.state, SHAMBLE); assert.ok(s.homeward && s.sore > 0, 'sore and on the way home'); assert.ok(s.flung, 'and still flung on the way');
-    for (let t = 0; t < 90 && s.homeward; t += 1 / 30) h.update(1 / 30, away);
+    for (let t = 0; t < 120 && s.homeward; t += 1 / 30) h.update(1 / 30, away);
     assert.ok(!s.homeward && !s.flung, 'home, and over it'); assert.equal(s.dead, undefined);
   });
 
-  test('every flight\'s a little different, and nothing\'s asked of the random numbers for it', () => {
+  test('every throw\'s a little different, and nothing\'s asked of the random numbers for it', () => {
     let asked = 0;
     const h = createHorde(field({ rand: () => { asked++; return rand(); } })), s = h.add(1, 0), seen = new Set();
     for (let i = 0; i < 6; i++) {
       s.x = 1; s.z = 0; s.y = 0; s.flat = 0; s.state = SHAMBLE; s.thrown = null; s.under = undefined;
       run(h, away, .05);
       const was = asked;
-      assert.equal(h.knock(0, 0, 3, 15, 'truck', { vx: MPH40 * 1.1, vz: 0 }), 1);
+      assert.equal(h.knock(0, 0, 3, 15, 'truck', { vx: 44 * MPH, vz: 0, mass: 1900 }), 1);
       assert.equal(asked, was, 'not one random number');
       const f = s.thrown; seen.add(`${f.vx.toFixed(2)} ${f.vz.toFixed(2)} ${f.vy.toFixed(2)} ${f.spin.toFixed(2)} ${f.twist.toFixed(2)}`);
     }
-    assert.equal(seen.size, 6, 'six different flights');
-  });
-
-  test('some go up over the top and some off ahead of it, off whichever side they were on', () => {
-    let over = 0, ahead = 0;
-    for (let look = 0; look < 40; look++) {
-      const h = createHorde(field()), s = h.add(1, look % 2 ? .6 : -.6, { look });
-      run(h, away, .05); h.knock(0, 0, 3, 15, 'truck', { vx: MPH40, vz: 0 });
-      if (s.thrown.vx < MPH40 * .6) over++; else ahead++;
-      assert.equal(Math.sign(s.thrown.vz), Math.sign(s.z), 'off their own side');
-    }
-    assert.ok(over >= 6 && ahead >= 18, `${over} over, ${ahead} ahead`);
+    assert.equal(seen.size, 6, 'six different throws');
   });
 
   test('what threw them doesn\'t stop them in the air, and a wall does', () => {
     const h = createHorde(field({ blocked: (x, z, y, flying) => !flying && x > 2 })), s = h.add(1, 0);
-    run(h, away, .05); h.knock(0, 0, 3, 15, 'truck', { vx: MPH40, vz: 0 });
+    run(h, away, .05); h.knock(0, 0, 3, 15, 'truck', { vx: 40 * MPH, vz: 0, mass: 1900 });
     run(h, away, .3);
     assert.ok(s.x > 3, `through to ${s.x}`);
     const g = createHorde(field({ blocked: (x) => x > 4 })), t = g.add(1, 0);
-    run(g, away, .05); g.knock(0, 0, 3, 15, 'truck', { vx: MPH40, vz: 0 });
-    for (let k = 0; k < 120 && t.thrown; k++) g.update(1 / 60, away);
+    run(g, away, .05); g.knock(0, 0, 3, 15, 'truck', { vx: 40 * MPH, vz: 0, mass: 1900 });
+    for (let k = 0; k < 600 && t.thrown; k++) g.update(1 / 60, away);
     assert.ok(t.x <= 4, `stopped at ${t.x}`);
   });
 
-  test('calming everyone down, as coming to after a try does, leaves anyone flung to get up sore and go home all the same', () => {
+  test('calming everyone down, as coming to after a try does, leaves anyone thrown to get up sore and go home all the same', () => {
     const h = createHorde(field()), s = h.add(1, 0), t = h.add(-20, 0);
-    run(h, away, .05); h.knock(0, 0, 3, 6, 'truck', { vx: MPH40, vz: 0 }); t.state = HUNTING;
-    for (let k = 0; s.thrown && k < 300; k++) h.update(1 / 60, away);
+    run(h, away, .05); h.knock(0, 0, 3, 6, 'truck', { vx: 40 * MPH, vz: 0, mass: 1900 }); t.state = HUNTING;
+    for (let k = 0; s.thrown && k < 600; k++) h.update(1 / 60, away);
     h.calm();
     assert.equal(s.state, STUNNED); assert.ok(h.down(s) > 0, 'still down'); assert.equal(t.state, SHAMBLE, 'and anyone else calmed as ever');
     run(h, away, 8);
     assert.equal(h.down(s), 0); assert.ok(s.homeward && s.sore > 0, 'up, sore and going home'); assert.equal(s.flop, null);
   });
 
-  test('with reduced motion they fly without turning over or flailing', () => {
-    const h = createHorde(field()), s = h.add(1, 0);
-    run(h, away, .05); h.knock(0, 0, 3, 15, 'truck', { vx: MPH40 * 1.3, vz: 0, still: true });
-    run(h, away, .4);
-    assert.ok(s.y > 0 && s.x > 4, 'still flying'); assert.equal(s.tumble, 0); assert.equal(s.twist, 0); assert.equal(s.flop.t, 0);
+  test('a swing sends one as far as it pushes, from a branch up to the skillet, with no line, the way it came round', () => {
+    const swung = (push, round = 0) => {
+      const h = createHorde(field()), s = h.add(1, 0, { look: 7 });
+      run(h, away, .05);
+      const down = h.knockOne(s, 0, 0, 10, 'hit', undefined, push, round);
+      for (let t = 0; s.thrown && t < 5; t += 1 / 60) h.update(1 / 60, away);
+      return { down, far: Math.hypot(s.x - 1, s.z), z: s.z, s };
+    };
+    const tap = swung(2);
+    assert.ok(!tap.down && tap.far < .3, `something light only staggers one: ${JSON.stringify(tap)}`);
+    let last = tap.far;
+    for (const push of [3, 3.6, 4.5, 5.6, 6.6, 7.5]) {
+      const f = swung(push);
+      assert.ok(f.down && f.far > last && f.far < last * 2.6 + .5, `${push} m/s goes ${f.far.toFixed(2)} m after ${last.toFixed(2)}`);
+      last = f.far;
+    }
+    const round = swung(6.6, .5);
+    assert.ok(round.z > .3, `the way it came round: off to ${round.z.toFixed(2)}`);
+  });
+
+  test('a blast throws whoever\'s near it by how near, outward', () => {
+    const h = createHorde(field()), at = [1, 2.5, 4.5].map((x) => h.add(x, 0));
+    run(h, away, .05);
+    assert.equal(h.knock(0, 0, 6, 14, 'blast'), 3);
+    for (let t = 0; at.some((s) => s.thrown) && t < 10; t += 1 / 60) h.update(1 / 60, away);
+    const far = at.map((s, i) => s.x - [1, 2.5, 4.5][i]);
+    assert.ok(far[0] > far[1] && far[1] > far[2] && far[2] > 0, `${far.map((d) => d.toFixed(1)).join(', ')} m`);
+    assert.ok(at[0].flung && at.every((s) => s.flat > 0) && !at[0].sent, 'the nearest thrown, everyone down, and nobody sent home for it');
   });
 });
 

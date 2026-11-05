@@ -43,9 +43,9 @@ export const TUNING = {
   grabReach: .95, grabbers: 3, dragSpeed: .7,
   armsLength: .8,                  // metres. One coming for him gets no nearer than this, and reaches for him from here.
   windUp: .5,                      // seconds it takes them to get hold of him once they're close enough, and a hit in that time stops it
-  // Hit with something he swung, the one he swung at goes over away from him and lands this far off, by their number, short of a wall or a car or the water, with this much room
-  // left between them and anyone else, and room for this much of them lying there past where they land
-  knockedOff: [1.9, 2.5], lieApart: .6, lieReach: .7,
+  // Knocked over, they slide short of a wall or a car or the water, with this much room left between them and anyone else, and room for this much of them lying there
+  // past where they stop
+  lieApart: .6, lieReach: .7,
   mash: .17, mashFade: .12, grabHold: 7,   // one press, how fast it slips back, and how long you've got
   stun: 1.6, shove: 2.6, mercy: 1.6,       // what breaking free buys you
   personalSpace: .95,
@@ -54,10 +54,19 @@ export const TUNING = {
   wading: .55,                     // how much of their pace they keep in the water, wading out of it. Nobody goes in after anything.
   goesUnder: 1.2,                  // seconds to go down, for anyone the train throws in
   thrownFalls: 15,                 // m/s², for anyone thrown
-  // Hit by what he's driving at 40 mph or more, they go flying, limp: up over the top of it about one time in three and ahead of it otherwise, the faster the higher and further,
-  // bouncing a couple of times, less each time, and lying in a heap however they come down
-  flingFrom: 17.9,                 // m/s, which is 40 mph
-  flungOver: .35, bounces: 2, bounce: .34, bounceFrom: 2.5,
+  // Hit by anything, they go as far as it hit them (CHUNKY-185), and nothing about it's a line. How hard is the speed it puts into them: for a vehicle how fast it was
+  // going, a little more for one far heavier than they are (body, hard), and for a swing or a blast what it pushes (push). Short of `over` they stagger back on their
+  // feet and catch themselves. From there they go over where they stood and slide. From `throwFrom` they're thrown, loose as a rag, tumbling along the ground, and from
+  // lift[0] up off it as well, up at lift[1] * (speed - lift[0]) ** lift[2], the harder the higher. Nothing slows them in the air. On the ground they slow by `grip`
+  // and by `drag` for each m/s they're going, and coming down takes `scuff` of how hard from how fast they're going along it. They bounce by `bounce` of how hard they
+  // came down, which fades out under `bounceFrom`, and lie in a heap however they stop.
+  body: 80, hard: 1.1,             // kg
+  over: 2.8, throwFrom: 7,         // m/s
+  lift: [7, 1.4, .65],
+  grip: 10, drag: .3, scuff: .5,
+  bounce: .34, bounceFrom: 2.5,
+  push: { hit: 6.5, blast: 16, fire: 5, swing: 6.6 },   // m/s, where it hit, outward, and half that at the edge of what it reached
+  staggerFor: [.4, .3],            // seconds a stagger has them unsteady, and more for each m/s
   // Nobody dies. The cottonmouths have whoever the train throws in and the current takes them, and they come up a little way downstream, on the bank, soaked, with a snake hanging off a sleeve, and walk home.
   below: [10, 18],                 // seconds under before they come up, by their number
   current: 3.5,                    // metres a second it takes them, which is how far downstream they come up: 35 to 63 m
@@ -333,23 +342,26 @@ export function createHorde(world, tuning = {}, on = {}) {
   };
   // There's no lure. Nothing draws a crowd, not a train and not an alarm and not a bell, since everyone in Chunky has heard all of them every day for years, and nobody follows anything
   // into the water: a noise rouses the ones near enough to hear it, and a bottle makes them look. The one real lure is supper, which isn't here yet.
-  // Knocked flat: anyone within r goes over, thrown clear, and lies there a while. It says how many. They remember it, and so does whoever was there.
-  // going is how fast what hit them was going, { vx, vz, still }, and at T.flingFrom or more they go flying (fling, below). still is reduced motion, with nobody turning over.
+  // Knocked about: anyone within r of x, z is hit, and goes as far as it hit them (impact, below). It says how many. They remember it, and so does whoever was there.
+  // going is what hit them. A vehicle's how fast it was going and how heavy it is, { vx, vz, mass }, and they go its way, off whichever side of its middle they were on.
+  // Anything else pushes them outward from x, z, by { push }, or for a knock that doesn't say, by what it was (T.push), and half that at the edge of r. still is
+  // reduced motion, with nobody turning over, and seconds is how long they're down if they go over. A vehicle sends anyone it throws home sore once they're up.
   h.knock = (x, z, r, seconds, by = 'hit', going = null, pid) => {
     let n = 0;
-    const flung = going && hypot(going.vx, going.vz) >= T.flingFrom ? going : null;
     // nobody thinks of a fire or the train as something he did
-    const his = by !== 'fire' && by !== 'train', p = who(pid, x, z), id = idOf(p);
+    const his = by !== 'fire' && by !== 'train', p = who(pid, x, z), id = idOf(p), still = !!going?.still;
+    const speed = going?.vx !== undefined ? hypot(going.vx, going.vz) : 0, into = going?.mass ? going.mass / (going.mass + T.body) * T.hard : T.hard;
     let victim = null, closest = Infinity;
     for (const s of active) {
       const dx = s.x - x, dz = s.z - z, d = hypot(dx, dz);
-      if (d >= r || s.flat > 0 || s.under !== undefined) continue;
-      floor(s, seconds, his, dx / (d || 1), dz / (d || 1), id); n++;
-      if (flung) fling(s, flung, dx, dz);
+      if (d >= r || s.flat > 0 || s.under !== undefined || s.thrown) continue;
+      if (speed) impact(s, going.vx * into, going.vz * into, { side: Math.sign(dx * -going.vz + dz * going.vx), seconds, his, id, still, home: true });
       else {
-        const k = 1 + (1 - d / r) * 2.4, nx = s.x + dx / (d || 1) * k, nz = s.z + dz / (d || 1) * k;
-        if (open(s, nx, nz)) { s.x = nx; s.z = nz; s.y = world.floorAt(nx, nz); }
+        // and right where it hit, back the way they were facing
+        const push = (going?.push ?? T.push[by] ?? T.push.hit) * (1 - .5 * d / r), ux = d > .01 ? dx / d : -Math.sin(s.yaw), uz = d > .01 ? dz / d : -Math.cos(s.yaw);
+        impact(s, ux * push, uz * push, { seconds, his, id, still });
       }
+      n++;
       if (s.who) F.hurt(s.who, s.x, s.z, by, id);
       if (d < closest) { closest = d; victim = s; }
     }
@@ -369,26 +381,67 @@ export function createHorde(world, tuning = {}, on = {}) {
     s.hitAs = s.state === ROUSED ? SHAMBLE : s.state; s.fromX = s.x; s.fromZ = s.z; s.hitX = hx; s.hitZ = hz; s.reaching = 0; s.rouse = null; s.rank = 0;
     s.state = STUNNED; s.timer = seconds; s.alert = 1; s.moving = 0; s.flat = s.flatFor = seconds;
   }
-  // Hit with something he swung, from where he stands at x, z: only the one he swung at goes down. It goes over away from him, along the line from him through it, and lands
-  // 1.5 to 3 m off, sliding there short of anything that would stop it, a wall, a car, the water or another of them, or where it stood if there's no room at all. It falls the way
-  // it's knocked, so it's turned to face him first. It says whether it went down. They remember it, and so does whoever was there.
-  h.knockOne = (s, x, z, seconds, by = 'hit', pid) => {
+  // Hit with something he swung, from where he stands at x, z: only the one he swung at. It goes as far as the swing pushes it (impact, below), away from him and the way
+  // the swing came round, `round` of the push to its side. It says whether it went down. They remember it, and so does whoever was there.
+  h.knockOne = (s, x, z, seconds, by = 'hit', pid, push = T.push.swing, round = 0, still = false) => {
     if (s.flat > 0 || s.under !== undefined || s.thrown) return false;
-    const p = who(pid, x, z), id = idOf(p), d = hypot(s.x - x, s.z - z) || 1, ux = (s.x - x) / d, uz = (s.z - z) / d, [near, far] = T.knockedOff;
-    floor(s, seconds, true, ux, uz, id);
+    const p = who(pid, x, z), id = idOf(p), d = hypot(s.x - x, s.z - z) || 1, ux = (s.x - x) / d, uz = (s.z - z) / d, k = push / hypot(1, round);
+    impact(s, (ux - uz * round) * k, (uz + ux * round) * k, { seconds, his: true, id, still });
+    // and facing him as they go over, whichever way round it sent them
+    if (s.flat > 0) s.yaw = Math.atan2(-ux, -uz);
+    if (s.who) F.hurt(s.who, s.x, s.z, by, id);
+    if (F) for (const o of active) if (o.who && !(o.flat > 0) && hypot(o.x - x, o.z - z) < T.witness) F.wasThere(o.who, id);
+    rile(s.fromX, s.fromZ, s, 'hit', p);
+    return s.flat > 0;
+  };
+  // How they go, by how hard they were hit, which is how fast vx, vz would send them. Each time is a little different, by who they are and how many times it's happened
+  // to them, so nothing's asked of world.rand(). Short of T.over they stagger; short of T.throwFrom they go over where they stood and slide; and from there they're thrown.
+  function impact(s, vx, vz, o) {
+    const times = s.hits = (s.hits ?? 0) + 1, r = (salt) => roll((s.who ? s.who.id : 1e6 + s.look) * 31 + times, salt);
+    const v = hypot(vx, vz) * (.97 + r(31) * .06), ux = vx / (hypot(vx, vz) || 1), uz = vz / (hypot(vx, vz) || 1);
+    // and however they last came down is over with
+    s.flop = null; s.tumble = 0; s.twist = 0;
+    if (v < T.over) return stagger(s, ux, uz, v, o);
+    floor(s, o.seconds, o.his, ux, uz, o.id);
+    // facing what hit them, so they go over the way they were knocked
     s.yaw = Math.atan2(-ux, -uz);
-    const reach = near + (far - near) * (((s.look ?? 0) * 0.618) % 1), clear = (t) => {
+    if (v < T.throwFrom) return slide(s, ux, uz, v);
+    thrown(s, ux, uz, v, o, r);
+  }
+  // A nudge: back on their feet the way it pushed them, as far as the ground lets them slide, and a moment to catch themselves. Nobody's down.
+  function stagger(s, ux, uz, v, { his, id }) {
+    floor(s, T.staggerFor[0] + T.staggerFor[1] * v, his, ux, uz, id);
+    s.flat = s.flatFor = 0; s.hitAs = undefined;
+    s.thrown = { vx: ux * v, vz: uz * v, vy: 0, spin: 0, twist: 0, ground: true, slides: true };
+  }
+  // How far the ground lets someone slide who's going v along it, as fly() has them slow down
+  const slid = (v) => (T.drag ? (v - T.grip / T.drag * Math.log(1 + T.drag * v / T.grip)) / T.drag : v * v / (2 * T.grip));
+  // Over where they stood, and sliding as far as it sent them, short of anything that would stop them, a wall, a car, the water or another of them, with room to lie,
+  // or where they stood if there's no room at all. They're drawn going over from where they were to there.
+  function slide(s, ux, uz, v) {
+    const reach = slid(v), clear = (t) => {
       const nx = s.fromX + ux * t, nz = s.fromZ + uz * t, lx = nx + ux * T.lieReach, lz = nz + uz * T.lieReach;
       return open(s, nx, nz) && open(s, lx, lz) && !active.some((o) => o !== s && o.under === undefined && Math.min(hypot(o.x - nx, o.z - nz), hypot(o.x - lx, o.z - lz)) < T.lieApart);
     };
     let k = 0;
-    for (let t = .1; t <= reach + 1e-6; t += .1) { if (!clear(t)) break; k = t; }
+    for (let t = .05; t <= reach + 1e-6; t += .05) { if (!clear(t)) break; k = t; }
     if (k) { s.x = s.fromX + ux * k; s.z = s.fromZ + uz * k; s.y = world.floorAt(s.x, s.z); }
-    if (s.who) F.hurt(s.who, s.x, s.z, by, id);
-    if (F) for (const o of active) if (o.who && !(o.flat > 0) && hypot(o.x - x, o.z - z) < T.witness) F.wasThere(o.who, id);
-    rile(s.fromX, s.fromZ, s, 'hit', p);
-    return true;
-  };
+  }
+  // Thrown, loose as a rag: its way and off to the side of it they were on a little, up off the ground the harder it was, and tumbling over and over the faster it
+  // sent them. A vehicle sends them home sore once they're up, the same as the train, and he's long gone by then.
+  function thrown(s, ux, uz, v, { side = 0, still, home }, r) {
+    const k = v - T.throwFrom, sd = side || (r(30) < .5 ? -1 : 1), flail = Math.min(1, k / 6);
+    const across = sd * v * (.03 + r(33) * .08), up = v > T.lift[0] ? T.lift[1] * (v - T.lift[0]) ** T.lift[2] * (.94 + r(34) * .12) : 0;
+    s.thrown = {
+      vx: ux * v - uz * across, vz: uz * v + ux * across, vy: up, ground: up <= 0, slides: true, limp: true, bounces: 0,
+      spin: still ? 0 : (r(35) < .5 ? -1 : 1) * Math.min(12, 2.5 + k * .9), twist: still ? 0 : (r(37) < .5 ? -1 : 1) * (2 + r(38) * 6) * flail,
+    };
+    // how they flop, which is the page's to draw: the same every time for this throw, and held where it was once they're down
+    s.tumble = 0; s.twist = 0; s.flop = { seed: r(39) * 100, t: 0, still }; s.hitAs = undefined; s.flung = true;
+    if (home) s.sent = true;
+    s.y = world.floorAt(s.x, s.z);
+    h.on.flung?.(s);
+  }
   // How much longer someone's down for, getting up included. It's nothing for anyone on their feet.
   h.down = (s) => (s.flat > 0 && !s.thrown && s.under === undefined ? s.flat : 0);
   // and keeping someone who's down there for at least this much longer, for anything that needs them to stay put. It says whether they were down.
@@ -418,34 +471,39 @@ export function createHorde(world, tuning = {}, on = {}) {
     }
     return n;
   };
-  // Flying, limp, off whatever side of its middle they were on, whichever way it was going. Each flight's its own, by who they are and how many times it's happened to them,
-  // so nothing's asked of world.rand(). They're sent home sore once they're up, the same as from the train, and he's long gone by then.
-  function fling(s, f, dx, dz) {
-    const sp = hypot(f.vx, f.vz) || 1, ux = f.vx / sp, uz = f.vz / sp, times = s.flings = (s.flings ?? 0) + 1;
-    const r = (salt) => roll((s.who ? s.who.id : 1e6 + s.look) * 31 + times, salt), still = !!f.still;
-    const side = Math.sign(dx * -uz + dz * ux) || (r(30) < .5 ? -1 : 1), over = r(31) < T.flungOver, faster = Math.max(0, sp - T.flingFrom);
-    const along = sp * (over ? .38 + r(32) * .12 : 1.05 + r(32) * .2), across = side * (1.5 + r(33) * 3.5), up = (over ? 7.5 : 4) + faster * .3 + r(34) * 2;
-    s.thrown = { vx: ux * along - uz * across, vz: uz * along + ux * across, vy: up, spin: still ? 0 : (r(35) < .5 ? -1 : 1) * (6 + r(36) * 6), twist: still ? 0 : (r(37) < .5 ? -1 : 1) * (2 + r(38) * 6), limp: true, bounces: 0 };
-    // how they flop, which is the page's to draw: the same every time for this flight, and held where it was once they're down
-    s.tumble = 0; s.twist = 0; s.flop = { seed: r(39) * 100, t: 0, still }; s.hitAs = undefined; s.sent = true; s.flung = true;
-    s.y = world.floorAt(s.x, s.z) + .3;
-    h.on.flung?.(s);
-  }
   function fly(s, dt) {
     const f = s.thrown, nx = s.x + f.vx * dt, nz = s.z + f.vz * dt;
     s.tumble += f.spin * dt;
     if (f.limp) { s.twist += f.twist * dt; if (!s.flop.still) s.flop.t += dt; }
-    // what stops them in the air is a wall, and not whatever threw them, which they go up and over
+    // what stops them is a wall, and not whatever threw them, which they go up and over
     if (!world.blocked(nx, nz, s.y, true)) { s.x = nx; s.z = nz; } else { f.vx *= -.2; f.vz *= -.2; }
+    const wet = () => world.water(s.x, s.z) && s.y < (world.level?.(s.x, s.z) ?? -Infinity);
+    // along the ground, which slows them and their tumbling with them, till they stop
+    if (f.ground) {
+      s.y = world.floorAt(s.x, s.z);
+      // and off the bank, the river has them
+      if (wet()) { s.thrown = null; s.tumble = 0; dive(s); h.on.splash?.(s); return; }
+      const u = hypot(f.vx, f.vz), slow = (T.grip + T.drag * u) * dt;
+      if (u > slow) { const k = (u - slow) / u; f.vx *= k; f.vz *= k; f.spin *= k; f.twist *= k; return; }
+      return stop(s, f);
+    }
     f.vy -= T.thrownFalls * dt; s.y += f.vy * dt;
     // into the water, and the river has them
-    if (world.water(s.x, s.z) && s.y < (world.level?.(s.x, s.z) ?? -Infinity)) { s.thrown = null; s.tumble = 0; dive(s); h.on.splash?.(s); return; }
+    if (wet()) { s.thrown = null; s.tumble = 0; dive(s); h.on.splash?.(s); return; }
     const floor = world.floorAt(s.x, s.z);
     if (s.y > floor) return;
     s.y = floor;
-    // limp, they bounce, less each time, and stay however they come down
-    if (f.limp && f.vy < -T.bounceFrom && f.bounces < T.bounces) { f.bounces++; h.on.bounce?.(s, -f.vy); f.vy *= -T.bounce; f.vx *= .55; f.vz *= .55; f.spin *= -.5; f.twist *= .6; return; }
-    // and how far over they'd turned, from upright, -π to π, which is whether they're laid on their back or their front
+    // Anyone the train throws stays however they come down. Anyone else, the ground takes some of how fast they're going along it, by how hard they came down, and they
+    // bounce, less the softer they landed, till there's nothing in it and they slide.
+    if (!f.slides) return stop(s, f);
+    const vi = -f.vy, u = hypot(f.vx, f.vz), keep = u > 0 ? Math.max(0, u - T.scuff * vi) / u : 0, t = Math.min(1, Math.max(0, vi / T.bounceFrom - .5)), up = vi * T.bounce * t * t * (3 - 2 * t);
+    f.vx *= keep; f.vz *= keep;
+    if (vi > T.bounceFrom) { f.bounces = (f.bounces ?? 0) + 1; h.on.bounce?.(s, vi); }
+    if (up > .3) { f.vy = up; f.spin *= -.5; f.twist *= .6; return; }
+    f.vy = 0; f.ground = true;
+  }
+  // and where they stop: limp, how far over they'd turned, from upright, -π to π, which is whether they're laid on their back or their front
+  function stop(s, f) {
     if (f.limp) s.flop.land = Math.atan2(Math.sin(s.tumble), Math.cos(s.tumble));
     s.thrown = null; s.tumble = 0;
   }
@@ -623,8 +681,10 @@ export function createHorde(world, tuning = {}, on = {}) {
       s.timer -= T.thinkEvery;
       // nobody's up while they've still got time down, which is what anything asking how long that is goes by
       if (s.timer > 0 || s.flat > 0) return;
-      // run down by the train or flung, they've had enough of whatever they were at: up, sore, and off home
-      if (s.sent) { sore(s); goHome(s); s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; s.flop = null; s.twist = 0; return; }
+      // up, and in one piece again, however they'd come down
+      s.flop = null; s.twist = 0;
+      // run down by the train or a vehicle, they've had enough of whatever they were at: up, sore, and off home
+      if (s.sent) { sore(s); goHome(s); s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.lost = 0; s.tx = s.x; s.tz = s.z; return; }
       // up again. Anyone who'd keep away from him does. Whoever was after him and was thrown off him, or knocked over by something that wasn't him, goes straight back if there's room for them,
       // and gives up if there isn't: they never stopped. Whoever he hurt comes for him, which takes a second of standing there first like anyone else coming for him. And anyone else goes back
       // to what they were doing: it wasn't him, and it's nothing to them.
@@ -776,7 +836,8 @@ export function createHorde(world, tuning = {}, on = {}) {
     for (let i = looks.length - 1; i >= 0; i--) if (looks[i].until < clock) looks.splice(i, 1);
     active.length = 0;
     for (const s of all) {
-      if (nearAny(s, T.active)) active.push(s);
+      // and anyone in the air or sliding along the ground goes on till they stop, however far it's taken them
+      if (nearAny(s, T.active) || s.thrown) active.push(s);
       // what's not looked at isn't thinking about him either: one that was on his way out of reach when he went doesn't take it up again when he's back
       else if (s.state === CURIOUS || s.state === ROUSED || s.state === HUNTING) { if (s.state === CURIOUS) { s.state = SHAMBLE; s.timer = 0; s.alert = 0; s.tx = s.x; s.tz = s.z; s.gaze = null; } else giveUp(s); }
     }

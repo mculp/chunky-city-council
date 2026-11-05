@@ -8,8 +8,8 @@
 // Then the skillet (CHUNKY-171), on the phone with real taps. A tap turns him to whoever's in reach whichever way he's facing, the nearest, and one coming for him before
 // one that isn't. It lands every time from 0.4 to 2.8 m off, in front, beside and behind, stood still and reaching for him, with nobody else going down, with the middle of
 // the skillet's bottom on its head or its chest in the frame it lands in, and with a ray from the camera getting to its head and to its chest past him as the pan lands, or
-// its outline drawn through him, both on the screen. It goes over away from him, along the line
-// from him through it, and lands 1.5 to 3 m off, or short of another of them, a parked pickup or a house's wall right behind it. One coming for him stops at arm's length. A
+// its outline drawn through him, both on the screen. It goes over away from him, a little round the way
+// the swing came (CHUNKY-185), and lands as far as the skillet's weight sends it, 1.5 to 3 m off, or short of another of them, a parked pickup or a house's wall right behind it. One coming for him stops at arm's length. A
 // ring of cast iron goes over the thud, and the one it lands on jolts back as the picture holds. Two coming at him at once, one either side, go down in two taps, the second
 // swinging back the other way. With reduced motion the camera stays where it was from him. The bat (CHUNKY-172) lands on them the same way from 0.4 to 2.8 m off, with the
 // fat of it across their head or their chest, and between swings he carries whichever he's got: the skillet hanging at his right thigh, the bat over his right shoulder,
@@ -102,6 +102,8 @@ let g = (fn, arg) => page.evaluate(fn, arg);
 const snap = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.jpg`, type: 'jpeg', quality: 82 }); };
 await g(helpers);
 const K = await g(() => ({ up: kinds.up.who.name, scuttle: kinds.scuttle.who.name, reach: H.T.grabReach, windUp: H.T.windUp }));
+// how long the skillet keeps one down, getting up included, which is about ten seconds by its weight, and how far round the way the swing came it sends them (CHUNKY-185)
+const PAN = await g(() => ({ down: __game.downFor.swing(__game.downFor.swung.skillet), round: Math.atan(__game.downFor.round) }));
 console.log(`     ${K.up} comes stood up and ${K.scuttle} scuttles, folded over. They get hold of him from ${K.reach} m, ${K.windUp} s after they're close enough.`);
 
 // With the camera behind him, one coming straight at him is behind his hood by the time it reaches, so what warns him is its glow flaring and one groan as its hands go up.
@@ -160,7 +162,7 @@ const lying = await g(() => {
   G.player.yaw = Math.atan2(s.x - P().x, s.z - P().z); G.look(G.player.yaw + Math.PI + .7, .35); go(2.5);
   return { since: +since.toFixed(2), down: +H.down(s).toFixed(2), lie: s.lie, kneel: s.kneel, grab: !!H.grab, state: s.state, outline: outlined(s) };
 });
-check(`${lying.since} s on, it's lying flat on its back, with ${lying.down} s left`, lying.lie > .99 && lying.kneel === 0 && lying.state === 5 && Math.abs(lying.since + lying.down - 10) < .1, lying);
+check(`${lying.since} s on, it's lying flat on its back, with ${lying.down} s left`, lying.lie > .99 && lying.kneel === 0 && lying.state === 5 && Math.abs(lying.since + lying.down - PAN.down) < .1, lying);
 check(`and where he's in front of it lying there, its outline's drawn through him (${lying.outline.px} pixels of it)`, lying.outline.through && lying.outline.px > 300, lying.outline);
 await snap('2-lying-there');
 const kneeling = await g(() => { const s = kinds.up; go(H.down(s) - 1.2); return { since: +since.toFixed(2), down: +H.down(s).toFixed(2), lie: +s.lie.toFixed(2), kneel: +s.kneel.toFixed(2), lean: +s.lean.toFixed(2), grab: !!H.grab, state: s.state }; });
@@ -176,7 +178,7 @@ const up = await g(() => {
   return { since: +since.toFixed(2), grab: !!H.grab, state: s.state, down: H.down(s) };
 });
 await snap('4-up-again');
-check(`it was down ${up.since} s, getting up included, and never got hold of him stood over it`, Math.abs(up.since - 10) < .2 && !lying.grab && !kneeling.grab && !up.grab && up.down === 0, { up, lying, kneeling });
+check(`it was down ${up.since} s, getting up included, and never got hold of him stood over it`, Math.abs(up.since - PAN.down) < .2 && !lying.grab && !kneeling.grab && !up.grab && up.down === 0, { up, lying, kneeling });
 // it's up, and it isn't coming yet: it stops, turns to him and flares for a second, because he hit it, and nothing on the screen says so
 const turned = await g(() => { const s = kinds.up; G.step(T, T); return { state: s.state, glow: G.glow(s), noted: G.roused.log.map((r) => r.kind), added: screenText().filter((l) => !before.includes(l)), whyBox: !!document.getElementById('why'), faces: Math.abs(Math.sin((s.yaw - Math.atan2(P().x - s.x, P().z - s.z)) / 2)) }; });
 check(`and it's back up, but it stops and turns to him for a second first, flaring (${turned.glow?.toFixed(2)}), because he hit it, and nothing on the screen says why`, up.state === 8 && turned.state === 8 && turned.glow > 1.4 && turned.noted.join() === 'hit' && turned.added.length === 0 && !turned.whyBox, { up, turned });
@@ -279,14 +281,14 @@ for (const kind of ['up', 'scuttle']) for (const a of AROUND) for (const d of [.
   all.push({ kind, a, d, ...r, ...fell(r) });
 }
 const landed = all.filter((r) => r.down && !r.grab), nobodyElse = all.filter((r) => !r.others.some(Boolean));
-const seen = all.filter((r) => r.seen?.head && r.seen?.chest), away = landed.filter((r) => r.away && r.off < .35 && r.far >= 1.5 && r.far <= 3);
+const seen = all.filter((r) => r.seen?.head && r.seen?.chest), rounded = (r) => Math.abs(r.off - PAN.round) < .15, away = landed.filter((r) => r.away && rounded(r) && r.far >= 1.5 && r.far <= 3);
 const show = (list) => list.slice(0, 16).map((r) => `${r.kind} ${r.a.toFixed(1)} rad ${r.d}${typeof r.d === 'number' ? ' m' : ''}: ${JSON.stringify({ down: r.down, grab: r.grab, seen: r.seen && { head: r.seen.head, chest: r.seen.chest }, far: r.far, off: r.off, away: r.away, others: r.others })}`).join('\n       ');
 console.log(`     ${all.length} swings: ${landed.length} landed, ${seen.length} with its head and chest in sight as the pan got there, ${away.length} going over away from him 1.5 to 3 m, ${nobodyElse.length} with nobody else down`);
 check(`it lands every time, stood still from 0.4 to 2.8 m off or reaching for him, in front, beside and behind (${landed.length} of ${all.length})`, landed.length === all.length, show(all.filter((r) => !r.down || r.grab)));
 check(`and nobody he didn't turn to goes down (${nobodyElse.length} of ${all.length})`, nobodyElse.length === all.length, show(all.filter((r) => r.others.some(Boolean))));
 const past = seen.filter((r) => r.seen.past).length, through = seen.filter((r) => !r.seen.past).length;
 check(`you see who you hit: as the pan lands its head and chest are on the screen, with nothing of him in the way of them (${past}) or its outline drawn through him (${through}), ${seen.length} of ${all.length}`, seen.length === all.length, show(all.filter((r) => !(r.seen?.head && r.seen?.chest))));
-check(`it goes over away from him, along the line from him through it, and lands 1.5 to 3 m off (${away.length} of ${landed.length})`, away.length === landed.length, show(landed.filter((r) => !(r.away && r.off < .35 && r.far >= 1.5 && r.far <= 3))));
+check(`it goes over away from him, a little round the way the swing came, and lands 1.5 to 3 m off (${away.length} of ${landed.length})`, away.length === landed.length, show(landed.filter((r) => !(r.away && rounded(r) && r.far >= 1.5 && r.far <= 3))));
 // The skillet's on them in the frame it lands in: the middle of its bottom against the outside of their head or their chest as they were drawn where they stood, which is
 // about 0.12 m from the middle of a head and 0.13 m from a chest's. It's within this much of one or the other, and never short of them.
 const PAN_ON = { head: .25, chest: .3 }, onIt = all.filter((r) => r.pan && (r.pan.head <= PAN_ON.head || r.pan.chest <= PAN_ON.chest));
@@ -487,7 +489,7 @@ const calm = await g(() => {
   while (since < 12 && H.down(s) > 0) go(T, false);
   return { ...r, torn, took: +since.toFixed(2) };
 });
-check(`with reduced motion a swing still knocks it down, for ${calm.took} s, and the picture doesn't hold or tear`, calm.down && !calm.grab && !calm.torn && Math.abs(calm.took - 10) < .2, calm);
+check(`with reduced motion a swing still knocks it down, for ${calm.took} s, and the picture doesn't hold or tear`, calm.down && !calm.grab && !calm.torn && Math.abs(calm.took - PAN.down) < .2, calm);
 await snap('5-reduced-motion-up-again');
 // and the camera doesn't swing about to show it, but stays where it was from him: one stood straight ahead of him, where it's behind him on the screen, and one off to his side.
 // It follows him a little behind wherever he goes, which is in to them as he winds up, so where it is from him is taken once it's caught up with him.

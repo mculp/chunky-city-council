@@ -4816,9 +4816,14 @@ const SWING_POSES = [[.2, .34, -.2, -2.1], [.15, .5, -.08, -1], [.1, .16, .42, .
 // It turns him to the nearest one he can reach, whichever way he's facing on a phone, and close to where he's looking with a mouse. It lands on them where it's
 // best, at the end of his arms (SWING_ARM, nearest and furthest), which he steps in or back to as he winds up, up to this quick (SWING_LUNGE, m/s).
 const SWING_REACH = 2.8, SWING_CONE = { mouse: Math.cos(.5) }, SWING_ARM = { skillet: [.5, .7], bat: [.8, 1.15] }, SWING_LUNGE = 10;
-// How long a hit keeps one of them down, getting up included: about ten seconds from the skillet or the bat, and longer the harder anything else hits. Nobody's ever worse off than down.
+// How long a hit keeps one of them down, getting up included: about ten seconds from a swing, longer the heavier what he swung (downBySwing), a blast 14,
+// and a vehicle 8 to 20 by how fast it was going. Nobody's ever worse off than down.
 // and the train's longer than any of them, 20 s being the most that anything else keeps them down: thrown off its side, and off its front
 const DOWN_FOR = { swing: 10, blast: 14, train: [30, 45] }, downByTruck = (speed) => Math.min(20, 8 + speed * .5);
+// What he swings, by how hard it hits, which is how fast it would send one of them (horde.T): from a branch, for when there's one to swing, up to the
+// skillet, the heaviest. SWING_ROUND is how much of that sends them round the way the swing's going, and one the bat's weight has them down DOWN_FOR.swing,
+// going with the square root of the weight.
+const SWUNG = { branch: 3.6, bat: 5.6, skillet: 6.6 }, SWING_ROUND = .3, downBySwing = (push) => DOWN_FOR.swing * Math.sqrt(push / SWUNG.bat);
 // and where it is in one, whether it's landed, which side it came from, who it's at, and what the skillet landed on, while it's drawn there
 let swingT = -1, swingHit = false, throwT = 0, swingSide = 1, swingWho = null, swingLands = null;
 function poseHero(tq) {
@@ -7683,7 +7688,7 @@ const traffic = createTraffic({
     v.y = floorAt(v.x, v.z); settle(v, floorAt);
     const near = Math.hypot(v.x - P.x, v.z - P.z);
     if (near < 8) folks.close(c.who, 1 / 30);
-    if (!driving && S.mode === 'town' && Math.abs(P.y - v.y) < 1.4 && v.f > 3 && inVehicle(v, P.x, P.z, .3)) hurtBy('wreck', P.x - v.x, P.z - v.z, 7, v);
+    if (!driving && S.mode === 'town' && Math.abs(P.y - v.y) < 1.4 && v.f > NUDGE && inVehicle(v, P.x, P.z, .3)) runInto(v);
   },
   roadNear(x, z) { const d = MAP.roadGrid.nearest(x, z, (r) => r.lane); return d < MAP.roadGrid.reach ? MAP.roadGrid.seg.owner : null; },
   laneNear(x, z) { const d = MAP.roadGrid.nearest(x, z, (r) => !unpaved(r)); return d < 40 ? MAP.roadGrid.seg.owner : null; },
@@ -7897,6 +7902,7 @@ function stepRoll(dt) {
     if (r.t >= BAIL.up) { roll = null; HP.kind = 'run'; HP.down = 0; player.grounded = true; }
     return;
   }
+  if (r.hit) { stepHit(r, dt); return; }
   const air = r.phase === 'air';
   if (!air) { const left = Math.max(0, 1 - r.t / r.T); r.vx = r.v0x * left; r.vz = r.v0z * left; }
   let nx = P.x + (r.vx + player.kb.x) * dt, nz = P.z + (r.vz + player.kb.y) * dt;
@@ -7925,9 +7931,109 @@ function stepRoll(dt) {
     if (half > r.half) { r.half = half; footstep(.5 + .7 * (1 - e)); if (!pavedAt(P.x, P.z)) puff(P.x - r.dx * .7, fl + .06, P.z - r.dz * .7, .08 + .08 * (1 - e), .45, .35); }
     if (r.t >= r.T) { r.phase = 'up'; r.t = 0; r.beta = r.to; HP.kind = 'down'; HP.down = 1; player.grounded = true; }
   }
-  // and into the water, off a bank or a bridge
-  const lv = WATER.level(P.x, P.z);
+  intoWater(fl);
+}
+// and into the water, off a bank or a bridge
+function intoWater(fl) {
+  const P = player.pos, lv = WATER.level(P.x, P.z);
   if (P.y < lv + .05 && fl < lv - .3) { roll = null; SFX.play('splash.small'); swimY = lv; P.y = lv; S.mode = 'swim'; HP.kind = 'swim'; objective('Swim to the bank.'); }
+}
+
+// Hit by something (CHUNKY-185), he goes the way anyone in the crowd would going vx, vz (horde.T): short of going over he's nudged, and staggers
+// on his feet; a bit harder he goes over where he stands, the way it pushed him, and slides; and harder still he's thrown, up off the ground the
+// harder it was, turning over as he goes and bouncing, and rolls along the ground as far as it takes him, a whole number of turns so that he
+// finishes face down. Then he lies there a moment, longer the harder it was, and gets up. Going over costs a heart, once the hearts are showing.
+// NUDGE is the slowest anything going counts as hitting anyone, in m/s. HIT has how far each turn along the ground takes him and how far it has to
+// be before he turns over at all, in m, how far off the side of a vehicle's middle it sends him, as part of how hard, how long he lies there for
+// each m/s past going over and the most, and how long going over takes and how soon after a nudge he can have another, in seconds.
+const NUDGE = 1, HIT = { turn: 3.5, rolls: 1.5, across: .07, lieBy: .12, lieMost: 2.5, falls: .35, nudge: .4 }, TURN = Math.PI * 2;
+let nudgedAt = -1e9;
+// how far the ground lets anyone slide who's going u along it, as they slow down in horde.js
+const slidOf = (u) => { const T = horde.T; return (u - T.grip / T.drag * Math.log(1 + T.drag * u / T.grip)) / T.drag; };
+function struck(vx, vz, kind, what) {
+  const T = horde.T, v = Math.hypot(vx, vz);
+  if (S.mode !== 'town' || !v) return;
+  const ux = vx / v, uz = vz / v;
+  if (v < T.over) {
+    // as far as the ground would slide him, which is how far the push he walks with lets him go (updateDrive's own on foot). On the ground
+    // already, rolling or lying there, a nudge is nothing.
+    if (roll || time - nudgedAt < HIT.nudge || player.inv > 0) return;
+    nudgedAt = time; const k = slidOf(v) * 5; player.kb.set(ux * k, uz * k);
+    SFX.play('hit.flesh', { rate: 1.2, gain: .35 });
+    return;
+  }
+  // and harder, it's what happens to him now, whatever he was doing: rolling out of something, or lying in the road
+  if (player.inv > 0) return;
+  hurtBy(kind, vx, vz, 0, what);
+  if (S.mode !== 'town') return;
+  const over = v < T.throwFrom, up = over ? 0 : T.lift[1] * (v - T.lift[0]) ** T.lift[2];
+  S.act = null; HP.speed = 0; player.running = false; player.kb.set(0, 0);
+  // going over, he's facing the way it pushed him; thrown, he's lying across that with his head to his left of it, so that rolling's along it
+  player.yaw = over ? Math.atan2(ux, uz) : Math.atan2(uz, -ux);
+  roll = { phase: 'air', hit: true, over, t: 0, k: 1, dx: ux, dz: uz, vx, vz, vy: up, beta: 0, pitch: 1.2, half: 0, from: 0, to: 0, D: 0, went: 0,
+    spin: reduceMotion || over ? 0 : Math.min(12, 2.5 + (v - T.throwFrom) * .9), lie: Math.min(HIT.lieMost, (v - T.over) * HIT.lieBy), out: what?.K ? what : null };
+  HP.kind = over ? 'down' : 'roll'; HP.down = 0; player.grounded = up <= 0;
+  if (up <= 0) rollOn(roll);
+}
+// Run into by a vehicle: as hard as how fast it's going and how heavy it is against him, the same as for anyone in the crowd (horde.knock), the
+// way it's going and a little off whichever side of its middle he was on
+function runInto(v) {
+  const T = horde.T, P = player.pos, l = v.loose;
+  const vx = l ? l.vx : Math.sin(v.yaw) * v.f - Math.cos(v.yaw) * (v.s ?? 0), vz = l ? l.vz : Math.cos(v.yaw) * v.f + Math.sin(v.yaw) * (v.s ?? 0);
+  const into = v.K.mass / (v.K.mass + T.body) * T.hard, side = Math.sign((P.x - v.x) * -vz + (P.z - v.z) * vx) || 1;
+  struck((vx - vz * side * HIT.across) * into, (vz + vx * side * HIT.across) * into, 'wreck', v);
+}
+// Coming down: the ground takes some of what he's going along it, by how hard he came down, and he bounces, less the softer he landed, till
+// there's nothing in it, as anyone thrown does (horde.T)
+function landHit(r, fl) {
+  const T = horde.T, P = player.pos, vi = -r.vy, u = Math.hypot(r.vx, r.vz), keep = u > 0 ? Math.max(0, u - T.scuff * vi) / u : 0;
+  const t = clamp(vi / T.bounceFrom - .5, 0, 1), up = vi * T.bounce * t * t * (3 - 2 * t);
+  P.y = fl; r.vx *= keep; r.vz *= keep;
+  SFX.play('hit.flesh', { rate: .72, gain: Math.min(1, .35 + vi * .08) }); footstep(1.5);
+  if (!reduceMotion) cam.shake = Math.max(cam.shake, Math.min(.4, .1 + vi * .03));
+  if (!pavedAt(P.x, P.z)) puff(P.x, fl + .1, P.z, .16 + vi * .02, .55, .5);
+  if (folkOut) horde.noise(P.x, P.z, 16, .6, 'bounce');
+  if (up > .3) { r.vy = up; r.spin *= .5; return; }
+  rollOn(r);
+}
+// and along the ground, as far as it lets him go, turning over as many whole times as it's far, from however far round he'd got in the air
+function rollOn(r) {
+  const D = slidOf(Math.hypot(r.vx, r.vz)), turns = r.over || reduceMotion || D < HIT.rolls ? 0 : Math.max(1, Math.round(D / HIT.turn));
+  r.phase = 'roll'; r.vy = 0; r.D = D; r.went = 0; r.from = r.beta; r.to = (Math.ceil(r.beta / TURN - 1e-6) + turns) * TURN; r.t = 0;
+  player.grounded = true;
+}
+function stepHit(r, dt) {
+  const T = horde.T, P = player.pos, air = r.phase === 'air';
+  let nx = P.x + r.vx * dt, nz = P.z + r.vz * dt;
+  // and along the ground he slows the way they do, once he's gone
+  if (!air) { const u = Math.hypot(r.vx, r.vz), slow = (T.grip + T.drag * u) * dt, k = u > slow ? (u - slow) / u : 0; r.vx *= k; r.vz *= k; }
+  // into anything that'd stop him on his feet he stops, and finishes the turn he's on where he is
+  const into = (x, z) => floorAt(x, z) - P.y > .6 || blockedInTown(x, z, P.y + .3);
+  if (into(nx, nz)) {
+    if (!into(nx, P.z)) { nz = P.z; r.vz = 0; } else if (!into(P.x, nz)) { nx = P.x; r.vx = 0; } else { nx = P.x; nz = P.z; r.vx = r.vz = 0; }
+    if (!r.vx && !r.vz && !r.stopped) { r.stopped = true; SFX.play('hit.flesh', { rate: .6, gain: .5 }); }
+  }
+  r.went += Math.hypot(nx - P.x, nz - P.z); P.x = nx; P.z = nz;
+  const fl = floorAt(P.x, P.z);
+  if (air) {
+    r.vy -= T.thrownFalls * dt; P.y += r.vy * dt; r.pitch = Math.min(1.46, r.pitch + dt * 3); r.beta += r.spin * dt;
+    if (P.y <= fl) landHit(r, fl);
+  } else {
+    P.y += (fl - P.y) * Math.min(1, dt * 18);
+    const going = r.vx || r.vz;
+    if (r.over) HP.down = Math.min(1, Math.floor(r.t * 12) / 12 / HIT.falls);
+    else {
+      r.pitch = Math.min(1.46, r.pitch + dt * 5);
+      // the turns go with how far he's got of the way, and stopped short of it he finishes the one he's on
+      if (!going) r.to = Math.min(r.to, Math.ceil(r.beta / TURN - 1e-6) * TURN);
+      r.beta = going ? r.from + (r.to - r.from) * (r.D > 0 ? Math.min(1, r.went / r.D) : 1) : Math.min(r.to, r.beta + dt * 12);
+      // a scuff each time he's over onto his front or his back
+      const half = Math.floor(r.beta / Math.PI + .5);
+      if (half > r.half) { r.half = half; footstep(.9); if (!pavedAt(P.x, P.z)) puff(P.x - r.dx * .7, fl + .06, P.z - r.dz * .7, .12, .45, .35); }
+    }
+    if (!going && (r.over ? HP.down >= 1 : r.beta >= r.to)) { r.phase = 'up'; r.t = -r.lie; r.beta = r.to; HP.kind = 'down'; HP.down = 1; }
+  }
+  intoWater(fl);
 }
 // What he's jumped out of goes on without him, its door hanging open, off its line a little and slowing, until it stops or it hits
 // something. To the crowd and the cast it's anything that's going, and it's parked again where it stops.
@@ -7945,7 +8051,7 @@ function updateCoasting(dt) {
     if (v.grounded) v.f -= Math.sign(v.f) * Math.min(Math.abs(v.f), BAIL.drag * dt);
     if (vehicleGoes(v, r, dt, false, c.T) || (v.drowned && !was)) wreckedNow(v, false);
     // and him, if it comes at him, but not on his way out of it
-    if (!driving && roll?.out !== v && speedOf(v) > 3 && Math.abs(P.y - v.y) < 1.4 && inVehicle(v, P.x, P.z, .3)) hurtBy('wreck', P.x - v.x, P.z - v.z, 7, v);
+    if (!driving && roll?.out !== v && speedOf(v) > NUDGE && Math.abs(P.y - v.y) < 1.4 && inVehicle(v, P.x, P.z, .3)) runInto(v);
     vehDirty = true;
     // stopped, and it can't stop with him in it, or on what he's driving
     if (speedOf(v) < .3 && !(driving && Math.hypot(driving.x - v.x, driving.z - v.z) < (driving.K.length + v.K.length) / 2)) {
@@ -8061,11 +8167,12 @@ function vehicleGoes(v, r, dt, mine, T) {
   if (mine && r.landed > 6 && !reduceMotion) cam.shake = Math.min(.5, r.landed * .04);
   if (r.damage > 0) vehDirty = true;
   let done = r.wrecked;
-  // the crowd: anyone in front goes over, and it costs a little, and at 40 mph they go flying (horde.T.flingFrom)
-  if (folkOut && speed > 3) {
-    const dir = v.f < 0 ? -1 : 1, going = { vx: fx * v.f - fz * v.s, vz: fz * v.f + fx * v.s, still: reduceMotion };
+  // the crowd: anyone in front goes as hard as it hit them, by how fast it's going and how heavy it is (horde.knock), from a stagger at walking pace to
+  // flying, and it costs a little, more the harder it hit
+  if (folkOut && speed > NUDGE) {
+    const dir = v.f < 0 ? -1 : 1, going = { vx: fx * v.f - fz * v.s, vz: fz * v.f + fx * v.s, mass: K.mass, still: reduceMotion }, hard = Math.min(1, speed / 6);
     const n = horde.knock(v.x + fx * dir * K.length * .35, v.z + fz * dir * K.length * .35, K.width / 2 + .8, downByTruck(speed), 'truck', going) + horde.knock(v.x, v.z, K.width / 2 + .6, downByTruck(speed), 'truck', going);
-    if (n) { SFX.play('hit.flesh', { ...at }); v.f *= Math.pow(.97, n); if (hurtVehicle(v, .5 * n)) done = true; vehDirty = true; if (mine && !reduceMotion) cam.shake = Math.max(cam.shake, .18); }
+    if (n) { SFX.play('hit.flesh', { ...at, gain: .3 + .7 * hard }); v.f *= Math.pow(.97, n); if (hurtVehicle(v, .5 * n * hard)) done = true; vehDirty = true; if (mine && !reduceMotion) cam.shake = Math.max(cam.shake, .18 * hard); }
   }
   // dust off the road, and smoke when it's hurting
   if ((T.puff -= dt) <= 0 && speed > 4 && v.grounded && !r.wet && !pavedAt(v.x, v.z)) {
@@ -8158,7 +8265,7 @@ function heatFrom(b) {
   const P = player.pos, d = Math.hypot(P.x - b.x, P.z - b.z), hot = b.size * .75 + .3;
   if (S.mode === 'town' && d < hot && Math.abs(P.y + 1 - b.y) < b.size + 1.4) hurtBy('fire', P.x - b.x, P.z - b.z, 6, b);
   const low = b.y < b.floor + 2.5;
-  if (low && folkOut) horde.knock(b.x, b.z, b.size + .4, 1.2, 'fire');
+  if (low && folkOut) horde.knock(b.x, b.z, b.size + .4, 1.2, 'fire', { still: reduceMotion });
   for (const v of vehShown) {
     if (v === b.owner?.veh || v.exploded || Math.hypot(v.x - b.x, v.z - b.z) > b.size + v.K.length * .6 || !low) continue;
     if (hurtVehicle(v, 7)) wreckVehicle(v);
@@ -8303,9 +8410,13 @@ function shock(x, y, z, r, power, skip, fire) {
       toss(v, dx / d * k * 9, dz / d * k * 9, 2 + k * 6); vehDirty = true;
     }
   }
-  if (folkOut) { horde.knock(x, z, r, DOWN_FOR.blast, 'blast'); horde.noise(x, z, r * 9, 6, 'blast'); }
+  if (folkOut) { horde.knock(x, z, r, DOWN_FOR.blast, 'blast', { still: reduceMotion }); horde.noise(x, z, r * 9, 6, 'blast'); }
+  // and him, the same as them: outward from it, as hard as it'd send one of them from where he is
   const P = player.pos, d = Math.hypot(P.x - x, P.z - z), reach = r * .8;
-  if (S.mode === 'town' && d < reach && Math.abs(P.y - y) < r) { const k = 1 - d / reach; player.vy = Math.max(player.vy, 2.5 + 5 * k); player.grounded = false; hurtBy(fire ? 'blast' : 'hit', P.x - x, P.z - z, 8 + 20 * k, { x, y, z }); }
+  if (S.mode === 'town' && d < reach && Math.abs(P.y - y) < r) {
+    const push = horde.T.push.blast * (1 - .5 * d / r), ux = d > .01 ? (P.x - x) / d : -Math.sin(player.yaw), uz = d > .01 ? (P.z - z) / d : -Math.cos(player.yaw);
+    struck(ux * push, uz * push, fire ? 'blast' : 'hit', { x, y, z });
+  }
 }
 function thud(x, y, z, r, power) {
   shock(x, y, z, r, power, null, false);
@@ -8396,9 +8507,9 @@ function updateLoose(dt) {
     }
     // and whoever's in the way
     const P = player.pos;
-    if (sp > 3) {
-      if (folkOut) horde.knock(v.x, v.z, v.K.length / 2 + .3, downByTruck(sp), 'truck', { vx: l.vx, vz: l.vz, still: reduceMotion });
-      if (!driving && Math.abs(P.y - v.y) < 1.4 && inVehicle(v, P.x, P.z, .3)) hurtBy('wreck', P.x - v.x, P.z - v.z, 7, v);
+    if (sp > NUDGE) {
+      if (folkOut) horde.knock(v.x, v.z, v.K.length / 2 + .3, downByTruck(sp), 'truck', { vx: l.vx, vz: l.vz, mass: v.K.mass, still: reduceMotion });
+      if (!driving && Math.abs(P.y - v.y) < 1.4 && inVehicle(v, P.x, P.z, .3)) runInto(v);
     }
     v.yaw += l.turn * dt; v.pitch += l.pitch * dt; v.roll += l.roll * dt;
     const fl = floorAt(v.x, v.z);
@@ -8700,7 +8811,9 @@ function updateSwing(dt) {
       // On someone, it's them and nobody else. A ring of cast iron over the thud, and the picture holds a frame and tears, like a drawing being hit, with what he swung drawn
       // on them in it, where they stood, whenever in the twelfth of a second it is.
       swingLands = { ...landingOf(s, bat ? BAT_ON : PAN_ON), bat, draws: 2 }; poseHero(lastStepIdx / 12);
-      horde.knockOne(s, P.x, P.z, DOWN_FOR.swing);
+      // and it goes as hard as what he swung, away from him and a little round the way the swing came down, from his side to the middle
+      const push = bat ? SWUNG.bat : SWUNG.skillet;
+      horde.knockOne(s, P.x, P.z, downBySwing(push), 'hit', undefined, push, swingSide * SWING_ROUND, reduceMotion);
       SFX.play('hit.flesh'); SFX.play(bat ? 'hit.wood' : 'hit.metal');
       if (!reduceMotion) { triggerBurst(.45, .1, true, false); stepBurst(); cam.shake = Math.max(cam.shake, .22); }
     } else {
@@ -10043,7 +10156,7 @@ if (TEST) {
     river: { path: RIVER, comeUp, wetOn: (s) => { const i = crowdShown.indexOf(s); return i < 0 ? null : crowdWet.getX(i); }, moccasins: () => SNAKES.map((s) => ({ x: s.p.x, z: s.p.z, state: s.state, shown: s.head.visible })), snakes: () => ({ drawn: crowdSnakes.count, shown: crowdSnakes.visible && crowdGroup.visible, falling: fallen.length, geometry: crowdSnakeGeo.attributes.position.count, calls: [crowdSnakes, crowdSnakeLine].filter((m) => m.count > 0).length }), arm: (s) => (s.who ? s.who.id : s.look) % 2,
       // where the snake is on the sleeve it hangs from, which doesn't change at all with reduced motion
       relative: (s) => { const i = crowdShown.indexOf(s); if (i < 0 || !(s.snake > 0) || s.snakeAt === undefined) return null; const a = (s.who ? s.who.id : s.look) % 2; return new THREE.Matrix4().fromArray(crowdArms.instanceMatrix.array, (i * 2 + a) * 16).invert().multiply(new THREE.Matrix4().fromArray(crowdSnakes.instanceMatrix.array, s.snakeAt * 16)).toArray(); } },
-    downFor: { table: DOWN_FOR, truck: downByTruck }, castHips: (id) => 180 - THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(NPCS[id].rig.hm.quaternion.w)))),
+    downFor: { table: DOWN_FOR, truck: downByTruck, swing: downBySwing, swung: SWUNG, round: SWING_ROUND }, hit: { HIT, NUDGE, slid: slidOf, struck, roll: () => roll && { ...roll } }, castHips: (id) => 180 - THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(NPCS[id].rig.hm.quaternion.w)))),
     // how hot what's coming off someone was last drawn: 1 for anyone after him, up to 1 + FLARE as their hands go up, or nothing if they weren't drawn
     glow: (s) => { const i = crowdShown.indexOf(s); return i < 0 ? null : crowdAuraZ.getY(i); },
     // each one that has stopped, turned to him and flared, with what woke it (the last 64, and the tests empty it), and how much hotter the flare is than the glow of anyone after him
