@@ -46,7 +46,8 @@ const VARIANTS = { smoke: '--touch', sound: '--old' };
 // for --changed: the checks for a module besides any named after it, the checks that look after parts of index.html by
 // other names than their own, and names too common in index.html to mean a check
 const ALIASES = { vehicles: ['drive', 'crowd'], damage: ['wreck'], roads: ['walk', 'wet', 'crowd'], mapview: ['net', 'keys', 'water'], fever: ['deaths', 'trains', 'horde'],
-  horde: ['fling'], agents: ['fling'], folks: ['fling'], water: ['wet', 'crowd'], lanes: ['wet', 'crowd'], solids: ['wet', 'crowd'], wet: ['crowd'], structures: ['crowd'] };
+  horde: ['fling'], agents: ['fling'], folks: ['fling'], water: ['wet', 'crowd'], lanes: ['wet', 'crowd'], solids: ['wet', 'crowd'], wet: ['crowd'], structures: ['crowd'],
+  aside: ['crowd', 'net', 'town:host', 'compound'] };
 const LOOKS_AFTER = { fling: /poseCrowd|aura|shoe|\bhop|\bfl[iu]ng/i, wet: /\b(landH|pondGround|riverDist|groundH|floorAt|roadHalf|onRoad|TOWN_Y|channel)\b/,
   crowd: /\b(HOMES|HOME_\w+|KEPT_EMPTY|SET_ASIDE|fillHomes|VEH_SET|VEHICLES|placeVehicles|vehicleFits|GROUNDS|churchZone|gasSpot|screenSpot|yardSpot|spotOff|horde\.lights|horde\.zones)\b/ };
 const COMMON = new Set(['play', 'test', 'town', 'water']);
