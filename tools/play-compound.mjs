@@ -31,6 +31,14 @@ await g(() => {
   };
   window.played = []; const play = G.sound.play.bind(G.sound); G.sound.play = (name, o) => { played.push(name); return play(name, o); };
   // where a building's doors are, in world metres: just outside each, and just in
+  // how far off the floor the lowest corner of a thing is, and how far its middle is from the shop's back wall
+  window.lying = (grp, F, floor) => {
+    const geo = grp.children[0].geometry; geo.computeBoundingBox(); grp.updateMatrixWorld(true);
+    const b = geo.boundingBox, e = grp.matrixWorld.elements, [x0, z0] = F.at(0, 0), [x2, z2] = F.at(0, 1);
+    let low = Infinity;
+    for (const X of [b.min.x, b.max.x]) for (const Y of [b.min.y, b.max.y]) for (const Z of [b.min.z, b.max.z]) low = Math.min(low, e[1] * X + e[5] * Y + e[9] * Z + e[13]);
+    return { low: +(low - floor).toFixed(2), v: +((e[12] - x0) * (x2 - x0) + (e[14] - z0) * (z2 - z0)).toFixed(2) };
+  };
   window.doorsOf = (id) => { const s = G.structures.find((b) => b.id === id), [ax, az] = s.pts[s.door], [bx, bz] = s.pts[(s.door + 1) % s.pts.length], mx = (ax + bx) / 2, mz = (az + bz) / 2, l = Math.hypot(bx - ax, bz - az), nx = (bz - az) / l, nz = -(bx - ax) / l; return { out: [mx + nx * 2, mz + nz * 2], in: [mx - nx * 1.4, mz - nz * 1.4] }; };
 });
 
@@ -252,6 +260,97 @@ const doors = await g(() => {
   return out;
 });
 for (const [id, d] of Object.entries(doors)) check(`he can walk into ${id}`, d.ok, d);
+
+// ---------------- the taxidermy shop, arranged inside as it is on the listing's photo from December 2020
+const shop = await g(async () => {
+  const G = __game, S = G.compound.SHOP, s = G.compound.shopHouse, F = S.F, { Sheet, writeStructure, wallsOf } = await import('/src/structures.js');
+  // its walls as they're drawn: which way each window looks, and the colour of each face that looks into the room
+  const sheet = new Sheet(); writeStructure(sheet, s, 0); const a = sheet.arrays(), { panels } = wallsOf(s);
+  const way = (q) => (Math.abs(q.nz) > Math.abs(q.nx) ? (q.nz < 0 ? 'north' : 'south') : q.nx > 0 ? 'east' : 'west');
+  const windows = a.pieces.filter((p) => p.kind === 'window').map((p) => way(panels[p.on]));
+  const want = [1, 3, 5].map((i) => (parseInt(s.inside.slice(i, i + 2), 16) / 255) ** 2.2);
+  let faces = 0, painted = 0;
+  for (const p of a.pieces) if (p.kind === 'wall' || p.kind === 'lintel') {
+    const q = panels[p.panel];
+    for (let v = p.first; v < p.first + p.count; v++) {
+      if (a.normal[v * 3] * q.nx + a.normal[v * 3 + 2] * q.nz > -.99) continue;
+      const k = a.color[v * 3 + 2] / want[2]; faces++;
+      if (k > .65 && k < 1.06 && Math.abs(a.color[v * 3] / want[0] - k) < .01 && Math.abs(a.color[v * 3 + 1] / want[1] - k) < .01 && a.mat[v * 3] === 0) painted++;
+    }
+  }
+  // where things are in the room: u along the back wall from its west corner, v in from it toward the door, and how high off the floor
+  const [x0, z0] = F.at(0, 0), [x1, z1] = F.at(1, 0), [x2, z2] = F.at(0, 1), uv = (x, z) => [+((x - x0) * (x1 - x0) + (z - z0) * (z1 - z0)).toFixed(2), +((x - x0) * (x2 - x0) + (z - z0) * (z2 - z0)).toFixed(2)];
+  const bench = S.bench.objs[0], floor = bench.position.y, L = S.light.position, [lu, lv] = uv(L.x, L.z);
+  const hung = S.hung.map((h) => {
+    const q = panels[h.panel], o = h.prop.objs[0].position, [u, v] = uv(o.x, o.z);
+    return { kind: h.kind, wall: way(q), u, v, y: +(o.y - floor).toFixed(2), off: +Math.abs((o.x - q.ax) * q.nx + (o.z - q.az) * q.nz).toFixed(2), facing: +(h.out[0] * -q.nx + h.out[1] * -q.nz).toFixed(3), reach: +Math.hypot(o.x - L.x, o.y - L.y, o.z - L.z).toFixed(1) };
+  });
+  // the alligator: which way its head is from the door, and how far it's over the end of the bench
+  const geo = bench.children[0].geometry; geo.computeBoundingBox();
+  const d = doorsOf(s.id), fx = d.in[0] - d.out[0], fz = d.in[1] - d.out[1], fl = Math.hypot(fx, fz), head = [-Math.cos(bench.rotation.y), Math.sin(bench.rotation.y)];
+  return {
+    windows, faces, painted, hung, light: { on: S.light.intensity, u: lu, v: lv, up: +(L.y - floor).toFixed(2), far: S.light.distance },
+    gator: { left: +(head[0] * fz / fl - head[1] * fx / fl).toFixed(3), over: +(-geo.boundingBox.min.x - 2).toFixed(2), bench: uv(bench.position.x, bench.position.z) },
+  };
+});
+check(`the shop's walls are white inside: ${shop.painted} of the ${shop.faces} faces looking into the room are the paint's colour, and plain`, shop.faces > 40 && shop.painted === shop.faces, shop);
+check(`  and its only windows are in the wall with the door, none in the back or the ends, which are hung with things (${shop.windows.join(', ')})`, shop.windows.every((w) => w === 'south'), shop.windows);
+const on = (wall) => shop.hung.filter((h) => h.wall === wall), back = on('north').sort((p, q) => p.u - q.u), one = (k) => shop.hung.filter((h) => h.kind === k);
+const [buck, young] = one('buck').sort((p, q) => q.u - p.u), turkey = one('turkey')[0], clock = one('clock')[0], plaques = back.filter((h) => h.kind === 'plaque');
+check(`on the back wall, left to right: ${back.map((h) => h.kind).join(', ')}`, back.length === 12 && back[0].kind === 'plaque' && back[0].y > 2.1, back.map((h) => [h.kind, h.u, h.y]));
+check(`  the buck left of the middle over the bench (${buck?.u} m along a wall of 8.24), a young one further left, and an oval plaque high on the left`, buck?.u < 4.12 && buck.u > shop.gator.bench[0] - 2 && buck.u < shop.gator.bench[0] + 2 && young?.u < buck.u && back[0].u < young.u, { buck, young, oval: back[0] });
+check(`  plaques of antlers and skulls along the top of the middle (${plaques.slice(1).map((h) => h.u).join(', ')})`, plaques.length === 5 && plaques.slice(1).every((h) => h.y > 2 && h.u > 2.75 && h.u < 5.6), plaques);
+check(`  tools hung among them (${one('tools').map((h) => h.u).join(', ')})`, one('tools').length === 2 && one('tools').every((h) => h.wall === 'north' && h.u > back[0].u && h.u < turkey.u), one('tools'));
+check(`  the turkey strutting on its shelf up on the right, one duck flying by it, and the white clock under it`, turkey?.wall === 'north' && turkey.u > 5.5 && one('duck').length === 1 && Math.abs(one('duck')[0].u - turkey.u) < 1.2 && clock?.wall === 'north' && Math.abs(clock.u - turkey.u) < .1 && clock.y < turkey.y - .3, { turkey, duck: one('duck'), clock });
+check(`  two plaques on the right-hand wall, and nothing on the left-hand one`, on('east').length === 2 && on('east').every((h) => h.kind === 'plaque') && on('west').length === 0 && on('south').length === 0, { east: on('east'), west: on('west') });
+check(`  every one of them hung on the inside of its wall, ${[...new Set(shop.hung.map((h) => h.off))].join(' or ')} m in, looking into the room`, shop.hung.every((h) => Math.abs(h.off - .2) < .03 && h.facing > .99 && h.y > 1 && h.y < 2.6), shop.hung.filter((h) => !(Math.abs(h.off - .2) < .03 && h.facing > .99 && h.y > 1 && h.y < 2.6)));
+check(`the alligator lies on the bench along the back wall with its head at the left as you come in, ${shop.gator.over} m over the end`, shop.gator.left > .95 && shop.gator.over > .4 && shop.gator.bench[1] < 1.6, shop.gator);
+const lightOn = shop.light, farthest = Math.max(...shop.hung.map((h) => h.reach));
+check(`the strip lights over it light the room, from ${lightOn.up} m up in the middle of it, and everything hung is in their light, the farthest ${farthest} m off`, lightOn.on > 0 && lightOn.u > 0 && lightOn.u < 8.24 && lightOn.v > 0 && lightOn.v < 6.34 && lightOn.up > 1.5 && lightOn.up < 2.7 && farthest < lightOn.far * .9, { lightOn, farthest });
+
+// in at the door, round the right-hand end of the bench and along behind it, as far as the middle
+const behind = await g(() => {
+  const G = __game, S = G.compound.SHOP, F = S.F, d = doorsOf(G.compound.shopHouse.id), P = G.player.pos;
+  G.place(...d.out); G.sim(.1, .1);
+  const r = walkTo([d.in, F.at(5.6, 2.3), F.at(5.6, .55), F.at(3, .55)], .3, 40), [x0, z0] = F.at(0, 0), [x2, z2] = F.at(0, 1);
+  return { ...r, v: +((P.x - x0) * (x2 - x0) + (P.z - z0) * (z2 - z0)).toFixed(2) };
+});
+check(`he goes in, round the end of the bench and along behind it, between it and the wall (${behind.v} m from the wall)`, behind.off < .35 && behind.v > .45 && behind.v < .7, behind);
+await g(() => { const G = __game, d = doorsOf(G.compound.shopHouse.id); walkTo([G.compound.SHOP.F.at(5.6, .55), G.compound.SHOP.F.at(5.6, 2.3), d.in], .4, 30); G.look(Math.atan2(d.out[0] - d.in[0], d.out[1] - d.in[1]), .9); G.step(.5, 1 / 30); });
+await snap('shop');
+
+// a swing at the clock, with a real tap, from the floor in front of the bins under it, and it comes straight down off the wall to the floor behind them
+const before = await g(() => {
+  // straight up to the bins under it, which leaves him looking at the wall
+  const G = __game, S = G.compound.SHOP, F = S.F, h = S.hung.find((h) => h.kind === 'clock'), P = G.player.pos, [x0, z0] = F.at(0, 0), [x2, z2] = F.at(0, 1);
+  walkTo([F.at(6.55, 2.3), F.at(6.55, 1.43)], .06, 20); G.sim(.2, .2);
+  return { button: document.getElementById('bA').textContent, hp: h.prop.hp, down: h.prop.down, v: +((P.x - x0) * (x2 - x0) + (P.z - z0) * (z2 - z0)).toFixed(2) };
+});
+await page.tap('#bA'); await page.waitForTimeout(30);
+const swung = await g(() => {
+  const G = __game, S = G.compound.SHOP, F = S.F, h = S.hung.find((h) => h.kind === 'clock'), floor = S.bench.objs[0].position.y;
+  for (let i = 0; i < 75; i++) G.sim(1 / 30, 1 / 30);
+  return { down: h.prop.down, ...lying(h.prop.objs[0], F, floor), others: S.hung.filter((o) => o !== h && o.prop.down).map((o) => o.kind) };
+});
+check(`a swing at the white clock from in front of the bins under it (${before.v} m from the wall) knocks it off the wall: the button said ${before.button}`, before.button === 'SWING' && !before.down && swung.down && swung.others.length === 0, { before, swung });
+check(`  and it comes straight down to the floor under where it hung, ${swung.v} m from the wall and ${swung.low} m off the floor, and nothing else comes down`, Math.abs(swung.low) < .12 && swung.v < .6 && swung.others.length === 0, swung);
+const panel = await g(() => {
+  const G = __game, S = G.compound.SHOP, s = G.compound.shopHouse, F = S.F, D = G.wreck.damage, mid = S.hung.filter((h) => h.kind === 'buck').sort((p, q) => q.prop.max - p.prop.max)[0];
+  // from outside, the panel of the back wall behind the big buck, hit hard enough to bring it down
+  const [ox, oz] = F.at(3, -.6), [ix, iz] = F.at(3, 1), e = D.nearest(s, ox, mid.prop.objs[0].position.y, oz, 3), was = S.hung.filter((h) => h.prop.down).map((h) => h.kind);
+  D.hit(s, e.part, 99, ix - ox, iz - oz); for (let i = 0; i < 60; i++) G.sim(1 / 30, 1 / 30);
+  const on = S.hung.filter((h) => h.panel === mid.panel), rest = S.hung.filter((h) => h.panel !== mid.panel && h.kind !== 'clock');
+  return { panel: mid.panel, hit: e.part.panel, on: on.map((h) => [h.kind, h.prop.down]), rest: rest.filter((h) => h.prop.down).map((h) => h.kind), was, lights: S.lights.down };
+});
+check(`a panel of the back wall coming down takes the ${panel.on.length} things hung on it with it, the big buck's among them, and nothing else`, panel.hit === panel.panel && panel.on.length >= 4 && panel.on.every(([, down]) => down) && panel.rest.length === 0 && !panel.lights, panel);
+const roof = await g(() => {
+  const G = __game, S = G.compound.SHOP, s = G.compound.shopHouse, F = S.F, D = G.wreck.damage, floor = S.bench.objs[0].position.y, [x, z] = F.at(4.12, 3.17);
+  const was = { on: S.light.intensity, glow: S.glow.visible };
+  for (let k = 0; k < 6 && D.gone(s) <= .3; k++) { D.blast(s, x, floor + 2.4, z, 9, 40); for (let i = 0; i < 10; i++) G.sim(1 / 30, 1 / 30); }
+  for (let i = 0; i < 75; i++) G.sim(1 / 30, 1 / 30);
+  return { gone: +D.gone(s).toFixed(2), down: S.lights.down, bench: S.bench.down, was, on: S.light.intensity, glow: S.glow.visible };
+});
+check(`the shop coming down (${roof.gone} of it gone) brings the strip lights down, and the room goes dark`, roof.gone > .3 && roof.down && roof.was.on > 0 && roof.was.glow && roof.on === 0 && !roof.glow, roof);
 
 // ---------------- the room in the shed, with real taps
 await g(() => { const G = __game, d = doorsOf(G.compound.JAM_SHED); G.place(...d.in); G.sim(.1, .1); G.bringOutCrowd(); G.sim(.1, .1); });

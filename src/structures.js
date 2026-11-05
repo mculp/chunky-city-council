@@ -277,13 +277,14 @@ export class Sheet {
     this.index[this.iN++] = v; this.index[this.iN++] = v + 2; this.index[this.iN++] = v + 3;
     this.n += 4;
   }
-  // a solid from its four corners underneath and the four over them, with its own colours for the top and the sides
+  // a solid from its four corners underneath and the four over them, with its own colours for the top and the sides. `inside` is
+  // how the side from c to d looks, if not like the rest: the inside of a wall that's painted.
   solid([a, b, c, d, e, f, g, h], o) {
     const start = this.n, side = o.side || o.color, top = o.color, m = [0, 0, 0];
     for (const p of [a, b, c, d, e, f, g, h]) { m[0] += p[0] / 8; m[1] += p[1] / 8; m[2] += p[2] / 8; }
     if (!o.noBottom) this.quad(a, b, c, d, o.under || side, o, m);
     this.quad(e, f, g, h, top, o, m);
-    this.quad(a, b, f, e, side, o, m); this.quad(b, c, g, f, side, o, m); this.quad(c, d, h, g, side, o, m); this.quad(d, a, e, h, side, o, m);
+    this.quad(a, b, f, e, side, o, m); this.quad(b, c, g, f, side, o, m); this.quad(c, d, h, g, o.inside?.color ?? side, o.inside ?? o, m); this.quad(d, a, e, h, side, o, m);
     if (o.kind) this.pieces.push({ kind: o.kind, s: o.s, part: this.partN++, panel: o.panel, on: o.on, first: start, count: this.n - start, x: m[0], y: m[1], z: m[2] });
   }
   // a square-cornered upright block around a wall line, reaching in by `inward` and out by `outward`
@@ -321,18 +322,21 @@ export function writeStructure(sheet, s, base = 0) {
   const base0 = { s: s.index, axis, origin };
   const { panels, doors } = wallsOf(s, base);
   const missing = new Set();
-  // Everyone's been gone a while: some of it has already fallen in.
+  // Everyone's been gone a while: some of it has already fallen in. Walls painted `inside` are painted plain, and go with their panels.
   panels.forEach((p, i) => {
     const k = hash2(seed, 40 + i);
     if (fellIn(s, p, i)) { missing.add(i); return; }
-    sheet.upright(p.ax, p.az, p.bx, p.bz, p.nx, p.nz, p.y0, p.y1, WALL_THICK, 0, { ...base0, kind: p.kind, panel: i, color: shade(wall, tone * (.94 + k * .12)), lowDark: .72, noBottom: true, pattern, edge: p.edge });
+    const o = { ...base0, kind: p.kind, panel: i, color: shade(wall, tone * (.94 + k * .12)), lowDark: .72, noBottom: true, pattern, edge: p.edge };
+    if (s.inside) o.inside = { ...o, color: shade(srgb(s.inside), .97 + k * .06), pattern: PATTERN.PAINT };
+    sheet.upright(p.ax, p.az, p.bx, p.bz, p.nx, p.nz, p.y0, p.y1, WALL_THICK, 0, o);
   });
-  // windows. A wall that faces the way `glass` says is mostly glass: every length of it has the biggest window that'll go in it.
+  // windows. A wall that faces the way `glass` says is mostly glass: every length of it has the biggest window that'll go in it, and
+  // one that faces the way `blank` says has none.
   const smallWindows = s.use === 'shed' || s.use === 'farm';
   const plate = s.use === 'shop' || s.use === 'office' || s.use === 'public' || s.use === 'hall';
   const facing = (p) => (Math.abs(p.nx) > Math.abs(p.nz) ? (p.nx > 0 ? 'east' : 'west') : p.nz > 0 ? 'south' : 'north');
   panels.forEach((p, i) => {
-    if (p.kind !== 'wall' || missing.has(i)) return;
+    if (p.kind !== 'wall' || missing.has(i) || s.blank?.includes(facing(p))) return;
     const len = Math.hypot(p.bx - p.ax, p.bz - p.az), k = hash2(seed, 200 + i), glass = !!s.glass?.includes(facing(p));
     if (len < 1.5 || (!glass && k < (smallWindows ? .88 : p.edge === s.door ? .15 : .4))) return;
     for (let floor = 0; floor < (s.floors ?? 1); floor++) {
@@ -443,7 +447,7 @@ export function writeStructure(sheet, s, base = 0) {
     sheet.solid([[x - r, base, z - r], [x + r, base, z - r], [x + r, base, z + r], [x - r, base, z + r], [x - r, top, z - r], [x + r, top, z - r], [x + r, top, z + r], [x - r, top, z + r]], { ...base0, kind: 'post', color: post, pattern: PATTERN.PAINT, noBottom: true });
   }
   // a porch on posts over the door, and a carport on the wall beside it. A roof down one wall runs down from under the eave, or on a house of more than one floor
-  // from over the first, under the second's windows.
+  // from over the first, under the second's windows. Each goes out of the way with the roof when he's inside, or the one over the door's all you'd see going in.
   for (const [f, kind] of [[porchOf(s), 'porch'], [carportOf(s), 'carport'], [leanOf(s), 'porch']]) {
     if (!f) continue;
     const under = (s.floors ?? 1) > 1 ? base + 3 : E - EAVES * pitch - .02, top = f.lean ? under - f.deep * (s.lean.slope ?? .13) : base + Math.min(H, 2.6), high = f.lean ? under : base + Math.min(H, 2.6) + .28, c = shade(roof, .95), post = f.lean && s.lean.post ? srgb(s.lean.post) : f.lean && s.trimColor ? trim : shade(wall, .9);
@@ -451,7 +455,7 @@ export function writeStructure(sheet, s, base = 0) {
     const n = Math.max(1, Math.ceil(f.wide / ROOF_SECTION));
     for (let i = 0; i < n; i++) {
       const t0 = f.wide * i / n, t1 = f.wide * (i + 1) / n;
-      sheet.solid([corner(t0, 0, high - .1), corner(t1, 0, high - .1), corner(t1, f.deep, top - .1), corner(t0, f.deep, top - .1), corner(t0, 0, high), corner(t1, 0, high), corner(t1, f.deep, top), corner(t0, f.deep, top)], { ...base0, kind, color: c, side: shade(c, .6), pattern: roofPat, roofOf: -1 });
+      sheet.solid([corner(t0, 0, high - .1), corner(t1, 0, high - .1), corner(t1, f.deep, top - .1), corner(t0, f.deep, top - .1), corner(t0, 0, high), corner(t1, 0, high), corner(t1, f.deep, top), corner(t0, f.deep, top)], { ...base0, kind, color: c, side: shade(c, .6), pattern: roofPat, roofOf: s.index });
     }
     const count = postCount(f);
     for (let k = 0; k < count; k++) {

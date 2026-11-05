@@ -265,7 +265,7 @@ import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVe
 import { vehicleGeometries, doorGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
 import { makeLine, makeSiding, createTrains } from './src/trains.js';
 import { trainGeometries, TRAIN_LAMPS, gateArm } from './src/trainmodels.js';
-import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, dumpTrailer, discHarrow, logPile, dumpster, skid, feedBin, stockTank, frog, frogThroat, frogLids } from './src/things.js';
+import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, dumpTrailer, discHarrow, logPile, dumpster, skid, feedBin, stockTank, frog, frogThroat, frogLids, gatorOnBench, BENCH_TOP, buckHead, struttingTurkey, flyingDuck, antlerPlaque, skullPlaque, ovalPlaque, hangingTools, shopClutter, wallClock } from './src/things.js';
 import { CEMETERY, layGraves, graveSolid, onSlab, slabHead, fromCemetery } from './src/graves.js';
 import { FRONTAGE, GRASS_PINES, woodsAlong, fenceAlong, inWoods, sidesOf } from './src/frontage.js';
 import { createSong } from './src/song.js';
@@ -1796,6 +1796,8 @@ function breakProp(p, dx = 0, dz = 0) {
   let dirx = l ? dx / l : Math.cos(a), dirz = l ? dz / l : Math.sin(a);
   // a stretch of fence only goes over one way or the other
   if (p.falls) { const side = dirx * p.falls[0] + dirz * p.falls[1] >= 0 ? 1 : -1; dirx = p.falls[0] * side; dirz = p.falls[1] * side; }
+  // and what's hung on a wall comes straight down off it, leaning out from it: drops is [dirx, dirz, how high what it lands on is]
+  if (p.drops) { dirx = p.drops[0]; dirz = p.drops[1]; }
   p.dirx = dirx; p.dirz = dirz;
   // as it stood, for when it's healed in a town everyone shares
   if (tellBroken) p.was = {
@@ -1825,7 +1827,8 @@ function breakProp(p, dx = 0, dz = 0) {
   if (p.rigid) {
     const objs = p.objs.map((o) => ({ o, pos: o.position.clone(), quat: o.quaternion.clone() })), high = max.y - min.y, T = p.T ?? Math.min(1.2, .45 + high * .07);
     if (p.was) p.was.objs = objs;
-    falling.push({ boxes, objs, t: quiet ? T : 0, T, pivot: [p.cx, p.pivotY ?? min.y, p.cz], dirx, dirz, angle: Math.PI / 2 - .05, lift: (p.pivotY ? TOWN_Y - p.pivotY + 1 : 0) + .08, prop: p, mode, end: !quiet && (() => { dust(p.cx + dirx * high * .5, p.cz + dirz * high * .5, dirx, dirz, Math.min(high, 12), 1.6); land?.(); }) });
+    const angle = p.drops ? .2 : Math.PI / 2 - .05, lift = p.drops ? TOWN_Y + (p.drops[2] ?? 0) + .04 - min.y : (p.pivotY ? TOWN_Y - p.pivotY + 1 : 0) + .08;
+    falling.push({ boxes, objs, t: quiet ? T : 0, T, pivot: [p.cx, p.pivotY ?? min.y, p.cz], dirx, dirz, angle, lift, prop: p, mode, end: !quiet && (() => { dust(p.cx + dirx * high * .5, p.cz + dirz * high * .5, dirx, dirz, Math.min(high, 12), 1.6); land?.(); }) });
     return;
   }
   const floor = TOWN_Y + .03, squash = p.squash ?? .2, T = Math.min(.8, Math.sqrt(2 * Math.max(min.y - floor, .3) / 9.8) + .08);
@@ -3388,11 +3391,12 @@ function tilted(tx, tz, deg, up = 0) {
   };
 }
 // What's made in src/things.js: one mesh and its outline, which goes over in one piece. `solid` is how wide, how deep and how high it stops him, and `walls` are any that aren't square to the map.
+// `drops` is for one hung on a wall: which way out from the wall it leans as it lands (breakProp).
 function thing(into, kind, parts, x, z, yaw, hp, o = {}) {
   const geo = mergeGeometries(parts), g = new THREE.Group(), [w, d, top] = o.solid ?? [0, 0, 0], c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw)), hx = (w * c + d * s) / 2, hz = (w * s + d * c) / 2;
   g.add(new THREE.Mesh(geo, thingMat), new THREE.Mesh(smoothed(geo), thingLine));
   g.position.set(x, Y0 + (o.y ?? 0), z); g.rotation.y = yaw; into.add(g);
-  return breakable(kind, hp, () => { if (top) solid(x - hx, x + hx, z - hz, z + hz, Y0 + top); for (const w of o.walls ?? []) { PROP_WALLS.push(w); PROP.walls.push(w); } }, { rigid: true, objs: [g], foot: [x, z], chip: o.chip, broke: o.broke, hit: o.hit });
+  return breakable(kind, hp, () => { if (top) solid(x - hx, x + hx, z - hz, z + hz, Y0 + top); for (const w of o.walls ?? []) { PROP_WALLS.push(w); PROP.walls.push(w); } }, { rigid: true, objs: [g], foot: [x, z], chip: o.chip, broke: o.broke, hit: o.hit, drops: o.drops });
 }
 // Chain-link anywhere but the ball field, drawn the same: a stretch goes over at a time, with the mesh on it
 function chainLink(group, pts, high = 1.25, spacing = 3) {
@@ -3614,6 +3618,72 @@ const STUDIO = 900020, CABIN = 900019;
   F.beam([1.5, 2.38, 2.1], [1.5, 2.1, 2.1], .012, .012, poleMat, 0); F.box(lit('#e6efff', 1.8), 1.5, 2.04, 2.1, .08, .1, .08, 0);
   const glow = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 4), new THREE.MeshBasicMaterial({ map: radialTex, color: '#46505c', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), [gx, gz] = F.at(1.5, 2.1);
   glow.position.set(gx, Y0 + .06, gz); glow.rotation.set(-Math.PI / 2, 0, yaw); room.add(glow);
+  flushBuckets(70);
+}
+// ---- the taxidermy shop, the block by the loop in the drive with the porch over its door, as it is inside on the listing's photo from December 2020: white walls hung
+// with mounts, a whole alligator on a long bench of planks on cinder blocks along the back wall with its jaws open past the end of it, tools lying at the other end, and
+// the bins, bags and boxes on the floor past that. The white's the walls' own (data/structures.json), so it goes with each one that comes down, and so does what hangs on it.
+// The strip lights over the bench light the room, and they go with the roof.
+const SHOP_HOUSE = houseAt(...atTrue(1020.4, 626.9)), SHOP = { hung: [], bench: null, clutter: null, lights: null, light: null, glow: null, F: null };
+{
+  // along the back wall from its west corner, and in toward the door, which is in the middle of the wall across from it
+  const F = tilted(1015.21, 626.25, -31), room = nearHere(1020, 627, 70), yaw = F.yaw, { panels } = wallsOf(SHOP_HOUSE, Y0);
+  SHOP.F = F;
+  // which panel of the walls a spot just inside them is against
+  const panelAt = (x, z) => {
+    let best = -1, bd = Infinity;
+    panels.forEach((p, i) => { const dx = p.bx - p.ax, dz = p.bz - p.az, t = Math.max(0, Math.min(1, ((x - p.ax) * dx + (z - p.az) * dz) / (dx * dx + dz * dz))), d = Math.hypot(x - p.ax - dx * t, z - p.az - dz * t); if (d < bd) { bd = d; best = i; } });
+    return best;
+  };
+  // `over` is how high what's under it on the floor is, which it lands on if that's still standing
+  const hang = (kind, parts, u, y, v, turn, hp, chip, over = 0) => {
+    const [x, z] = F.at(u, v), out = [Math.sin(yaw + turn), Math.cos(yaw + turn)];
+    SHOP.hung.push({ kind, x, z, y, out, over, panel: panelAt(x, z), prop: thing(room, kind, parts, x, z, yaw + turn, hp, { y, chip, drops: [...out, over] }) });
+  };
+  // Straight ahead from the door, the back wall, from the left: a plain oval plaque up high, a young buck, a saw, the big buck over the bench, plaques of antlers and skulls
+  // along the top of the middle with hand tools under them, and the turkey strutting on its shelf on the right, with a mallard flying by it and the white clock under it
+  hang('plaque', ovalPlaque(), .85, 2.25, .2, 0, .6, '#7a5232');
+  hang('buck', buckHead(true), 1.75, 1.75, .2, 0, 1, '#7d6347');
+  hang('tools', hangingTools('saw'), 2.36, 1.62, .2, 0, .4, '#7a4a2a');
+  hang('buck', buckHead(), 3, 1.72, .2, 0, 1.5, '#7d6347');
+  hang('plaque', antlerPlaque(.3, 2), 3.75, 2.1, .2, 0, .8, '#5a3a22');
+  hang('plaque', skullPlaque(.28, 2), 4.35, 2.06, .2, 0, .8, '#6a4a2c');
+  hang('plaque', antlerPlaque(.34, 3), 4.95, 2.1, .2, 0, .8, '#5a3a22');
+  hang('plaque', skullPlaque(.3, 3), 5.55, 2.06, .2, 0, .8, '#6a4a2c');
+  hang('tools', hangingTools('hand'), 4.5, 1.45, .2, 0, .4, '#7a4a2a');
+  hang('turkey', struttingTurkey(), 6.55, 1.72, .2, 0, 1, '#3b2f26', .74);
+  hang('duck', flyingDuck(.3), 7.5, 2.15, .2, 0, .5, '#a29d92', .36);
+  hang('clock', wallClock(.17, '#eeebe2'), 6.55, 1.2, .2, 0, .5, '#eeebe2');
+  // and two more plaques on the right-hand wall. The left-hand one's bare.
+  hang('plaque', antlerPlaque(.36, 3), 8.04, 1.9, 2, -Math.PI / 2, .8, '#5a3a22');
+  hang('plaque', antlerPlaque(.28, 2), 8.04, 1.75, 3.8, -Math.PI / 2, .8, '#5a3a22');
+  // The bench along the back wall with the alligator on it, which stops him along its length, and the bins past the end of it, far enough past it that he can
+  // go round the end to stand behind it. What stops him is round at its ends, so it stops short of that one by its own width, and runs to the end with the
+  // alligator's head.
+  {
+    const [x, z] = F.at(2.9, 1.35), [ax, az] = F.at(.9, 1.35), [bx, bz] = F.at(4.45, 1.35);
+    SHOP.bench = thing(room, 'gator', gatorOnBench(4, .9), x, z, yaw, 3, { walls: [[ax, az, bx, bz, Y0 + 1.1, .45]], chip: '#3a3f30' });
+  }
+  // and the bins, which stop him square to the walls, since a solid is square to the map
+  { const [x, z] = F.at(7.05, .65), [ax, az] = F.at(6.55, .65), [bx, bz] = F.at(7.55, .65); SHOP.clutter = thing(room, 'bins', shopClutter(), x, z, yaw, 1, { walls: [[ax, az, bx, bz, Y0 + .75, .4]], chip: '#3e5f86', broke() { for (const h of SHOP.hung) h.prop.drops[2] = 0; } }); }
+  // Two strip lights over the bench on chains, the light they throw on the room, and its pool on the floor. The light's in the scene and not the room, which is hidden from
+  // afar, so that how many lights there are never changes, which would build every material over again.
+  const tube = lit('#eef3ff', 1.6), fixture = new THREE.MeshStandardMaterial({ color: '#d9d6cc', roughness: .6 }), [gx, gz] = F.at(2.9, 1.7), [lx, lz] = F.at(3.4, 1.9);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 2.6), new THREE.MeshBasicMaterial({ map: radialTex, color: '#262c32', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  glow.position.set(gx, Y0 + .05, gz); glow.rotation.set(-Math.PI / 2, 0, yaw); room.add(glow); SHOP.glow = glow;
+  const light = new THREE.PointLight('#e3ebff', 1.9, 7.5, 1.2); light.position.set(lx, Y0 + 2.2, lz); scene.add(light); SHOP.light = light;
+  SHOP.lights = breakable('light', .5, () => {
+    for (const u of [1.75, 4.05]) {
+      F.box(fixture, u, 2.34, 1.35, 1.25, .05, .16, .9);
+      for (const dv of [-.04, .04]) F.box(tube, u, 2.3, 1.35 + dv, 1.2, .03, .03, 0);
+      for (const du of [-.45, .45]) F.beam([u + du, 2.37, 1.35], [u + du, 3.05, 1.35], .012, .012, poleMat, 0);
+    }
+  }, { rigid: true, drops: [Math.sin(yaw), Math.cos(yaw), 0], chip: '#d9d6cc', broke() { glow.visible = false; light.intensity = 0; } });
+  // what hangs on a wall comes down with it, and the lights come down with the roof, onto the alligator if the bench is still standing
+  tieTo(SHOP_HOUSE, (s, p) => {
+    for (const h of SHOP.hung) if (p.panel === h.panel) breakProp(h.prop);
+    if (damage.gone(s) > .3) { SHOP.lights.drops[2] = SHOP.bench.down ? 0 : BENCH_TOP + .3; breakProp(SHOP.lights); }
+  });
   flushBuckets(70);
 }
 // ---- the white building by the fenced lawn: the concrete at its door, the clutter under the lean-to, and a boat that isn't going anywhere. What the building is hasn't been said.
@@ -9519,7 +9589,7 @@ if (TEST) {
     THREE, hills: { at: HILLS.at, slope: HILLS.slope, follow: HILLS.follow, terraces: HILLS.terraces, tracks: HILLS.tracks, here: () => HILL.uHillHere.value, uniforms: HILL, flat: hillsFlat, skyline },
     stumble: { CRT_TRAILER, CRT, GLASS, crtOn: () => crtOn, looking: () => crtLook, frame: () => crtTex.offset.x, flick: () => crtMat.color.r, crtInReach, STONE, STONE_CLIP, WORDS_SLAB, GRAVE_TURN, GRAVES, CEMETERY, stoneInReach, sheet: STONE_WORDS, stoneRead: () => stoneRead, song, fromCemetery: (x, z) => fromCemetery(x, z, CEMETERY_EDGE) },
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : castIron) },
-    compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, screen: () => screenMesh, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach, sign: TAXIDERMY_SIGN, front: FRONT, lot: SIGN_LOT },
+    compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, screen: () => screenMesh, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach, sign: TAXIDERMY_SIGN, front: FRONT, lot: SIGN_LOT, SHOP, shopHouse: SHOP_HOUSE, BENCH_TOP },
     lures: { LYING, lyingNear, flying, popping, ALARMS, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
     horde, folks, traffic, homes: HOMES, putBack, HOME: { SEE: HOME_SEE, PUT: HOME_PUT }, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, horns: hornLog, blasts: () => blastsBlown, go() { trainsOn = true; }, on: () => trainsOn, siding: SIDING, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, kept: putBack.length, roused: horde.active.filter((s) => s.state === ROUSED).length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf,
     // the river's, for the tests: which way it flows and where it brings someone up, and what's drawn of someone soaked: how soaked the graphics card has them, the snakes on sleeves and the ones falling

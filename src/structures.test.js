@@ -116,10 +116,43 @@ test('a house of two floors has a row of windows on each under its eaves, and a 
   assert.ok(lean > firstTop && lean < rows[1], `the roof down its side meets the wall at ${lean}, between the first floor's windows, up to ${firstTop}, and the second's, from ${rows[1]}`);
 });
 
+// which way a panel's outside looks, as `glass` and `blank` name it
+const facing = (p) => (Math.abs(p.nx) > Math.abs(p.nz) ? (p.nx > 0 ? 'east' : 'west') : p.nz > 0 ? 'south' : 'north');
+test('a wall facing the way `blank` says has no windows, and the rest keep theirs', () => {
+  const s = house(box, { glass: ['north', 'east', 'south', 'west'] }), { panels } = wallsOf(s), faced = (t) => new Set(written(t).pieces.filter((p) => p.kind === 'window').map((p) => facing(panels[p.on])));
+  assert.deepEqual([...faced(s)].sort(), ['east', 'north', 'south', 'west']);
+  assert.deepEqual([...faced({ ...s, blank: ['north', 'east', 'west'] })], ['south']);
+});
+
+test('a wall painted `inside` is that colour inside, plain, and its own outside, and it goes with its panel', () => {
+  const s = house(box, { inside: '#ffffff' }), a = written(s), { panels } = wallsOf(s), walls = a.pieces.filter((p) => p.kind === 'wall' || p.kind === 'lintel');
+  assert.equal(a.position.length, written(house(box)).position.length, 'nothing more is drawn');
+  assert.ok(walls.length > 8);
+  for (const p of walls) {
+    const q = panels[p.panel], seen = { in: 0, out: 0 };
+    for (let v = p.first; v < p.first + p.count; v++) {
+      // the face that looks in is white and plain, the one that looks out is the siding it was, and the ends are left alone
+      const way = a.normal[v * 3] * q.nx + a.normal[v * 3 + 2] * q.nz, [r, , b] = a.color.subarray(v * 3, v * 3 + 3), pattern = a.mat[v * 3];
+      if (way < -.99) { seen.in++; assert.ok(r > .69 && Math.abs(r - b) < .01 && pattern === 0, `inside ${r} ${b} ${pattern}`); }
+      if (way > .99) { seen.out++; assert.ok(r - b > .05 && pattern === 1, `outside ${r} ${b} ${pattern}`); }
+    }
+    assert.deepEqual(seen, { in: 4, out: 4 }, `panel ${p.panel}`);
+  }
+});
+
 test('the roof is marked with its building, and nothing else is', () => {
   const a = written(house(box)), marks = new Set();
   for (let i = 2; i < a.mat.length; i += 3) marks.add(a.mat[i]);
   assert.deepEqual([...marks].sort(), [-1, 7]);
+});
+
+test('a porch, a carport and a roof down one wall go with the roof, and their posts stay', () => {
+  for (const more of [{ porch: 'front', carport: true }, { lean: { edge: 1, deep: 3, t0: .5, t1: 3 } }]) {
+    const a = written(house(box, more)), roofs = a.pieces.filter((p) => p.kind === 'porch' || p.kind === 'carport'), posts = a.pieces.filter((p) => p.kind === 'post');
+    assert.ok(roofs.length && posts.length, JSON.stringify(more));
+    for (const p of roofs) for (let v = p.first; v < p.first + p.count; v++) assert.equal(a.mat[v * 3 + 2], 7);
+    for (const p of posts) for (let v = p.first; v < p.first + p.count; v++) assert.equal(a.mat[v * 3 + 2], -1);
+  }
 });
 
 test('every wall panel stands on the floor it was given', () => {
@@ -168,7 +201,8 @@ test('what was written down comes through to the data', () => {
     const s = kept.get(id);
     if (!s) { assert.ok(dropped.has(id), `${id} went missing`); continue; }
     assert.equal(s.seen, true, id);
-    for (const k of ['use', 'open', 'walls', 'roof', 'roofMat', 'floors', 'condition', 'carport', 'trimColor', 'doorColor', 'what']) if (k in n) assert.equal(s[k], n[k], `${id} ${k}`);
+    for (const k of ['use', 'open', 'walls', 'roof', 'roofMat', 'floors', 'condition', 'carport', 'trimColor', 'doorColor', 'inside', 'what']) if (k in n) assert.equal(s[k], n[k], `${id} ${k}`);
+    for (const k of ['glass', 'blank']) if (k in n) assert.deepEqual(s[k], n[k], `${id} ${k}`);
   }
   assert.ok(data.structures.filter((s) => s.open).length >= 8, 'the carports and canopies are open');
 });

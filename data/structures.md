@@ -116,5 +116,7 @@ The second trailer in the row nearest the ball field and the low building by the
 | `lean` | `{ "faces": "west", "deep": 2.3 }`, a roof on posts down the wall facing that way, and optionally `length`, `from` (a compass word for which end it starts at), `slope` (its roof's fall per metre, .13 unless it's given) and `post` (hex). |
 | `eaves`, `pitch` | Wall height in metres and the roof's rise over run, in place of what's usual. |
 | `glass` | Compass words, like `["south", "east"]`. Every length of wall facing that way gets the biggest window that'll go in it, for a wall that's mostly glass. |
+| `blank` | Compass words. Walls facing that way have no windows, for one whose walls are hung with things inside. |
+| `inside` | Hex. The walls are painted that colour inside, plain, and the paint goes with each panel when it comes down. |
 | `cross` | Each wing after the first turns its ridge across the main one. |
 | `gableColor`, `band`, `vent` | The gable ends in their own colour, that colour across the top of the door wall by `band` metres, and a louvre under the ridge. |

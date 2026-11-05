@@ -338,6 +338,205 @@ export function discRack(colors = ['#a33a3a', '#e8a93a', '#2f6f8f', '#d8d2bd', '
   return [box(0, .68, -.06, .42, 1.36, .03, '#3a2c22'), ...both((s) => box(s * .2, .68, 0, .02, 1.36, .16, '#3a2c22')), ...[0, 1, 2, 3, 4, 5].map((y) => box(0, .02 + y * .25, 0, .4, .02, .16, '#3a2c22')), ...spines];
 }
 
+// ---- the taxidermy shop's, as its inside is on the listing's photo from December 2020: a whole alligator on a long bench of planks on cinder blocks, with tools lying at
+// the other end of it, the bins, bags and boxes past that, and what hangs on the walls. What hangs on a wall has its origin on the wall, at its own middle, and looks out along +z.
+export const BENCH_TOP = .805;
+// planks on three piers of blocks laid on their sides, four high, with their two holes looking out front and back
+export function blockBench(long = 4.6, wide = .9) {
+  const BLOCK = '#9a978e', CORE = '#3d3b38', parts = [];
+  for (const x of [-long / 2 + .3, 0, long / 2 - .3]) for (let k = 0; k < 4; k++) for (const s of [1, -1]) {
+    const y = .095 + k * .19, z = s * (wide / 2 - .1);
+    parts.push(box(x, y, z, .39, .19, .19, BLOCK), ...[-.095, .095].map((dx) => box(x + dx, y, z + s * .097, .13, .12, .006, CORE)));
+  }
+  ['#a07c52', '#97744d', '#a8855a'].forEach((c, i) => parts.push(box(0, .7825, (i - 1) * (wide - .02) / 3, long, .045, (wide - .06) / 3, c)));
+  return parts;
+}
+// A big one, lying on its belly with its head at +z, its tail curving off to its left, and its teeth showing along its jaws. `long` is from its nose to its tail,
+// and `open` is how far its jaws are open, from 0 to 1.
+export function alligator(long = 3.2, open = 0) {
+  const BACK = '#363b2d', SIDE = '#4a5039', BELLY = '#cfc6a3', SCUTE = '#25281f', TOOTH = '#e8e1ca', EYE = '#b8952f', DARK = '#0e0d0c', MOUTH = '#dcb8a2', k = long / 3.2;
+  // how high its back is at (x, z), over one of the lumps it's made of: [y, z, half across, half high, half long]
+  const LUMPS = [[.14, .35, .28, .13, .48], [.12, -.12, .22, .11, .26], [.12, .78, .18, .095, .2]];
+  const over = (x, z) => Math.max(...LUMPS.map(([y, z0, a, b, c]) => y + b * Math.sqrt(Math.max(0, 1 - (x / a) ** 2 - ((z - z0) / c) ** 2))));
+  // the half-width of its snout, which is broad and flat and narrows to the nose
+  const snoutHalf = (z) => z < 1.05 ? .136 : .12 - .055 * (z - 1.05) / .5;
+  // Its jaws hinge behind its eyes. The top one has its nostrils on the end and its teeth hanging over the line of its mouth, and the bottom one its own teeth standing up,
+  // and both are pale inside, which shows when they're open.
+  const upper = [
+    painted(new THREE.CylinderGeometry(.065, .12, .5, 10).rotateX(Math.PI / 2).scale(1, .5, 1).translate(0, .09, 1.3), BACK), blob(0, .045, 1.25, .095, .012, .26, MOUTH),
+    blob(0, .125, 1.52, .045, .028, .035, BACK), ...both((s) => blob(s * .018, .15, 1.53, .008, .006, .008, DARK)),
+    ...both((s) => bar([s * .138, .085, .95], [s * .068, .085, 1.53], .014, DARK)),
+  ];
+  for (let i = 0; i < 9; i++) { const z = .98 + i * .065; upper.push(...both((s) => box(s * (snoutHalf(z) + .004), .07, z, .012, .028, .012, TOOTH))); }
+  // the bottom one runs all the way back to the hinge, where it's broad
+  const lower = [
+    painted(new THREE.CylinderGeometry(.06, .125, .62, 10).rotateX(Math.PI / 2).scale(1, .32, 1).translate(0, .04, 1.22), SIDE), blob(0, .068, 1.2, .08, .008, .24, MOUTH),
+    ...both((s) => blob(s * .1, .05, .96, .045, .04, .09, SIDE)),
+  ];
+  for (let i = 0; i < 8; i++) { const z = 1.08 + i * .055, r = .125 - .065 * (z - .91) / .62; lower.push(...both((s) => box(s * r * .88, .08, z, .01, .022, .01, TOOTH))); }
+  const hinge = (list, rx) => moved(moved(list, { y: -.08, z: -.92 }), { rx, y: .08, z: .92 });
+  const parts = [
+    ...hinge(upper, -open * .32), ...hinge(lower, open * .38),
+    blob(0, .11, 1, .15, .085, .17, BACK), blob(0, .045, .88, .11, .045, .13, BELLY), ...LUMPS.map(([y, z, a, b, c]) => blob(0, y, z, a, b, c, BACK)), blob(0, .07, .35, .275, .06, .46, BELLY),
+    // its eyes up on top of its head
+    ...both((s) => [blob(s * .08, .19, .95, .045, .04, .05, BACK), blob(s * .105, .2, .96, .022, .02, .026, EYE), blob(s * .126, .2, .962, .004, .015, .008, DARK)]).flat(),
+  ];
+  // its back, in rows of ridged scutes
+  for (let z = .7; z > -.3; z -= .095) for (const x of [-.2, -.13, -.05, .05, .13, .2]) { const y = over(x, z); if (y > .17) parts.push(blob(x, y, z, .015, .022, .04, SCUTE, 5)); }
+  // the tail, narrowing and taller than it's wide by the end, with two rows of scutes standing up along its top that come together a third of the way down it
+  for (let i = 0; i < 10; i++) {
+    const t = i / 9, z = -.32 - t * 1.2, x = .14 * Math.sin(t * 2.4), w = .19 * (1 - .82 * t), h = .1 * (1 - .55 * t) + .015;
+    parts.push(blob(x, h * .95, z, w, h, .19, BACK));
+    if (t < .35) parts.push(...both((s) => blob(x + s * w * .4, h * 1.95 - .005, z, .012, .04, .055, SCUTE, 5)));
+    else parts.push(blob(x, h * 1.95, z, .012, .045, .065, SCUTE, 5));
+  }
+  // its legs splayed out to its sides, the front ones reaching forward and the back ones bent, on flat feet with their toes spread
+  parts.push(...both((s) => [
+    bar([s * .2, .12, .6], [s * .36, .07, .64], .07, BACK), bar([s * .36, .07, .64], [s * .42, .03, .74], .055, BACK), blob(s * .44, .018, .79, .05, .016, .065, BACK),
+    bar([s * .17, .12, -.1], [s * .36, .09, -.2], .09, BACK), bar([s * .36, .09, -.2], [s * .44, .035, -.07], .07, BACK), blob(s * .46, .018, -.01, .055, .016, .08, BACK),
+  ]).flat());
+  for (const s of [1, -1]) for (const [fx, fz, n] of [[.44, .79, 5], [.46, -.01, 4]]) for (let j = 0; j < n; j++) { const a = (j - (n - 1) / 2) * .32 + s * .25; parts.push(bar([s * fx, .012, fz + .03], [s * fx + Math.sin(a) * .09, .01, fz + .03 + Math.cos(a) * .09], .016, BACK)); }
+  return parts.map((g) => g.scale(k, k, k));
+}
+// The bench with the alligator lying along it, its head at the bench's -x end with its jaws open past it, and at the other end what's lying about: a hammer, a knife,
+// a brush, a can, a roll of tape and a small box
+export const GATOR_HINGE = .1;
+export function gatorOnBench(long = 4.6, wide = .9) {
+  const y = BENCH_TOP, x = long / 2 - 1.3;
+  return [
+    ...blockBench(long, wide), ...moved(alligator(3.2, 1), { y, ry: -Math.PI / 2, x: -long / 2 + GATOR_HINGE + .92, z: .02 }),
+    box(x, y + .015, -.12, .3, .025, .03, '#7a4a2a'), box(x + .16, y + .022, -.12, .03, .035, .1, '#8a8c92'),
+    box(x + .45, y + .006, .1, .14, .012, .025, '#c9cbd0'), box(x + .33, y + .012, .1, .11, .024, .03, '#2a2228'),
+    cyl(x + .8, y + .06, -.16, .045, .12, '#b8562a', 10), cyl(x + .8, y + .125, -.16, .046, .01, '#8a8c92', 10),
+    painted(new THREE.TorusGeometry(.04, .018, 6, 12).rotateX(Math.PI / 2).translate(x + .6, y + .018, .2), '#cfc9b8'),
+    box(x + 1.15, y + .05, .04, .2, .1, .14, '#b08a5a'), box(x + .2, y + .01, .28, .2, .02, .03, '#d8c9a0'), box(x + .33, y + .014, .28, .06, .03, .04, '#5a3a22'),
+  ];
+}
+// A whitetail buck's head and shoulders, with eight points, its head turned a little to its left. A smaller one's a young buck, with four.
+export function buckHead(small = false) {
+  const COAT = '#7d6347', BROW = '#5a4430', WHITE = '#ebe5d6', DARK = '#1b1714', ANTLER = '#d6c6a2', BURR = '#8a7050';
+  // a long head, narrowing to a muzzle that's white under it, with the black of its nose at the end and big dark eyes
+  const head = [
+    blob(0, .25, .41, .08, .09, .12, COAT), blob(0, .2, .55, .05, .055, .13, COAT), blob(0, .196, .675, .03, .025, .02, DARK),
+    blob(0, .168, .6, .04, .02, .07, WHITE), blob(0, .305, .44, .05, .03, .06, BROW),
+    ...both((s) => [blob(s * .062, .275, .46, .025, .021, .027, '#b9ab92'), blob(s * .067, .277, .466, .017, .017, .017, DARK)]).flat(),
+    ...both((s) => moved([blob(0, .09, 0, .045, .1, .02, COAT), blob(0, .09, .012, .03, .07, .012, '#c4b69d')], { rx: -.2, rz: -s * .9, x: s * .075, y: .32, z: .36 })).flat(),
+  ];
+  // the main beams sweep out and round to the front, darker at the burr, with tines standing up off each
+  const beam = (pts) => pts.slice(1).map((p, i) => bar(pts[i], p, .032 - i * .0045, i ? ANTLER : BURR));
+  const rack = both((s) => small ? [
+    ...beam([[s * .05, .34, .42], [s * .12, .44, .4], [s * .16, .5, .46], [s * .13, .53, .55]]), bar([s * .135, .45, .405], [s * .14, .58, .43], .02, ANTLER),
+  ] : [
+    ...beam([[s * .05, .34, .42], [s * .17, .46, .38], [s * .24, .52, .45], [s * .22, .55, .58], [s * .12, .57, .67]]),
+    bar([s * .085, .385, .415], [s * .09, .5, .47], .02, ANTLER), bar([s * .19, .48, .4], [s * .2, .68, .43], .022, ANTLER), bar([s * .235, .535, .52], [s * .215, .7, .57], .02, ANTLER),
+  ]).flat();
+  const parts = [
+    // the shoulders flat against the wall, the chest under them, and the neck coming out and up, white at the throat
+    blob(0, -.02, 0, .26, .3, .1, COAT), blob(0, -.2, .08, .15, .13, .1, COAT), blob(0, .03, .17, .14, .22, .14, COAT), blob(0, .16, .3, .11, .14, .11, COAT), blob(0, .1, .3, .07, .06, .03, WHITE),
+    ...moved(moved([...head, ...rack], { z: -.3 }), { ry: .22, z: .3 }),
+  ];
+  return small ? parts.map((g) => g.scale(.8, .8, .8)) : parts;
+}
+// A wild turkey in full strut on a shelf, with its fan spread behind it, its wings dragging and its beard hanging. The shelf's top is at y = 0.
+export function struttingTurkey() {
+  const SHELF = '#6e5238', BRONZE = '#3b2f26', LEG = '#b8897a', RED = '#b3262b';
+  // the fan's a half circle standing up behind it, in rings: chestnut tips, a dark band and the barred brown, and the coverts over them
+  const half = (r, z, color) => painted(new THREE.CylinderGeometry(r, r, .016, 16, 1, false, Math.PI / 2, Math.PI).rotateX(Math.PI / 2).translate(0, .36, z), color);
+  return [
+    box(0, -.015, .23, .9, .03, .46, SHELF), ...both((s) => [box(s * .36, -.13, .015, .035, .22, .03, SHELF), bar([s * .36, -.22, .03], [s * .36, -.035, .32], .03, SHELF)]).flat(),
+    half(.44, .075, '#8a5a32'), half(.4, .085, '#1f1813'), half(.36, .095, '#5d4430'), half(.2, .11, '#6e4d30'),
+    blob(0, .33, .24, .19, .19, .21, BRONZE), blob(0, .35, .36, .14, .15, .1, '#5a3f28'),
+    ...both((s) => moved([blob(0, 0, 0, .035, .17, .2, '#4c3c2d'), blob(0, -.1, .02, .036, .04, .14, '#cfc6b4')], { x: s * .175, y: .2, z: .24, rx: .3 })).flat(),
+    ...both((s) => [bar([s * .05, 0, .27], [s * .055, .17, .25], .022, LEG), ...[-.5, 0, .5].map((a) => bar([s * .05, .006, .27], [s * .05 + Math.sin(a) * .09, .006, .27 + Math.cos(a) * .09], .014, LEG))]).flat(),
+    // its head pulled back, pale, with the red under it and the snood hanging over its beak
+    blob(0, .5, .35, .045, .07, .045, BRONZE), blob(0, .58, .37, .05, .05, .055, '#cad6df'), blob(0, .52, .405, .038, .05, .032, RED), bar([0, .6, .41], [0, .52, .45], .016, RED),
+    blob(0, .575, .425, .014, .012, .026, '#c8b48c'), ...both((s) => blob(s * .042, .59, .38, .008, .008, .008, '#111')),
+    bar([0, .4, .44], [0, .2, .47], .03, '#1d1712'),
+  ];
+}
+// A mallard drake flying toward +x, climbing by `climb`, its wings up, the near one out toward the room. `beat` brings that one down a little.
+export function flyingDuck(climb = .35, beat = 0) {
+  const z = .13, BLACK = '#1b1a1d', WHITE = '#efece4';
+  return moved([
+    blob(0, 0, z, .22, .08, .09, '#a29d92'), blob(.12, -.015, z, .1, .07, .085, '#6b3825'), blob(.205, .02, z, .026, .046, .046, WHITE),
+    blob(.26, .045, z, .062, .05, .045, '#1d5a3c'), blob(.33, .035, z, .045, .014, .022, '#d4b13c'), ...both((s) => blob(.275, .06, z + s * .038, .007, .007, .007, BLACK)),
+    blob(-.21, .01, z, .06, .025, .05, BLACK), blob(-.2, .045, z, .012, .02, .012, BLACK), blob(-.245, .005, z, .03, .02, .045, WHITE),
+    ...both((s) => blob(-.12, -.065, z + s * .03, .035, .01, .015, '#d9822b')),
+    ...moved(wing('#857b6e', true), { x: .03, y: .04, z: z + .07, rx: .5 - beat, rz: .2 }),
+    ...moved(wing('#cdc7ba', false), { x: .03, y: .04, z: z - .05, rx: -.12, rz: .2 }),
+  ], { rz: climb });
+}
+// one of its wings, standing up from the shoulder: the broad inner part with the blue patch on its back edge, and the long primaries tapering to a point
+function wing(color, patch) {
+  const parts = [blob(-.01, .1, 0, .085, .12, .014, color), painted(new THREE.CylinderGeometry(.006, .07, .27, 6).scale(1, 1, .2).translate(-.025, .33, 0), color)];
+  if (patch) parts.push(blob(-.07, .1, .012, .022, .055, .004, '#3c4fa8'), blob(-.09, .1, .012, .006, .055, .004, '#efece4'));
+  return parts;
+}
+// The plaques: an oval of dark wood with a set of antlers on a skull cap, or with a bleached skull, nose down, and its antlers, or nothing on it at all
+const oval = (w, h, d, z, color) => painted(new THREE.CylinderGeometry(.5, .5, d, 20).rotateX(Math.PI / 2).scale(w, h, 1).translate(0, 0, z), color);
+// each beam rises off the cap at height y, sweeps out and round to the front, and has its tines standing up off it
+function antlers(spread, tines, y = .06) {
+  const parts = [];
+  for (const s of [1, -1]) {
+    const p = [[s * .03, y, .07], [s * .1, y + .08, .07], [s * spread * .55, y + .16, .1], [s * spread * .6, y + .24, .17], [s * spread * .42, y + .3, .23]];
+    for (let i = 1; i < p.length; i++) parts.push(bar(p[i - 1], p[i], .026 - i * .003, '#d2c19b'));
+    for (let t = 0; t < tines; t++) { const a = p[t + 2]; parts.push(bar(a, [a[0] * 1.03, a[1] + .14 - t * .025, a[2] + .01], .016, '#d2c19b')); }
+  }
+  return parts;
+}
+export function antlerPlaque(spread = .3, tines = 2) {
+  return [oval(.34, .44, .03, .015, '#3c2717'), oval(.3, .4, .02, .035, '#5a3a22'), blob(0, .04, .06, .05, .035, .03, '#3a2a1e'), ...antlers(spread, tines)];
+}
+export function skullPlaque(spread = .3, tines = 2) {
+  const BONE = '#e6dfcd', HOLE = '#2a2420';
+  return [
+    oval(.32, .46, .03, .015, '#3c2717'), oval(.28, .42, .02, .035, '#6a4a2c'),
+    blob(0, .05, .075, .06, .055, .05, BONE), blob(0, -.08, .085, .042, .11, .035, BONE), ...both((s) => blob(s * .045, .02, .105, .02, .02, .015, HOLE)), blob(0, -.13, .115, .015, .04, .01, HOLE),
+    ...antlers(spread, tines, .09),
+  ];
+}
+export function ovalPlaque(w = .42, h = .56) {
+  return [oval(w + .04, h + .04, .03, .015, '#3c2717'), oval(w, h, .025, .04, '#7a5232')];
+}
+// Tools hung on nails among the mounts: a handsaw, or a hammer and a pair of pliers
+export function hangingTools(kind = 'saw') {
+  const STEEL = '#9a9ca2', NAIL = '#2a2628', WOOD = '#7a4a2a';
+  if (kind === 'saw') {
+    // hung by the hole in its handle, with its blade tapering down to the tip and its teeth along the right-hand edge
+    const V = (x, y) => new THREE.Vector2(x, y), edge = [V(-.07, -.05), V(-.07, -.62), V(-.005, -.62)];
+    for (let i = 1; i <= 44; i++) { const t = i / 44; edge.push(V(-.005 + .07 * t + (i % 2) * .008, -.62 + .57 * t)); }
+    const grip = new THREE.Shape(), hole = new THREE.Path();
+    grip.moveTo(-.075, -.08); grip.lineTo(.07, -.08); grip.lineTo(.07, .06); grip.quadraticCurveTo(.07, .13, 0, .13); grip.quadraticCurveTo(-.075, .13, -.075, .06); grip.closePath();
+    hole.moveTo(-.04, -.035); hole.lineTo(.035, -.035); hole.lineTo(.035, .05); hole.quadraticCurveTo(.035, .09, 0, .09); hole.quadraticCurveTo(-.04, .09, -.04, .05); hole.closePath(); grip.holes.push(hole);
+    return [
+      painted(new THREE.ExtrudeGeometry(new THREE.Shape(edge), { depth: .003, bevelEnabled: false }).translate(0, 0, .014), STEEL),
+      painted(new THREE.ExtrudeGeometry(grip, { depth: .024, bevelEnabled: false, curveSegments: 4 }).translate(0, 0, .004), WOOD), box(0, .075, .03, .012, .012, .05, NAIL),
+    ];
+  }
+  return [
+    box(-.1, 0, .03, .012, .012, .05, NAIL), box(-.1, -.012, .03, .12, .035, .035, STEEL), box(-.1, -.19, .03, .028, .32, .022, WOOD),
+    box(.12, 0, .03, .012, .012, .05, NAIL), bar([.11, -.01, .03], [.13, .07, .03], .02, STEEL), bar([.13, -.01, .03], [.11, .07, .03], .02, STEEL),
+    bar([.11, -.01, .03], [.08, -.29, .03], .018, '#b0362e'), bar([.13, -.01, .03], [.16, -.29, .03], .018, '#b0362e'),
+  ];
+}
+// The bins, bags and boxes on the floor past the end of the bench: two bins stacked, a box with a smaller one on it, and two sacks slumped against them
+export function shopClutter() {
+  const bin = (x, y, z, w, h, d, color, lid) => [box(x, y + h / 2, z, w, h, d, color), box(x, y + h + .015, z, w + .03, .03, d + .03, lid)];
+  const sack = (x, z, color, turn) => moved([blob(0, .16, 0, .24, .16, .17, color), blob(0, .3, -.12, .14, .06, .07, color)], { x, z, ry: turn });
+  return [
+    ...bin(-.62, 0, -.05, .6, .38, .42, '#3e5f86', '#2d4664'), ...bin(-.62, .41, -.05, .55, .3, .4, '#d9d4c6', '#bdb7a6'),
+    box(.08, .22, -.12, .5, .44, .4, '#b08a5a'), box(.08, .445, -.12, .5, .012, .06, '#cdb48c'), box(.12, .59, -.1, .36, .28, .3, '#a07c4e'),
+    ...sack(.62, .12, '#d8d0bc', .3), ...sack(.72, -.22, '#8f7350', -.4),
+  ];
+}
+// A round clock, stopped at ten past ten, in a case of its own colour
+export function wallClock(r = .17, rim = '#1d1a1e') {
+  const INK = '#1d1a1e', parts = [cylZ(0, 0, .025, r, .05, rim, 24), cylZ(0, 0, .051, r - .015, .004, '#efebe0', 24), cylZ(0, 0, .058, .01, .006, INK, 8)];
+  for (let h = 0; h < 12; h++) { const a = h * Math.PI / 6; parts.push(bar([Math.sin(a) * (r - .045), Math.cos(a) * (r - .045), .054], [Math.sin(a) * (r - .025), Math.cos(a) * (r - .025), .054], h % 3 ? .006 : .012, INK)); }
+  const hand = (turns, long, w) => bar([0, 0, .057], [Math.sin(turns * 2 * Math.PI) * long, Math.cos(turns * 2 * Math.PI) * long, .057], w, INK);
+  return [...parts, hand((10 + 10 / 60) / 12, r * .5, .012), hand(10 / 60, r * .66, .008)];
+}
+
 // ---- what stands in a cemetery, from what can be seen from the road. Nothing's written on any of it but the one slab with `words`, whose lines are cut in the
 // face of the stone at its head, toward the slab, where it's read from, and can only be made out from right up close.
 const GRAVE_GREYS = ['#8d8c88', '#77767a', '#a3a196', '#5e5d62', '#b4b1a4'], BLOOMS = ['#d94a6a', '#f1e6cf', '#e8a93a', '#b03ac0', '#d9402a'];
