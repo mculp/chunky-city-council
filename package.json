@@ -36,6 +36,7 @@
     "church": "node tools/play-church.mjs",
     "water": "node tools/play-water.mjs",
     "wet": "node tools/play-wet.mjs",
+    "crowd": "node tools/crowd.mjs",
     "lore": "node tools/play-lore.mjs",
     "toni": "node tools/play-toni.mjs",
     "talk": "node tools/play-talk.mjs",

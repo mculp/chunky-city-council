@@ -15,6 +15,7 @@
 // - net, for the town's own files in server/, the name check in src/names.js and the phone's side of the town, src/together.js
 // - wallet, for the wallet's page, the town's wallets and the chain, their stand-in, the town on this machine it plays against, and
 //   src/together.js, whose looks have the wallet's rektguys
+// - crowd, for the world the town's people walk in, server/world.js
 // - for index.html, the checks named in its changed lines, but for names it uses everywhere, and the sound checks,
 //   which are the slowest and come from sound files instead, and the checks that look after what those lines touch,
 //   such as fling for the crowd's pose, aura and shoes
@@ -44,9 +45,10 @@ const NEVER = new Set(['check', 'deploy', 'sound:make', 'sound:level', 'frames',
 const VARIANTS = { smoke: '--touch', sound: '--old' };
 // for --changed: the checks for a module besides any named after it, the checks that look after parts of index.html by
 // other names than their own, and names too common in index.html to mean a check
-const ALIASES = { vehicles: ['drive'], damage: ['wreck'], roads: ['walk', 'wet'], mapview: ['net', 'keys', 'water'], fever: ['deaths', 'trains', 'horde'],
-  horde: ['fling'], agents: ['fling'], folks: ['fling'], water: ['wet'], lanes: ['wet'], solids: ['wet'] };
-const LOOKS_AFTER = { fling: /poseCrowd|aura|shoe|\bhop|\bfl[iu]ng/i, wet: /\b(landH|pondGround|riverDist|groundH|floorAt|roadHalf|onRoad|TOWN_Y|channel)\b/ };
+const ALIASES = { vehicles: ['drive', 'crowd'], damage: ['wreck'], roads: ['walk', 'wet', 'crowd'], mapview: ['net', 'keys', 'water'], fever: ['deaths', 'trains', 'horde'],
+  horde: ['fling'], agents: ['fling'], folks: ['fling'], water: ['wet', 'crowd'], lanes: ['wet', 'crowd'], solids: ['wet', 'crowd'], wet: ['crowd'], structures: ['crowd'] };
+const LOOKS_AFTER = { fling: /poseCrowd|aura|shoe|\bhop|\bfl[iu]ng/i, wet: /\b(landH|pondGround|riverDist|groundH|floorAt|roadHalf|onRoad|TOWN_Y|channel)\b/,
+  crowd: /\b(HOMES|HOME_\w+|KEPT_EMPTY|SET_ASIDE|fillHomes|VEH_SET|VEHICLES|placeVehicles|vehicleFits|GROUNDS|churchZone|gasSpot|screenSpot|yardSpot|spotOff|horde\.lights|horde\.zones)\b/ };
 const COMMON = new Set(['play', 'test', 'town', 'water']);
 
 // where it runs: here, or a copy of a commit with this worktree's installs and raw downloads linked in
@@ -115,6 +117,7 @@ if (args.includes('--changed')) {
       if ((/^server\/(town|host|worker|wrangler|wallet|chain)\b/.test(f) || /^tools\/(wrangler-dev|chain-stand-in)\.mjs$/.test(f)) && c.name === 'town:host') add(c, f);
       if ((/^server\/(town|index|host)\b/.test(f) || f === 'src/names.js' || f === 'src/together.js') && c.name === 'net') add(c, f);
       if ((/^server\/(town|index|host|wallet|chain)\b/.test(f) || ['wallet.html', 'tools/chain-stand-in.mjs', 'src/together.js'].includes(f)) && c.name === 'wallet') add(c, f);
+      if (/^server\/world\b/.test(f) && c.name === 'crowd') add(c, f);
     }
   }
   const stems = new Set(files.filter((f) => /^(src|data)\//.test(f)).map((f) => f.split('/').pop().replace(/(\.test)?\.[^.]+$/, '')));
