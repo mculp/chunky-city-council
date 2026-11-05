@@ -11,8 +11,9 @@
 // out front of the gas station in a new look and with what they had, and the time after that Play takes them straight in, with Coop
 // remembering them, and how he and Miss Bobby feel about them, from what the town kept. What one breaks, the other sees come down as it
 // did, with a blast doing its damage once, and nothing breaks at a place that's set aside (CHUNKY-152). Then the hero's link, who starts
-// there too with no chapters, is known to the cast and finds what was broken already down: everyone sees the hero, and only one phone at
-// a time is him. A day later, with everyone away, what was broken is back for everyone. Fails on anything out of place or a console error.
+// there too with no chapters, is known to the cast and finds what was broken already down: everyone sees the hero, carrying and swinging
+// the skillet and the bat as he does on his own screen, and only one phone at a time is him. A day later, with everyone away, what was
+// broken is back for everyone. Fails on anything out of place or a console error.
 //
 //   npm i && npm run net -- [--shots dir]
 import { createHash } from 'node:crypto';
@@ -771,16 +772,63 @@ try {
     check('and not as a townsperson', !(await bodyOf(a, C.id)), await drawn(a));
     const tag = (await on(a, () => __net.tags())).find((t) => t.id === C.id);
     check(`with his name over him: "${tag?.text}"`, tag?.text === 'River', tag);
-    // and he swings the skillet as he does on his own screen: in his right hand, with the left out to the side for balance
-    const swung = on(a, () => new Promise((done) => {
+    // and he carries and swings what he's got as he does on his own screen (CHUNKY-172): the skillet at his right thigh between swings and in
+    // his right hand with his left out for balance as he swings it, and the bat over his right shoulder and swung in both hands. Every frame
+    // A draws of him has to be one his own screen draws, his fists to a centimetre, so the two can't drift apart whatever a swing's made to
+    // look like. He's drawn twelve times a second, so a swing, which is .46 s, shows five or six of its six drawings, depending on where in a
+    // twelfth it starts, and each screen starts it somewhere different. So what his own screen draws is every drawing it shows of a swing
+    // started at each 120th through a twelfth, on a page of its own with its clock held. Where a swing lands isn't said, so those land on nothing.
+    const ownPage = await serveAndOpen({ viewport: { width: 390, height: 844 } }), hisOwn = await ownPage.page.evaluate(() => {
+      const G = __game, T = 1 / 120, fists = () => G.hero.arms.map((A) => A.fist.position.toArray()), out = {};
+      G.pause(); G.jump('town'); G.S.flags.town = true; G.S.flags.ended = G.S.flags.arrived = true;
+      let now = G.sim(.1, T).time;
+      for (const bat of [false, true]) {
+        G.S.flags.bat = bat; now = G.sim(.4, T).time;
+        const rest = fists(), swing = []; let landed = false;
+        for (let k = 0; k < 10; k++) {
+          while (Math.round(now * 120) % 10 !== k) now = G.sim(T, T).time;
+          G.key('f', true); G.sim(T, T); G.key('f', false);
+          for (let i = 0; i < 72; i++) { now = G.sim(T, T).time; swing.push({ hands: fists() }); landed ||= !!G.skillet.lands(); }
+        }
+        out[bat ? 'bat' : 'pan'] = { rest: { hands: rest }, swing, landed };
+      }
+      G.S.flags.bat = false;
+      return out;
+    });
+    await ownPage.close();
+    const same = (f, g) => f.hands.every((h, i) => Math.hypot(h[0] - g.hands[i][0], h[1] - g.hands[i][1], h[2] - g.hands[i][2]) < .01);
+    const drawings = (frames, rest) => frames.filter((f) => !same(f, rest)).reduce((list, f) => (list.some((g) => same(f, g)) ? list : [...list, f]), []);
+    for (const [tool, { rest, swing, landed }] of Object.entries(hisOwn)) check(`his own screen, a frame at a time, draws the swing of the ${tool === 'bat' ? 'bat' : 'skillet'} in ${drawings(swing, rest).length} drawings, landing on nothing`, drawings(swing, rest).length >= 6 && !landed, { landed });
+    const watched = () => on(a, () => new Promise((done) => {
       const got = [], t0 = performance.now();
-      (function look() { const h = __net.drawn().hero; if (h) got.push({ pan: h.pan, hands: h.hands }); if (performance.now() - t0 < 1600) requestAnimationFrame(look); else done(got); })();
+      (function look() { const h = __net.drawn().hero; if (h) got.push({ pan: h.pan, bat: h.bat, hands: h.hands }); if (performance.now() - t0 < 1600) requestAnimationFrame(look); else done(got); })();
     }));
     await c.page.keyboard.press('f');
-    const frames = await swung, held = frames.filter((f) => f.pan), inRight = held.every((f) => f.hands[0][0] < 0 && f.hands[1][0] > .4);
-    check(`and A sees him swing the skillet in his right hand with his left out for balance, in ${held.length} frames of ${frames.length}, and put it away after`, held.length > 3 && inRight && !frames.at(-1).pan, { held: held.slice(0, 3), last: frames.at(-1) });
+    // What A drew of a swing: the frames that aren't him at rest, which of his own screen's drawings each one is, any his screen never draws, and
+    // him at rest after as he is on his own. A phone draws him at most every twelfth of a second, and only on a frame it draws at all, so a slow
+    // one shows fewer of a swing's six drawings, as it would of his own. More than one shows it going through a swing and not stuck on one.
+    const mirrored = (seen, { rest, swing }) => {
+      const his = drawings(swing, rest), drawn = seen.filter((f) => !same(f, rest)), which = drawn.map((f) => his.findIndex((g) => same(f, g)));
+      return { drawn, which: which.join(' '), drawings: new Set(which.filter((i) => i >= 0)).size, odd: drawn.filter((_, i) => which[i] < 0), rest: same(seen.at(-1), rest), last: seen.at(-1) };
+    };
+    const right = (f) => f.hands[0].map((v) => v.toFixed(2)).join(', '), thigh = (f) => f.pan && !f.bat && f.hands[0][0] < -.25 && f.hands[0][1] < -.45;
+    check(`A sees him carry the skillet at his right thigh, with his right hand at ${right(seen)}`, thigh(seen), seen);
+    let swung = watched();
+    let frames = await swung, m = mirrored(frames, hisOwn.pan), out = m.drawn.filter((f) => f.hands[1][0] > .65 && f.hands[1][1] > -.4);
+    check(`and A sees him swing the skillet as his own screen draws it, ${m.drawn.length} frames of ${frames.length} in ${m.drawings} of its drawings and ${m.odd.length} it never draws, his left out for balance in ${out.length}, and at his thigh after as he is on his own`, m.drawings > 1 && !m.odd.length && out.length > 3 && m.rest && frames.every((f) => f.pan && !f.bat) && thigh(m.last), { which: m.which, odd: m.odd.slice(0, 2), last: m.last, his: hisOwn.pan.rest });
     await snap(a, '06-a-sees-the-hero');
     // and on everyone else's map he's in the orange of his own arrow, a way up the road so that A's arrow isn't over him
+    // and with the bat, it's over his right shoulder between swings, and swung in both hands across him
+    await on(c, () => { __game.S.flags.bat = true; });
+    await sleep(600);
+    const shoulder = (await drawn(a)).hero;
+    check(`with the bat, A sees it over his right shoulder, with his right hand at ${right(shoulder)}`, shoulder?.bat && !shoulder.pan && shoulder.hands[0][0] < -.1 && shoulder.hands[0][1] > -.25, shoulder);
+    swung = watched();
+    await c.page.keyboard.press('f');
+    frames = await swung; m = mirrored(frames, hisOwn.bat); const across = m.drawn.filter((f) => f.hands[0][0] > -.2 && f.hands[1][0] < .45);
+    check(`and A sees him swing it as his own screen draws it, ${m.drawn.length} frames of ${frames.length} in ${m.drawings} of its drawings and ${m.odd.length} it never draws, both fists across him in ${across.length}, and back over his shoulder after as he is on his own`, m.drawings > 1 && !m.odd.length && across.length > 3 && m.rest && frames.every((f) => f.bat && !f.pan) && m.last.hands[0][1] > -.25, { which: m.which, odd: m.odd.slice(0, 2), last: m.last, his: hisOwn.bat.rest });
+    await snap(a, '06-a-sees-the-hero-with-the-bat');
+    await on(c, () => { __game.S.flags.bat = false; });
     await onRoad(c, A.x + 60, await on(c, (x) => __game.map.zAt('us_80', x), A.x + 60));
     await sleep(600);
     const H = await me(c);

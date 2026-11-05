@@ -45,6 +45,21 @@ test('a pose says what they are in, and counts their swings and waves, so nobody
   assert.deepEqual(decodePose(encodePose(1, 0, 0, 0, 0)), { ...decodePose(encodePose(1, 0, 0, 0, 0)), ride: 0, swings: 0, waves: 0, how: HOW.foot });
 });
 
+test('the hero\'s pose says whether it\'s the bat he\'s got and whether he\'s carrying it, without touching anything else in it', () => {
+  for (const bat of [false, true]) for (const carry of [false, true]) {
+    const p = decodePose(encodePose(1, 0, 0, 0, 0, { swings: 255, waves: 15, how: HOW.trip, bat, carry }));
+    assert.deepEqual([p.bat, p.carry, p.swings, p.waves, p.how], [bat, carry, 255, 15, HOW.trip]);
+  }
+  const p = decodePose(encodePose(1, 0, 0, 0, 0));
+  assert.equal(p.bat, false); assert.equal(p.carry, false);
+  // and whoever's shown has the newest pose's, as with swings
+  const walkers = createWalkers();
+  walkers.take([{ id: 2, stamp: 1, ...decodePose(encodePose(1, 0, 0, 0, 0, { carry: true })) }], 0);
+  walkers.take([{ id: 2, stamp: 2, ...decodePose(encodePose(2, 0, 0, 0, 0, { bat: true, carry: true })) }], 50);
+  const [w] = walkers.at(60);
+  assert.equal(w.bat, true); assert.equal(w.carry, true);
+});
+
 test('a snapshot is two bytes and twenty for each person, and reads back as it went in', () => {
   const snap = encodeSnapshot([{ id: 3, pose: encodePose(100, 1, 2, 3, 0) }, { id: 900, pose: encodePose(200, -4, 5, -6, 1, { ride: 7, how: HOW.down }) }]);
   assert.equal(snap.length, 2 + 20 * 2);

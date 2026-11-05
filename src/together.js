@@ -36,7 +36,7 @@ const SWING_ARM = [-2.75, -2.95, -2.1, -1.2, -.75, -.55];
 // opened on it, which are each kept for one town, by the ?net it came with, and never go to another. Otherwise a link to someone
 // else's town would hand them both, and with them someone's place in this one, or the hero.
 export const KEPT = { key: 'chunky.net.key@', name: 'chunky.net.name', look: 'chunky.net.look', hero: 'chunky.net.hero@' };
-const UP = new THREE.Vector3(0, 1, 0);
+const UP = new THREE.Vector3(0, 1, 0), X_AXIS = new THREE.Vector3(1, 0, 0), _hang = new THREE.Quaternion(), _turn = new THREE.Euler(), _fist = new THREE.Vector3(), _handle = new THREE.Vector3();
 const CSS = `
 #join input{font:inherit;font-size:16px;width:min(300px,82vw);padding:10px 12px;text-align:center;letter-spacing:.06em;color:var(--cream);background:var(--panel);border:2px solid var(--line);border-radius:0;-webkit-user-select:text;user-select:text}
 #join input:focus{outline:2px solid var(--cyan);outline-offset:2px}
@@ -277,6 +277,8 @@ export function together(G) {
   // ---------------- the wire
   let riding = null;
   const howNow = () => (S.mode === 'trip' ? HOW.trip : HP.kind === 'swim' ? HOW.swim : HP.kind === 'roll' || (HP.kind === 'down' && HP.down > .5) ? HOW.down : HOW.foot);
+  // which he's got, the skillet or the bat, and whether he's carrying it between swings, which is whenever his own screen shows it then (CHUNKY-172)
+  const holding = () => ({ bat: !!S.flags.bat, carry: G.swingT < 0 && (G.castIron.visible || G.batTool.visible) });
   function pump() {
     if (!link) return;
     requestAnimationFrame(pump);
@@ -289,7 +291,7 @@ export function together(G) {
     else if (d) link.update(d.x, d.y, d.z, d.yaw, { ride: G.vehicles.indexOf(d) + 1, swings, waves, how: HOW.foot });
     // down until they're halfway up, coming to, and down rolling out of something going too: a pose has no room for which way over
     // they are, so it's lying along the ground. On a trip from a ring it's that, from sitting down to getting up at the other end.
-    else link.update(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: howNow() });
+    else link.update(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: howNow(), ...holding() });
     // what they carry goes whenever it changes, and what's broken a few times a second
     const had = JSON.stringify({ beans: S.beans, items: S.items, gas: S.gas });
     if (link.id && had !== keptWas) { keptWas = had; link.keep({ beans: S.beans, items: { ...S.items }, gas: S.gas }); }
@@ -569,9 +571,9 @@ export function together(G) {
     if (twin) twin.root.visible = !far;
     if (far) return;
     if (!twin) {
-      // and the skillet he swings, which shares its iron and its lines with his own
-      const rig = G.heroTwin(), root = new THREE.Group(), pan = G.castIron.clone();
-      pan.visible = false; rig.body.add(pan); root.add(rig.body); G.scene.add(root); twin = { rig, root, pan, hands: [new THREE.Vector3(), new THREE.Vector3()] };
+      // and the skillet or the bat he carries and swings, which share their iron, wood and lines with his own
+      const rig = G.heroTwin(), root = new THREE.Group(), pan = G.castIron.clone(), bat = G.batTool.clone();
+      pan.visible = bat.visible = false; rig.body.add(pan, bat); root.add(rig.body); G.scene.add(root); twin = { rig, root, pan, bat, hands: [new THREE.Vector3(), new THREE.Vector3()] };
       // all of him goes at once on a trip from a ring, his tape and his lines too, or there'd be a face left over the ring
       rig.body.traverse((o) => { if (o.isMesh) o.material = madeToGo(o.material, true); });
     }
@@ -605,20 +607,43 @@ export function together(G) {
       const a = Math.min(1, w.speed / 4.2) + .5 * run;
       for (let i = 0; i < 2; i++) {
         const s = i ? 1 : -1, p = ph + (i ? Math.PI : 0), lift = Math.max(0, Math.cos(p)) * .16 * a;
-        R.arm(i, V(s * .36, -.6 + .05 * a, .05 - Math.sin(p) * .28 * a), V(s * .7, -.35, -.25));
+        twin.hands[i].copy(R.arm(i, V(s * .36, -.6 + .05 * a, .05 - Math.sin(p) * .28 * a), V(s * .7, -.35, -.25)));
         R.leg(i, V(s * .13, -1.36 + lift, Math.sin(p) * .34 * a), V(s * .1, -1, .8), lift * 2);
       }
     }
-    // The skillet in his right hand, with the left out to the side for balance, as he swings it on his own screen. Where it lands isn't
-    // said, so it's the six drawings through, and from over his right shoulder, which is where a swing starts.
-    const age = (w.at?.swung ?? -9), since = G.time - age, waved = G.time - (w.at?.waved ?? -9);
-    twin.pan.visible = k === 'run' && since < G.SWING_T;
-    if (twin.pan.visible) {
-      const n = Math.min(G.SWING_POSES.length - 1, Math.floor(since * 12)), [x, y, z, turn] = G.SWING_POSES[n], f = n / (G.SWING_POSES.length - 1);
-      twin.pan.position.copy(twin.hands[0].copy(R.arm(0, V(-x, y, z), V(-.7, -.3, -.25), V(0, Math.cos(turn), Math.sin(turn)))));
-      twin.hands[1].copy(R.arm(1, V(.6 + .06 * f, -.16 + .06 * f, .24 - .4 * f), V(.7, -.3, -.25)));
-      twin.pan.quaternion.setFromEuler(new THREE.Euler(turn, 0, 0));
-    } else if (k !== 'drive' && waved < WAVE_FOR) R.arm(1, V(.52, .6 + (G.reduceMotion ? 0 : Math.sin(step * 1.9) * .05), .08), V(.8, .1, -.2));
+    // What he swings, as he swings it on his own screen: the skillet in his right hand with his left out to the side for balance, or the
+    // bat in both, his left fist on the grip and his right BAT_HOLD.grip down the handle. Where it lands isn't said, so it's the six drawings through,
+    // from over one shoulder, and from over the other for a swing that comes before the last one's through.
+    const since = G.time - (w.at?.swung ?? -9), waved = G.time - (w.at?.waved ?? -9), bat = !!w.bat, tool = bat ? twin.bat : twin.pan;
+    (bat ? twin.pan : twin.bat).visible = false;
+    const swinging = k === 'run' && since < G.SWING_T;
+    // and between swings, on his feet, he carries it as he does on his own screen whenever that shows it
+    tool.visible = swinging || (k === 'run' && !!w.carry);
+    if (swinging) {
+      const n = Math.min(G.SWING_POSES.length - 1, Math.floor(since * 12)), [x0, y, z, turn] = G.SWING_POSES[n], x = x0 * (w.at?.side ?? 1);
+      if (bat) {
+        // in both hands, nearer his middle than the drawing, where both can reach it: his own holdBat, which puts the bat where his left fist is
+        G.holdBat(R, tool, _fist.set(x * G.BAT_HOLD.middle, y, z), _handle.set(0, Math.cos(turn), Math.sin(turn)));
+        twin.hands[0].copy(R.arms[0].fist.position); twin.hands[1].copy(R.arms[1].fist.position);
+      } else {
+        const f = n / (G.SWING_POSES.length - 1);
+        tool.position.copy(twin.hands[0].copy(R.arm(0, V(-x, y, z), V(-.7, -.3, -.25), V(0, Math.cos(turn), Math.sin(turn)))));
+        twin.hands[1].copy(R.arm(1, V(.6 + .06 * f, -.16 + .06 * f, .24 - .4 * f), V(.7, -.3, -.25)));
+        tool.quaternion.setFromEuler(_turn.set(turn, 0, 0));
+      }
+    } else if (tool.visible) {
+      // the skillet hanging at his right thigh and swinging a little behind his step, or the bat over his right shoulder
+      const a = Math.min(1, w.speed / 4.2) + .5 * run;
+      if (bat) {
+        tool.quaternion.setFromUnitVectors(UP, G.BAT_REST);
+        tool.position.copy(twin.hands[0].copy(R.arm(0, V(-.22, -.06 + Math.abs(Math.sin(ph)) * .02 * a, .2), V(-.7, -.3, -.25), G.BAT_REST)));
+      } else {
+        const hang = _hang.setFromAxisAngle(X_AXIS, Math.sin(ph - .7) * .3 * a).multiply(G.CARRY_HANG);
+        tool.quaternion.copy(hang);
+        tool.position.copy(twin.hands[0].copy(R.arm(0, V(-.37, -.6 + .04 * a, .05 - Math.sin(ph) * .16 * a), V(-.7, -.35, -.25), V(0, 1, 0).applyQuaternion(hang))));
+      }
+    }
+    if (!swinging && k !== 'drive' && waved < WAVE_FOR) twin.hands[1].copy(R.arm(1, V(.52, .6 + (G.reduceMotion ? 0 : Math.sin(step * 1.9) * .05), .08), V(.8, .1, -.2)));
     R.strings(tq, k === 'run' ? Math.sin(ph) * .1 * Math.min(1, w.speed / 4.2) : 0);
   }
 
@@ -654,12 +679,13 @@ export function together(G) {
   waveButton.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); doWave(); });
   addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 'v' && !e.repeat && panel.hidden) doWave(); });
 
-  // what's known of each of them, kept from frame to frame: when their swings and waves were
+  // what's known of each of them, kept from frame to frame: when their swings and waves were, and which shoulder the swing's from,
+  // which is the other one for a swing that comes before the last is through, as it is on the hero's own screen
   const marks = new Map();
   function marked(w) {
     let m = marks.get(w.id);
-    if (!m) marks.set(w.id, m = { swings: w.swings, waves: w.waves, swung: -9, waved: -9 });
-    if (m.swings !== w.swings) { m.swings = w.swings; m.swung = G.time; }
+    if (!m) marks.set(w.id, m = { swings: w.swings, waves: w.waves, swung: -9, waved: -9, side: 1 });
+    if (m.swings !== w.swings) { m.side = G.time - m.swung < G.SWING_T ? -m.side : 1; m.swings = w.swings; m.swung = G.time; }
     if (m.waves !== w.waves) { m.waves = w.waves; m.waved = G.time; }
     w.at = m; return m;
   }
@@ -671,7 +697,7 @@ export function together(G) {
     // where they come to when a try ends, which is by the pumps where they start
     spot: () => startSpot(),
     // where he's come to at the other ring, at once, the way where a vehicle was left goes first, so that the jump arrives as one step
-    jumped() { if (!link || alone || !started) return; const P = G.player.pos; link.now(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: howNow() }); },
+    jumped() { if (!link || alone || !started) return; const P = G.player.pos; link.now(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: howNow(), ...holding() }); },
     // after the world's placed, each frame that's drawn
     frame(dt, step) {
       if (!started) return;
@@ -770,7 +796,7 @@ export function together(G) {
             const B = at(bodies, i), yAxis = new THREE.Vector3().setFromMatrixColumn(B, 1).normalize(), armAt = (a) => deg(new THREE.Vector3().setFromMatrixColumn(at(arms, i * 2 + a), 1).normalize().negate().angleTo(down));
             return { ...s, look: z1.getX(i), far: z1.getY(i), hot: z1.getZ(i), up: deg(yAxis.angleTo(UP)), arms: [armAt(0), armAt(1)] };
           }),
-          hero: twin ? { visible: twin.root.visible, x: twin.root.position.x, y: twin.root.position.y, z: twin.root.position.z, sit: heroSit, gone: heroGone.value, pan: twin.pan.visible, hands: twin.hands.map((h) => h.toArray()) } : null,
+          hero: twin ? { visible: twin.root.visible, x: twin.root.position.x, y: twin.root.position.y, z: twin.root.position.z, sit: heroSit, gone: heroGone.value, pan: twin.pan.visible, bat: twin.bat.visible, hands: twin.hands.map((h) => h.toArray()) } : null,
         };
       },
       tags: () => tags.filter((t) => !t.e.hidden).map((t) => { const r = t.e.getBoundingClientRect(); return { id: t.id, text: t.e.textContent, x: r.left + r.width / 2, y: r.bottom }; }),

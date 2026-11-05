@@ -35,18 +35,20 @@ const viewOf = (b) => new DataView(b.buffer, b.byteOffset, b.byteLength);
 
 // A pose: the sender's clock in ms, x and z to a couple of millimetres, y to the centimetre, facing to a 65536th of a turn, which
 // vehicle they're in (one more than its place in the game's list, and 0 on foot), and how many times they've swung and waved, as
-// counts that wrap, so that a swing or a wave between two poses still shows.
-export function encodePose(stamp, x, y, z, yaw, { ride = 0, swings = 0, waves = 0, how = HOW.foot } = {}) {
+// counts that wrap, so that a swing or a wave between two poses still shows. Last, two bits for the hero (CHUNKY-172): whether it's
+// the bat he's got rather than the skillet, and whether he's carrying it between swings, as he is on his own screen.
+export function encodePose(stamp, x, y, z, yaw, { ride = 0, swings = 0, waves = 0, how = HOW.foot, bat = false, carry = false } = {}) {
   const b = new Uint8Array(POSE_BYTES), v = viewOf(b);
   v.setUint16(0, stamp & 0xffff, true); v.setFloat32(2, x, true); v.setFloat32(6, z, true);
   v.setInt16(10, Math.max(-32768, Math.min(32767, Math.round(y * 100))), true);
   v.setUint16(12, Math.round(yaw / TAU * 65536) & 0xffff, true);
-  v.setUint16(14, ride & 0xffff, true); b[16] = swings & 0xff; b[17] = (how & 3) | (waves & 15) << 2;
+  v.setUint16(14, ride & 0xffff, true); b[16] = swings & 0xff; b[17] = (how & 3) | (waves & 15) << 2 | (bat ? 64 : 0) | (carry ? 128 : 0);
   return b;
 }
 const poseAt = (v, at) => ({
   stamp: v.getUint16(at, true), x: v.getFloat32(at + 2, true), z: v.getFloat32(at + 6, true), y: v.getInt16(at + 10, true) / 100, yaw: v.getUint16(at + 12, true) / 65536 * TAU,
   ride: v.getUint16(at + 14, true), swings: v.getUint8(at + 16), waves: v.getUint8(at + 17) >> 2 & 15, how: v.getUint8(at + 17) & 3,
+  bat: !!(v.getUint8(at + 17) & 64), carry: !!(v.getUint8(at + 17) & 128),
 });
 export const decodePose = (b) => poseAt(viewOf(b), 0);
 
@@ -103,7 +105,7 @@ const strideRate = (v) => Math.min(v, 4.4) * 2.4 + Math.max(0, v - 4.4) * 1.3;
 // Going by the sender's clock is the point: the server's ticks are out of step with everyone's frames, and if it were its clock they
 // were placed on, a walk would come out as a stutter. What they're in and how they are go with where they're shown, from the same pose,
 // and getting into something or out of it isn't gone between by degrees: they're just there, as they are after a jump. Their swings
-// and waves aren't smoothed: they take the newest pose's, so none goes missing between two.
+// and waves aren't smoothed: they take the newest pose's, so none goes missing between two, and so does what the hero's holding.
 export function createWalkers({ delay = 100, ahead = 150, jump = 10 } = {}) {
   const all = new Map(), list = [], names = new Map();
   const named = (w) => { const n = names.get(w.id); w.name = n?.name ?? ''; w.look = n?.look ?? 0; w.hero = !!n?.hero; w.rekt = n?.rekt ?? null; };
@@ -120,14 +122,14 @@ export function createWalkers({ delay = 100, ahead = 150, jump = 10 } = {}) {
         if (!w) {
           const at = { t: 0, x: p.x, y: p.y, z: p.z, yaw: p.yaw, ride: p.ride ?? 0, how: p.how ?? HOW.foot };
           w = { id: p.id, x: p.x, y: p.y, z: p.z, yaw: p.yaw, ride: at.ride, how: at.how, when: 0, speed: 0, phase: 0, s: [at], stamp: p.stamp, t: 0, off: now, drawn: now, here: true };
-          w.swings = p.swings ?? 0; w.waves = p.waves ?? 0;
+          w.swings = p.swings ?? 0; w.waves = p.waves ?? 0; w.bat = !!p.bat; w.carry = !!p.carry;
           named(w); all.set(p.id, w); list.push(w); continue;
         }
         w.here = true;
         const d = (p.stamp - w.stamp) & 0xffff;
         if (!d) continue;   // the same pose again: they've not said anything since the server's last tick
         w.stamp = p.stamp; w.t += d;
-        w.swings = p.swings ?? 0; w.waves = p.waves ?? 0;
+        w.swings = p.swings ?? 0; w.waves = p.waves ?? 0; w.bat = !!p.bat; w.carry = !!p.carry;
         const off = now - w.t;
         w.off = Math.abs(off - w.off) > 1000 ? off : w.off + (off - w.off) * .05;
         w.s.push({ t: w.t, x: p.x, y: p.y, z: p.z, yaw: p.yaw, ride: p.ride ?? 0, how: p.how ?? HOW.foot }); if (w.s.length > KEEP) w.s.shift();
