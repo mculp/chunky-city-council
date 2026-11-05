@@ -257,8 +257,43 @@ test('without --talk there\'s no /talk, and the town still works', async () => {
   const s = await startServer({ port: 0, quiet: true });
   try {
     assert.notEqual((await ask(s.port)).status, 200);
+    assert.notEqual((await decideAt(s.port)).status, 200);
     const a = client(s.port); await a.in(); a.ws.close();
   } finally { await s.close(); }
+});
+
+// what someone comes up with for him to do (CHUNKY-163), asked as the game asks it
+const ASKED = { phone: 'p'.repeat(32), state: 'Coop drives home along Chunky Duffee Rd.', shapes: ['fishing', 'go-see'], places: ['the pond by the church', 'the pond in the pines'] };
+const decideAt = (port, { origin = 'http://localhost:4321', body = JSON.stringify(ASKED) } = {}) => fetch(`http://localhost:${port}/decide`, {
+  method: 'POST', headers: { 'Content-Type': 'text/plain', Origin: origin }, body,
+});
+
+test('with --talk, it answers /decide by its rules too: the first shape, the first place and worth it, unless it\'s told otherwise', async () => {
+  const s = await startServer({ port: 0, quiet: true, talk: true });
+  try {
+    const res = await decideAt(s.port);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('access-control-allow-origin'), 'http://localhost:4321');
+    assert.deepEqual(await res.json(), { shape: 'fishing', place: 0, worth: true });
+    assert.deepEqual(await (await decideAt(s.port, { body: JSON.stringify({ ...ASKED, shapes: [] }) })).json(), { quiet: 'bad' });
+    assert.equal((await decideAt(s.port, { origin: 'https://somewhere.else' })).status, 403);
+  } finally { await s.close(); }
+});
+
+test('a test can say what\'s decided, from what was asked, and an answer the game didn\'t offer is off, as Jev\'s would be', async () => {
+  const seen = [];
+  const s = await startServer({ port: 0, quiet: true, talk: { decide: (asked) => { seen.push(asked); return asked.places.length > 2 ? { shape: 'nope', place: 0, worth: true } : { shape: 'go-see', place: 1, worth: false }; } } });
+  try {
+    assert.deepEqual(await (await decideAt(s.port)).json(), { shape: 'go-see', place: 1, worth: false });
+    assert.deepEqual(seen, [{ state: ASKED.state, shapes: ASKED.shapes, places: ASKED.places }], 'and it\'s told what the phone said, not the phone');
+    assert.deepEqual(await (await decideAt(s.port, { body: JSON.stringify({ ...ASKED, places: [...ASKED.places, 'the third pond'] }) })).json(), { quiet: 'off' });
+  } finally { await s.close(); }
+  for (const quiet of ['off', 'cap']) {
+    const q = await startServer({ port: 0, quiet: true, talk: { decide: { quiet } } });
+    try { assert.deepEqual(await (await decideAt(q.port)).json(), { quiet }); } finally { await q.close(); }
+  }
+  const capped = await startServer({ port: 0, quiet: true, talk: { quiet: 'cap' } });
+  try { assert.deepEqual(await (await decideAt(capped.port)).json(), { quiet: 'cap' }, 'and the talk server\'s quiet is its too'); } finally { await capped.close(); }
 });
 
 // how many are in town, as the title card asks before anyone's said who they are

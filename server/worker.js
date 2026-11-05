@@ -1,6 +1,6 @@
-// The host for everyone, on Cloudflare: the characters' words at /talk, and the town everyone shares at /town. What they do is in
-// server/talk.js and server/host.js, and this gives them the owner's key, Cloudflare's limits, a bill that every copy of the Worker
-// shares, and one place for the town to be.
+// The host for everyone, on Cloudflare: the characters' words at /talk, what someone comes up with for him to do at /decide
+// (CHUNKY-163), and the town everyone shares at /town. What they do is in server/talk.js, server/decide.js and server/host.js, and
+// this gives them the owner's key, Cloudflare's limits, a bill that every copy of the Worker shares, and one place for the town to be.
 //
 //   npx wrangler@4.154.0 deploy --config server/wrangler.jsonc
 //
@@ -12,6 +12,7 @@
 // server/chain.js's public ones unless it's said, none of which answers Cloudflare now.
 import { DurableObject } from 'cloudflare:workers';
 import { createTalk, OPENROUTER_URL } from './talk.js';
+import { createDecide, DECISIONS_URL } from './decide.js';
 import { createTown } from './town.js';
 import { createHost, MOST } from './host.js';
 import { createChain, GATEWAYS, RPCS } from './chain.js';
@@ -143,8 +144,8 @@ export class Town extends DurableObject {
   }
 }
 
-// one for each copy of the Worker, so that it remembers what the month's spent between asks
-let talk = null;
+// one of each for each copy of the Worker, so that it remembers what the month's spent between asks
+let talk = null, decide = null;
 export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
@@ -167,16 +168,21 @@ export default {
       if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('This is the town, over a WebSocket.', { status: 426 });
       return town.fetch(request);
     }
-    if (pathname === '/talk') {
+    // the characters' words and what someone comes up with for him to do, on the same key, limits and bill
+    if (pathname === '/talk' || pathname === '/decide') {
       const bill = () => env.BILL.get(env.BILL.idFromName('chunky'));
-      talk ??= createTalk({
-        fetch: (...a) => fetch(...a), key: env.OPENROUTER_KEY, url: env.OPENROUTER_URL || OPENROUTER_URL,
-        cap: env.CAP_USD === undefined ? 20 : Number(env.CAP_USD), origins: pagesOf(env),
+      const same = {
+        fetch: (...a) => fetch(...a), key: env.OPENROUTER_KEY, cap: env.CAP_USD === undefined ? 20 : Number(env.CAP_USD), origins: pagesOf(env),
         phoneLimit: async (key) => (await env.PHONE.limit({ key })).success,
         placeLimit: async (key) => (await env.PLACE.limit({ key })).success,
         bill: { spent: (month) => bill().spent(month), add: (month, cost) => bill().add(month, cost) },
-      });
-      return talk(request, (p) => ctx.waitUntil(p));
+      };
+      if (pathname === '/talk') {
+        talk ??= createTalk({ ...same, url: env.OPENROUTER_URL || OPENROUTER_URL });
+        return talk(request, (p) => ctx.waitUntil(p));
+      }
+      decide ??= createDecide({ ...same, url: env.OPENROUTER_DECISIONS_URL || DECISIONS_URL });
+      return decide(request, (p) => ctx.waitUntil(p));
     }
     return new Response('Chunky, Mississippi.', { status: 404 });
   },

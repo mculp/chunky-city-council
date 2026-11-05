@@ -85,6 +85,26 @@ It's the first in `MODELS` in `server/talk.js` until the side-by-side trial pick
 
 An ask is about 4,700 letters, which is about 1,200 tokens, and a line back is under 100. At the prices `server/talk.js` keeps, that's about $0.004 to $0.01 for a hundred lines.
 
+## What they come up with
+
+Once a day, a person holding out can come up with something for him to do (CHUNKY-163). The game asks the same server at `/decide`, beside `/talk`, on the same key, limits and bill, so it comes out of the same $20 a month. It's `server/decide.js`, the Platform Engineer's.
+
+- **What's sent.** A POST as text: `{ phone, state, shapes, places }`.
+  - `state` is what the game says about their round, the day and him, in plain words, up to 4,000 characters.
+  - `shapes` is the game's fixed menu, 1 to 8 ids such as `fishing`.
+  - `places` is the places from the game's list near the round, 1 to 20, each in plain words of up to 200 characters, in the game's order.
+  - The game keeps which place is which, and the phone's key goes no further than the server.
+- **What Jev's asked.** Jev is TypeSafe's decision model on OpenRouter, at `/api/alpha/decisions`, pinned to `typesafe/jev-1.14` because the API is alpha. The server writes three questions itself, so a page can't ask Jev anything else:
+  - a choice over the shapes;
+  - a choice over the places by their numbers;
+  - a yes or no (a `noul`) on whether it's worth bringing up today.
+- **What comes back.** `{ shape, place, worth }`:
+  - `shape` is one of the shapes sent;
+  - `place` is an index into `places`;
+  - `worth` is Jev being at least half sure.
+  Anything Jev says that isn't one of those is `{ quiet: "off" }`, so no idea can name a place that isn't on the list. Otherwise it's `{ quiet }` with the talk server's words: `bad`, `off`, `fast`, `cap` or `slow`, the last after 8 s.
+- **What it costs.** Jev bills only what goes in, about $0.04 a million tokens, and an ask is a few hundred tokens. So it's a fraction of a cent a player a month.
+
 ## `data/talk.json`
 
 | Field | Type | What it is |
@@ -108,6 +128,8 @@ An ask is about 4,700 letters, which is about 1,200 tokens, and a line back is u
 | `care` | object | The 988 Lifeline: `when`, the patterns for what he types; `say`, what's said; `lifeline`, `how` and `danger`, what the panel says; `call`, `text` and `chat`, its buttons; `chatUrl`; and `back`, the button back to the game. |
 
 ## For tests
+
+`startServer({ talk: { decide } })` in `server/index.js` answers `/decide` for pages on this machine, by the real route's rules, with a stand-in for Jev and nothing spent. `decide` is a decision, or a function of what was asked, `{ state, shapes, places }`, that says one, or `{ quiet }` as Jev's answer would make it: `off`, `slow` or `cap`. Unless it's said, it's the first shape, the first place and worth it. The talk server's `quiet` quiets `/decide` too.
 
 With `?test`, nothing is asked until `__game.talk.on(url)` says where. `__game.talk` also has:
 

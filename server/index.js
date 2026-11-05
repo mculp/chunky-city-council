@@ -16,6 +16,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createTown } from './town.js';
 import { createHost, MOST } from './host.js';
 import { createTalk } from './talk.js';
+import { createDecide, JEV } from './decide.js';
 import { createMemoryStore, createWalletRoutes, walletKey } from './wallet.js';
 import { createChain } from './chain.js';
 import { NET_PORT, NET_RATE } from '../src/net.js';
@@ -40,6 +41,28 @@ function cannedTalk({ line = LINE, quiet = null } = {}) {
   });
 }
 
+// What someone comes up with for him to do (CHUNKY-163), by the same rules, from server/decide.js, with a stand-in for Jev that
+// answers as Jev does with what `decide` says: a decision, { shape, place, worth }, or a function of what was asked, { state, shapes,
+// places }, that says one. It can say { quiet } instead, as Jev's answer would make it: off, slow or cap. Unless it's said, it's the
+// first shape, the first place and worth it. `quiet` is the talk server's, for this too.
+const FIRST = (asked) => ({ shape: asked.shapes[0], place: 0, worth: true });
+function cannedDecide({ decide = FIRST, quiet = null } = {}) {
+  const jev = async (url, { body, signal }) => {
+    const { state, questions } = JSON.parse(body), asked = { state, shapes: Object.keys(questions.shape.criteria), places: Object.values(questions.place.criteria) };
+    const d = typeof decide === 'function' ? decide(asked) : decide, why = quiet === 'slow' ? 'slow' : d?.quiet;
+    if (why === 'slow') return new Promise((_, no) => signal.addEventListener('abort', () => no(signal.reason)));
+    if (why === 'cap') return new Response(JSON.stringify({ error: { code: 402, message: 'Insufficient credits' } }), { status: 402 });
+    if (why || quiet === 'off') return new Response(JSON.stringify({ error: { code: 500, message: 'Internal Server Error' } }), { status: 500 });
+    const answers = { shape: { type: 'choice', choice: d.shape }, place: { type: 'choice', choice: String(d.place) }, worth: { type: 'noul', noul: d.worth ? 1 : 0 } };
+    return new Response(JSON.stringify({ answers, model: JEV.model, usage: { input_tokens: 0, output_tokens: 0, cost: 0 } }));
+  };
+  return createDecide({
+    fetch: jev, key: 'canned', cap: quiet === 'cap' ? 0 : 5, origins: onThisMachine,
+    phoneLimit: async () => quiet !== 'fast', placeLimit: async () => true,
+    bill: { spent: async () => 0, add: async (month, cost) => cost }, log: () => {},
+  });
+}
+
 // `chain` is what's asked whose signature it is and what a wallet holds (server/chain.js), and with none, a wallet can't be checked
 // `wall` is the time of day as the town has it, for what's broken, which a test can move on to tomorrow
 export async function startServer({ port = NET_PORT, rate = NET_RATE, max, keeps, silence = 5000, helloWithin = 5000, save = null, saveEvery = 5000, heroHash = '', talk = false, chain = null, quiet = false, wall = () => Date.now() } = {}) {
@@ -47,7 +70,7 @@ export async function startServer({ port = NET_PORT, rate = NET_RATE, max, keeps
   // as the town for everyone keeps them each on their own
   let minds = {}, kept = null;
   const town = createTown({ max, keeps, wall, aside: createAside(farm) });
-  const words = talk ? cannedTalk(talk === true ? {} : talk) : null;
+  const words = talk ? cannedTalk(talk === true ? {} : talk) : null, choices = talk ? cannedDecide(talk === true ? {} : talk) : null;
 
   // A town that's been kept is taken back out. One that can't be read is left as it is for someone to look at, not written over.
   if (save) {
@@ -84,8 +107,9 @@ export async function startServer({ port = NET_PORT, rate = NET_RATE, max, keeps
     try {
       if (pathname === '/here') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify({ here: host.here, ...(chain && { wallets: true }) })); return; }
       if (pathname.startsWith('/wallet/') || pathname.startsWith('/rektguy/')) { await answer(res, await wallet(asked(req))); return; }
-      if (!words || pathname !== '/talk') { res.writeHead(426, { 'Content-Type': 'text/plain' }); res.end('This is the town, over a WebSocket.'); return; }
-      await answer(res, await words(asked(req)));
+      if (words && pathname === '/talk') { await answer(res, await words(asked(req))); return; }
+      if (choices && pathname === '/decide') { await answer(res, await choices(asked(req))); return; }
+      res.writeHead(426, { 'Content-Type': 'text/plain' }); res.end('This is the town, over a WebSocket.');
     } catch (e) { if (!res.headersSent) res.writeHead(500); res.end(); console.error(`${pathname} went wrong: ${e.message}`); }
   });
   const wss = new WebSocketServer({ server: http, maxPayload: MOST });
@@ -111,7 +135,7 @@ export async function startServer({ port = NET_PORT, rate = NET_RATE, max, keeps
   const saver = save ? setInterval(store, saveEvery) : null;
 
   const actualPort = http.address().port;
-  if (!quiet) console.log(`Chunky's open on ws://localhost:${actualPort}${words ? `, with the characters' words at http://localhost:${actualPort}/talk` : ''}. Serve the repo and open index.html?net on this machine, or on a phone on the same network.`);
+  if (!quiet) console.log(`Chunky's open on ws://localhost:${actualPort}${words ? `, with the characters' words at http://localhost:${actualPort}/talk and what they come up with at /decide` : ''}. Serve the repo and open index.html?net on this machine, or on a phone on the same network.`);
   return {
     port: actualPort,
     stats: () => { const { ticks, joined, busy, sockets } = host.stats(); return { ticks, joined, busy, clients: sockets.map(([id, s]) => ({ id, bytesIn: s.tcp.bytesRead, bytesOut: s.tcp.bytesWritten })) }; },

@@ -36,7 +36,7 @@ const MINUTE = 60000;
 export const monthOf = (ms) => new Date(ms).toISOString().slice(0, 7);
 const priced = (model, tokensIn, tokensOut) => (MODELS[model].in * tokensIn + MODELS[model].out * tokensOut) / 1e6;
 // a few words off an error that are safe for the log, or nothing
-const plain = (s) => (/^[\w .:,'-]{1,80}$/.test(String(s ?? '')) ? String(s) : null);
+export const plain = (s) => (/^[\w .:,'-]{1,80}$/.test(String(s ?? '')) ? String(s) : null);
 
 // what a phone asked, or null if it broke any of the limits
 export function readAsk(text) {
@@ -55,7 +55,7 @@ export function readAsk(text) {
 }
 
 // the body, as long as it's no more than `most` bytes however it's sent
-async function readCapped(request, most) {
+export async function readCapped(request, most) {
   if (+(request.headers.get('content-length') ?? 0) > most) return null;
   if (!request.body) return '';
   const reader = request.body.getReader(), parts = [];
