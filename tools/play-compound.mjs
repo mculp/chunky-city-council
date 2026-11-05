@@ -83,7 +83,7 @@ await g(() => __game.step(.1));
 await snap('yard');
 
 // ---------------- the taxidermy sign across the road from the drive, side-on to the road with its board running east and west and the carving on both faces, so that it's
-// read coming either way, with the round plaque hanging from its bar and the birdhouse sat on it. What's carved on it is only checked for what it isn't: there's a name, the
+// read coming either way, with the plain oval plaque hanging close under its bar and the birdhouse sat on it. What's carved on it is only checked for what it isn't: there's a name, the
 // word, and no number. Then he walks into it and it stops him, and a truck driven into one of its faces knocks it down.
 const sign = await g(() => {
   const G = __game, S = G.compound.sign, P = G.player.pos, T = 1 / 30, mouth = G.map.lanes.filter((l) => measured.includes(l.id)).sort((a, b) => b.length - a.length)[0].pts[0];
@@ -102,8 +102,9 @@ const sign = await g(() => {
     bearings: looks.map((n) => (deg(Math.atan2(n.x, -n.z)) + 360) % 360), offRoad: Math.max(...looks.map((n) => deg(Math.acos(Math.min(1, Math.abs(n.x * along[0] + n.z * along[1])))))),
     both: S.faces.length === 2 && looks[0].dot(looks[1]) < -.999 && S.faces.every((m) => m.material === S.faces[0].material && !!m.material.map),
     named: S.words.length === 2 && S.words[0].length > 2, word: S.words[1] === 'TAXIDERMY', number: S.words.some((w) => /\d/.test(w)), lit: S.faces.every((m) => m.material.emissiveIntensity > 0),
-    // as tall as it's wide
-    round: +Math.abs((pb.max.y - pb.min.y) - Math.max(pb.max.x - pb.min.x, pb.max.z - pb.min.z)).toFixed(3),
+    // an oval half again as wide as it's tall, about 60% as wide as the board, with nothing on it, close under the bar the birdhouse sits on and clear of the board
+    oval: +(Math.max(pb.max.x - pb.min.x, pb.max.z - pb.min.z) / (pb.max.y - pb.min.y)).toFixed(2), wide: +(Math.max(pb.max.x - pb.min.x, pb.max.z - pb.min.z) / Math.max(fb.max.x - fb.min.x, fb.max.z - fb.min.z)).toFixed(2),
+    plain: !S.plaque.material.map, under: +(bb.min.y - pb.max.y).toFixed(2), clear: +(pb.min.y - fb.max.y).toFixed(2),
     // sat on the bar, above the top of the board and between the posts
     perched: bb.min.y > fb.max.y + 1 && Math.hypot((bb.min.x + bb.max.x) / 2 - S.x, (bb.min.z + bb.max.z) / 2 - S.z) < 1.2,
   };
@@ -115,7 +116,7 @@ await snap('sign');
 check(`the taxidermy sign stands across the road from the drive, ${sign.mouth} m from its mouth, off the road and lit a little`, sign.mouth < 20 && sign.off && sign.lit, sign);
 check(`  side-on to the road, with a face looking each way along it: they look ${sign.bearings.join('° and ')}°, within ${sign.offRoad}° of the way the road runs`, sign.both && sign.bearings.some((b) => Math.min(b, 360 - b) < 1) && sign.bearings.some((b) => Math.abs(b - 180) < 1) && sign.offRoad < 25, sign);
 check('  carved with a name and TAXIDERMY on both faces, and no number', sign.both && sign.named && sign.word && !sign.number, { both: sign.both, named: sign.named, word: sign.word, number: sign.number });
-check(`  with the round plaque hanging from its bar (${sign.round} m between how tall and how wide it is) and the birdhouse sat on it`, sign.round < .02 && sign.perched, sign);
+check(`  with a plain oval plaque ${sign.oval} times as wide as it's tall and ${sign.wide} as wide as the board, ${sign.under} m under the top of its bar, and the birdhouse sat on it`, sign.oval > 1.4 && sign.oval < 1.6 && sign.wide > .55 && sign.wide < .68 && sign.plain && sign.under < .35 && sign.clear > .05 && sign.perched, sign);
 check(`  walking into it stops him ${sign.stopped} m short of it`, sign.stopped > .1 && sign.stopped < 1, sign.stopped);
 const knocked = await g(() => {
   // from far enough off across the lot's dirt to be going as fast as off the road
@@ -197,6 +198,41 @@ const woods = await g(() => {
 check(`a pickup flat out off the road into the woods is stopped in them, ${woods.tries} times all along the frontage, square on and at an angle, ${woods.deepest} m from the road at most`, woods.tries >= 30 && woods.deepest < woods.far + 3, woods);
 check(`  and a four-wheeler and a golf cart are stopped at the fence in front of them, ${woods.fence} m from the road`, woods.small.length === 2 && woods.fence < 6, woods);
 check(`  and it turns in at the drive and goes ${woods.drive.long} m up it, touching nothing`, woods.drive.up && !woods.drive.hurt, woods.drive);
+
+// ---------------- the woods and fence round its north and south sides, down to the river. From outside, flat out at either side all along it, square on and at an angle, the
+// fastest car there is and a pickup are stopped in the woods, and a four-wheeler and a golf cart at the fence. Round the river's end of each side every one of them is stopped,
+// or drowns in the river past the end of the fence. The woods and what's driven are as they were before each one, and after the last. A length of fence that's gone over
+// stays down off line, so the small ones go first on each side, while it's whole, and the rest go at it as the ones before left it.
+const round = await g(() => {
+  const G = __game, T = 1 / 30, F = G.compound.front, B = F.band, W = G.wreck, [cx, cz] = true2(1000, 660);
+  const trees = F.trees.map((t) => W.treeHere(...true2(t.x, t.z))).filter(Boolean), near = (p) => { const [x, z] = G.map.toGame(p.cx, p.cz); return x > 820 && x < 1230 && z > 530 && z < 820; };
+  const fresh = () => { for (const t of trees) if (t.down || t.stump || t.burnt || t.lean || t.hp !== undefined) W.mendTree(t); for (const p of W.props) if (p.kind === 'fence' && !p.down && near(p)) p.hp = p.max; };
+  const away = (kind) => G.vehicles.find((o) => o.kind === kind && !o.wrecked && Math.hypot(o.x - cx, o.z - cz) > 300), used = new Set();
+  const sides = F.fences.filter((r) => r.side >= 0).map((r) => ({ side: r.side, a: G.map.toGame(...r[0]), b: G.map.toGame(...r.at(-1)) }));
+  // the side's fence line's z at x, and how far past it into the compound z is
+  const lineZ = (S, x) => S.a[1] + (x - S.a[0]) * (S.b[1] - S.a[1]) / (S.b[0] - S.a[0]), into = (S, x, z) => (z - lineZ(S, x)) * (S.side ? -1 : 1);
+  const ram = (v, S, tx, turn) => {
+    fresh(); W.mendVehicle(v); used.add(v);
+    const [x, z] = true2(tx, lineZ(S, tx) + (S.side ? 3 : -3));
+    G.getIn(v); v.x = x; v.z = z; v.y = G.floorAt(x, z); v.yaw = (S.side ? Math.PI : 0) + turn; v.f = v.K.top; v.s = 0; G.sim(T, T);
+    for (let t = 0; t < 6 && !v.drowned && (t < 1 || Math.hypot(v.f, v.s) > .3); t += T) { G.stick(0, 1); G.sim(T, T); }
+    G.stick(0, 0); const [ex, ez] = G.map.toGame(v.x, v.z), r = { past: +into(S, ex, ez).toFixed(1), drowned: !!v.drowned };
+    if (G.driving()) G.getOut(true); G.sim(T, T);
+    return r;
+  };
+  const fast = away('coupe99') ?? away('coupe'), pickup = away('pickup'), out = { tries: 0, deepest: -Infinity, small: -Infinity, smallKinds: [], end: 0, drowned: 0, endDeepest: -Infinity, fast: fast?.kind, band: B.far };
+  for (const S of sides) {
+    for (const [kind, k] of [['quad', .3], ['golf', .45], ['quad', .6], ['golf', .75]]) { const v = away(kind); if (!v) continue; if (!out.smallKinds.includes(kind)) out.smallKinds.push(kind); out.small = Math.max(out.small, ram(v, S, S.a[0] + (S.b[0] - S.a[0]) * k, 0).past); }
+    for (let tx = S.a[0] + 10; tx < S.b[0] - 8; tx += 30) [[fast, 0], [pickup, .5], [fast, -.5], [pickup, 0]].forEach(([v, turn]) => { out.deepest = Math.max(out.deepest, ram(v, S, tx, turn).past); out.tries++; });
+    // and round the river's end of it, straight in and angled down the bank either way
+    for (const dx of [-3, 0, 2]) for (const v of [away('quad'), pickup, fast]) for (const turn of [0, .35, -.35]) { const r = ram(v, S, S.b[0] + dx, turn); out.end++; if (r.drowned) out.drowned++; else out.endDeepest = Math.max(out.endDeepest, r.past); }
+  }
+  fresh(); for (const v of used) W.mendVehicle(v);
+  return out;
+});
+check(`a car flat out at the compound's north or south side from outside is stopped in its woods, ${round.tries} times all along both sides, square on and at an angle, ${round.deepest} m in at most`, round.tries >= 40 && round.fast && round.deepest < round.band, round);
+check(`  and a four-wheeler and a golf cart are stopped at its fence, ${-round.small} m short of it`, round.smallKinds.length === 2 && round.small < 0, round);
+check(`  and round the river's end of each side none gets in: ${round.drowned} of ${round.end} drown in the river past the fence's end, and the rest go ${round.endDeepest} m in at most`, round.end >= 50 && round.drowned > 0 && round.endDeepest < round.band, round);
 
 // ---------------- no woods where it's been cleared
 const clear = await g(() => {

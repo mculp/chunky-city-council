@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { BRIDGE, createAside } from './aside.js';
 import { CEMETERY } from './graves.js';
+import { FRONTAGE, woodsAlong, fenceAlong, sidesOf } from './frontage.js';
 
 const json = (f) => JSON.parse(readFileSync(new URL(`../data/${f}`, import.meta.url), 'utf8'));
 const farm = json('farm.json'), roads = json('roads.json'), aside = createAside(farm);
@@ -28,6 +29,13 @@ for (const [what, spots] of Object.entries(SET_ASIDE)) {
     for (const [x, z] of spots) assert.ok(aside.at(x, z), `(${x}, ${z})`);
   });
 }
+
+test('nothing breaks online in the woods and fence round the compound, along the road and down both sides to the river, so nobody drives in but by the drive', () => {
+  const line = roads.edges.find((e) => e.id === 'pine_forest_rd_e1').points, sides = sidesOf(line);
+  for (const t of woodsAlong(line, () => .5, FRONTAGE, { sides })) assert.ok(aside.at(t.x, t.z), `a tree (${t.x}, ${t.z})`);
+  for (const run of fenceAlong(line, FRONTAGE, { sides })) for (const [x, z] of run) assert.ok(aside.at(x, z), `the fence (${x}, ${z})`);
+  assert.ok(!aside.at(1000, 540) && !aside.at(1000, 810), 'and not the woods outside it');
+});
 
 test('nothing breaks online anywhere on the farm south of the bridge: its yard, its pastures, its fences, its lone trees and its bales', () => {
   for (const [x, z] of [[-500, 1680], [-485, 1652], [-467.5, 1666], [-509, 1700.5]]) assert.ok(aside.at(x, z), `the yard, its tractor, trailer and feed bin (${x}, ${z})`);

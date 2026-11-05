@@ -267,7 +267,7 @@ import { makeLine, createTrains } from './src/trains.js';
 import { trainGeometries, TRAIN_LAMPS, gateArm } from './src/trainmodels.js';
 import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, dumpTrailer, discHarrow, logPile, dumpster, skid, feedBin, stockTank, frog, frogThroat, frogLids } from './src/things.js';
 import { CEMETERY, layGraves, graveSolid, onSlab, slabHead, fromCemetery } from './src/graves.js';
-import { FRONTAGE, GRASS_PINES, woodsAlong, fenceAlong, inWoods } from './src/frontage.js';
+import { FRONTAGE, GRASS_PINES, woodsAlong, fenceAlong, inWoods, sidesOf } from './src/frontage.js';
 import { createSong } from './src/song.js';
 import { RING as SHROOMS, tripAt, settle as settleRing, ringAt, pickRing } from './src/rings.js';
 import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/volley.js';
@@ -831,13 +831,6 @@ let swimY = 0;   // how high the water he's swimming in is
 const OPENING_ROAD = MAP.opening.road;
 // where things stand, in true metres from town center, so that they move with the map if its bands change
 const atTrue = (x, z) => MAP.fromTrue(x, z);
-// Along Pine Forest Rd where it passes the compound: woods a car gets in only by the drive, and the fence in front of them. src/frontage.js says where, in true metres from the road's line.
-// The fence is built heavier than the farm's, so that a four-wheeler or a golf cart, which is narrow enough to get between the trees, doesn't get through it either.
-const FRONT = (() => {
-  const line = MAP.roadById.get('pine_forest_rd').pts.map(([x, z]) => MAP.toGame(x, z)), trees = woodsAlong(line, hash), at = trees.map((t) => atTrue(t.x, t.z));
-  const x0 = Math.min(...at.map(([x]) => x)) - 3, x1 = Math.max(...at.map(([x]) => x)) + 3, z0 = Math.min(...at.map(([, z]) => z)) - 3, z1 = Math.max(...at.map(([, z]) => z)) + 3;
-  return { trees, far: FRONTAGE.far, fences: fenceAlong(line).map((run) => Object.assign(run.map(([x, z]) => atTrue(x, z)), { hp: 3 })), has: (x, z) => x > x0 && x < x1 && z > z0 && z < z1 && inWoods(line, ...MAP.toGame(x, z)) };
-})();
 // The Chunky River Bridge on Griffis Fountain Rd, at the edge of town: one lane wide, 30.7 m long, where he comes to
 const WAKE_ROAD = 'griffis_fountain_rd', WAKE_BRIDGE = MAP.crossings.find((c) => c.road === WAKE_ROAD && c.with === 'river');
 const WAKE_HALF = 2.15, WAKE_SPAN = 30.7;
@@ -925,6 +918,16 @@ function groundH(x, z) {
   const pw = padWeight(x, z);
   return pw > 0 ? h + (TOWN_Y - h) * pw : h;
 }
+// Along Pine Forest Rd where it passes the compound: woods a car gets in only by the drive, and the fence in front of them, and the same round its north and south sides
+// back to the river. src/frontage.js says where, in true metres from the road's line. The fence is built heavier than the farm's, so that a four-wheeler or a golf cart,
+// which is narrow enough to get between the trees, doesn't get through it either. How deep the river is there goes by the land as it lies, before anything's built on it.
+const FRONT = (() => {
+  const line = MAP.roadById.get('pine_forest_rd').pts.map(([x, z]) => MAP.toGame(x, z)), sides = sidesOf(line), deep = (tx, tz) => { const [x, z] = atTrue(tx, tz); return WATER.level(x, z) - landH(x, z); };
+  const trees = woodsAlong(line, hash, FRONTAGE, { sides, deep }), at = trees.map((t) => atTrue(t.x, t.z));
+  const x0 = Math.min(...at.map(([x]) => x)) - 3, x1 = Math.max(...at.map(([x]) => x)) + 3, z0 = Math.min(...at.map(([, z]) => z)) - 3, z1 = Math.max(...at.map(([, z]) => z)) + 3;
+  const fences = fenceAlong(line, FRONTAGE, { sides, deep }).map((run) => Object.assign(run.map(([x, z]) => atTrue(x, z)), { hp: 3, side: run.side }));
+  return { trees, far: FRONTAGE.far, band: FRONTAGE.sides, fences, sides, has: (x, z) => x > x0 && x < x1 && z > z0 && z < z1 && inWoods(line, ...MAP.toGame(x, z), FRONTAGE, sides) };
+})();
 // The ground is built in chunks around the camera, on the same grid the first scene was drawn on.
 const CH_Q = 36, CH_STEP = 300 / 180, CH_SIZE = CH_Q * CH_STEP, CH_R = matchMedia('(pointer:coarse)').matches ? 210 : 250;
 const chunkIndex = (() => {
@@ -3585,10 +3588,12 @@ const STUDIO = 900020, CABIN = 900019;
 // drive, as far as which anyone after him gives up at the road. The kids on four-wheelers turn round at the road, and the river doesn't bring anyone up on its bank.
 const GROUNDS = (() => { const [x0, z0] = atTrue(855.5, 572), [x1, z1] = atTrue(1088, 739); return { x0, z0, x1, z1, out: atTrue(850, 737), on: (x, z) => x > x0 && x < x1 && z > z0 && z < z1 }; })();
 // ---- the taxidermy sign at the road. The owner asked for it by name, so it's the one thing here that says whose it is, as it's carved on the listing's photo from
-// February 2018: two tall timber posts and a crossbar, a plain round plaque hanging from the bar and a little red birdhouse sat on it, and under them a board of weathered
+// February 2018: two tall timber posts and a crossbar, a plain oval plaque hanging close under the bar and a little red birdhouse sat on it, and under them a board of weathered
 // grey-green planks in a timber frame, with the family's name in an arc over a buck and a doe and TAXIDERMY on a ribbon. The real one has the phone number on its last
 // plank, and here that plank's bare. It's 1.4 times life, as the other signs are, so it reads from the road. It stands across Pine Forest Rd from the drive, at the front
-// of the cleared lot there, side-on to the road with its board running east and west and the carving on both faces, so that it's read coming either way.
+// of the cleared lot there, side-on to the road with its board running east and west and the carving on both faces, so that it's read coming either way. The plaque's
+// as Street View has it from up the road in October 2024: an oval half again as wide as it's tall and about 60% as wide as the board, on two short hangers. The real one
+// has the house number on it, which is part of the address, so it's bare.
 const TAXIDERMY_SIGN = (() => {
   // one face looks north and the other south
   const words = ['MURPHEY', 'TAXIDERMY'], [x, z] = atTrue(839, 724), nx = 0, nz = -1;
@@ -3635,8 +3640,8 @@ const TAXIDERMY_SIGN = (() => {
   // its faces are lit a little, so they read from the road at dusk. They, the plaque and the birdhouse come down with the rest.
   const boardMat = new THREE.MeshStandardMaterial({ map: face, emissiveMap: face, emissive: '#ffffff', emissiveIntensity: .35, roughness: 1 }), boardPlane = new THREE.PlaneGeometry(2.13, 1.67);
   const faces = [1, -1].map((side) => { const m = new THREE.Mesh(boardPlane, boardMat), [fx, fz] = at(0, side * .045); m.position.set(fx, Y0 + 2.695, fz); m.rotation.y = side > 0 ? yaw : yaw + Math.PI; here.add(m); return m; });
-  const plaque = outline(new THREE.Mesh(new THREE.CylinderGeometry(.39, .39, .07, 28).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#9a5c38', roughness: .8 })), INK, 1.1);
-  { const [px, pz] = at(0, 0); plaque.position.set(px, Y0 + 4.14, pz); plaque.rotation.y = yaw; here.add(plaque); }
+  const OVAL = { w: 1.36, h: .9, y: 4.19 }, plaque = outline(new THREE.Mesh(new THREE.CylinderGeometry(.5, .5, .07, 36).rotateX(Math.PI / 2).scale(OVAL.w, OVAL.h, 1), new THREE.MeshStandardMaterial({ color: '#9a5c38', roughness: .8 })), INK, 1.1);
+  { const [px, pz] = at(0, 0); plaque.position.set(px, Y0 + OVAL.y, pz); plaque.rotation.y = yaw; here.add(plaque); }
   // The birdhouse, sat on the bar off to one side with its hole to the south: red, with a dark pitched roof and a peg under the hole, and as wide as the bar's deep.
   const birdhouse = new THREE.Group();
   {
@@ -3655,8 +3660,8 @@ const TAXIDERMY_SIGN = (() => {
   const prop = breakable('sign', 3, () => {
     for (const u of [-1.18, 1.18]) { const [px, pz] = at(u, 0); addBox(timber, px, (foot + Y0 + 4.9) / 2, pz, .21, Y0 + 4.9 - foot, .21, 1.1, q); }
     { const [cx, cz] = at(0, 0); addBox(timber, cx, Y0 + 4.8, cz, 3.08, .2, .2, 1.1, q); }
-    // the round plaque's hangers, down to a little inside its edge
-    for (const u of [-.2, .2]) { const [hx, hz] = at(u, 0); addBox(poleMat, hx, Y0 + 4.58, hz, .03, .24, .03, 0, q); }
+    // the plaque's two short hangers, from under the bar to a little inside its top edge
+    for (const u of [-.3, .3]) { const [hx, hz] = at(u, 0), top = OVAL.y + OVAL.h / 2 * Math.sqrt(1 - (2 * u / OVAL.w) ** 2) - .025; addBox(poleMat, hx, Y0 + (4.7 + top) / 2, hz, .03, 4.7 - top, .03, 0, q); }
     { const [bx, bz] = at(0, 0); addBox(planks, bx, Y0 + 2.695, bz, 2.27, 1.81, .06, 1, q); }
     // the frame stands proud of the planks on both faces
     for (const [u, y, su, sy] of [[0, 3.585, 2.35, .11], [0, 1.805, 2.35, .11], [-1.12, 2.695, .11, 1.89], [1.12, 2.695, .11, 1.89]]) { const [fx, fz] = at(u, 0); addBox(timber, fx, Y0 + y, fz, su, sy, .18, 1, q); }
@@ -3664,7 +3669,7 @@ const TAXIDERMY_SIGN = (() => {
     PROP.objs.push(...faces, plaque, birdhouse);
   }, { rigid: true, chip: '#6f7b68', foot: [x, z] });
   flushBuckets(160);
-  return { x, z, nx, nz, prop, board: faces[0], faces, plaque, birdhouse, words };
+  return { x, z, nx, nz, prop, board: faces[0], faces, plaque, oval: OVAL, birdhouse, words };
 })();
 // ---- what's on the lot across the road from the drive, from the aerial: a green tractor with yellow rims at the south end of a line with a rusty red dump trailer and a
 // rusty disc harrow behind it, logs stacked to dry east and west, a dark blue dumpster with a white label, a cream tractor out on the grass, a long low skid, and a patch of
@@ -7138,8 +7143,9 @@ function markVehicle(v, on) {
   const x = v.mx ?? v.x, z = v.mz ?? v.z;
   for (let cx = Math.floor((x - r) / 16); cx <= Math.floor((x + r) / 16); cx++) for (let cz = Math.floor((z - r) / 16); cz <= Math.floor((z + r) / 16); cz++) {
     const k = (cx + 32768) * 65536 + cz + 32768; let list = vehCells.get(k);
-    if (on) { if (!list) vehCells.set(k, list = []); list.push(v); }
-    else if (list) { list.splice(list.indexOf(v), 1); if (!list.length) vehCells.delete(k); }
+    // once in a cell at most, and taking out one that isn't there leaves the rest alone
+    if (on) { if (!list) vehCells.set(k, list = []); if (!list.includes(v)) list.push(v); }
+    else if (list) { const i = list.indexOf(v); if (i >= 0) list.splice(i, 1); if (!list.length) vehCells.delete(k); }
   }
 }
 for (const v of VEHICLES) markVehicle(v, true);
@@ -7541,8 +7547,8 @@ function vehicleGoes(v, r, dt, mine, T) {
   // what it hit
   if (r.hit > 1.5) {
     for (const o of vehShown) {
-      // and not what he's driving, or anything else going without him, which would be left parked where it's going
-      if (o === v || o === driving || o.coast || Math.hypot(o.x - v.x, o.z - v.z) > (o.K.length + K.length) / 2 + 1.2) continue;
+      // and not what he's driving, or anything else going without him, rolling or thrown, which would be left parked where it's going
+      if (o === v || o === driving || o.coast || o.loose || Math.hypot(o.x - v.x, o.z - v.z) > (o.K.length + K.length) / 2 + 1.2) continue;
       // another vehicle takes it too, and shoves along if there's room
       const dx = o.x - v.x, dz = o.z - v.z, L = Math.hypot(dx, dz) || 1, push = Math.min(2.4, r.hit * .12 * K.mass / o.K.mass);
       markVehicle(o, false);
@@ -7870,7 +7876,8 @@ function mendVehicle(v) {
   if (v === driving) return;
   if (v.burner) { v.burner.T = 0; v.burner = null; }
   const lit = fuses.indexOf(v); if (lit >= 0) fuses.splice(lit, 1);
-  if (v.loose) { loose.splice(loose.indexOf(v), 1); v.loose = null; } else markVehicle(v, false);
+  // one he's just jumped out of, still rolling, isn't parked yet, the same as when he gets in
+  if (v.loose) { loose.splice(loose.indexOf(v), 1); v.loose = null; } else if (v.coast) { coasting.splice(coasting.indexOf(v.coast), 1); v.coast = null; } else markVehicle(v, false);
   Object.assign(v, { x: v.home.x, z: v.home.z, yaw: v.home.yaw, f: 0, s: 0, vy: 0, steer: 0, pitch: 0, roll: 0, hp: v.K.hp, wrecked: false, drowned: false, exploded: false, grounded: true });
   delete v.fuse;
   v.y = floorAt(v.x, v.z); settle(v, floorAt); markVehicle(v, true); vehDirty = true;
@@ -9536,7 +9543,7 @@ if (TEST) {
     // out of one at speed (CHUNKY-168): how far into it he is, what's going on without him, the doors drawn standing open, and which hood he has on,
     // 0 to 3: his own, flopped one way, flopped the other, and back
     bail: { BAIL, roll: () => roll && { ...roll }, coasting: () => coasting.map((c) => c.v), doors: () => Object.fromEntries(Object.entries(vehDoors).map(([k, m]) => [k, m.visible ? m.count : 0])), hood: () => [heroHood, heroHoodHung, heroHoodFlop, heroHoodSwim].findIndex((h) => h.geo === hero.hm.geometry) },
-    wreck: { strike, blast, blastCan, thud, toss, damage, breakProp, props: PROPS, falling, swing, burnAt, burners, catchTree, treesNear, treeBlocks, fellTree, gasCans: GAS_CANS, wreckVehicle, explodeVehicle, startFree, housesNear, trees: (x, z, r) => { const out = []; treesNear(x, z, r, (t) => out.push(t)); return out; } },
+    wreck: { strike, blast, blastCan, thud, toss, damage, breakProp, props: PROPS, falling, swing, burnAt, burners, catchTree, treesNear, treeBlocks, fellTree, gasCans: GAS_CANS, wreckVehicle, explodeVehicle, startFree, housesNear, trees: (x, z, r) => { const out = []; treesNear(x, z, r, (t) => out.push(t)); return out; }, treeHere: (x, z) => treeHere(x, z), mendTree: (t) => mendTree(t), mendProp, mendVehicle },
     openMap, closeMap, updateMini, mapState: () => ({ open: mapOpen, cam: mapCam, mini: !$('mini').hidden, name: $('miniName').hidden ? '' : $('miniName').textContent }), mapCamTo(c) { mapCam = { ...mapCam, ...c }; drawFullMap(); },
     // the mushroom rings (CHUNKY-176): where each settled, which he's standing in, how far into a trip he is, which ring the map's open to pick from and where
     // each is on it, how long nobody's to go for him, and how far he's sat down
