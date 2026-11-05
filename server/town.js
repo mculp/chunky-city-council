@@ -184,7 +184,8 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
       makeRoom();
       const back = before && 'x' in before ? { x: before.x, y: before.y, z: before.z, yaw: before.yaw, beans: before.beans, items: before.items, gas: before.gas } : null;
       if (!minds.has(keyHash)) minds.set(keyHash, tidyMinds(kept));
-      out.push({ to: id, msg: { t: 'welcome', id, name: p.name, look: p.look, hero: p.hero, ...(p.rekt && { rekt: p.rekt }), saved: back, minds: minds.get(keyHash), cars: carList(), wrecks: [...wrecks.values()].map((e) => e.w) } });
+      // and what time it is in town, which the trains run to (CHUNKY-153)
+      out.push({ to: id, msg: { t: 'welcome', id, name: p.name, look: p.look, hero: p.hero, ...(p.rekt && { rekt: p.rekt }), saved: back, minds: minds.get(keyHash), cars: carList(), wrecks: [...wrecks.values()].map((e) => e.w), now: wall() } });
       out.push({ to: 'all', msg: roster() });
       return { id, out };
     },

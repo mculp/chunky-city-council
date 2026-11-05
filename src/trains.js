@@ -92,10 +92,26 @@ export function makeLine(points) {
 }
 
 // The siding: its switches where the points west and east are on the line, at s0 and s1, and its track gap metres to the left going up the line
-// at its fullest, easing over in ease metres from each switch. off(s) is how far over from the line it is at s.
+// at its fullest, easing over in ease metres from each switch. off(s) is how far over from the line it is at s, and clear(x, z, r) whether
+// (x, z) is r or more from its own track, which everywhere short of one switch or past the other is.
 export function makeSiding(line, { west, east, gap, ease }) {
   const s0 = line.nearest(west[0], west[1]).s, s1 = line.nearest(east[0], east[1]).s, k = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
-  return { s0, s1, gap, ease, off: (s) => gap * Math.min(k((s - s0) / ease), k((s1 - s) / ease)) };
+  const off = (s) => gap * Math.min(k((s - s0) / ease), k((s1 - s) / ease)), A = {}, box = [Infinity, -Infinity, Infinity, -Infinity];
+  for (let s = s0; s <= s1 + 1; s += 2) {
+    const o = off(Math.min(s, s1)); line.at(Math.min(s, s1), A);
+    const x = A.x + A.tz * o, z = A.z - A.tx * o;
+    box[0] = Math.min(box[0], x); box[1] = Math.max(box[1], x); box[2] = Math.min(box[2], z); box[3] = Math.max(box[3], z);
+  }
+  return {
+    s0, s1, gap, ease, off,
+    clear(x, z, r) {
+      if (x < box[0] - r || x > box[1] + r || z < box[2] - r || z > box[3] + r) return true;
+      const { s } = line.nearest(x, z);
+      if (s < s0 || s > s1) return true;
+      line.at(s, A);
+      return Math.abs((x - A.x) * A.tz - (z - A.z) * A.tx - off(s)) >= r;
+    },
+  };
 }
 
 // The timetable on its own, for the town as well as the page. Run n is in cycle floor(n / 2), which starts when its local comes to a stand:

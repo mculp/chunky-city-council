@@ -263,7 +263,7 @@ import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boun
 import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
 import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, rimHit, placeVehicles, settle, speedOf } from './src/vehicles.js';
 import { vehicleGeometries, doorGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
-import { makeLine, createTrains } from './src/trains.js';
+import { makeLine, makeSiding, createTrains } from './src/trains.js';
 import { trainGeometries, TRAIN_LAMPS, gateArm } from './src/trainmodels.js';
 import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, dumpTrailer, discHarrow, logPile, dumpster, skid, feedBin, stockTank, frog, frogThroat, frogLids } from './src/things.js';
 import { CEMETERY, layGraves, graveSolid, onSlab, slabHead, fromCemetery } from './src/graves.js';
@@ -286,6 +286,8 @@ await Promise.race([document.fonts.load('40px Bungee').catch(() => {}), new Prom
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ?test adds window.__game (see the bottom of this file) and seeds Math.random, so a run can be repeated
 const TEST = new URLSearchParams(location.search).has('test');
+// the town everyone shares (see "playing together" at the bottom of this file)
+const SHARED = location.hostname === 'online.chunky.ms' || new URLSearchParams(location.search).has('net');
 // three.js draws on Math.random for every object's id, so it's seeded again before the particles, or adding a mesh would move them
 const seedRandom = () => { if (TEST) { let s = 20261031; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; } };
 seedRandom();
@@ -831,6 +833,10 @@ let swimY = 0;   // how high the water he's swimming in is
 const OPENING_ROAD = MAP.opening.road;
 // where things stand, in true metres from town center, so that they move with the map if its bands change
 const atTrue = (x, z) => MAP.fromTrue(x, z);
+// What's by the railroad, and the siding in town between Mulberry St and Poplar St, which the boxcar's beside and the trains pass on in the
+// town everyone shares (CHUNKY-153). The woods keep off it, and what's drawn of it is further down, with the trains.
+const RAILROAD = await (await fetch('data/railroad.json')).json();
+const SIDING = makeSiding(RAIL, { ...RAILROAD.siding, west: atTrue(...RAILROAD.siding.west), east: atTrue(...RAILROAD.siding.east) });
 // The Chunky River Bridge on Griffis Fountain Rd, at the edge of town: one lane wide, 30.7 m long, where he comes to
 const WAKE_ROAD = 'griffis_fountain_rd', WAKE_BRIDGE = MAP.crossings.find((c) => c.road === WAKE_ROAD && c.with === 'river');
 const WAKE_HALF = 2.15, WAKE_SPAN = 30.7;
@@ -1168,7 +1174,7 @@ function swayMat(params) {
       if (r(0) < .9 && padWeight(rx, z) === 0 && MAP.roadGrid.nearest(rx, z) > 7) t = { x: rx, z, h, r, pine: true, young: true, size: .5 + r(4) * .35 };
     } else if (r(0) < .62 && !first && !FARM.clear(x, z) && !FRONT.has(x, z) && (FARM.edge(x, z) || fbm(x * .012 + 40, z * .012 + 40, 77, 1e6, 2) > .36)) {
       const h = groundH(x, z), rd = MAP.roadGrid.nearest(x, z), half = rd < 32 ? MAP.roadGrid.seg.owner.width / 2 : 0;
-      if (h >= 2.2 && rd > half + 4 && MAP.railGrid.nearest(x, z) > 6 && padWeight(x, z) === 0 && !(WATER.look(x, z) && WATER.d < 2)) { const pine = r(3) < .33; t = { x, z, h, r, pine, size: pine ? .8 + r(4) * .7 : .7 + r(4) * .9 }; }
+      if (h >= 2.2 && rd > half + 4 && MAP.railGrid.nearest(x, z) > 6 && SIDING.clear(x, z, 6) && padWeight(x, z) === 0 && !(WATER.look(x, z) && WATER.d < 2)) { const pine = r(3) < .33; t = { x, z, h, r, pine, size: pine ? .8 + r(4) * .7 : .7 + r(4) * .9 }; }
     }
     cache.set(k, t); return t;
   };
@@ -1932,7 +1938,7 @@ const PLACES = {
   hall: landing(-57.7, -62.1, 40, -11),
   // the south door of the brick church, at Adams and Church St
   church: landing(-311, -211.6, 68.5, -8),
-  // on the gravel by the main line, where the sidings were
+  // on the gravel by the main line, where the sidings were: how far along the line it is, since BOX stands it square to the siding there
   boxcar: landing(10, 52.4, 0, 0),
 };
 function around(place, fn) { OX = place.x; OZ = place.z; fn(); OX = OZ = 0; }
@@ -2426,14 +2432,15 @@ function shrubs(list, colors) {
   }
   flushBuckets(1e6);
 }
-const TIES = new THREE.InstancedMesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#2a1d18', roughness: 1 }), 620);
+const TIES = new THREE.InstancedMesh(boxGeo, new THREE.MeshStandardMaterial({ color: '#2a1d18', roughness: 1 }), 900);
 TIES.frustumCulled = false; TIES.count = 0; scene.add(TIES);
-let tieX = 1e9, tieZ = 1e9;
+// the lines with ties under them: the main line, and the siding in town once it's laid, further down
+let tieX = 1e9, tieZ = 1e9, tieLines = MAP.rail;
 function fillTies(x, z) {
   if (Math.hypot(x - tieX, z - tieZ) < 12) return;
   tieX = x; tieZ = z;
   let n = 0; const RANGE = 160;
-  for (const line of MAP.rail) {
+  for (const line of tieLines) {
     let run = 0;
     for (let i = 1; i < line.length; i++) {
       const [ax, az] = line[i - 1], [bx, bz] = line[i], l = Math.hypot(bx - ax, bz - az);
@@ -2452,14 +2459,49 @@ function fillTies(x, z) {
   }
   TIES.count = n; TIES.instanceMatrix.needsUpdate = true;
 }
-// rusted boxcar, on a siding with the tracks behind it
-const BOX = PLACES.boxcar;
+// The rusted boxcar, still on its siding: square to the one in town, on a short length of rusty rail of its own as far north of that one's
+// track as that is of the main line, a few metres longer than it and dead at both ends (CHUNKY-153). Its rails are drawn with the siding's,
+// just below. at(u, v) is how far from the middle of it u along it, going up the line, and v across it is, with the road side's v the less.
+const BOX = (() => {
+  const s = RAIL.nearest(PLACES.boxcar.x, PLACES.boxcar.z).s, q = RAIL.at(s), o = SIDING.off(s) + SIDING.gap;
+  return { x: q.x + q.tz * o, z: q.z - q.tx * o, long: 19, turn: new THREE.Quaternion().setFromAxisAngle(UP, Math.atan2(-q.tz, q.tx)), at: (u, v) => [u * q.tx - v * q.tz, u * q.tz + v * q.tx] };
+})();
 around(BOX, () => {
   pad(-9, 9, -9, 3);
-  breakable('boxcar', 7, () => { addBox(steelMat, 0, Y0 + 2.4, 0, 13, 3.6, 3.4, 1.6); solid(-6.5, 6.5, -1.7, 1.7, Y0 + 4.2); addBox(roofMat, 1, Y0 + 2.2, -1.75, 3, 2.6, .1, 0); }, { chip: '#5a3a2c', squash: .34 });
+  breakable('boxcar', 7, () => {
+    const [dx, dz] = BOX.at(1, -1.75), c = [[-6.5, -1.7], [6.5, -1.7], [6.5, 1.7], [-6.5, 1.7]].map(([u, v]) => BOX.at(u, v));
+    addBox(steelMat, 0, Y0 + 2.6, 0, 13, 3.6, 3.4, 1.6, BOX.turn); addBox(roofMat, dx, Y0 + 2.4, dz, 3, 2.6, .1, 0, BOX.turn);
+    // square to the siding and not to the map, so it's its four sides that stop him
+    for (let i = 0; i < 4; i++) { const a = c[i], b = c[(i + 1) % 4], w = [BOX.x + a[0], BOX.z + a[1], BOX.x + b[0], BOX.z + b[1], Y0 + 4.4, 0]; PROP_WALLS.push(w); PROP.walls.push(w); }
+  }, { chip: '#5a3a2c', squash: .34 });
   flushBuckets();
 });
-for (const x of [-5, 5]) for (const z of [-.8, .8]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(.45, .45, .2, 14), roofMat); w.rotation.x = Math.PI / 2; w.position.set(BOX.x + x, Y0 + .5, BOX.z + z); scene.add(w); }
+// its wheels, on its rails
+const AXLE = new THREE.Quaternion().setFromAxisAngle(XA, Math.PI / 2);
+for (const u of [-5, 5]) for (const v of [-.8, .8]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(.45, .45, .2, 14), roofMat), [dx, dz] = BOX.at(u, v); w.quaternion.copy(BOX.turn).multiply(AXLE); w.position.set(BOX.x + dx, Y0 + .7, BOX.z + dz); scene.add(w); }
+// The siding itself, on its gravel bed between Mulberry St and Poplar St, and in the story too, since the bed's there: a rail either side,
+// rustier than the main line's, from where it's off the main line's rails at each switch, on ties wherever it's clear of the main line's,
+// and the boxcar's short length beside it the same. It's made here, before the particles' random numbers are seeded again, since three.js
+// draws on them for each thing's id, and made later it would move the opening's.
+{
+  const sidingMat = new THREE.MeshStandardMaterial({ color: '#8a4424', metalness: .25, roughness: .85, emissive: '#1c0a04' });
+  const A = {}, dir = new THREE.Vector3(), mid = new THREE.Vector3(), rq = new THREE.Quaternion(), pts = [];
+  for (let s = SIDING.s0; s < SIDING.s1 + 1; s += 2) { const o = SIDING.off(Math.min(s, SIDING.s1)); RAIL.at(Math.min(s, SIDING.s1), A); pts.push([A.x + A.tz * o, A.z - A.tx * o, o]); }
+  // a rail either side of a line, over the hills
+  const rails = (line) => {
+    for (let i = 1; i < line.length; i++) {
+      const [ax, az] = line[i - 1], [bx, bz] = line[i], l = Math.hypot(bx - ax, bz - az);
+      if (l < .01) continue;
+      dir.set((bx - ax) / l, 0, (bz - az) / l); rq.setFromUnitVectors(XA, dir);
+      const nx = -dir.z * .8, nz = dir.x * .8, run = HILLS.follow([[ax, az], [bx, bz]]);
+      for (let k = 1; k < run.length; k++) { const [px, pz] = run[k - 1], [qx, qz] = run[k]; for (const s of [-1, 1]) { mid.set((px + qx) / 2 + nx * s, Y0 + .18, (pz + qz) / 2 + nz * s); addBox(sidingMat, mid.x, mid.y, mid.z, Math.hypot(qx - px, qz - pz) + .02, .14, .12, 0, rq); } }
+    }
+  };
+  const [ux, uz] = BOX.at(BOX.long / 2, 0), stub = [[BOX.x - ux, BOX.z - uz], [BOX.x + ux, BOX.z + uz]];
+  rails(pts.filter(([, , o]) => o >= .15)); rails(stub);
+  flushBuckets();
+  tieLines = [...MAP.rail, pts.filter(([, , o]) => o > 2.7).map(([x, z]) => [x, z]), stub];
+}
 // Where Rocky and Miss Bobby live: his trailer across US 80 from the gas station, and her house just north of the town hall on Commerce St.
 // Each of them is out front of their own door, which is where the building's own walls put it. `out` is how far from the wall and `side` how far along it.
 const homeDoor = (id) => wallsOf(STRUCTURES.find((s) => s.id === id), TOWN_Y).doors[0];
@@ -4186,7 +4228,6 @@ const GATE_ARMS = [], GATE_LAMPS = [];
     flushBuckets(260);
   }
 }
-const RAILROAD = await (await fetch('data/railroad.json')).json();
 const RAIL_MARKER = (() => {
   const [x, z] = atTrue(...RAILROAD.marker.at), q = RAIL.at(RAIL.nearest(x, z).s), side = ((x - q.x) * -q.tz + (z - q.z) * q.tx) >= 0 ? 1 : -1, nx = -q.tz * side, nz = q.tx * side, foot = Math.min(groundH(x, z), Y0);
   const plate = textTex([], 1024, 720, '#1f2a24', '#efe7d2', '40px Georgia, serif', { after: (g) => {
@@ -4941,7 +4982,7 @@ const canMat = [new THREE.MeshStandardMaterial({ map: canLabel, roughness: .6, m
 const PICKUPS = [
   [38.3 + PLACES.hall.x, Y0 + 1.75, -9.2 + PLACES.hall.z], [41.3 + PLACES.hall.x, Y0 + 1.75, -14 + PLACES.hall.z],
   // the first two are on the town hall's shelves, then one on the ground by the mobile home, one in front of the porch of the red brick house on the south side of US 80 down its drive from the road, and one by the boxcar
-  (() => { const [x, z] = atTrue(-18.8, -54.5); return [x, Y0 + .3, z]; })(), (() => { const [x, z] = atTrue(-346.8, -6.3); return [x, Y0 + .3, z]; })(), [BOX.x + 1.5, Y0 + .9, BOX.z - 2]
+  (() => { const [x, z] = atTrue(-18.8, -54.5); return [x, Y0 + .3, z]; })(), (() => { const [x, z] = atTrue(-346.8, -6.3); return [x, Y0 + .3, z]; })(), (() => { const [dx, dz] = BOX.at(1.5, -2); return [BOX.x + dx, Y0 + 1.1, BOX.z + dz]; })()
 ].map(([x, y, z]) => {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(.11, .11, .26, 18), [canMat[0], canMat[1], canMat[1]]);
   m.position.set(x, y + .2, z); outline(m, INK, 1.5); scene.add(m);
@@ -6414,7 +6455,7 @@ function stageDeath(d, k) {
   // the boxcars keep going by, stretching, and its light swells till it's all there is
   if (d.by === 'train') {
     trainStretch = still ? 1 : 1 + 2.4 * sstep(.05, 1, k); u.uSwell.value = .1 + .9 * sstep(.25, 1, k);
-    const tr = trains.train, nose = tr?.cars[0];
+    const tr = trains.trains.includes(trainGotBy) ? trainGotBy : trains.train, nose = tr?.cars[0];
     if (nose) { _deathAt.set(nose.x, RAIL_TOP + TRAIN_LAMPS.head[1], nose.z).project(camera); if (_deathAt.z < 1 && Math.abs(_deathAt.x) < 1.4 && Math.abs(_deathAt.y) < 1.4) u.uSwellAt.value.set(_deathAt.x * .5 + .5, _deathAt.y * .5 + .5); }
   }
   const flashed = SKY_FLASH[d.by];
@@ -6450,7 +6491,7 @@ function deathCamera(d) {
     camera.position.set(H.x, H.y + .22 + .4 * sstep(0, 1, k), H.z); camera.lookAt(H.x, H.y + 30, H.z); fov = Math.max(92, 2 * Math.atan(1.05 / camera.aspect) * 180 / Math.PI) - 10 * k;
   } else if (d.by === 'train') {
     // rising off him, looking at whatever's going by
-    const tr = trains.train; let best = null, far = Infinity;
+    const tr = trains.trains.includes(trainGotBy) ? trainGotBy : trains.train; let best = null, far = Infinity;
     if (tr) for (const c of tr.cars) { const f = Math.hypot(c.x - H.x, c.z - H.z); if (f < far) { far = f; best = c; } }
     _deathLook.set(best ? best.x : H.x, RAIL_TOP + 2, best ? best.z : H.z);
     const ax = _deathLook.x - H.x, az = _deathLook.z - H.z, l = Math.hypot(ax, az) || 1;
@@ -6813,10 +6854,11 @@ function hitsWall(x, z, y, list) {
   }
   return false;
 }
-// The one train, from src/trains.js. What it looks like and what it does are further down, by what's on the road.
+// The trains, from src/trains.js: in the story the one, and in the town everyone shares two at once, to the town's clock, with the local
+// standing on the siding in town while the freight goes by (CHUNKY-153). What they look like and what they do are further down, by what's on the road.
 const trainRand = (() => { let s = 20261102; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
 let trainsOn = !new URLSearchParams(location.search).has('test');
-const trains = createTrains(RAIL, { crossings: RAIL_CROSSINGS, posts: TRESTLES, tuning: FEW ? { cars: [10, 16] } : {}, world: {
+const trains = createTrains(RAIL, { crossings: RAIL_CROSSINGS, posts: TRESTLES, tuning: FEW ? { cars: [10, 16] } : {}, timetable: SHARED ? { siding: SIDING } : null, world: {
   rand: trainRand,
   start: (tr) => { for (const c of tr.cars) { const list = TRAIN_PAINTS[c.kind]; c.paint = new THREE.Color(list[Math.floor(c.seed * 97) % list.length]); } },
   horn: (g, tr) => trainHorn(g, tr),
@@ -6824,7 +6866,7 @@ const trains = createTrains(RAIL, { crossings: RAIL_CROSSINGS, posts: TRESTLES, 
 } });
 function blocked(x, z, y) {
   if (!MAP.inBounds(x, z)) return true;
-  if (trains.train && y > TOWN_Y - 2 && trains.at(x, z, .15)) return true;
+  if (trains.trains.length && y > TOWN_Y - 2 && trains.at(x, z, .15)) return true;
   const cell = (Math.floor(x / 16) + 32768) * 65536 + Math.floor(z / 16) + 32768, list = solidCells.get(cell);
   if (list) for (const [x0, x1, z0, z1, top] of list) if (x > x0 - .3 && x < x1 + .3 && z > z0 - .3 && z < z1 + .3 && y < top - .25) return true;
   const walls = wallCells.get(cell);
@@ -7960,8 +8002,9 @@ function ram(x, z, y, speed, dirx, dirz, mass, self = null) {
   return { energy: r.used * SMASH_J, gone: r.gone };
 }
 
-// ---------------- the train. src/trains.js says where it is, and this is what it looks like and what it does.
-const TRAIN_CAP = { loco: 2, box: 26, hopper: 26, tank: 26 }, TRAIN_SEE = 240, TRAIN_NEAR = 150, RAIL_TOP = Y0 + .25;
+// ---------------- the train. src/trains.js says where it is, and this is what it looks like and what it does. Online there are two at
+// once, so there's room for a freight's locomotives and cars and the local's together.
+const TRAIN_CAP = { loco: 3, box: 32, hopper: 32, tank: 32 }, TRAIN_SEE = 240, TRAIN_NEAR = 150, RAIL_TOP = Y0 + .25;
 const TRAIN_PAINTS = { loco: ['#46586a', '#5a4638', '#4b5a44', '#5e4c3e'], box: ['#7d5638', '#8c5636', '#5e6470', '#7f6a46', '#6b4234'], hopper: ['#9a9482', '#7e8488', '#8c8570'], tank: ['#3a3a42', '#4e4e58', '#6a6e74'] };
 const trainGeos = trainGeometries(), trainGroup = new THREE.Group(), trainBodies = {}, trainLines = {}, trainSeeds = {}, trainUsed = {};
 trainGroup.visible = false; scene.add(trainGroup);
@@ -7974,17 +8017,20 @@ for (const [kind, n] of Object.entries(TRAIN_CAP)) {
 }
 // Its lights: a star down the line, the same size however far off, since that's what you see first, a glare when it's close, and the track lit up ahead of it. None of it's a real light.
 const lampCloud = (n, material) => { const p = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage)).setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage)), new THREE.PointsMaterial({ map: radialTex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, ...material })); p.frustumCulled = false; p.geometry.setDrawRange(0, 0); p.renderOrder = 3; scene.add(p); return p; };
-const trainStar = lampCloud(4, { size: 26, sizeAttenuation: false }), trainGlare = lampCloud(4, { size: 7, sizeAttenuation: true });
-const trainPool = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 1, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: radialTex, color: '#ffe2b0', transparent: true, opacity: .55, depthWrite: false, blending: THREE.AdditiveBlending }));
-trainPool.frustumCulled = false; trainPool.visible = false; trainPool.renderOrder = 2; scene.add(trainPool);
+const trainStar = lampCloud(8, { size: 26, sizeAttenuation: false }), trainGlare = lampCloud(6, { size: 7, sizeAttenuation: true });
+// the track lit ahead of each, in one mesh, which is the same three things made as when there was the one train, so the opening's random
+// numbers, which three.js draws on for each thing's id, are where they were
+const trainPool = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1, 1, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: radialTex, color: '#ffe2b0', transparent: true, opacity: .55, depthWrite: false, blending: THREE.AdditiveBlending }), 2);
+trainPool.frustumCulled = false; trainPool.count = 0; trainPool.renderOrder = 2; scene.add(trainPool);
 function drawTrain() {
-  const tr = trains.train;
+  const list = trains.trains;
   drawGates();
-  trainGroup.visible = trainPool.visible = !!tr;
-  if (!tr) { trainStar.geometry.setDrawRange(0, 0); trainGlare.geometry.setDrawRange(0, 0); return; }
+  trainGroup.visible = list.length > 0;
+  trainPool.count = list.length;
+  if (!list.length) { trainStar.geometry.setDrawRange(0, 0); trainGlare.geometry.setDrawRange(0, 0); return; }
   const cx = camera.position.x, cz = camera.position.z;
   for (const k in TRAIN_CAP) trainUsed[k] = 0;
-  for (const c of tr.cars) {
+  for (const tr of list) for (const c of tr.cars) {
     if (Math.abs(c.x - cx) > TRAIN_SEE || Math.abs(c.z - cz) > TRAIN_SEE) continue;
     const n = trainUsed[c.kind], b = trainBodies[c.kind];
     if (n >= TRAIN_CAP[c.kind]) continue;
@@ -7993,9 +8039,9 @@ function drawTrain() {
     b.setColorAt(n, c.paint); trainSeeds[c.kind].array[n] = c.seed;
   }
   for (const k in TRAIN_CAP) { const b = trainBodies[k], n = trainUsed[k]; b.count = trainLines[k].count = n; b.visible = trainLines[k].visible = n > 0; if (n) { b.instanceMatrix.needsUpdate = true; b.instanceColor.needsUpdate = true; trainSeeds[k].needsUpdate = true; } }
-  // the lamps. A car's left is (fz, -fx).
-  const pos = trainStar.geometry.attributes.position, col = trainStar.geometry.attributes.color, nose = tr.cars[0], last = tr.cars[tr.cars.length - 1];
-  let n = 0;
+  // the lamps, each train's four and the glare off three of them. A car's left is (fz, -fx).
+  const pos = trainStar.geometry.attributes.position, col = trainStar.geometry.attributes.color, gp = trainGlare.geometry.attributes.position, gc = trainGlare.geometry.attributes.color;
+  let n = 0, glared = 0;
   const cy = camera.position.y;
   // Further off than the ground goes, the skyline's in the way, and it's only the hills' trees, so a lamp's drawn nearer on the same line from the camera: it's the same size however far off, and whatever's close still hides it.
   const lamp = (c, lx, ly, lz, r, g, b) => {
@@ -8004,21 +8050,24 @@ function drawTrain() {
     if (d > TRAIN_NEAR) { const k = TRAIN_NEAR / d, seen = y + hillUp(x, z); x = cx + (x - cx) * k; z = cz + (z - cz) * k; y = cy + (seen - cy) * k - hillUp(x, z); }
     pos.setXYZ(n, x, y, z); col.setXYZ(n, r, g, b); n++;
   };
-  const away = Math.hypot(cx - nose.x, cz - nose.z) || 1, front = ((cx - nose.x) * nose.fx + (cz - nose.z) * nose.fz) / away, H = TRAIN_LAMPS.head, D = TRAIN_LAMPS.ditch;
-  const k = sstep(-.1, .4, front) * (.45 + .55 * (1 - sstep(150, 1100, away))) * (MAP.railGrid.nearest(cx, cz) < 24 || away < TRAIN_NEAR ? 1 : 1 - sstep(TRAIN_NEAR, 500, away));
-  // the two down low take it in turns as it comes up to a crossing, as they do
-  const ditching = !reduceMotion && trains.gates.some((g) => g.shut && (g.s - tr.head) * tr.dir > 0 && (g.s - tr.head) * tr.dir < 200), flip = Math.floor(time * 3) % 2;
-  lamp(nose, H[0], H[1], H[2], k, k * .92, k * .7);
-  lamp(nose, D[0], D[1], D[2], k * .8 * (ditching && flip ? .1 : 1), k * .72 * (ditching && flip ? .1 : 1), k * .5 * (ditching && flip ? .1 : 1));
-  lamp(nose, -D[0], D[1], D[2], k * .8 * (ditching && !flip ? .1 : 1), k * .72 * (ditching && !flip ? .1 : 1), k * .5 * (ditching && !flip ? .1 : 1));
-  const T = TRAIN_LAMPS.tail, seen = sstep(-.1, .4, -((cx - last.x) * last.fx + (cz - last.z) * last.fz) / (Math.hypot(cx - last.x, cz - last.z) || 1)), blink = reduceMotion || Math.floor(time * 1.4) % 2 ? 1 : .08;
-  lamp(last, T[0], T[1], -last.len / 2 - .05, seen * blink, seen * blink * .08, seen * blink * .05);
-  trainStar.geometry.setDrawRange(0, n); pos.needsUpdate = col.needsUpdate = true;
-  // the glare's only for what's near, and a point that's nearly touching the camera would be as big as the screen
-  const gp = trainGlare.geometry.attributes.position, gc = trainGlare.geometry.attributes.color, close = sstep(3, 9, away) * (1 - sstep(70, 200, away));
-  for (let i = 0; i < 3; i++) { gp.setXYZ(i, pos.getX(i), pos.getY(i), pos.getZ(i)); gc.setXYZ(i, col.getX(i) * close, col.getY(i) * close, col.getZ(i) * close); }
-  trainGlare.geometry.setDrawRange(0, 3); gp.needsUpdate = gc.needsUpdate = true;
-  trainPool.position.set(nose.x + nose.fx * 42, TOWN_Y + .14, nose.z + nose.fz * 42); trainPool.rotation.y = nose.yaw; trainPool.scale.set(15, 1, 72);
+  list.forEach((tr, i) => {
+    const nose = tr.cars[0], last = tr.cars[tr.cars.length - 1], first = n;
+    const away = Math.hypot(cx - nose.x, cz - nose.z) || 1, front = ((cx - nose.x) * nose.fx + (cz - nose.z) * nose.fz) / away, H = TRAIN_LAMPS.head, D = TRAIN_LAMPS.ditch;
+    const k = sstep(-.1, .4, front) * (.45 + .55 * (1 - sstep(150, 1100, away))) * (MAP.railGrid.nearest(cx, cz) < 24 || away < TRAIN_NEAR ? 1 : 1 - sstep(TRAIN_NEAR, 500, away));
+    // the two down low take it in turns as it comes up to a crossing, as they do, and not for one shut for the other train while this one stands
+    const ditching = !reduceMotion && going(tr) && trains.gates.some((g) => g.shut && (g.s - tr.head) * tr.dir > 0 && (g.s - tr.head) * tr.dir < 200), flip = Math.floor(time * 3) % 2;
+    lamp(nose, H[0], H[1], H[2], k, k * .92, k * .7);
+    lamp(nose, D[0], D[1], D[2], k * .8 * (ditching && flip ? .1 : 1), k * .72 * (ditching && flip ? .1 : 1), k * .5 * (ditching && flip ? .1 : 1));
+    lamp(nose, -D[0], D[1], D[2], k * .8 * (ditching && !flip ? .1 : 1), k * .72 * (ditching && !flip ? .1 : 1), k * .5 * (ditching && !flip ? .1 : 1));
+    const T = TRAIN_LAMPS.tail, seen = sstep(-.1, .4, -((cx - last.x) * last.fx + (cz - last.z) * last.fz) / (Math.hypot(cx - last.x, cz - last.z) || 1)), blink = reduceMotion || Math.floor(time * 1.4) % 2 ? 1 : .08;
+    lamp(last, T[0], T[1], -last.len / 2 - .05, seen * blink, seen * blink * .08, seen * blink * .05);
+    // the glare's only for what's near, and a point that's nearly touching the camera would be as big as the screen
+    const close = sstep(3, 9, away) * (1 - sstep(70, 200, away));
+    for (let j = first; j < first + 3; j++) { gp.setXYZ(glared, pos.getX(j), pos.getY(j), pos.getZ(j)); gc.setXYZ(glared, col.getX(j) * close, col.getY(j) * close, col.getZ(j) * close); glared++; }
+    trainPool.setMatrixAt(i, _m.compose(_v.set(nose.x + nose.fx * 42, TOWN_Y + .14, nose.z + nose.fz * 42), _q.setFromAxisAngle(UP, nose.yaw), _s.set(15, 1, 72)));
+  });
+  trainStar.geometry.setDrawRange(0, n); pos.needsUpdate = col.needsUpdate = trainPool.instanceMatrix.needsUpdate = true;
+  trainGlare.geometry.setDrawRange(0, glared); gp.needsUpdate = gc.needsUpdate = true;
 }
 // The gates. Down in about five seconds and up in about seven.
 const gateArmGeo = gateArm(), GATE_N = GATE_ARMS.length;
@@ -8041,7 +8090,7 @@ function drawGates() {
     gateArms.instanceMatrix.needsUpdate = true; gatesDrawn = true;
   }
   let n = 0;
-  if (seen && trains.train) {
+  if (seen && trains.trains.length) {
     const pos = gateLamps.geometry.attributes.position, col = gateLamps.geometry.attributes.color, flip = Math.floor(time * 1.7) % 2 ? 1 : -1;
     for (const l of GATE_LAMPS) {
       if (!l.gate.shut) continue;
@@ -8067,9 +8116,9 @@ function trainHorn(g, tr) {
 const trainHit = { x: 0, z: 0, vx: 0, vz: 0, vy: 0, hard: false, seconds: 0, spin: 0 };
 function trainThrows(x, z, y) {
   if (y < TOWN_Y - 2) return null;
-  const c = trains.at(x, z, .3);
-  if (!c) return null;
-  const tr = trains.train, side = trains.side(c, x, z), ax = c.fz * side, az = -c.fx * side, along = (x - c.x) * c.fx + (z - c.z) * c.fz, front = c === tr.cars[0] && along > c.len / 2 - 2.5, r = trainRand(), H = trainHit;
+  const c = trains.at(x, z, .3), tr = c && trains.of(c);
+  if (!going(tr)) return null;
+  const side = trains.side(c, x, z), ax = c.fz * side, az = -c.fx * side, along = (x - c.x) * c.fx + (z - c.z) * c.fz, front = c === tr.cars[0] && along > c.len / 2 - 2.5, r = trainRand(), H = trainHit;
   H.x = c.x + c.fx * along + ax * (c.half + .5); H.z = c.z + c.fz * along + az * (c.half + .5);
   const ahead = front ? tr.speed * (.6 + r * .35) : 0, off = front ? 7 + r * 6 : 7 + r * 2;
   H.vx = c.fx * ahead + ax * off; H.vz = c.fz * ahead + az * off; H.vy = front ? 5 + r * 5 : 2.5; H.hard = front; H.seconds = DOWN_FOR.train[+front] + r * (front ? 10 : 6);
@@ -8092,11 +8141,11 @@ function trainHitsVehicle(v, c, tr) {
   if (!reduceMotion) cam.shake = Math.max(cam.shake, .6 * Math.max(.2, 1 - Math.hypot(player.pos.x - v.x, player.pos.z - v.z) / 40));
   if (folkOut) horde.noise(v.x, v.z, 60, 3);
 }
-// It doesn't stop for him, and there's no surviving it.
-let trainGot = false, flungUntil = 0;
+// It doesn't stop for him, and there's no surviving it. Which one it was is kept for the fever, since there can be two.
+let trainGot = false, flungUntil = 0, trainGotBy = null;
 function trainGotHim(c, tr) {
   const P = player.pos, side = trains.side(c, P.x, P.z), ax = c.fz * side, az = -c.fx * side, along = (P.x - c.x) * c.fx + (P.z - c.z) * c.fz;
-  trainGot = true; flungUntil = time + 1.2;
+  trainGot = true; flungUntil = time + 1.2; trainGotBy = tr;
   P.x = c.x + c.fx * along + ax * (c.half + .5); P.z = c.z + c.fz * along + az * (c.half + .5);
   player.kb.set(c.fx * tr.speed * .7 + ax * 9, c.fz * tr.speed * .7 + az * 9); player.vy = 7; player.grounded = false; player.inv = 1.6;
   SFX.play('hit.flesh', { gain: 1.3 }); SFX.play('hurt');
@@ -8105,29 +8154,39 @@ function trainGotHim(c, tr) {
   after(1.1, () => { trainGot = false; if (S.mode === 'town' || S.mode === 'grabbed') die('train'); });
 }
 let trainLoud = false;
+// A train that's going, which is all that hits anything: the local standing on the siding is only in the way
+const going = (tr) => tr && tr.speed >= 1;
 function updateTrains(dt) {
   const P = player.pos, me = driving ?? P;
-  trains.update(dt, { x: me.x, z: me.z });
+  trains.update(dt, { x: me.x, z: me.z }, net ? net.wall() / 1000 : 0);
   moveGates(dt);
-  const tr = trains.train;
   let bell = 0;
   for (const g of trains.gates) if (g.shut) bell = Math.max(bell, 1 - Math.hypot(g.x - me.x, g.z - me.z) / 110);
   SFX.loop('crossing.bell', Math.max(0, bell) ** 2);
-  if (!tr) { if (trainLoud) { SFX.loop('train.rumble', 0); SFX.loop('train.clatter', 0); trainLoud = false; } return; }
-  // heard a long way off, and it comes up through your feet
-  const gap = tr.gap, rate = 1 + tr.closing / 340;
-  SFX.loop('train.rumble', Math.min(1, (1 - Math.min(1, gap / 1100)) ** 2 * 1.2), rate);
-  SFX.loop('train.clatter', (1 - Math.min(1, gap / 90)) ** 2, rate);
-  trainLoud = true;
-  if (gap < 34 && !reduceMotion) cam.shake = Math.max(cam.shake, .3 * (1 - gap / 34));
-  if (gap > 340) return;
-  if (!driving && !trainGot && (S.mode === 'town' || S.mode === 'grabbed') && P.y > TOWN_Y - 2 && trains.at(P.x, P.z, .05)) trainGotHim(trains.at(P.x, P.z, .05), tr);
-  for (const v of VEHICLES) {
-    if (v.kid || v.x < tr.x0 || v.x > tr.x1 || v.z < tr.z0 || v.z > tr.z1 || v.y < TOWN_Y - 2 || time - (v.trainAt ?? -9) < 1.5) continue;
-    const fx = Math.sin(v.yaw) * v.K.length * .42, fz = Math.cos(v.yaw) * v.K.length * .42, w = v.K.width / 2, c = trains.at(v.x, v.z, w) ?? trains.at(v.x + fx, v.z + fz, w) ?? trains.at(v.x - fx, v.z - fz, w);
-    if (c) trainHitsVehicle(v, c, tr);
+  if (!trains.trains.length) { if (trainLoud) { SFX.loop('train.rumble', 0); SFX.loop('train.clatter', 0); trainLoud = false; } return; }
+  // heard a long way off, and it comes up through your feet, the loudest of them the one you hear. One standing is only its engine running.
+  let rumble = 0, clatter = 0, rate = 1;
+  for (const tr of trains.trains) {
+    const r = Math.min(1, (1 - Math.min(1, tr.gap / 1100)) ** 2 * 1.2) * (going(tr) ? 1 : .5), c = (1 - Math.min(1, tr.gap / 90)) ** 2 * Math.min(1, tr.speed / 8);
+    if (r > rumble) { rumble = r; rate = 1 + tr.closing / 340; }
+    clatter = Math.max(clatter, c);
+    if (going(tr) && tr.gap < 34 && !reduceMotion) cam.shake = Math.max(cam.shake, .3 * (1 - tr.gap / 34));
   }
-  if (folkOut) horde.runOver(trainThrows);
+  SFX.loop('train.rumble', rumble, rate);
+  SFX.loop('train.clatter', clatter, rate);
+  trainLoud = true;
+  // what a car's in is asked of the car, since the one near him needn't be the one nearest
+  const hit = (c) => (going(trains.of(c)) ? c : null), got = hit(trains.at(P.x, P.z, .05));
+  if (got && !driving && !trainGot && (S.mode === 'town' || S.mode === 'grabbed') && P.y > TOWN_Y - 2) trainGotHim(got, trains.of(got));
+  for (const tr of trains.trains) {
+    if (tr.gap > 340 || !going(tr)) continue;
+    for (const v of VEHICLES) {
+      if (v.kid || v.x < tr.x0 || v.x > tr.x1 || v.z < tr.z0 || v.z > tr.z1 || v.y < TOWN_Y - 2 || time - (v.trainAt ?? -9) < 1.5) continue;
+      const fx = Math.sin(v.yaw) * v.K.length * .42, fz = Math.cos(v.yaw) * v.K.length * .42, w = v.K.width / 2, c = hit(trains.at(v.x, v.z, w)) ?? hit(trains.at(v.x + fx, v.z + fz, w)) ?? hit(trains.at(v.x - fx, v.z - fz, w));
+      if (c) trainHitsVehicle(v, c, trains.of(c));
+    }
+  }
+  if (folkOut && trains.trains.some((tr) => going(tr) && tr.gap <= 340)) horde.runOver(trainThrows);
 }
 // ---- the skillet. It's in his hand for as long as he's swinging it, which is all anyone sees of it.
 // With the mouse, what he swings at or throws at is what the camera's looking at. He keeps going the way he was going while he does.
@@ -9368,8 +9427,8 @@ ghost.position.set(-17.5, 1.3, 7.5);
 // town right now under it, over the gas station where everyone starts, and src/together.js is all the rest. `net` stays null in a game
 // on its own, which is what the few lines that mention it go by, and nothing of playing together is loaded there. The owner's link,
 // #hero=…, is kept on their phone the first time it's opened, for the town it came with and no other (as chunky.net.hero@ and the
-// ?net that came with it, like the rest of what src/together.js keeps), and it comes off the address so it isn't passed on.
-const SHARED = location.hostname === 'online.chunky.ms' || new URLSearchParams(location.search).has('net');
+// ?net that came with it, like the rest of what src/together.js keeps), and it comes off the address so it isn't passed on. Whether
+// it's the town everyone shares is SHARED, up by TEST, since the trains are made knowing.
 {
   const town = new URLSearchParams(location.search);
   if (location.hash.startsWith('#hero=')) { try { localStorage.setItem(`chunky.net.hero@${town.get('net') ?? ''}`, decodeURIComponent(location.hash.slice(6))); } catch { /* not kept */ } history.replaceState(null, '', location.pathname + location.search); }
@@ -9388,7 +9447,8 @@ const SHARED = location.hostname === 'online.chunky.ms' || new URLSearchParams(l
     hillUp, floorAt, onRoad, blocked: blockedInTown, markVehicle, toast, prompt, getOut, rattle,
     get time() { return time; }, get driving() { return driving; }, get swingT() { return swingT; },
     vehMoved() { vehDirty = true; },
-    trainsOff() { trainsOn = false; },
+    // once they're in, the trains run to the town's clock, and with ?test not until trains.go(), as in the story (CHUNKY-153)
+    trainsOnline() { trainsOn = !TEST; },
     // straight into town, where they're put
     toTown(at) {
       $('title').hidden = true; tidyOpening(); HP.kind = 'run'; onWakeBridge(); feverLeft = 0; feverTo(0); gifMat.uniforms.uFade.value = 1; startTown();
@@ -9426,7 +9486,7 @@ const SHARED = location.hostname === 'online.chunky.ms' || new URLSearchParams(l
     for (const id of ['chapter', 'start', 'free', 'forget']) $(id).hidden = true;
     const play = document.createElement('button'); play.className = 'big'; play.id = 'together'; play.textContent = 'Play';
     $('start').after(play);
-    // and behind it the town, as it is when it's shared, from the first frame: the opening's things put away, no trains, and the camera
+    // and behind it the town, as it is when it's shared, from the first frame: the opening's things put away, no trains till they're in, and the camera
     // across US 80 from the pumps, looking back at them under the canopy's light, and a little over it, so that the sky's behind the
     // title and the gas station's under it on a phone
     tidyOpening(); trainsOn = false; S.collapse = 99; S.flags.town = true; vehGroup.visible = true; gasMesh.visible = gasLine.visible = true;
@@ -9461,7 +9521,7 @@ if (TEST) {
     yard: { COURT, BALL, VOLLEY, TRAMP, ring: ballRing, spot: yardSpot, on: () => yardOn, pole: yardPole, ballWants, ballInReach, GEAR_SHED, BAT_AT, batInReach, onTrampoline, tool: () => (S.flags.bat ? batTool : castIron) },
     compound: { JAM, JAM_SHED, DECK, LAWN, CINEMA, CABIN, STUDIO, decks: CABIN_DECKS, onDeck: onCabinDeck, spot: screenSpot, screen: () => screenMesh, on: () => screenOn, frame: () => leaderTex.offset.x, flick: () => screenMat.color.r, projector: screenProjector, tank: shedTank, jamInReach, sign: TAXIDERMY_SIGN, front: FRONT, lot: SIGN_LOT },
     lures: { LYING, lyingNear, flying, popping, ALARMS, VEHICLES, thrownNow, canAlarm, parkedAt, soundAlarm, mesh: lureMeshes, glows: lureGlows },
-    horde, folks, traffic, homes: HOMES, putBack, HOME: { SEE: HOME_SEE, PUT: HOME_PUT }, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, horns: hornLog, blasts: () => blastsBlown, go() { trainsOn = true; }, on: () => trainsOn, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, kept: putBack.length, roused: horde.active.filter((s) => s.state === ROUSED).length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf,
+    horde, folks, traffic, homes: HOMES, putBack, HOME: { SEE: HOME_SEE, PUT: HOME_PUT }, fillTown() { townFull = true; }, shambling: () => shambling, trains: { t: trains, horns: hornLog, blasts: () => blastsBlown, go() { trainsOn = true; }, on: () => trainsOn, siding: SIDING, got: () => trainGot, TRESTLES, TRESTLE, onTrestle, RAIL, arms: GATE_ARMS, MARKER: RAIL_MARKER, markerInReach: railMarkerInReach, markerRead: () => railMarkerRead, drawn: () => Object.values(trainBodies).reduce((n, b) => n + (b.visible ? b.count : 0), 0), star: trainStar, loud: () => trainLoud }, bringOutCrowd, crowd: () => ({ out: crowdOut, all: horde.all.length, kept: putBack.length, roused: horde.active.filter((s) => s.state === ROUSED).length, active: horde.active.length, shown: crowdShown.length, drawn: crowdBodies.count, degrees: crowdShown.map((s) => s.far), burnt: horde.all.filter((s) => s.quiet === false).length, line: BURNT_LINE }), stance: stanceOf,
     // the river's, for the tests: which way it flows and where it brings someone up, and what's drawn of someone soaked: how soaked the graphics card has them, the snakes on sleeves and the ones falling
     river: { path: RIVER, comeUp, wetOn: (s) => { const i = crowdShown.indexOf(s); return i < 0 ? null : crowdWet.getX(i); }, moccasins: () => SNAKES.map((s) => ({ x: s.p.x, z: s.p.z, state: s.state, shown: s.head.visible })), snakes: () => ({ drawn: crowdSnakes.count, shown: crowdSnakes.visible && crowdGroup.visible, falling: fallen.length, geometry: crowdSnakeGeo.attributes.position.count, calls: [crowdSnakes, crowdSnakeLine].filter((m) => m.count > 0).length }), arm: (s) => (s.who ? s.who.id : s.look) % 2,
       // where the snake is on the sleeve it hangs from, which doesn't change at all with reduced motion

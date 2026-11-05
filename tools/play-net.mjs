@@ -35,9 +35,10 @@ const on = (p, fn, arg) => p.page.evaluate(fn, arg);
 const away = (p, q) => Math.hypot(p.x - q.x, p.z - q.z);
 
 const HERO = 'a-secret-only-the-owner-has-1386', LOOKS = 8;
-// the town's time of day, for what's broken, which the check moves on to tomorrow
-const DAY = 864e5, clock = { at: Date.now() };
-const server = await startServer({ port: 0, quiet: true, heroHash: createHash('sha256').update(HERO).digest('hex'), wall: () => clock.at });
+// the town's clock, which goes as a clock does, for the trains, and which the check moves on to tomorrow, for what's broken. It's three
+// hours ahead of this machine's, so that a phone going by its own clock and not the town's is found out.
+const DAY = 864e5, clock = { skip: 3 * 36e5 };
+const server = await startServer({ port: 0, quiet: true, heroHash: createHash('sha256').update(HERO).digest('hex'), wall: () => Date.now() + clock.skip });
 const query = `?test&net=ws://localhost:${server.port}`;
 // One on a keyboard at a phone's size, and one that's a phone, with touch
 const a = await serveAndOpen({ viewport: { width: 390, height: 844 }, query }), b = await serveAndOpen({ touch: true, query });
@@ -813,8 +814,8 @@ try {
     const right = (f) => f.hands[0].map((v) => v.toFixed(2)).join(', '), thigh = (f) => f.pan && !f.bat && f.hands[0][0] < -.25 && f.hands[0][1] < -.45;
     check(`A sees him carry the skillet at his right thigh, with his right hand at ${right(seen)}`, thigh(seen), seen);
     let swung = watched();
-    let frames = await swung, m = mirrored(frames, hisOwn.pan), out = m.drawn.filter((f) => f.hands[1][0] > .65 && f.hands[1][1] > -.4);
     await c.page.keyboard.press('f');
+    let frames = await swung, m = mirrored(frames, hisOwn.pan), out = m.drawn.filter((f) => f.hands[1][0] > .65 && f.hands[1][1] > -.4);
     check(`and A sees him swing the skillet as his own screen draws it, ${m.drawn.length} frames of ${frames.length} in ${m.drawings} of its drawings and ${m.odd.length} it never draws, his left out for balance in ${out.length}, and at his thigh after as he is on his own`, m.drawings > 1 && !m.odd.length && out.length > 3 && m.rest && frames.every((f) => f.pan && !f.bat) && thigh(m.last), { which: m.which, odd: m.odd.slice(0, 2), last: m.last, his: hisOwn.pan.rest });
     await snap(a, '06-a-sees-the-hero');
     // and with the bat, it's over his right shoulder between swings, and swung in both hands across him
@@ -828,8 +829,8 @@ try {
     check(`and A sees him swing it as his own screen draws it, ${m.drawn.length} frames of ${frames.length} in ${m.drawings} of its drawings and ${m.odd.length} it never draws, both fists across him in ${across.length}, and back over his shoulder after as he is on his own`, m.drawings > 1 && !m.odd.length && across.length > 3 && m.rest && frames.every((f) => f.bat && !f.pan) && m.last.hands[0][1] > -.25, { which: m.which, odd: m.odd.slice(0, 2), last: m.last, his: hisOwn.bat.rest });
     await snap(a, '06-a-sees-the-hero-with-the-bat');
     await on(c, () => { __game.S.flags.bat = false; });
-    await onRoad(c, A.x + 60, await on(c, (x) => __game.map.zAt('us_80', x), A.x + 60));
     // and on everyone else's map he's in the orange of his own arrow, a way up the road so that A's arrow isn't over him
+    await onRoad(c, A.x + 60, await on(c, (x) => __game.map.zAt('us_80', x), A.x + 60));
     await sleep(600);
     const H = await me(c);
     await a.page.keyboard.press('m');
@@ -907,7 +908,7 @@ try {
     if (site) {
       for (const p of [a, b, d]) await onRoad(p, spot.x + (p === d ? 6 : p === b ? -6 : 0), await on(p, (x) => __game.map.zAt('us_80', x), spot.x));
       await sleep(1500);
-      clock.at += DAY + 60000;
+      clock.skip += DAY + 60000;
       const healed = await until(async () => (await Promise.all([a, b, d].map((p) => brokenNow(p, site)))).every((w) => !w.held && !w.prop && !w.treeDown && !w.up), 15000);
       for (const [name, p] of [['A', a], ['B', b], ['the hero', d]]) {
         const w = await brokenNow(p, site);
@@ -915,6 +916,23 @@ try {
           !!healed && !w.held && !w.wall && w.stops > -1e8 && !w.prop && w.propStops && !w.treeDown && !w.up && !w.wrecked && w.home < .05 && w.whole, w);
       }
     }
+  }
+
+  // ---------------- the trains (CHUNKY-153), last, so that nothing above has one going by: none with ?test until they're asked for, and
+  // then the same ones in the same places on every phone, from the town's clock as its welcome said it was, three hours ahead of this
+  // machine's, and never the phone's own
+  {
+    const held = await Promise.all([a, b].map((p) => on(p, () => ({ on: __game.trains.on(), out: __game.trains.t.trains.length }))));
+    check(`with ?test there are no trains in the town everyone shares until they're asked for: ${held.map((h) => h.out).join(' and ')}`, held.every((h) => !h.on && !h.out), held);
+    await Promise.all([a, b].map((p) => on(p, () => __game.trains.go())));
+    await sleep(1500);
+    const seen = (p) => on(p, () => ({ wall: __net.link.wall(), trains: __game.trains.t.trains.map((tr) => ({ run: tr.run, head: tr.head, dir: tr.dir, speed: tr.speed, kinds: tr.cars.map((c) => c.kind).join(' '), local: tr.local })).sort((x, y) => x.run - y.run) }));
+    const [sa, sb] = await Promise.all([seen(a), seen(b)]), welcomed = Date.now() + 3 * 36e5;
+    const due = await on(a, (s) => { const P = __game.trains.t.plan; return P.runs(s).filter((n) => P.where(n, s)); }, welcomed / 1000);
+    check(`each phone keeps the town's clock, ${((sa.wall - welcomed) / 1000).toFixed(2)} s and ${((sb.wall - welcomed) / 1000).toFixed(2)} s from it, three hours from this machine's`, Math.abs(sa.wall - welcomed) < 500 && Math.abs(sb.wall - welcomed) < 500, { a: sa.wall, b: sb.wall, welcomed });
+    check(`the trains out are the ones the town's clock has out: ${sa.trains.map((t) => `${t.local ? 'the local' : 'a freight'} (${t.run})`).join(' and ') || 'none'}`, sa.trains.length > 0 && sa.trains.map((t) => t.run).join() === due.join(), { a: sa.trains.map((t) => t.run), due });
+    const apart = sa.trains.map((t, i) => { const o = sb.trains[i]; return o && o.run === t.run && o.kinds === t.kinds ? Math.abs(t.head + t.dir * t.speed * (sb.wall - sa.wall) / 1000 - o.head) : Infinity; });
+    check(`and B has the same ones, each the same cars in the same place on it: ${apart.map((d) => `${d.toFixed(2)} m`).join(' and ')} apart`, sb.trains.length === sa.trains.length && apart.every((d) => d < 3), { a: sa.trains, b: sb.trains });
   }
 
   // ---------------- what it costs

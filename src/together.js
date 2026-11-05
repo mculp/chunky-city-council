@@ -243,7 +243,7 @@ export function together(G) {
     panel.hidden = true;
     // back after the line dropped: nothing to start again
     if (started) return;
-    started = true; G.trainsOff();
+    started = true; G.trainsOnline();
     if (m.saved) restore(m.saved);
     // and what the cast remember of them is the town's, and goes to it a change at a time. A town from before it kept them doesn't
     // say, and leaves it on the phone as it was.
@@ -696,6 +696,8 @@ export function together(G) {
     get name() { return you.name; },
     // where they come to when a try ends, which is by the pumps where they start
     spot: () => startSpot(),
+    // the town's clock in ms, which the trains run to, as of its welcome, or the phone's own until there's been one (CHUNKY-153)
+    wall: () => (link ? link.wall() : Date.now()),
     // where he's come to at the other ring, at once, the way where a vehicle was left goes first, so that the jump arrives as one step
     jumped() { if (!link || alone || !started) return; const P = G.player.pos; link.now(P.x, P.y, P.z, G.player.yaw, { swings, waves, how: howNow(), ...holding() }); },
     // after the world's placed, each frame that's drawn

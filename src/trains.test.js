@@ -225,6 +225,12 @@ test('online every phone has the same trains in the same places, from the town\'
   assert.deepEqual(what(a), what(b));
 });
 
+test('online there\'s always a train out and never more than two, all through a cycle, which is as many as the page has lamps for', () => {
+  const t = online(), A = E + 7 * P, out = new Set();
+  runIn(t, A - P, A + P, { x: 5100, z: 30 }, .5, () => out.add(t.trains.length));
+  assert.deepEqual([...out].sort(), [1, 2]);
+});
+
 test('a local stands on the siding with its engine running while the freight comes, the long way round', () => {
   const t = online(), A = E + 5 * P;
   t.update(0, { x: 5100, z: 30 }, A + STAND / 2);
@@ -346,6 +352,18 @@ test('what\'s in a run is the same wherever it\'s asked, and a local\'s as many 
   }
 });
 
+test('what\'s clear of the siding\'s own track, from one switch to the other', () => {
+  const mid = (SIDING.s0 + SIDING.s1) / 2, s = SIDING.s0 + 5;
+  assert.equal(SIDING.clear(mid, -SIDING.gap, 6), false, 'on it');
+  assert.equal(SIDING.clear(mid, -SIDING.gap - 5.9, 6), false, 'beside it');
+  assert.equal(SIDING.clear(mid, -SIDING.gap - 6.1, 6), true, 'far enough off it');
+  assert.equal(SIDING.clear(mid, 2, 6), true, 'across the main line from it, which is the main line\'s to keep clear');
+  assert.equal(SIDING.clear(s, -SIDING.off(s) - 1, 6), false, 'by the west switch, where it\'s coming off the main line');
+  assert.equal(SIDING.clear(SIDING.s0 - 30, -SIDING.gap, 6), true, 'short of the west switch, where there isn\'t one');
+  assert.equal(SIDING.clear(SIDING.s1 + 30, -SIDING.gap, 6), true, 'and past the east one');
+  assert.equal(SIDING.clear(mid, -400, 6), true, 'a long way off');
+});
+
 test('on the real line the siding\'s on the bed between Mulberry St and Poplar St, beside the track and clear of Railroad St, and the timetable fits it', () => {
   const roads = JSON.parse(readFileSync(new URL('../data/roads.json', import.meta.url), 'utf8')), rail = JSON.parse(readFileSync(new URL('../data/railroad.json', import.meta.url), 'utf8'));
   const line = makeLine(roads.reference.railroad.lines[0].points), siding = makeSiding(line, rail.siding);
@@ -361,6 +379,8 @@ test('on the real line the siding\'s on the bed between Mulberry St and Poplar S
       near = Math.min(near, Math.hypot(x - ax - dx * u, z - az - dz * u));
     }
     assert.ok(near > street.width / 2 + CARS.box.half + 3, `${near.toFixed(1)} m from Railroad St at ${s.toFixed(0)}`);
+    // and what's clear of it goes round the line's bends with it
+    assert.ok(!siding.clear(x, z, 6) && siding.clear(q.x + q.tz * (siding.gap + 6.5), q.z - q.tx * (siding.gap + 6.5), 6), `what's clear of it at ${s.toFixed(0)}`);
   }
   // and over two cycles nothing meets, with the real line's bends
   const t = createTrains(line, { crossings: roads.reference.crossings.filter((c) => c.with === 'railroad'), timetable: { siding }, world: {} });

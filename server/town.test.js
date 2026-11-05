@@ -23,7 +23,7 @@ test('everyone who joins gets an id of their own, and a welcome with their name 
   const t = createTown(), a = t.join(hello({ name: 'Miss Bobby', look: 5 })), b = t.join(hello());
   assert.notEqual(a.id, b.id);
   const [welcome] = to(a.out, a.id);
-  assert.deepEqual({ ...welcome, cars: undefined, wrecks: undefined }, { t: 'welcome', id: a.id, name: 'Miss Bobby', look: 5, hero: false, saved: null, minds: {}, cars: undefined, wrecks: undefined });
+  assert.deepEqual({ ...welcome, cars: undefined, wrecks: undefined, now: undefined }, { t: 'welcome', id: a.id, name: 'Miss Bobby', look: 5, hero: false, saved: null, minds: {}, cars: undefined, wrecks: undefined, now: undefined });
 });
 
 test('everyone hears who\'s here each time someone comes', () => {
@@ -397,6 +397,14 @@ const wall3 = (over) => ({ k: 'b7301', x: 10, z: -20, n: 40, p: encodeParts([{ p
 // what someone new is told is broken, as they come in
 const wrecksNow = (t) => { const c = t.join(hello()); return to(c.out, c.id)[0].wrecks; };
 const carsNow = (t) => { const c = t.join(hello()); return to(c.out, c.id)[0].cars; };
+
+// CHUNKY-153: the trains run to the town's clock, so every phone is told it as it comes in
+test('a welcome says what time it is in town, by the town\'s own clock', () => {
+  const w = wall(1.79e12), t = createTown({ wall: w }), a = t.join(hello());
+  assert.equal(to(a.out, a.id)[0].now, 1.79e12);
+  w.now += DAY; const b = t.join(hello());
+  assert.equal(to(b.out, b.id)[0].now, 1.79e12 + DAY);
+});
 
 test('something broken on one phone is broken for everyone else in town, and for anyone who comes later', () => {
   const t = createTown(), a = inTown(t), b = inTown(t);

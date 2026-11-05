@@ -170,9 +170,10 @@ export function createWalkers({ delay = 100, ahead = 150, jump = 10 } = {}) {
 // It says hello as soon as it's open and sends nothing else until it's let in. A town that's full gets asked again after `full` ms;
 // one that turned it away for its name, for being an older game than the one in town, or because he's the hero on another phone
 // isn't asked again until again() is called, since asking again would get the same answer.
-export function connectNet({ url, WS = globalThis.WebSocket, clock = () => performance.now(), hello = () => ({}), status = () => {}, on = {}, retry = 2000, full = 10000 }) {
+// wall is the phone's own clock in ms, and wall() on what this returns is the town's, as of its welcome and half the way there and back.
+export function connectNet({ url, WS = globalThis.WebSocket, clock = () => performance.now(), wall = () => Date.now(), hello = () => ({}), status = () => {}, on = {}, retry = 2000, full = 10000 }) {
   const walkers = createWalkers(), every = 1000 / NET_RATE, count = { framesIn: 0, bytesIn: 0, framesOut: 0, bytesOut: 0 };
-  let sock = null, id = 0, openAt = 0, sendAt = 0, said = null, refused = null, stopped = false;
+  let sock = null, id = 0, openAt = 0, sendAt = 0, said = null, refused = null, stopped = false, helloAt = 0, ahead = 0;
   const tell = (s, m) => { if (s !== said) { said = s; status(s, m); } };
   const send = (data) => { sock.send(data); count.framesOut++; count.bytesOut += data.length; };
   function open() {
@@ -180,7 +181,7 @@ export function connectNet({ url, WS = globalThis.WebSocket, clock = () => perfo
     let me;
     try { me = sock = new WS(url); } catch { openAt = clock() + retry; tell('lost'); return; }
     me.binaryType = 'arraybuffer';
-    me.onopen = () => { if (sock === me) send(say({ t: 'hello', ...hello() })); };
+    me.onopen = () => { if (sock === me) { helloAt = clock(); send(say({ t: 'hello', ...hello() })); } };
     // one that's been let go of says nothing more
     me.onmessage = (e) => {
       if (sock !== me) return;
@@ -188,7 +189,7 @@ export function connectNet({ url, WS = globalThis.WebSocket, clock = () => perfo
       const m = decodeMessage(e.data);
       if (!m) return;
       if (m.players && !m.t) walkers.take(m.players.filter((p) => p.id !== id), clock());
-      else if (m.t === 'welcome') { id = m.id; tell('joined'); on.welcome?.(m); }
+      else if (m.t === 'welcome') { id = m.id; ahead = typeof m.now === 'number' ? m.now + (clock() - helloAt) / 2 - wall() : 0; tell('joined'); on.welcome?.(m); }
       else if (m.t === 'who') walkers.who(m.players ?? []);
       else if (m.t === 'car') on.car?.(m);
       else if (m.t === 'bump') on.bump?.(m);
@@ -236,5 +237,7 @@ export function connectNet({ url, WS = globalThis.WebSocket, clock = () => perfo
     // let go of the town, without a word, until again()
     close() { const was = sock; stopped = true; sock = null; id = 0; refused = null; walkers.clear(); sendAt = 0; was?.close(); },
     others() { return walkers.at(clock()); },
+    // the town's clock, which the trains run to, or the phone's own until a town's said what time it is
+    wall: () => wall() + ahead,
   };
 }

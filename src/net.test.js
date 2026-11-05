@@ -462,6 +462,28 @@ test('losing the connection empties the town, says so once, and tries again afte
   assert.deepEqual(said, ['joined', 'lost']);
 });
 
+test('it keeps the town\'s clock, as the welcome says it was, plus half the way there and back', () => {
+  let mine = 1_000_000;
+  const { net, t, socket } = link({ wall: () => mine });
+  assert.equal(net.wall(), 1_000_000, 'its own until the town says');
+  net.update(0, 0, 0, 0); t.now = 100; socket().opened();
+  t.now = 180; mine += 80;
+  socket().hear(say({ t: 'welcome', id: 4, now: 5_000_000 }));
+  assert.equal(net.wall(), 5_000_040);
+  mine += 1000; assert.equal(net.wall(), 5_001_040, 'and goes on from there');
+  // and again from a welcome after the line drops, with nothing kept from the first
+  socket().shut(); t.now = 3000; net.update(0, 0, 0, 0); socket().opened(); t.now = 3020; mine += 20;
+  socket().hear(say({ t: 'welcome', id: 4, now: 9_000_000 }));
+  assert.equal(net.wall(), 9_000_010);
+});
+
+test('a town that doesn\'t say what time it is leaves the phone on its own clock', () => {
+  let mine = 1_000_000;
+  const l = joined(link({ wall: () => mine }));
+  mine += 500;
+  assert.equal(l.net.wall(), 1_000_500);
+});
+
 test('a town the browser won\'t even ask, as a page on https won\'t ask one on ws://, is lost like any other and asked again later', () => {
   const said = [], t = { now: 0 }; let tries = 0;
   const WS = class { constructor() { tries++; throw new Error('An insecure WebSocket connection may not be initiated from a page loaded over HTTPS.'); } };
