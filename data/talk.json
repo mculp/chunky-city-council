@@ -43,11 +43,11 @@
         ]
       },
       "bobby": {
-        "first": "Come here, baby, let me see you in the light. Now, who are your people?",
+        "first": "Come here, baby, let me see you in the light. Mm-hm. You'll do.",
         "back": "There you are, sugar. I was hoping you'd come back by.",
         "any": [
           "You learn their name, you feed them, and you bring them what they lost. That's all church ever was, baby.",
-          "Get in the van. No, the back. The front's for the Lord and the casserole."
+          "Van's out front. Front seat's for the Lord and the casserole."
         ]
       }
     }
@@ -56,7 +56,7 @@
   "asks": {
     "none": "Right now there's nothing you can ask {them} to do, and nothing to sell {them}, trade, play, teach {them} or hire {them} for, so don't offer {them} any of that.",
     "some": "Right now you can ask {them} to {what}, and that's all you can ask. There's nothing to sell {them}, trade, play, teach {them} or hire {them} for, so don't offer {them} anything else. {They} can already say yes to that, so leave it out of your replies.",
-    "what": { "sweep": "sweep your steps, since the pantry's for folks who help" }
+    "what": { "sweep": "sweep your steps, since the pantry's for folks who help", "fishing": "come fishing with you at nine, at the hole you told {them} about" }
   },
   "rules": [
     "Answer with one JSON object and nothing else, like this:",

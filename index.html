@@ -102,8 +102,8 @@ body.talking #mini,body.talking #miniName{visibility:hidden}
 .rep-name{color:var(--dusk);justify-self:start}
 .mutter{position:fixed;left:0;top:0;z-index:3;pointer-events:none;font-size:10px;font-style:italic;letter-spacing:.03em;white-space:nowrap;color:var(--cream);text-shadow:0 0 3px var(--ink),0 1px 1px var(--ink);opacity:0;will-change:transform,opacity}
 .mutter[hidden]{display:none}
-#toniSays{position:fixed;left:0;top:0;z-index:3;pointer-events:none;max-width:min(230px,64vw);font-size:12px;line-height:1.3;letter-spacing:.02em;text-align:center;color:var(--cream);text-shadow:0 0 3px var(--ink),0 1px 1px var(--ink),0 0 7px var(--ink);opacity:0;will-change:transform,opacity}
-#toniSays[hidden]{display:none}
+#toniSays,#coopSays{position:fixed;left:0;top:0;z-index:3;pointer-events:none;max-width:min(230px,64vw);font-size:12px;line-height:1.3;letter-spacing:.02em;text-align:center;color:var(--cream);text-shadow:0 0 3px var(--ink),0 1px 1px var(--ink),0 0 7px var(--ink);opacity:0;will-change:transform,opacity}
+#toniSays[hidden],#coopSays[hidden]{display:none}
 @media (pointer:coarse){.rep-head{min-height:40px}}
 #prompt{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom, 0px) + 176px);transform:translateX(-50%);z-index:4;pointer-events:none;
   font-family:var(--f-display);font-size:15px;letter-spacing:.03em;background:var(--panel);border:1px solid var(--line);padding:8px 14px;width:max-content;max-width:calc(100vw - 62px);text-align:center}
@@ -238,7 +238,7 @@ body.talking #mute,body.talking #levels,body.talking #levelsBox{visibility:hidde
 </div>
 <div id="prompt" hidden></div>
 <div id="toast"></div>
-<div id="susMeters"></div><div id="mutters"></div><div id="toniSays" hidden></div>
+<div id="susMeters"></div><div id="mutters"></div><div id="toniSays" hidden></div><div id="coopSays" hidden></div>
 <div id="sub" hidden></div>
 <div id="flash"></div>
 <div class="card" id="card"><div><h2 id="cardH"></h2><p id="cardP"></p></div></div>
@@ -305,7 +305,7 @@ import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVe
 import { vehicleGeometries, doorGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
 import { makeLine, makeSiding, createTrains } from './src/trains.js';
 import { trainGeometries, TRAIN_LAMPS, gateArm } from './src/trainmodels.js';
-import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, dumpTrailer, discHarrow, logPile, dumpster, skid, feedBin, stockTank, frog, frogThroat, frogLids, gatorOnBench, BENCH_TOP, buckHead, struttingTurkey, flyingDuck, antlerPlaque, skullPlaque, ovalPlaque, hangingTools, shopClutter, wallClock } from './src/things.js';
+import { drumKit, guitar, amp, ampStack, keyboard, micStand, stool, couch, porchSwing, easel, workbench, projector, excavator, propaneTank, hotTub, boat, crate, volleyNet, trampoline, bat, cap, computerDesk, deskChair, narrowBed, discRack, GLASS, cemeteryStones, roundBale, tractor, utilityTrailer, dumpTrailer, discHarrow, logPile, dumpster, skid, feedBin, stockTank, frog, frogThroat, frogLids, gatorOnBench, BENCH_TOP, buckHead, struttingTurkey, flyingDuck, antlerPlaque, skullPlaque, ovalPlaque, hangingTools, shopClutter, wallClock, fishingRod, bobber, catfish, catfishLong, ROD_TIP } from './src/things.js';
 import { CEMETERY, layGraves, graveSolid, onSlab, slabHead, fromCemetery } from './src/graves.js';
 import { FRONTAGE, GRASS_PINES, woodsAlong, fenceAlong, inWoods, sidesOf } from './src/frontage.js';
 import { createSong } from './src/song.js';
@@ -314,6 +314,8 @@ import { VOLLEY, makeCourt, makeBall, ballInReach, bump, stepBall } from './src/
 import { FROGS, BEST, TONI, createToni, frogLine, askLine, forgetToni } from './src/toni.js';
 import { createSigns, dayOf, paintSign } from './src/signs.js';
 import { createPantry, PANTRY } from './src/pantry.js';
+import { createQuests, clockOf } from './src/quests.js';
+import { createFishing, FISH } from './src/fishing.js';
 import { createTalk, talkUrl, inDistress, changesNothing, heardAs, writtenOpener, writtenFallback, LIMITS as TALK_LIMITS } from './src/talk.js';
 import { makeLight, stepLight, lightAt } from './src/light.js';
 import { FEVER, feverAt, wakesAt } from './src/fever.js';
@@ -4945,6 +4947,26 @@ function poseHero(tq) {
   heroGerald.visible = !!S.items.gerald && (k === 'run' || k === 'air');
   const thick = HERO_BUILD.thick; R.arms[0].fist.scale.set(thick, thick * (heroGerald.visible ? GERALD_HOLD.flat : 1), thick);
   if (heroGerald.visible) heroGerald.position.copy(R.arm(0, GERALD_HOLD.at, GERALD_HOLD.hint, UP)).y += GERALD_HOLD.sit;
+  // His rod (CHUNKY-163): in both hands out over the water while there's a line out, its tip up the harder it pulls, and otherwise in his
+  // left hand at his side with its tip trailing behind him, while that hand's not throwing or bumping the ball. What he's caught hangs
+  // on a stringer from that hand along with the rod, the biggest of it showing, and while both hands are on the rod, at his left hip out
+  // past his hoodie, which hides anything nearer in.
+  const fv = fish.view(), fishing = fv.state !== 'idle', onFoot = (k === 'run' || k === 'air') && (S.mode === 'town' || S.mode === 'dialog');
+  heroRod.visible = !!S.items.rod && onFoot && (fishing || (!(throwT > 0) && !(bumpT > 0)));
+  let fistFish = null;
+  if (heroRod.visible && fishing) {
+    tool.visible = false;
+    const up = .5 + .5 * fv.strain + (fv.running && !reduceMotion ? Math.sin(time * 14) * .05 : 0), d = new THREE.Vector3(0, Math.sin(up), Math.cos(up));
+    heroRod.position.copy(R.arm(0, V3(-.06, -.3, .34), V3(-.7, -.3, -.25), d)).addScaledVector(d, -.16); heroRod.quaternion.setFromUnitVectors(UP, d);
+    R.arm(1, heroRod.position.clone().addScaledVector(d, .5), V3(.7, -.3, -.25), d);
+  } else if (heroRod.visible) {
+    const d = new THREE.Vector3(0, .4, -.92).normalize();
+    fistFish = R.arm(1, V3(.3, -.62, .04), V3(.7, -.35, -.25), d).clone();
+    heroRod.position.copy(fistFish).addScaledVector(d, -.16); heroRod.quaternion.setFromUnitVectors(UP, d);
+  }
+  showFish(caught.length ? Math.max(...caught) : 0);
+  heroFish.visible = !!caught.length && onFoot;
+  if (heroFish.visible) { if (fistFish) heroFish.position.copy(fistFish).add(STRINGER.fist); else heroFish.position.copy(STRINGER.hip); }
   R.strings(tq, k === 'hang' ? HP.lag : Math.sin(ph) * .1 * Math.min(1, HP.speed / 4.2));
 }
 
@@ -5111,7 +5133,7 @@ const pantryInk = new THREE.InstancedMesh(pantryCans.geometry, outlineMat(INK, 1
 function showPantry() { pantryCans.count = pantryInk.count = pantry.stock(today()); }
 
 // What else is in the store, on the shelves and the counter. No arrow points at any of it: it's there for whoever goes looking. Beans are beans, and he just holds on to the rest for now.
-const LOOT_NAMES = { bottle: 'Bottles', crackers: 'Firecrackers', fluid: 'Lighter fluid' };
+const LOOT_NAMES = { bottle: 'Bottles', crackers: 'Firecrackers', fluid: 'Lighter fluid', worms: 'Worms', catfish: 'Catfish' };
 const lootGroup = new THREE.Group(); scene.add(lootGroup); DISTANT.push({ obj: lootGroup, x: PLACES.gas.x + 48, z: PLACES.gas.z - 2, r: 90 });
 const LOOT_LOOKS = {};
 const LOOT = (() => {
@@ -6631,14 +6653,15 @@ function deathCamera(d) {
 // ---------------- dialogue: the words and what they do are in data/cast.json, and their own words, when there are any, come through src/talk.js
 const ACTIONS = { sweep: () => startSweep() };
 // What someone can ask him to do right now (CHUNKY-182), which is always one of his answers while it is, whether they're saying their
-// written lines or their own words, in the story or online. Each is the answer data/cast.json has for it. Today it's only Miss Bobby's
-// steps, while they want sweeping: in the story as its lines have it, and in a town that's shared as each player's own pantry has it.
+// written lines or their own words, in the story or online. Each is the answer data/cast.json has for it. It's Miss Bobby's steps, while
+// they want sweeping: in the story as its lines have it, and in a town that's shared as each player's own pantry has it. And it's Coop's
+// fishing hole while it stands (CHUNKY-163), in the story, with the two answers data/quests.json has for it, which are further down.
 const ASKS = { sweep: Object.values(people.data.dialogue).flatMap((n) => n.opts ?? []).find((o) => o.do === 'sweep') };
 const stepsDue = () => (SHARED ? pantry.owes(today()) > 0 : !(S.flags.ended ? pantry.sweptOn(today()) : S.flags.swept) && pantryOwes() > 0);
-const asksOf = (who) => (who === 'bobby' && stepsDue() ? ['sweep'] : []);
+const asksOf = (who) => (who === 'bobby' && stepsDue() ? ['sweep'] : who === 'coop' && coopAsks() ? ['fishing'] : []);
 // a line with what they can ask for among his answers where it isn't already, before the last of them
 function withAsks(node) {
-  const more = asksOf(node.whoId).map((k) => ASKS[k]).filter((a) => !node.opts.some((o) => o.do === a.do));
+  const more = asksOf(node.whoId).flatMap((k) => ASKS[k]).filter((a) => !node.opts.some((o) => o.do === a.do));
   return more.length ? { ...node, opts: [...node.opts.slice(0, -1), ...more, ...node.opts.slice(-1)] } : node;
 }
 // This visit, while he's talking to someone: who, what's been said in their own words, what that's done to how they feel about him, what
@@ -6679,6 +6702,7 @@ function talkHere(who) {
   if (S.gas) carrying.push(S.gas === 1 ? 'a gas can' : `${S.gas} gas cans`);
   for (const [k, name] of Object.entries(LOOT_NAMES)) if (S.items[k] > 0) carrying.push(`${S.items[k]} ${name.toLowerCase()}`);
   if (S.flags.bat) carrying.push('a bat with tape on the grip');
+  if (S.items.rod) carrying.push('a fishing rod');
   const happened = net ? (pantry.sweptOn(today()) ? [H.flags.swept] : []) : [...Object.keys(H.flags).filter((f) => S.flags[f]).map((f) => H.flags[f]), ...Object.keys(H.items).filter((k) => S.items[k] > 0).map((k) => H.items[k])];
   return { beans: S.beans, carrying, happened, tonight: crowdOut ? talk.data.tonight : '', asks: asksOf(who) };
 }
@@ -6689,14 +6713,15 @@ function talkHere(who) {
   // a phone can call and text from here, and a laptop has the chat
   $('dCall').hidden = $('dSms').hidden = !touchUI;
 }
-function openDialog(id) {
+// `given` is a line that's said instead, such as Coop's answer to his, which is always the written one
+function openDialog(id, given = null) {
   // after Chapter 1 her steps want sweeping again each day, which in a town that's shared is the player's pantry's, and not the story's
   if (S.flags.ended && !net) S.flags.swept = pantry.sweptOn(today());
-  const node = withAsks(net ? onlineLine(id) : people.line(id, played)), who = node.whoId, fresh = S.mode !== 'dialog' || convo?.who !== who;
+  const node = given ?? withAsks(questLine(id) ?? (net ? onlineLine(id) : people.line(id, played))), who = node.whoId, fresh = S.mode !== 'dialog' || convo?.who !== who;
   if (toniTalking) { toniTalking = false; toni.later(); }
   if (net && fresh && !node.say && !talk.ready()) { nod(who); return; }
   if (fresh) { convo = { who, turns: [], moved: {}, last: null, care: false }; comeBack.delete(who); }
-  const own = id === who && !convo.care && (!!convo.last || (net ? wouldTalk(who) : wouldSayNew(who, node)));
+  const own = !node.quest && id === who && !convo.care && (!!convo.last || (net ? wouldTalk(who) : wouldSayNew(who, node)));
   // who's met them and how they feel in the story are the story's, and a town that's shared leaves them as they were
   if (!net) { people.meet(who); people.apply(node.do, played); }
   SFX.play('ui.tap');
@@ -6842,7 +6867,7 @@ function nextBeans() {
 function townObjective() {
   // a town that's shared has no chapters, the hero's included, so there's nothing to tell anyone until the side quests (CHUNKY-169)
   if (net) { objective(null); return; }
-  if (S.flags.ended) { objective('Chunky is yours. For now.'); return; }
+  if (S.flags.ended) { const f = fishingObjective(); objective(f ? f.text : 'Chunky is yours. For now.', f?.at ?? null); return; }
   if (!S.flags.arrived) { objective(`Follow ${street('griffis_fountain_rd')} into town`, standing(NPCS.coop)); return; }
   const count = `Stock up on beans (${S.beans}/12)`;
   if (S.items.bag > 0) objective(`${count} · Take Coop's bag to Rocky at his trailer, across ${street('us_80')} from the gas station`, standing(NPCS.rocky));
@@ -7050,6 +7075,267 @@ const comeUp = surfacing(RIVER, {
 // Who each of them is and what they remember of him is in src/agents.js and data/folks.json
 const folks = createFolks(await (await fetch('data/folks.json')).json(), { store: saveStore, looks: LOOKS.crowd });
 addEventListener('pagehide', () => folks.save());
+
+// ---------------- Coop's round by the clock, the side quests the town comes up with, and fishing (CHUNKY-163, with CHUNKY-112's fishing).
+// What he comes up with and when it stands is src/quests.js, from data/quests.json and data/places.json, and the cast, the bite and the
+// line are src/fishing.js. It's all the story's: through Chapter 1, and in a town that's shared, he keeps the counter.
+const QUESTS = await (await fetch('data/quests.json')).json(), QUEST_PLACES = (await (await fetch('data/places.json')).json()).places, FISHING = QUESTS.templates.fishing;
+// the clock in Mississippi the rounds keep, which is the church signs', so that a test sets them both at once
+const questNow = () => new Date(signNow ?? Date.now());
+// Jev, through the talk server's /decide, or a test's stand-in
+let questDecide = (ask) => talk.decide(ask);
+const quests = createQuests({ data: QUESTS, places: QUEST_PLACES, store: SHARED ? null : saveStore, decide: (ask) => questDecide(ask), now: questNow });
+const coopRounds = () => !net && !!S.flags.ended;
+// Where Coop is, from his round: `at`, the sign on his door, and the place when he's out at one. `came` is the day he was there with him,
+// `says` what he's saying over his head and since when, and `stays` until when he stays at the hole to say he's packing up.
+const coop = { at: 'counter', sign: null, t: 0, place: null, came: null, says: null, stays: 0, thought: -1e9 }, COOP_HOME_YAW = NPCS.coop.yaw;
+const COOP_WAY = QUESTS.rounds.coop.way.map(([x, z]) => atTrue(x, z)), COOP_WAY_AT = [0];
+for (let i = 1; i < COOP_WAY.length; i++) COOP_WAY_AT.push(COOP_WAY_AT[i - 1] + Math.hypot(COOP_WAY[i][0] - COOP_WAY[i - 1][0], COOP_WAY[i][1] - COOP_WAY[i - 1][1]));
+// where he's got to on his walk, `t` of the way out to the river bridge and back, and which way he's facing
+function alongWay(t) {
+  const out = t < .5, s = (out ? t * 2 : 2 - t * 2) * COOP_WAY_AT.at(-1);
+  let i = 1; while (i < COOP_WAY.length - 1 && COOP_WAY_AT[i] < s) i++;
+  const [ax, az] = COOP_WAY[i - 1], [bx, bz] = COOP_WAY[i], k = Math.min(1, (s - COOP_WAY_AT[i - 1]) / (COOP_WAY_AT[i] - COOP_WAY_AT[i - 1] || 1)), go = out ? 1 : -1;
+  return { x: ax + (bx - ax) * k, z: az + (bz - az) * k, yaw: Math.atan2((bx - ax) * go, (bz - az) * go) };
+}
+const isWater = (x, z) => floorAt(x, z) < WATER.level(x, z) - .1;
+// Where a cast from (x, z) the way `yaw` faces lands: on water from within a few metres all the way out to where it lands, as far as a
+// cast goes and short of the far bank. Nothing with no water in reach.
+const CAST = { from: 1, start: 5, most: 9, step: .5, least: 1.5 };
+function castFrom(x, z, yaw) {
+  const ux = Math.sin(yaw), uz = Math.cos(yaw);
+  let first = null, last = null;
+  for (let d = CAST.from; d <= CAST.most; d += CAST.step) {
+    const px = x + ux * d, pz = z + uz * d;
+    if (isWater(px, pz)) { first ??= d; last = { x: px, z: pz, d }; } else if (first !== null) break; else if (d > CAST.start) return null;
+  }
+  return last && last.d - first >= CAST.least ? { ...last, water: WATER.in(last.x, last.z) ? 'pond' : 'river' } : null;
+}
+// which way the open water is from (x, z): of 24 ways round, the one with the most of it in the next 9 m
+function waterward(x, z) {
+  let best = 0, most = -1;
+  for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; let n = 0; for (let d = 1; d <= 9; d++) if (isWater(x + Math.sin(a) * d, z + Math.cos(a) * d)) n++; if (n > most) { most = n; best = a; } }
+  return best;
+}
+// Where he stands at a hole, worked out once, facing the water with his own cast landing on it (data/places.md). At a trestle it's the
+// platform halfway over, out of a train's way, up by its railing. Anywhere else it's the nearest spot on the bank to the list's, a step
+// back from the water: dry ground, off the trestles and well clear of the railroad, where a train would come through him.
+const holes = new Map(), SHORE = { clear: 6, dry: .1, most: 60, ring: 1.5, railing: .6 };
+const onBank = (x, z) => floorAt(x, z) > WATER.level(x, z) + SHORE.dry && !onTrestle(x, z) && MAP.railGrid.nearest(x, z) > SHORE.clear;
+function holeAt(place) {
+  if (holes.has(place.id)) return holes.get(place.id);
+  const [px, pz] = atTrue(...place.at);
+  let h = null;
+  if (place.kind === 'trestle') {
+    const t = TRESTLES.reduce((a, b) => (Math.hypot(b.x - px, b.z - pz) < Math.hypot(a.x - px, a.z - pz) ? b : a));
+    const ox = t.rx - t.x, oz = t.rz - t.z, L = Math.hypot(ox, oz), yaw = Math.atan2(ox, oz), x = t.rx + ox / L * SHORE.railing, z = t.rz + oz / L * SHORE.railing;
+    h = { x, z, yaw, to: castFrom(x, z, yaw) };
+  }
+  for (let r = 0; r <= SHORE.most && !h; r += SHORE.ring) {
+    for (let i = 0, n = r ? Math.round(r * 2 * Math.PI / SHORE.ring) : 1; i < n && !h; i++) {
+      let x = px + Math.sin(i / n * Math.PI * 2) * r, z = pz + Math.cos(i / n * Math.PI * 2) * r;
+      if (!onBank(x, z)) continue;
+      const yaw = waterward(x, z), ux = Math.sin(yaw), uz = Math.cos(yaw);
+      for (let k = 0; k < 40 && !isWater(x + ux * 1.5, z + uz * 1.5) && onBank(x + ux * .5, z + uz * .5); k++) { x += ux * .5; z += uz * .5; }
+      const to = isWater(x + ux * 1.5, z + uz * 1.5) ? castFrom(x, z, yaw) : null;
+      if (to) h = { x, z, yaw, to };
+    }
+  }
+  h ??= { x: px, z: pz, yaw: waterward(px, pz), to: null };
+  holes.set(place.id, h);
+  return h;
+}
+// the rod, the bobber and the line: Coop's at the hole, and his once he has one
+const ROD_GEO = mergeGeometries(fishingRod()), BOBBER_GEO = mergeGeometries(bobber()), LINE_N = 12, LINE_SLACK = new THREE.Color('#ded8c8'), LINE_TIGHT = new THREE.Color('#e0452e');
+function rodMesh(into) { const g = new THREE.Group(); g.add(new THREE.Mesh(ROD_GEO, thingMat), new THREE.Mesh(smoothed(ROD_GEO), thingLine)); g.visible = false; into.add(g); return g; }
+function bobberMesh() { const m = new THREE.Mesh(BOBBER_GEO, thingMat); m.visible = false; scene.add(m); return m; }
+function lineMesh() {
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(LINE_N * 3), 3));
+  const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color: LINE_SLACK.clone(), transparent: true, opacity: .8 })); l.frustumCulled = false; l.visible = false; scene.add(l);
+  return l;
+}
+// from the rod's tip to the bobber, hanging between them the slacker it is
+const _tip = new THREE.Vector3();
+function drawLine(l, rod, x, y, z, slack) {
+  rod.updateWorldMatrix(true, false); rod.localToWorld(_tip.set(0, ROD_TIP, 0));
+  const P = l.geometry.attributes.position;
+  for (let i = 0; i < LINE_N; i++) { const k = i / (LINE_N - 1); P.setXYZ(i, _tip.x + (x - _tip.x) * k, _tip.y + (y - _tip.y) * k - Math.sin(Math.PI * k) * slack, _tip.z + (z - _tip.z) * k); }
+  P.needsUpdate = true; l.visible = true;
+}
+const coopRod = rodMesh(NPCS.coop.rig.body), coopBobber = bobberMesh(), coopLine = lineMesh();
+const heroRod = rodMesh(hero.body), heroBobber = bobberMesh(), heroLine = lineMesh();
+// what he's caught, on a stringer at his left hip, the biggest of them showing, hung by its mouth
+const heroFish = new THREE.Group(), STRINGER = { fist: new THREE.Vector3(.01, -.05, 0), hip: new THREE.Vector3(.38, -.6, .04) }; hero.body.add(heroFish); heroFish.visible = false;
+let heroFishLb = 0;
+function showFish(lb) {
+  if (heroFishLb === lb) return;
+  heroFishLb = lb;
+  for (const m of heroFish.children) m.geometry.dispose();
+  heroFish.clear();
+  if (!lb) return;
+  const g = mergeGeometries(catfish(lb)).rotateX(-Math.PI / 2).translate(0, -catfishLong(lb) * 3.05 / 6.4, 0);
+  heroFish.add(new THREE.Mesh(g, thingMat), new THREE.Mesh(smoothed(g), thingLine));
+}
+// What he's got to fish with and what he's caught, kept between visits on this phone, and in a town that's shared not at all
+const GEAR_KEY = 'chunky.gear.v1', caught = [];
+function saveGear() { if (SHARED) return; try { saveStore.setItem(GEAR_KEY, JSON.stringify({ rod: S.items.rod ? 1 : 0, worms: S.items.worms | 0, fish: caught })); } catch { /* not kept */ } }
+function forgetGear() { S.items.rod = 0; S.items.worms = 0; S.items.catfish = 0; caught.length = 0; try { saveStore.removeItem(GEAR_KEY); } catch { /* nothing to remove */ } }
+if (!SHARED) try {
+  const g = JSON.parse(saveStore.getItem(GEAR_KEY));
+  if (g?.rod === 1) S.items.rod = 1;
+  if (Number.isInteger(g?.worms)) S.items.worms = Math.max(0, Math.min(99, g.worms));
+  if (Array.isArray(g?.fish)) caught.push(...g.fish.filter((lb) => Number.isFinite(lb) && lb > 0 && lb <= 61).slice(0, 99));
+  S.items.catfish = caught.length;
+} catch { /* nothing kept */ }
+// The sign on the store's wall by its door while he's away from the counter, in marker on a bit of cardboard: BACK AT 6, BACK AT NOON or
+// GONE FISHIN'
+const doorSign = (() => {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(.5, .25), new THREE.MeshStandardMaterial({ map: tex, roughness: 1 })), D = GAS_DOOR, along = D.wide / 2 + .45;
+  m.position.set(D.x + D.ex * along + D.nx * .06, Y0 + 1.5, D.z + D.ez * along + D.nz * .06); m.rotation.y = Math.atan2(D.nx, D.nz); m.visible = false; scene.add(m);
+  return { m, cv, tex, text: null };
+})();
+function paintDoorSign(text) {
+  if (doorSign.text === text) return;
+  doorSign.text = text; doorSign.m.visible = !!text;
+  if (!text) return;
+  const g = doorSign.cv.getContext('2d');
+  g.fillStyle = '#b58f5e'; g.fillRect(0, 0, 256, 128); g.strokeStyle = '#8a6a40'; g.lineWidth = 6; g.strokeRect(3, 3, 250, 122);
+  g.fillStyle = '#1d1a1e'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  let size = 46; g.font = `${size}px Bungee, Impact, sans-serif`;
+  const w = g.measureText(text).width; if (w > 228) { size = Math.floor(size * 228 / w); g.font = `${size}px Bungee, Impact, sans-serif`; }
+  g.fillText(text, 128, 68); doorSign.tex.needsUpdate = true;
+}
+// what Coop's saying over his head, the way Toni's is
+const coopSays = $('coopSays'), _coopAt = new THREE.Vector3();
+const coopSay = (text) => { coop.says = { text, at: time }; };
+function drawCoopSays() {
+  const n = NPCS.coop, s = coop.says, P = n.root.position;
+  if (s && time - s.at >= readFor(s.text)) coop.says = null;
+  if (!coop.says || S.mode !== 'town' || !n.root.visible) { coopSays.hidden = true; return; }
+  _coopAt.set(P.x, P.y + hillUp(P.x, P.z) + 2.3, P.z).project(camera);
+  if (_coopAt.z >= 1) { coopSays.hidden = true; return; }
+  if (coopSays.textContent !== s.text) coopSays.textContent = s.text;
+  const age = time - s.at, fade = Math.min(1, reduceMotion ? 1 : age / .25, (readFor(s.text) - age) / .4);
+  coopSays.hidden = false; coopSays.style.opacity = Math.max(0, fade).toFixed(2);
+  const w = coopSays.offsetWidth, x = Math.min(Math.max((_coopAt.x * .5 + .5) * innerWidth, w / 2 + 6), innerWidth - w / 2 - 6);
+  coopSays.style.transform = `translate(${x.toFixed(1)}px,${((-_coopAt.y * .5 + .5) * innerHeight).toFixed(1)}px) translate(-50%,-100%)`;
+}
+// Stood up straight on his spot again, or holding his rod out over the water at the hole
+function standUp(n) {
+  n.rig.leg(0, new THREE.Vector3(-.11, -1.36, 0), new THREE.Vector3(-.1, -1, .8)); n.rig.leg(1, new THREE.Vector3(.11, -1.36, 0), new THREE.Vector3(.1, -1, .8));
+  hangArms(n.rig);
+}
+const COOP_ROD = new THREE.Vector3(0, .62, .78).normalize();
+function coopHolds(n) {
+  const R = n.rig, g = R.arm(0, new THREE.Vector3(-.05, -.42, .3), new THREE.Vector3(-.5, -.3, -.2), COOP_ROD);
+  coopRod.position.copy(g).addScaledVector(COOP_ROD, -.15); coopRod.quaternion.setFromUnitVectors(UP, COOP_ROD); coopRod.visible = true;
+  R.arm(1, coopRod.position.clone().addScaledVector(COOP_ROD, .45), new THREE.Vector3(.5, -.3, -.2), COOP_ROD);
+}
+// Coop by the clock once Chapter 1's done: behind his pumps, out on his walk, out of sight asleep, at church or on his way somewhere, and on
+// its nights at the hole with his own line out. He thinks of something to do at most every ten seconds of the game, which comes to nothing
+// once he has for the day.
+function stepCoop(dt) {
+  const n = NPCS.coop, rounds = coopRounds(), P = n.root.position;
+  if (rounds && time - coop.thought > 10) { coop.thought = time; quests.think('coop'); }
+  const w = rounds ? quests.where('coop') : { at: 'counter', sign: null, t: 0, place: null };
+  // he stays at the hole long enough to say he's packing up, to whoever was out there with him
+  if (coop.at === 'hole' && w.at !== 'hole' && !coop.stays && coop.came === today() && Math.hypot(P.x - player.pos.x, P.z - player.pos.z) < 30) { coop.stays = time + readFor(FISHING.lines.done) + .5; coopSay(FISHING.lines.done); }
+  if (coop.stays && time >= coop.stays) coop.stays = 0;
+  const was = coop.at, at = coop.stays ? 'hole' : w.at;
+  coop.at = at; coop.sign = w.sign; coop.t = w.t; if (w.place) coop.place = w.place;
+  paintDoorSign(rounds ? w.sign : null);
+  n.away = at === 'asleep' || at === 'church' || at === 'away';
+  // off his spot there's nothing of him to run into, and he doesn't hop back onto it
+  const off = at !== 'counter';
+  if (off !== !!n.off) {
+    n.off = off; n.jump = null;
+    if (off) n.box[4] = -Infinity;
+    else { n.box[4] = n.top; P.copy(n.spot); n.yaw = COOP_HOME_YAW; standUp(n); }
+  }
+  if (at === 'walk') {
+    const p = alongWay(w.t); P.set(p.x, floorAt(p.x, p.z), p.z); n.yaw = p.yaw; n.walking = true;
+    n.stride = (n.stride ?? 0) + dt * 5.5;
+    for (let i = 0; i < 2; i++) { const s = i ? 1 : -1, ph = n.stride + (i ? Math.PI : 0), lift = Math.max(0, Math.cos(ph)) * .08; n.rig.leg(i, new THREE.Vector3(s * .11, -1.36 + lift, Math.sin(ph) * .2), new THREE.Vector3(s * .1, -1, .8), lift * 2); }
+  } else if (n.walking) { n.walking = false; standUp(n); }
+  if (at === 'hole' && coop.place) {
+    const h = holeAt(coop.place);
+    P.set(h.x, floorAt(h.x, h.z), h.z); n.yaw = h.yaw; coopHolds(n);
+    if (h.to) { const y = WATER.level(h.to.x, h.to.z) + (reduceMotion ? 0 : Math.sin(time * 2.1 + 1) * .012); coopBobber.position.set(h.to.x, y, h.to.z); coopBobber.visible = true; drawLine(coopLine, coopRod, h.to.x, y + .04, h.to.z, .3); }
+  } else if (coopRod.visible) { coopRod.visible = coopBobber.visible = coopLine.visible = false; hangArms(n.rig); }
+  if (was !== at) townObjective();
+}
+
+// What Coop says of his fishing hole, ahead of anything else he'd say: at the hole, the spare rod; bringing it up; and what came of it once
+// its nights went by without him. It's the written line every time, since only code ever names a place.
+const coopNode = (say, opts = []) => ({ whoId: 'coop', who: NPCS.coop.name, say, opts: [...opts, { say: 'Later.' }], do: [], quest: true });
+const coopReplies = (say) => openDialog('coop', coopNode(say));
+ASKS.fishing = [{ say: FISHING.answers.yes, do: 'fishingYes' }, { say: FISHING.answers.no, do: 'fishingNo' }];
+ACTIONS.fishingYes = () => { quests.yes('coop'); coopReplies(FISHING.lines.yes); };
+ACTIONS.fishingNo = () => coopReplies(FISHING.lines.no);
+function coopAsks() { return coopRounds() && !!quests.open('coop'); }
+function questLine(who) {
+  if (who !== 'coop' || !coopRounds()) return null;
+  if (coop.at === 'hole') {
+    const c = quests.came('coop');
+    if (c) {
+      coop.came = today();
+      const { rod, worms = 0, trust = 0 } = c.reward;
+      if (rod) S.items.rod = 1;
+      S.items.worms = (S.items.worms | 0) + worms; saveGear();
+      if (trust) people.apply([{ meter: 'coop.trust', by: trust }], played);
+      talk.note('coop', c.note);
+      return coopNode(c.lines.came);
+    }
+  }
+  const news = quests.news('coop');
+  if (news?.say === 'ask') { quests.told('coop'); return coopNode(news.lines.ask, ASKS.fishing); }
+  if (news?.say === 'lapse') { const l = quests.lapsed('coop'); if (l?.note) talk.note('coop', l.note); return coopNode(news.lines.lapse); }
+  return null;
+}
+// what he's to do about it now: meet Coop at the hole once he's said he'll be there, and once he's there with him, catch one
+function fishingObjective() {
+  if (!coopRounds()) return null;
+  const o = quests.open('coop');
+  if (o?.yes) { const h = holeAt(o.at); return { text: `Go fishing with Coop at nine · ${o.at.name}`, at: { x: h.x, z: h.z } }; }
+  if (coop.came === today() && caughtOn !== today() && S.items.worms > 0) return { text: 'Catch a catfish', at: null };
+  return null;
+}
+
+// Fishing: with his rod and some worms, on his feet facing water close enough to cast into, and not with Gerald in his hand
+let fishTurn = 0, fishAt = null, caughtOn = null;
+const fish = createFishing({ rand: () => hash(fishTurn++, 163, 112) });
+const castHere = () => (S.items.rod && S.items.worms > 0 && !S.items.gerald ? castFrom(player.pos.x, player.pos.z, player.yaw) : null);
+function castNow(to) {
+  fishAt = { fromX: player.pos.x, fromZ: player.pos.z, x: to.x, z: to.z };
+  fish.cast(to.d, to.water); SFX.play('swing');
+  after(.45, () => { if (fish.view().state === 'waiting') SFX.play('splash.small'); });
+}
+function fished(e) {
+  if (e.what === 'bite') { SFX.play('splash.small'); return; }
+  // a bite missed, a line snapped and a fish landed are each the end of a cast, and of its worm
+  S.items.worms = Math.max(0, (S.items.worms | 0) - 1);
+  if (e.what === 'snapped') SFX.play('rope.snap');
+  if (e.what === 'landed') { SFX.play('splash.big'); caught.push(e.fish.lb); S.items.catfish = caught.length; caughtOn = today(); toast(`A ${e.fish.lb} lb catfish`); }
+  saveGear(); hudVitals(); townObjective();
+}
+// The line while it's out: the bobber where it went, coming in as it's reeled and pulled about while what's on it runs, and the line from
+// his rod to it, tighter and redder the more it strains. Walking off from it, or anything but being on his feet in town, brings it in.
+function stepFishing(dt) {
+  const v0 = fish.view();
+  if (v0.state !== 'idle' && (S.mode !== 'town' || Math.hypot(player.pos.x - fishAt.fromX, player.pos.z - fishAt.fromZ) > 2)) fish.stop();
+  else if (v0.state !== 'idle') { const e = fish.tick(dt, !!input.a); if (e) fished(e); }
+  const v = fish.view();
+  heroBobber.visible = v.state !== 'idle';
+  if (!heroBobber.visible) { heroLine.visible = false; return; }
+  const k = v.out ? Math.min(1, v.line / v.out) : 1, fx = fishAt.fromX, fz = fishAt.fromZ, dx = fishAt.x - fx, dz = fishAt.z - fz, dl = Math.hypot(dx, dz) || 1;
+  const side = v.running && !reduceMotion ? Math.sin(time * 9) * .4 : 0, x = fx + dx * k - dz / dl * side, z = fz + dz * k + dx / dl * side;
+  const y = WATER.level(x, z) + (reduceMotion ? 0 : Math.sin(time * 2.4) * .012) - v.under * .055;
+  heroBobber.position.set(x, y, z);
+  drawLine(heroLine, heroRod, x, y + .04, z, .3 * (1 - v.strain) * (v.state === 'hooked' ? .4 : 1));
+  heroLine.material.color.lerpColors(LINE_SLACK, LINE_TIGHT, v.strain);
+}
 // ---------------- never for no reason: before one comes for him it stops, turns to him and flares for a second, and that's all the screen says of it. Nothing says why. What woke each of them is only
 // kept, the last 64, for the tests to read.
 const rousedLog = [];
@@ -8938,6 +9224,7 @@ function drawFullMap() {
   if (mapCam.scale > .2) for (const o of VEHICLES) if (o !== driving && !o.wrecked && !o.drowned) drawVehicleMark(g, v, o, 2 + mapCam.scale * 1.6);
   const known = new Set(people.known().map((p) => p.id));
   for (const [id, n] of Object.entries(NPCS)) {
+    if (n.away) continue;
     const [x, y] = toScreen(v, n.root.position.x, n.root.position.z); if (!on(x, y)) continue;
     g.beginPath(); g.arc(x, y, 5, 0, 7); g.fillStyle = MAPC.cyan; g.strokeStyle = MAPC.ink; g.lineWidth = 2; g.stroke(); g.fill();
     const name = known.has(id) ? n.name : '?', side = nameBeside(free, x, y, name, 13);
@@ -9300,16 +9587,21 @@ function tick(dt, draw = true) {
       let near = null, nd = 2.6;
       // Once he's asked, the button by Robby is for the flies: he's said all he's going to, and it's the only button a phone has
       const lot = Math.hypot(ROBBY.x - player.pos.x, ROBBY.z - player.pos.z), fliesToDo = S.flags.robbySaid && fliesLeft > 0;
-      for (const [id, n] of Object.entries(NPCS)) { if (id === 'robby' && fliesToDo) continue; const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z); if (d < nd) { nd = d; near = id; } }
+      for (const [id, n] of Object.entries(NPCS)) { if ((id === 'robby' && fliesToDo) || n.away) continue; const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z); if (d < nd) { nd = d; near = id; } }
       // and Toni, wherever she's got to, unless she's already talking to him
       if (toniBody.root.visible && !toni.talking() && Math.hypot(toni.T.x - player.pos.x, toni.T.z - player.pos.z) < nd) near = 'toni';
       // whoever'd say something new is asked what as he comes near, so that it's there when he talks to them
       for (const who of talk.data.who) {
-        const n = NPCS[who], d = n ? Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z) : Infinity;
+        const n = NPCS[who], d = n && !n.away ? Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z) : Infinity;
         if (d > AWAY) comeBack.add(who);
         else if (d < NEAR && comeBack.has(who) && wouldTalk(who)) { comeBack.delete(who); early.set(who, { at: time, answer: talk.ask(who, { here: talkHere(who), as: talkAs() }) }); }
       }
-      const ride = near ? null : vehicleInReach();
+      // With his rod, water in front of him is to cast into (CHUNKY-163), and once there's a line out the button's for it, whatever else is
+      // near. At the hole he talks to Coop first, then fishes beside him.
+      const lineOut = fish.view().state !== 'idle', castTo = lineOut ? null : castHere();
+      const fishFirst = lineOut || (!!castTo && (!near || (near === 'coop' && coop.at === 'hole' && coop.came === today())));
+      if (fishFirst) near = null;
+      const ride = near || fishFirst ? null : vehicleInReach();
       const meat = !near && !ride && skillet.visible && Math.hypot(HEARTH.x - player.pos.x, HEARTH.z - player.pos.z) < 2.2;
       const door = !near && !ride && !meat && atGasDoor();
       const jam = !near && !ride && !meat && !door && jamInReach();
@@ -9321,14 +9613,14 @@ function tick(dt, draw = true) {
       const showTo = near && S.items.gerald && GERALD_SEEN[near] && !S.flags[GERALD_SEEN[near]], ditch = !!S.items.gerald && inDitch(player.pos.x, player.pos.z);
       // and in a ring of mushrooms, one to eat (CHUNKY-176)
       const ring = ringAt(RINGS, player.pos.x, player.pos.z);
-      S.act = near ? `${showTo ? 'Show Gerald to' : 'Talk to'} ${near === 'toni' ? 'Toni' : NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : bell ? 'Ring the bell' : gear && S.flags.sixInARow ? 'Take the bat' : ditch ? 'Let Gerald go' : ring >= 0 ? 'Eat a mushroom' : null;
+      S.act = fishFirst ? (lineOut ? 'Reel in' : 'Cast') : near ? `${showTo ? 'Show Gerald to' : 'Talk to'} ${near === 'toni' ? 'Toni' : NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : bell ? 'Ring the bell' : gear && S.flags.sixInARow ? 'Take the bat' : ditch ? 'Let Gerald go' : ring >= 0 ? 'Eat a mushroom' : null;
       if (!stone) stoneRead = false;
       if (!plate) railMarkerRead = false;
       if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (railMarkerRead && S.act === 'Read the marker') prompt(`<span class="words">${RAIL_MARKER.words}</span>`); else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH && !S.items.gerald) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
-      if (input.aEdge) { if (near === 'toni') toniSpoke(toni.talk(player.pos)); else if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) { stoneRead = true; SFX.clip(STONE_CLIP); } else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else if (ditch) letGeraldGo(); else if (ring >= 0) openMap(ring); else swing(); }
-      if (input.sEdge) swing();
+      if (input.aEdge) { if (fishFirst) { if (lineOut) fish.press(); else castNow(castTo); } else if (near === 'toni') toniSpoke(toni.talk(player.pos)); else if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) { stoneRead = true; SFX.clip(STONE_CLIP); } else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else if (ditch) letGeraldGo(); else if (ring >= 0) openMap(ring); else swing(); }
+      if (input.sEdge && !lineOut) swing();
       if (input.hEdge) toggleShamble();
-      if (input.cEdge) throwOne();
+      if (input.cEdge && !lineOut) throwOne();
       if (input.nEdge) switchThrown();
     }
   }
@@ -9409,15 +9701,16 @@ function tick(dt, draw = true) {
   stepShoes(dt);
   // townsfolk idle and turn toward you when you're close
   for (const n of Object.values(NPCS)) {
-    if (n.box) jumpClear(n, dt);
+    if (n.box && !n.off) jumpClear(n, dt);
     n.ph += dt; n.rig.body.position.y = TOWN_HIPS + Math.sin(n.ph * 1.6) * (n.ghost ? .05 : .012);
     // a nod, once, in a town that's shared when they've nothing left to say
     if (n.nodAt != null) { const k = (time - n.nodAt) / NOD_T; bow(n, k < 1 ? Math.sin(k * Math.PI) * NOD_A : 0); if (k >= 1) n.nodAt = null; }
     const d = Math.hypot(n.root.position.x - player.pos.x, n.root.position.z - player.pos.z);
-    const want = d < 7 && (M === 'town' || M === 'dialog' || M === 'drive') ? Math.atan2(player.pos.x - n.root.position.x, player.pos.z - n.root.position.z) : n.yaw;
+    // and off his spot, Coop keeps facing the way he's walking, or the water at his fishing hole unless he's being talked to
+    const want = d < (n.walking ? 0 : n.off ? 2.6 : 7) && (M === 'town' || M === 'dialog' || M === 'drive') ? Math.atan2(player.pos.x - n.root.position.x, player.pos.z - n.root.position.z) : n.yaw;
     n.root.rotation.y += angDiff(n.root.rotation.y, want) * Math.min(1, dt * 3); n.tag.visible = d < 14 && M !== 'title' && M !== 'dialog';
     // their limbs never frustum-cull, so someone across town costs forty draw calls for a few pixels in the fog
-    n.root.visible = Math.hypot(n.root.position.x - camera.position.x, n.root.position.z - camera.position.z) < 95;
+    n.root.visible = !n.away && Math.hypot(n.root.position.x - camera.position.x, n.root.position.z - camera.position.z) < 95;
   }
   for (const c of PICKUPS) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
   if (lootGroup.visible) for (const c of LOOT) if (!c.got) { c.ph += dt; c.m.rotation.y += dt * 1.6; c.m.position.y = c.y + .2 + Math.sin(c.ph * 2) * .06; }
@@ -9512,7 +9805,7 @@ function tick(dt, draw = true) {
   // ---------------- HUD timers
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').classList.remove('show'); }
   if (cardT > 0) { cardT -= dt; if (cardT <= 0) $('card').classList.remove('show'); }
-  if (S.flags.town) { stepToni(dt); stepFreeGerald(dt); }
+  if (S.flags.town) { stepToni(dt); stepFreeGerald(dt); stepCoop(dt); stepFishing(dt); }
   hudVitals();
   soundTick(dt, M);
   input.aEdge = false; input.bEdge = false; input.cEdge = false; input.nEdge = false; input.sEdge = false; input.hEdge = false;
@@ -9530,7 +9823,7 @@ function tick(dt, draw = true) {
   if (folkOut && step !== crowdDrawn) { crowdDrawn = step; drawCrowd(step); }
   else if (folkOut) drawSeated(step);
   if (folkOut) { drawSus(); drawMutters(); }
-  drawToniSays(); lightToniFrog();
+  drawToniSays(); drawCoopSays(); lightToniFrog();
   if (S.flags.town) { drawVehicles(step); drawWreck(step); if (trainsOn) drawTrain(); }
   updateParticles(dt, M);
   if (bottle.visible) levelLiquid();
@@ -9565,8 +9858,8 @@ function loop() { if (paused) return; if (!mapOpen) tick(Math.min(clock.getDelta
 const clickedIn = (e) => { if (e.isTrusted && e.detail > 0) takeMouse(); };
 $('start').addEventListener('click', (e) => { $('title').hidden = true; startHang(); clickedIn(e); });
 $('free').addEventListener('click', (e) => { startFree(); clickedIn(e); });
-$('forget').hidden = !people.hasSave() && !folks.hasSave() && !toni.mind.seen.length && !talk.hasSave();
-$('forget').addEventListener('click', () => { people.forget(); folks.forget(); pantry.forget(); toni.forget(); talk.forget(); S.items.gerald = 0; showPantry(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
+$('forget').hidden = !people.hasSave() && !folks.hasSave() && !toni.mind.seen.length && !talk.hasSave() && !S.items.rod && !caught.length;
+$('forget').addEventListener('click', () => { people.forget(); folks.forget(); pantry.forget(); toni.forget(); talk.forget(); quests.forget(); forgetGear(); fish.stop(); coop.came = null; S.items.gerald = 0; showPantry(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
 // first frame: him hanging behind the title
 heroRoot.position.copy(ANCHOR); poseHero(0); drawPlanks();
 for (const s of SNAKES) s.update(.016); deckSnake.update(.016);
@@ -9740,6 +10033,24 @@ if (TEST) {
     roused: { log: rousedLog, FLARE: ROUSE_FLARE },
     mutters: () => mutterSlots.filter((m) => m.s && !m.e.hidden).map((m) => ({ says: m.e.textContent, id: m.s.who.id, opacity: +m.e.style.opacity, transform: m.e.style.transform, box: m.e.getBoundingClientRect().toJSON() })),
     // Toni: what she's doing and where, what she remembers, what's over her head, which frog's in her hand, and Gerald, in his or let go
+    // Coop's round and his fishing hole (CHUNKY-163): where he is and what's on his door, Jev's stand-in, which a page is given with
+    // decide(fn) or has back as the talk server's with decide(null), and what he'd do now, by the church signs' clock
+    coop: {
+      state: () => { const n = NPCS.coop; return { at: coop.at, sign: doorSign.text, signShown: doorSign.m.visible, place: coop.place?.id ?? null, came: coop.came, says: coop.says?.text ?? null, saysShown: !coopSays.hidden, x: n.root.position.x, z: n.root.position.z, yaw: n.yaw, away: !!n.away, off: !!n.off, solid: n.box[4] > -1e9, rod: coopRod.visible, bobber: coopBobber.visible, line: coopLine.visible }; },
+      decide(fn) { questDecide = fn ?? ((ask) => talk.decide(ask)); },
+      think: () => quests.think('coop'), news: () => quests.news('coop'), open: () => quests.open('coop'), where: () => quests.where('coop'), trips: () => quests.trips('coop'),
+      hole: (id) => { const h = holeAt(QUEST_PLACES.find((p) => p.id === id)); return { x: h.x, z: h.z, yaw: h.yaw, to: h.to }; },
+      way: (t) => alongWay(t), home: () => ({ x: NPCS.coop.spot.x, z: NPCS.coop.spot.z }), door: () => ({ x: doorSign.m.position.x, y: doorSign.m.position.y, z: doorSign.m.position.z, nx: GAS_DOOR.nx, nz: GAS_DOOR.nz }),
+      forget() { quests.forget(); coop.came = null; coop.thought = -1e9; },
+    },
+    // fishing: the line, what he's got and what he's caught, and where a cast from somewhere would land
+    fishing: {
+      view: () => fish.view(), at: () => fishAt, caught: () => [...caught], castFrom, castHere,
+      gear: () => ({ rod: S.items.rod | 0, worms: S.items.worms | 0, catfish: caught.length }),
+      give(rod = 1, worms = 6) { S.items.rod = rod; S.items.worms = worms; saveGear(); },
+      shown: () => ({ rod: heroRod.visible, bobber: heroBobber.visible, line: heroLine.visible, fish: heroFish.visible, lb: heroFishLb, red: heroLine.material.color.r - heroLine.material.color.b }),
+      forget() { forgetGear(); fish.stop(); },
+    },
     toni: {
       state: () => ({ ...toni.T, mind: { ...toni.mind, seen: [...toni.mind.seen] }, home: TONI_HOME, spots: TONI_SPOTS, drawn: toniBody.root.visible, inHand: toniBody.frogs.findIndex((f) => f.visible), y: toniBody.root.position.y }),
       // what she's saying now, and whether it's up over her head and how faded, as of the last frame drawn
