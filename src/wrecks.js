@@ -32,6 +32,18 @@ export const keyOf = {
   vehicle: (i) => `v${i}`,
 };
 export const kindOf = (k) => { const c = typeof k === 'string' ? k[0] : ''; return KEYS[c]?.test(k) ? c : null; };
+// Every prop that breaks, by its key, in the order the game built them, which is how every phone counts the next of the same in the same
+// place; not one with nothing to it, or the boards over the gas station's door, which are his to put up and not the town's. data/solids.json
+// keys what stops anyone by these too (tools/solids.mjs).
+export function propKeys(props) {
+  const out = new Map(), seen = new Map();
+  for (const p of props) {
+    if (p.cx === undefined || p.kind === 'bar') continue;
+    const first = keyOf.prop(p.kind, p.cx, p.cz), n = seen.get(first) ?? 0;
+    seen.set(first, n + 1); out.set(p, n ? `${first}#${n}` : first);
+  }
+  return out;
+}
 
 export const dirByte = (dx, dz) => ((Math.round(Math.atan2(dz, dx) / (2 * Math.PI) * 256) % 256) + 256) % 256;
 export const dirOf = (b) => { const a = b / 256 * 2 * Math.PI; return [Math.cos(a), Math.sin(a)]; };

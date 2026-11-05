@@ -42,6 +42,7 @@
     "fling": "node tools/play-fling.mjs",
     "bail": "node tools/play-bail.mjs",
     "lanes": "node tools/play-lanes.mjs",
+    "solids": "node tools/solids.mjs",
     "sound": "node tools/play-sound.mjs",
     "sound:make": "node tools/make-sound.mjs",
     "sound:measure": "node tools/measure-sound.mjs",

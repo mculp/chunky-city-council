@@ -300,7 +300,7 @@ import { LURES, ALARM, GRAVITY, inHand, nextUp, kindsHeld, rangeOf, throwOf, aim
 import { keysFor, buttonsFor, actWord, fastWord, lookBy, edgeTurn, needsCursor, mouseLooks, MOUSE } from './src/controls.js';
 import { buildMapData, makeView, worldBox, toScreen, drawWorld, roadLabels, toRim, drawArrow, drawLabel, labelSpace, nameBeside, clampCam, zoomAbout, fitScale, COLORS as MAPC } from './src/mapview.js';
 import { placeStructures, collidersOf, writeStructure, cellsOf, insideRing, boundsOf, wallsOf, Sheet, PATTERN, hash2 } from './src/structures.js';
-import { createDamage, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
+import { createDamage, partsOf, settle as settlePiece, tip, tipNormals, faceNormals } from './src/damage.js';
 import { KINDS, SMASH_J, makeVehicle, stepVehicle, hurtVehicle, damageFrom, inVehicle, rimHit, placeVehicles, settle, speedOf } from './src/vehicles.js';
 import { vehicleGeometries, doorGeometries, smoothed, PAINTS, LAMPS } from './src/vehiclemodels.js';
 import { makeLine, makeSiding, createTrains } from './src/trains.js';
@@ -2622,7 +2622,7 @@ const wireMat = new THREE.MeshBasicMaterial({ color: '#0c080e' });
 // nothing out there can tell he's in there.
 const GAS_HOUSE = houseAt(...atTrue(-93.21, -43.55)), GAS_DOOR = wallsOf(GAS_HOUSE, Y0).doors[0];
 const GAS_IN = insideRing(GAS_DOOR.x + GAS_DOOR.nx * .5, GAS_DOOR.z + GAS_DOOR.nz * .5, GAS_HOUSE.pts) ? 1 : -1;
-const gasBarWall = [GAS_DOOR.x - GAS_DOOR.ex * GAS_DOOR.wide / 2, GAS_DOOR.z - GAS_DOOR.ez * GAS_DOOR.wide / 2, GAS_DOOR.x + GAS_DOOR.ex * GAS_DOOR.wide / 2, GAS_DOOR.z + GAS_DOOR.ez * GAS_DOOR.wide / 2, -1e9, .12];
+const gasBarWall = [GAS_DOOR.x - GAS_DOOR.ex * GAS_DOOR.wide / 2, GAS_DOOR.z - GAS_DOOR.ez * GAS_DOOR.wide / 2, GAS_DOOR.x + GAS_DOOR.ex * GAS_DOOR.wide / 2, GAS_DOOR.z + GAS_DOOR.ez * GAS_DOOR.wide / 2, -1e9, .12], GAS_BAR_UP = Y0 + 2.6;
 PROP_WALLS.push(gasBarWall);
 const gasBar = new THREE.Group(); gasBar.visible = false; gasBar.position.set(GAS_DOOR.x, Y0, GAS_DOOR.z); gasBar.rotation.y = Math.atan2(-GAS_DOOR.ez, GAS_DOOR.ex); scene.add(gasBar);
 {
@@ -2635,7 +2635,7 @@ let gasBarred = false, gasBarGone = false;
 const gasBarProp = breakable('bar', 4, null, { rigid: true, objs: [gasBar], walls: [gasBarWall], chip: '#7d5c44', down: true, broke() { gasBarred = false; gasBarGone = true; } });
 const atGasDoor = () => !gasBarGone && Math.hypot(player.pos.x - GAS_DOOR.x, player.pos.z - GAS_DOOR.z) < 2 && insideRing(player.pos.x, player.pos.z, GAS_HOUSE.pts);
 function barGasDoor() {
-  gasBarred = !gasBarred; gasBar.visible = gasBarred; gasBarProp.down = !gasBarred; gasBarWall[4] = gasBarred ? Y0 + 2.6 : -1e9;
+  gasBarred = !gasBarred; gasBar.visible = gasBarred; gasBarProp.down = !gasBarred; gasBarWall[4] = gasBarred ? GAS_BAR_UP : -1e9;
   SFX.play('vehicle.door', { x: GAS_DOOR.x, z: GAS_DOOR.z, rate: .75 });
   if (folkOut) horde.noise(GAS_DOOR.x, GAS_DOOR.z, 12, 2, 'door');
   if (!gasBarred) return;
@@ -6974,18 +6974,28 @@ const trains = createTrains(RAIL, { crossings: RAIL_CROSSINGS, posts: TRESTLES, 
   horn: (g, tr) => trainHorn(g, tr),
   blast: (tr) => { blastsBlown++; playNew('train.blast', { x: tr.cars[0].x, z: tr.cars[0].z }); },
 } });
+// What's built that stops him, in its cell, which is everything data/solids.json has (tools/solids.mjs) and src/solids.js answers the same
+function builtBlocks(x, z, y, cell) {
+  const list = solidCells.get(cell);
+  if (list) for (const [x0, x1, z0, z1, top] of list) if (x > x0 - .3 && x < x1 + .3 && z > z0 - .3 && z < z1 + .3 && y < top - .25) return true;
+  const walls = wallCells.get(cell);
+  return !!walls && hitsWall(x, z, y, walls);
+}
+// the rails on a road bridge, a metre wide down each side of the road while it's on the bridge, which data/solids.json has too
+function onRails(x, z, y) {
+  if (!(SPANS.length && y > ROAD_TOP - 1)) return false;
+  const s = spanAt(x, z); if (!s) return false;
+  const half = s.half ?? s.road.width / 2;
+  return MAP.roadGrid.nearest(x, z) > half && MAP.roadGrid.d < half + 1;
+}
 function blocked(x, z, y) {
   if (!MAP.inBounds(x, z)) return true;
   if (trains.trains.length && y > TOWN_Y - 2 && trains.at(x, z, .15)) return true;
-  const cell = (Math.floor(x / 16) + 32768) * 65536 + Math.floor(z / 16) + 32768, list = solidCells.get(cell);
-  if (list) for (const [x0, x1, z0, z1, top] of list) if (x > x0 - .3 && x < x1 + .3 && z > z0 - .3 && z < z1 + .3 && y < top - .25) return true;
-  const walls = wallCells.get(cell);
-  if (walls && hitsWall(x, z, y, walls)) return true;
+  const cell = (Math.floor(x / 16) + 32768) * 65536 + Math.floor(z / 16) + 32768;
+  if (builtBlocks(x, z, y, cell)) return true;
   const parked = vehCells.get(cell);
   if (parked) for (let i = 0; i < parked.length; i++) if (y < parked[i].y + 1.4 && inVehicle(parked[i], x, z, .3)) return true;
-  // the rails on a road bridge
-  if (SPANS.length && y > ROAD_TOP - 1) { const s = spanAt(x, z); if (s) { const half = s.half ?? s.road.width / 2; if (MAP.roadGrid.nearest(x, z) > half && MAP.roadGrid.d < half + 1) return true; } }
-  return false;
+  return onRails(x, z, y);
 }
 // and a tree stops him and anything he's driving, though not the crowd, and not until he's in town
 const blockedInTown = (x, z, y) => blocked(x, z, y) || !!treeBlocks(x, z);
@@ -9620,8 +9630,62 @@ if (location.hash === '#signs') openSignBoard();
 // ================================================================ test hook: index.html?test
 // pause() stops the clock, step() advances it by fixed frames, so a phase can be set up and looked at the same way every time
 if (TEST) {
+  // Everything built that stops anyone, and the floors raised off the ground, to the millimetre, as tools/solids.mjs writes them to
+  // data/solids.json for the town everyone shares (CHUNKY-153), whose ground is flat: each raised floor as far up as it is from where you
+  // step onto it, and everything that stops anyone as high as it stands over the highest floor beside it, in the town's terms, so that a
+  // bridge's rails stand over its deck and not over the river. What's fixed, each prop's by its key on the wire, each building's walls and
+  // posts by the part src/damage.js knows them by, the boards he can put up across the gas station's door, and the cast where they stand.
+  // Nothing's broken in a page that's only just started. `cells` is how many of each are in the cells builtBlocks looks in, which is all of them.
+  async function solidsNow() {
+    const [{ propKeys }, { createSolids }] = await Promise.all([import('./src/wrecks.js'), import('./src/solids.js')]);
+    const mm = (v) => Math.round(v * 1000) / 1000, keys = propKeys(PROPS), segs = (pts) => pts.slice(1).map((p, i) => [pts[i][0], pts[i][1], p[0], p[1]]);
+    const off = (x, z, [ax, az, bx, bz]) => { const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1e-9; let t = ((x - ax) * dx + (z - az) * dz) / l2; t = t < 0 ? 0 : t > 1 ? 1 : t; return Math.hypot(x - ax - dx * t, z - az - dz * t); };
+    // the dock from the bank at its shore end, in the two runs onDock has, and the cabin's decks from the yard round them
+    const turn = DOCK.deg * Math.PI / 180, ux = Math.cos(turn), uz = Math.sin(turn), along = (u) => [DOCK.x + ux * u, DOCK.z + uz * u], dock = DOCK.top - floorAt(...along(-8));
+    const rects = [[-.95, 6.55, 1], [7.4, 1.8, 1.8]].map(([u, hl, hw]) => ({ k: keys.get(DOCK.prop), rect: [...along(u), ux, uz, hl, hw].map(mm), top: mm(dock) }));
+    for (const [x0, x1, z0, z1] of CABIN_DECKS) {
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, yard = Math.min(floorAt(x0 - .5, cz), floorAt(x1 + .5, cz), floorAt(cx, z0 - .5), floorAt(cx, z1 + .5));
+      rects.push({ rect: [cx, cz, 1, 0, (x1 - x0) / 2, (z1 - z0) / 2].map(mm), top: mm(Y0 + CABIN_DECK_TOP - yard) });
+    }
+    // each trestle from the bed off either end of it, and each road bridge from the road off it, with every road and lane near enough to count
+    const rail = MAP.rail.flatMap(segs), roads = [...MAP.roads, ...MAP.lanes].flatMap((o) => segs(o.pts).map((g) => ({ o, g })));
+    const trestles = TRESTLES.map((t) => {
+      const bed = [RAIL.at(t.s - TRESTLE.span - 1), RAIL.at(t.s + TRESTLE.span + 1)].reduce((n, p) => n + floorAt(p.x, p.z) / 2, 0);
+      return { at: [t.x, t.z, TRESTLE.span].map(mm), half: TRESTLE.half, rail: rail.filter((g) => off(t.x, t.z, g) < TRESTLE.span + 2).map((g) => g.map(mm)), refuge: [t.rx, t.rz, TRESTLE.refuge].map(mm), top: mm(TRESTLE.top - bed) };
+    });
+    const bridges = SPANS.map((s) => {
+      const at = MAP.sOn(s.road.id, s.x, s.z), from = Math.max(...[at - s.r - 1, at + s.r + 1].map((d) => { const p = MAP.along(s.road.id, d); return floorAt(p.x, p.z); }));
+      return { at: [s.x, s.z, s.r].map(mm), half: mm(s.half ?? s.road.width / 2), deck: mm(ROAD_TOP - from), roads: roads.filter(({ g }) => off(s.x, s.z, g) < 2 * s.r + 2).map(({ o, g }) => [...g, roadHalf(o, s.x, s.z)].map(mm)) };
+    });
+    const floors = { rects, trestles, bridges }, town = createSolids({ fixed: { boxes: [], walls: [] }, props: {}, buildings: {}, cast: {}, bar: [0, 0, 0, 0, 0, 0], floors });
+    // how far up the game has the highest floor beside something, over the town's floor there
+    const base = (pts) => { let best = -Infinity, by = 0; for (const [x, z] of pts) { const f = floorAt(x, z); if (f > best) { best = f; by = f - town.floorAt(x, z); } } return by; };
+    const wallBase = ([ax, az, bx, bz, , r]) => {
+      const mx = (ax + bx) / 2, mz = (az + bz) / 2, l = Math.hypot(bx - ax, bz - az), o = r + .45;
+      if (l < .1) return base([[mx + o, mz], [mx - o, mz], [mx, mz + o], [mx, mz - o]]);
+      const nx = (az - bz) / l * o, nz = (bx - ax) / l * o;
+      return base([[mx + nx, mz + nz], [mx - nx, mz - nz]]);
+    };
+    const boxBase = ([x0, x1, z0, z1]) => { const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2; return base([[x0 - .45, cz], [x1 + .45, cz], [cx, z0 - .45], [cx, z1 + .45]]); };
+    const box = (b) => [...b.slice(0, 4), b[4] - boxBase(b)].map(mm), wall = (w) => [...w.slice(0, 4), w[4] - wallBase(w), w[5]].map(mm);
+    const owner = new Map(), fixed = { boxes: [], walls: [] }, props = {}, buildings = {}, cast = {}, of = (k) => (props[k] ??= { boxes: [], walls: [] });
+    for (const [p, k] of keys) for (const c of [...p.solids, ...p.walls]) owner.set(c, k);
+    for (const [id, n] of Object.entries(NPCS)) if (n.box) { cast[id] = box(n.box); owner.set(n.box, null); }
+    for (const b of SOLIDS) if (!owner.has(b)) fixed.boxes.push(box(b)); else if (owner.get(b)) of(owner.get(b)).boxes.push(box(b));
+    for (const w of PROP_WALLS) if (w !== gasBarWall) { if (owner.has(w)) of(owner.get(w)).walls.push(wall(w)); else fixed.walls.push(wall(w)); }
+    for (const s of STRUCTURES) {
+      if (!s.stops.size) continue;
+      const { parts } = partsOf(s, TOWN_Y), part = new Map(parts.filter((p) => p.stop !== undefined).map((p) => [p.stop, p.part]));
+      buildings[s.id] = { n: parts.length, walls: [...s.stops].map(([which, w]) => [part.get(which) ?? -1, ...wall(w)]) };
+    }
+    const distinct = (cells) => new Set([...cells.values()].flat()).size;
+    return { fixed, props, buildings, cast, bar: wall([...gasBarWall.slice(0, 4), GAS_BAR_UP, gasBarWall[5]]), floors, cells: { boxes: distinct(solidCells), walls: distinct(wallCells) } };
+  }
+  const builtAt = (x, z, y) => builtBlocks(x, z, y, (Math.floor(x / 16) + 32768) * 65536 + Math.floor(z / 16) + 32768);
+  // and where the game has a floor raised off the ground: the dock, the cabin's decks, a trestle, or a road over a bridge
+  const raisedAt = (x, z) => onDock(x, z) || onCabinDeck(x, z) || onTrestle(x, z) || (!!spanAt(x, z) && onRoad(x, z));
   window.__game = {
-    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, farm: FARM, dock: DOCK, onDock, sound: SFX, singers, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, church: { house: CHURCH_HOUSE, at: CF.at, door: () => wallsOf(CHURCH_HOUSE, Y0).doors[0], steeple: churchSteeple, steeplePos: STEEPLE, steepleShown: () => churchSteepleOn.visible, us80: US80_CHURCH, us80Shown: () => us80Steeple.visible, roundWindow, rope: ROPE, bellInReach, ring: ringBell, ringing: () => bellLeft > 0, strokes: () => bellStrokes, BELL, pantry, PANTRY, today, owes: pantryOwes, shown: () => pantryCans.count, shelf: PANTRY_SHELF }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
+    S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, farm: FARM, dock: DOCK, onDock, sound: SFX, singers, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, solids: { now: solidsNow, blocks: builtAt, rails: onRails, raised: raisedAt }, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, church: { house: CHURCH_HOUSE, at: CF.at, door: () => wallsOf(CHURCH_HOUSE, Y0).doors[0], steeple: churchSteeple, steeplePos: STEEPLE, steepleShown: () => churchSteepleOn.visible, us80: US80_CHURCH, us80Shown: () => us80Steeple.visible, roundWindow, rope: ROPE, bellInReach, ring: ringBell, ringing: () => bellLeft > 0, strokes: () => bellStrokes, BELL, pantry, PANTRY, today, owes: pantryOwes, shown: () => pantryCans.count, shelf: PANTRY_SHELF }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, skillet: { tools: [castIron, batTool], SKILLET, LANDS, ARM: SWING_ARM, bottom: () => castIron.localToWorld(new THREE.Vector3(0, SKILLET.at, SKILLET.deep)).toArray(), barrel: () => batTool.localToWorld(new THREE.Vector3(0, BAT_ON.at, 0)).toArray(), lands: () => swingLands && { at: swingLands.at.toArray(), part: swingLands.part }, side: () => swingSide, who: () => swingWho, through: () => throughWho.map((i) => crowdShown[i]), frame(off) { throughOff = !!off; renderFrame(0); throughOff = false; } }, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
     // flung by what he's driving: the shoes that came off and how many are drawn, which way and how far each one's glow is drawn streaking, and the cast, where they are and whether anything can hit them
     fling: { shoes: () => shoeList.map((o) => ({ x: o.x, y: o.y, z: o.z, down: o.down, roll: o.roll })), drawnShoes: () => shoes.count, streak: (s) => { const i = crowdShown.indexOf(s), a = crowdAura.instanceMatrix.array; return i < 0 ? null : [a[i * 16 + 8], a[i * 16 + 9], a[i * 16 + 10]]; },
@@ -9734,7 +9798,7 @@ if (TEST) {
     // out of one at speed (CHUNKY-168): how far into it he is, what's going on without him, the doors drawn standing open, and which hood he has on,
     // 0 to 3: his own, flopped one way, flopped the other, and back
     bail: { BAIL, roll: () => roll && { ...roll }, coasting: () => coasting.map((c) => c.v), doors: () => Object.fromEntries(Object.entries(vehDoors).map(([k, m]) => [k, m.visible ? m.count : 0])), hood: () => [heroHood, heroHoodHung, heroHoodFlop, heroHoodSwim].findIndex((h) => h.geo === hero.hm.geometry) },
-    wreck: { strike, blast, blastCan, thud, toss, damage, breakProp, props: PROPS, falling, swing, burnAt, burners, catchTree, treesNear, treeBlocks, fellTree, gasCans: GAS_CANS, wreckVehicle, explodeVehicle, startFree, housesNear, trees: (x, z, r) => { const out = []; treesNear(x, z, r, (t) => out.push(t)); return out; }, treeHere: (x, z) => treeHere(x, z), mendTree: (t) => mendTree(t), mendProp, mendVehicle },
+    wreck: { strike, blast, blastCan, thud, toss, damage, breakProp, props: PROPS, falling, swing, burnAt, burners, catchTree, treesNear, treeBlocks, fellTree, gasCans: GAS_CANS, wreckVehicle, explodeVehicle, startFree, housesNear, trees: (x, z, r) => { const out = []; treesNear(x, z, r, (t) => out.push(t)); return out; }, treeHere: (x, z) => treeHere(x, z), mendTree: (t) => mendTree(t), mendHouse, mendProp, mendVehicle },
     openMap, closeMap, updateMini, mapState: () => ({ open: mapOpen, cam: mapCam, mini: !$('mini').hidden, name: $('miniName').hidden ? '' : $('miniName').textContent }), mapCamTo(c) { mapCam = { ...mapCam, ...c }; drawFullMap(); },
     // the mushroom rings (CHUNKY-176): where each settled, which he's standing in, how far into a trip he is, which ring the map's open to pick from and where
     // each is on it, how long nobody's to go for him, and how far he's sat down

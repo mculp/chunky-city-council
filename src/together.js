@@ -18,7 +18,7 @@ import { checkName, NAME_MOST } from './names.js';
 import { inVehicle, settle, KINDS } from './vehicles.js';
 import { toScreen, drawLabel, nameBeside, COLORS as MAPC } from './mapview.js';
 import { TRIP } from './rings.js';
-import { keyOf, kindOf, dirByte, dirOf, houseWrecks, takenParts, batches, BYTE } from './wrecks.js';
+import { keyOf, kindOf, dirByte, dirOf, houseWrecks, takenParts, batches, BYTE, propKeys } from './wrecks.js';
 import { createAside } from './aside.js';
 
 const MOST = 25;                  // everyone the town holds, you included
@@ -362,17 +362,11 @@ export function together(G) {
   W.start(createAside(W.farm).world, (kind, thing) => saidHere.set(thing, kind));
   const houseOf = new Map(W.houses.map((s) => [keyOf.building(s.id), s]));
   // every prop that breaks, by what it is and where it stands, and the next of the same in the same place after it, as every phone
-  // counts them; not the boards over the gas station's door, which are his to put up and not the town's
+  // counts them (src/wrecks.js's propKeys)
   let propKey = null, propOf = null;
   function props() {
     if (propKey) return;
-    propKey = new Map(); propOf = new Map();
-    const seen = new Map();
-    for (const p of W.props) {
-      if (p.cx === undefined || p.kind === 'bar') continue;
-      const first = keyOf.prop(p.kind, p.cx, p.cz), n = seen.get(first) ?? 0, k = n ? `${first}#${n}` : first;
-      seen.set(first, n + 1); propKey.set(p, k); propOf.set(k, p);
-    }
+    propKey = propKeys(W.props); propOf = new Map([...propKey].map(([p, k]) => [k, p]));
   }
   const hpByte = (v) => Math.max(0, Math.floor(v.hp / v.K.hp * BYTE)), flagsOf = (v) => (v.wrecked ? 1 : 0) | (v.exploded ? 2 : 0) | (v.drowned ? 4 : 0);
   const vehicleAt = (k) => { const i = +k.slice(1); return i < G.parked.length ? G.vehicles[i] : null; };
