@@ -287,6 +287,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { loadMap } from './src/map.js';
 import { loadWater } from './src/water.js';
 import { loadFarm } from './src/farm.js';
+import { GROUNDS as GROUNDS_TRUE, GROUNDS_OUT, SET_ASIDE as SET_ASIDE_TRUE } from './src/aside.js';
 import { loadHills, TRACK_SOFT, TRACK_EASE } from './src/hills.js';
 import { loadSound } from './src/sound.js';
 import { randomFrom } from './src/soundbank.js';
@@ -3738,9 +3739,9 @@ const SHOP_HOUSE = houseAt(...atTrue(1020.4, 626.9)), SHOP = { hung: [], bench: 
   { const [x, z] = atTrue(979.3, 675.5); thing(out, 'digger', excavator(), x, z, -2.41, 6, { solid: [2.2, 2.2, 2], chip: '#d6a321' }); }
   flushBuckets(70);
 }
-// ---- its grounds, from the edge of Pine Forest Rd to the river, where the owner wants nobody. The crowd never goes in, and anyone of them who's in there anyway leaves by the
+// ---- its grounds, from the edge of Pine Forest Rd to the river, where the owner wants nobody (src/aside.js). The crowd never goes in, and anyone of them who's in there anyway leaves by the
 // drive, as far as which anyone after him gives up at the road. The kids on four-wheelers turn round at the road, and the river doesn't bring anyone up on its bank.
-const GROUNDS = (() => { const [x0, z0] = atTrue(855.5, 572), [x1, z1] = atTrue(1088, 739); return { x0, z0, x1, z1, out: atTrue(850, 737), on: (x, z) => x > x0 && x < x1 && z > z0 && z < z1 }; })();
+const GROUNDS = (() => { const [w, n, e, s] = GROUNDS_TRUE, [x0, z0] = atTrue(w, n), [x1, z1] = atTrue(e, s); return { x0, z0, x1, z1, out: atTrue(...GROUNDS_OUT), on: (x, z) => x > x0 && x < x1 && z > z0 && z < z1 }; })();
 // ---- the taxidermy sign at the road. The owner asked for it by name, so it's the one thing here that says whose it is, as it's carved on the listing's photo from
 // February 2018: two tall timber posts and a crossbar, a plain oval plaque hanging close under the bar and a little red birdhouse sat on it, and under them a board of weathered
 // grey-green planks in a timber frame, with the family's name in an arc over a buck and a doe and TAXIDERMY on a ribbon. The real one has the phone number on its last
@@ -7437,7 +7438,8 @@ function bringOutCrowd() {
     }
   }
 }
-const SET_ASIDE = [[...atTrue(880, 580), ...atTrue(1075, 740)], [...atTrue(-1600, -830), ...atTrue(-1490, -745)], [...atTrue(-730, 1630), ...atTrue(-440, 1780)]];
+// the places set aside where nobody's at home and nothing's parked by chance (src/aside.js): the compound's grounds, the same box the crowd keeps out of, and two yards
+const SET_ASIDE = SET_ASIDE_TRUE.map(([w, n, e, s]) => [...atTrue(w, n), ...atTrue(e, s)]);
 // ---------------- people at home, at most of the houses and two at some. They come out as he gets near them, since working out where a door is takes a moment.
 // Nobody's at the places that are set aside, somebody's own, the trailer with the computer in it, or anywhere near Stuckey's Bridge.
 const HOME_ID = 1000, HOME_SEE = 190, HOME_PUT = 300, HOME_SHARE = .8, HOME_TWO = .3, KEPT_EMPTY = new Set([75414843, 75057300, CRT_TRAILER, 75411012, 76094199]);

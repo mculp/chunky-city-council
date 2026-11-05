@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { BRIDGE, createAside } from './aside.js';
+import { BRIDGE, GROUNDS, GROUNDS_OUT, SET_ASIDE as NOBODY_HOME, createAside } from './aside.js';
 import { CEMETERY } from './graves.js';
 import { FRONTAGE, woodsAlong, fenceAlong, sidesOf } from './frontage.js';
 
@@ -29,6 +29,16 @@ for (const [what, spots] of Object.entries(SET_ASIDE)) {
     for (const [x, z] of spots) assert.ok(aside.at(x, z), `(${x}, ${z})`);
   });
 }
+
+test('wherever nobody\'s at home and nothing\'s parked by chance, the compound\'s grounds among them, nothing breaks online either', () => {
+  assert.ok(NOBODY_HOME.includes(GROUNDS), 'and the grounds the crowd keeps out of are one of them');
+  const [w, n, e, s] = GROUNDS, [ox, oz] = GROUNDS_OUT;
+  assert.ok(!(ox > w && ox < e && oz > n && oz < s) && Math.hypot(ox - Math.min(Math.max(ox, w), e), oz - Math.min(Math.max(oz, n), s)) < 10, 'and their way out is just outside them');
+  for (const [w, n, e, s] of NOBODY_HOME) {
+    assert.ok(w < e && n < s, `[${w}, ${n}, ${e}, ${s}] is west to east and north to south`);
+    for (const x of [w + .01, (w + e) / 2, e - .01]) for (const z of [n + .01, (n + s) / 2, s - .01]) assert.ok(aside.at(x, z), `(${x}, ${z})`);
+  }
+});
 
 test('nothing breaks online in the woods and fence round the compound, along the road and down both sides to the river, so nobody drives in but by the drive', () => {
   const line = roads.edges.find((e) => e.id === 'pine_forest_rd_e1').points, sides = sidesOf(line);

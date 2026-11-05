@@ -121,7 +121,7 @@ At 3 m/s against his 4.4 at a walk it takes 19 to 21 seconds in the open, and a 
 
 ## Where nobody goes
 
-`horde.zones` is the places none of them goes, each a circle, `{ x, z, r }`, or a box, `{ x0, z0, x1, z1, out }`. There are two: 28 m round the church on Church St, from when the crowd comes out until the church comes down, and the compound on Pine Forest Rd, always, from the edge of the road down to the river, which is `GROUNDS` in `index.html`. Nobody steps into one, whatever he does in there. While he's in one he can't be found, so his noise stirs nobody, and anyone after him stops at the edge, loses him and gives up. Anyone in one anyway leaves it, straight out of a circle and by its way out of a box, which for the compound is the drive. The kids on four-wheelers turn round short of the compound, and the river doesn't bring anyone up on its bank there. `npm run church` and `npm run compound` play both.
+`horde.zones` is the places none of them goes, each a circle, `{ x, z, r }`, or a box, `{ x0, z0, x1, z1, out }`. There are two: 28 m round the church on Church St, from when the crowd comes out until the church comes down, and the compound on Pine Forest Rd, always, from the edge of the road down to the river, which is `GROUNDS` in `src/aside.js`. Nobody steps into one, whatever he does in there. While he's in one he can't be found, so his noise stirs nobody, and anyone after him stops at the edge, loses him and gives up. Anyone in one anyway leaves it, straight out of a circle and by its way out of a box, which for the compound is the drive. The kids on four-wheelers turn round short of the compound, and the river doesn't bring anyone up on its bank there. `npm run church` and `npm run compound` play both.
 
 ## Running
 
@@ -253,7 +253,7 @@ He can pass for one of them: SHAMBLE on a phone, C on a laptop, once the crowd's
 
 Four in five houses and trailers have someone at home, and three in ten of those have two. That's about 900 people, and they come out when he gets within 190 m of the house, since working out where a door is takes a moment. Nobody's kept out of a house for what's there except:
 
-- the places set aside for how they really are, which is `SET_ASIDE` in `index.html`, the same rectangles that keep parked cars off them
+- the places set aside for how they really are, which is `SET_ASIDE` in `src/aside.js`, the same rectangles that keep parked cars off them. For the compound on Pine Forest Rd it's its grounds, the same box the crowd keeps out of
 - two other properties and a trailer, by structure id
 - anything within 400 m of Stuckey's Bridge, which is left quiet for the opening and the light
 

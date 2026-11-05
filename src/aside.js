@@ -8,11 +8,20 @@ import { fromCemetery } from './graves.js';
 
 // Stuckey's Bridge, in true metres, which is the world's middle (data/roads.md)
 export const BRIDGE = [6843.067, 7797.433];
-// [west, north, east, south]
+// Each box is [west, north, east, south].
+// The compound on Pine Forest Rd's grounds, from the edge of the road down to the river, where the owner wants nobody. The crowd keeps out
+// of them, nobody's at home on them and nothing's parked on them by chance (index.html). Where nothing breaks online is more than them, below.
+export const GROUNDS = [855.5, 572, 1088, 739];
+// and the way out of them, at the foot of the drive by the road, which anyone of the crowd who's in there anyway leaves by
+export const GROUNDS_OUT = [850, 737];
+const YARD = [-1600, -830, -1490, -745], FARM_YARD = [-730, 1630, -440, 1780];
+// Where nobody's at home and nothing's parked by chance (index.html): the compound's grounds, the yard off True Light Rd and the farm's yard.
+// Nothing breaks online anywhere in them either.
+export const SET_ASIDE = [GROUNDS, YARD, FARM_YARD];
 const BOXES = [
-  [835, 548, 1220, 801],        // the compound on Pine Forest Rd, from its sign across the road to past the river, and the woods and fence round it (src/frontage.js)
-  [-1600, -830, -1490, -745],   // the yard off True Light Rd
-  [-730, 1630, -440, 1780],     // the farm's yard
+  [835, 548, 1220, 801],        // the compound on Pine Forest Rd: its grounds, and from its sign across the road to past the river, and the woods and fence round it (src/frontage.js)
+  YARD,                         // the yard off True Light Rd
+  FARM_YARD,                    // the farm's yard
   [-12, -526, 44, -468],        // a home, its barn and its yard, from the road
   [-370, -588, -350, -561],     // the trailer with the computer in it, and its deck, and not the trailers either side of it
   [-280, 184, -244, 215],       // Robby's lot
