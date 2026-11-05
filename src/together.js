@@ -46,8 +46,10 @@ const CSS = `
 #join .look[aria-pressed=true]{border-color:var(--rust);background:rgba(236,128,58,.14)}
 #join .yours{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;width:min(420px,88vw)}
 #join .yours[hidden]{display:none}
-#join .rekt{width:72px;height:72px;padding:3px;background:rgba(255,255,255,.05);border:2px solid var(--line)}
-#join .rekt img{display:block;width:100%;height:100%;object-fit:cover}
+#join .rekt{position:relative;width:72px;height:72px;padding:3px;background:rgba(255,255,255,.05);border:2px solid var(--line)}
+#join .rekt img{position:relative;display:block;width:100%;height:100%;object-fit:cover}
+#join .rekt .n{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--f-display);font-size:15px;color:var(--cream)}
+#join .rekt .n[hidden]{display:none}
 #join .rekt[aria-pressed=true]{border-color:var(--rust)}
 #joinSay{min-height:1.6em;color:var(--cream)}
 #pair .letters{font-family:var(--f-display);font-size:clamp(44px,16vw,72px);letter-spacing:.12em;line-height:1;text-shadow:0 4px 0 var(--ink)}
@@ -109,14 +111,19 @@ export function together(G) {
     for (const b of yours.children) b.setAttribute('aria-pressed', String(b.dataset.h === pickedRekt));
   };
   lookButtons.forEach((b, i) => b.addEventListener('click', () => { picked = i; pickedRekt = null; showLook(); }));
-  // their own rektguys, by their pictures, above the town's looks
+  // their own rektguys, by their pictures, above the town's looks, each with its number until its picture comes, and for good if the
+  // town can't have it, so that a button's never empty
   function showYours() {
     yours.replaceChildren(...mine.rekt.map((h) => {
-      const b = document.createElement('button'), img = new Image();
-      b.className = 'rekt'; b.dataset.h = h; b.setAttribute('aria-label', 'Your rektguy');
+      const b = document.createElement('button'), img = new Image(), n = document.createElement('span'), number = mine.numbers?.[h];
+      b.className = 'rekt'; b.dataset.h = h; b.setAttribute('aria-label', Number.isInteger(number) ? `Your rektguy #${number}` : 'Your rektguy');
+      n.className = 'n'; n.textContent = Number.isInteger(number) ? `#${number}` : '';
       // asked for as a page can read it from the start, since what they wear is drawn from it, and it's fetched once
-      img.crossOrigin = 'anonymous'; img.loading = 'lazy'; img.alt = ''; img.src = wallet.picture(h);
-      b.append(img); b.addEventListener('click', () => { pickedRekt = h; showLook(); });
+      img.crossOrigin = 'anonymous'; img.loading = 'lazy'; img.alt = '';
+      img.addEventListener('load', () => { n.hidden = true; }, { once: true });
+      img.addEventListener('error', () => img.remove(), { once: true });
+      img.src = wallet.picture(h);
+      b.append(n, img); b.addEventListener('click', () => { pickedRekt = h; showLook(); });
       return b;
     }));
     yours.hidden = !mine.rekt.length;
@@ -207,7 +214,7 @@ export function together(G) {
       const r = await wallet.waiting(pairingCode);
       if (pairing.hidden) return;
       if ((r.waiting || r.no === 'town' || r.no === 'busy') && Date.now() < until) { waitFor(until); return; }
-      if (r.done) { mine = { rekt: r.rekt, wearing: r.wearing }; pickedRekt = r.wearing; showYours(); }
+      if (r.done) { mine = { rekt: r.rekt, wearing: r.wearing, numbers: r.numbers ?? {} }; pickedRekt = r.wearing; showYours(); }
       endPairing();
     }, WAIT_EVERY);
   }

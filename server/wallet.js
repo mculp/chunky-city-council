@@ -163,12 +163,15 @@ export function createBindings({ store, clock = Date.now }) {
 // alike. Everything's a POST of JSON as words, so a page on another site needs no asking first, and nothing private's ever in an
 // address. Anything that isn't /wallet/ or /rektguy/ is someone else's, and gets null.
 //
-//   from the phone:         pair { key } → { code, letters, until }, waiting { code, key } → { waiting } or { done, rekt, wearing },
-//                           mine { key } → { rekt, wearing }, wear { key, rekt } → { wearing }, forget { key }
+//   from the phone:         pair { key } → { code, letters, until },
+//                           waiting { code, key } → { waiting } or { done, rekt, wearing, numbers },
+//                           mine { key } → { rekt, wearing, numbers }, wear { key, rekt } → { wearing }, forget { key }
 //   from the wallet's page: seen { code } → { letters, until }, words { code, address } → { words }, signed { code, signature }
 //   from anyone:            GET /rektguy/<handle>, the picture
 //
-// `rekt` are handles, and `wearing` is one of them or null. Anything that can't be done is { no } and why.
+// `rekt` are handles, and `wearing` is one of them or null. `numbers` is each handle's rektguy number, for the phone to put on its
+// button when the picture can't be had. Only the phone that paired is told them, since they're the wallet's to know, and with a
+// number anyone could look up whose it is. Anything that can't be done is { no } and why.
 export function createWalletRoutes({ store, chain, pages, clock = Date.now }) {
   const allowed = pageTest(pages);
   const bindings = createBindings({ store, clock });
@@ -206,22 +209,26 @@ export function createWalletRoutes({ store, chain, pages, clock = Date.now }) {
   }
   async function mine(keyHash) {
     const b = await bindings.of(keyHash);
-    if (!b) return { rekt: [], wearing: null };
+    if (!b) return { rekt: [], wearing: null, numbers: {} };
     if (clock() - b.checked > RECHECK) recheck(keyHash, b);
-    const rekt = [];
-    for (const id of b.ids) rekt.push(await bindings.handle(id));
-    return { rekt, wearing: Number.isInteger(b.chosen) ? await bindings.handle(b.chosen) : null };
+    const rekt = [], numbers = {};
+    for (const id of b.ids) { const h = await bindings.handle(id); rekt.push(h); numbers[h] = id; }
+    return { rekt, wearing: Number.isInteger(b.chosen) ? await bindings.handle(b.chosen) : null, numbers };
   }
 
-  // a picture's the same for everyone, so it's kept to hand, newest first, and anyone can have it once they know the handle
+  // A picture's the same for everyone, so it's kept to hand, newest first, and anyone can have it once they know the handle. One that
+  // can't be had right now is nothing, which a page can read without its console saying anything went wrong, and isn't kept.
   async function picture(request, handle) {
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405 });
-    const none = (status, words) => new Response(words, { status, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'text/plain' } });
+    const none = (status, words) => new Response(words, { status, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*', 'Cross-Origin-Resource-Policy': 'cross-origin' } });
     let p = pictures.get(handle);
     if (!p) {
       const id = await bindings.idOf(handle);
       if (id === null || !chain) return none(404, 'Nobody\'s wearing that.');
-      try { p = await chain.picture(id); } catch (e) { console.error(`Couldn't have rektguy ${id}'s picture: ${e.message}`); return none(502, 'That picture can\'t be had right now.'); }
+      try { p = await chain.picture(id); } catch (e) {
+        console.error(`Couldn't have rektguy ${id}'s picture: ${e.message}`);
+        return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Cross-Origin-Resource-Policy': 'cross-origin' } });
+      }
       pictures.set(handle, p); pictured += p.bytes.length;
       for (const [h, q] of pictures) { if (pictured <= PICTURES_MOST) break; pictures.delete(h); pictured -= q.bytes.length; }
     } else { pictures.delete(handle); pictures.set(handle, p); }

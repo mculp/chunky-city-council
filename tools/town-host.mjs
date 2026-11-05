@@ -143,7 +143,7 @@ try {
   assert.deepEqual([had?.x, had?.z, had?.beans, had?.items?.bottle], [5, 6, 4, 1]);
   assert.deepEqual(back.welcome().minds, { coop: { notes: [], said: ['Hey.'], visits: 1 } });
   assert.deepEqual(n.welcome().minds, {});
-  assert.deepEqual(await askWallet(url, 'mine', { key: 'w'.repeat(32) }), { rekt: told.rekt, wearing: told.wearing });
+  assert.deepEqual(await askWallet(url, 'mine', { key: 'w'.repeat(32) }), { rekt: told.rekt, wearing: told.wearing, numbers: told.numbers });
   assert.deepEqual(back.welcome().wrecks, [fence]);
   console.log('stopped and started again, someone coming back finds where they were, what they had, Coop remembering them, what they wear of their own, and the fence still down');
 
@@ -161,7 +161,7 @@ try {
   await until(() => forgotten.id, 'the one away longest to come back');
   assert.equal(forgotten.welcome().saved, null);
   assert.deepEqual(forgotten.welcome().minds, {});
-  assert.deepEqual(await askWallet(url, 'mine', { key: 'w'.repeat(32) }), { rekt: [], wearing: null });
+  assert.deepEqual(await askWallet(url, 'mine', { key: 'w'.repeat(32) }), { rekt: [], wearing: null, numbers: {} });
   console.log('a thousand more come and go, and whoever\'d been away longest comes back as someone new, with Coop not remembering them, and their wallet forgotten');
   console.log('town host: all good');
 } finally {

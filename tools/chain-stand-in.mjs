@@ -38,8 +38,10 @@ class Reverted extends Error {}
 // it, so on the chain it's none for most who hold one (CHUNKY-170). `delegations` are { registry: 1 or 2, type: 'all', 'contract' or
 // 'token', from, to }, with `contract`, `tokenId` and `rights` where they're wanted. `smart` is a smart wallet's address → (hash,
 // signature) → whether it takes it. `ipfs` is 'cid/path' → what's there, words or bytes. `base` is what tokenURI puts the number on
-// the end of, as rektguy's does.
-export function chainStandIn({ owners = {}, minted = {}, counter = null, delegations = [], smart = {}, ipfs = {}, base = 'ipfs://QmStandInMeta/' } = {}) {
+// the end of, as rektguy's does. Alchemy's NFT API is here too, at /nft/v3/<key>/: its index of who holds what is `index`, rektguy
+// number → address, where it's given, as one that hasn't caught up would be, and otherwise the same as `owners`; and its own copy of
+// each picture is `cached`, number → bytes, at /cdn/<number>. `alchemyDown` has it answer nothing but 503.
+export function chainStandIn({ owners = {}, minted = {}, counter = null, delegations = [], smart = {}, ipfs = {}, base = 'ipfs://QmStandInMeta/', index = null, cached = {}, alchemyDown = false } = {}) {
   const asked = [];
   const ownerOf = (id) => owners[id] ?? null;
   const contracts = {
@@ -105,8 +107,23 @@ export function chainStandIn({ owners = {}, minted = {}, counter = null, delegat
     }
   }
 
+  // Alchemy's NFT API, v3: what an owner holds of a contract's, a hundred to a page at most, and a token's metadata with its picture's copy
+  function alchemy(what, q) {
+    if (alchemyDown) return new Response('Service Unavailable', { status: 503 });
+    asked.push(what);
+    if (what === 'getNFTsForOwner') {
+      const theirs = q.get('contractAddresses[]')?.toLowerCase() !== REKTGUY ? [] : Object.entries(index ?? owners).filter(([, o]) => isAddressEqual(o, q.get('owner'))).map(([id]) => +id).sort((a, b) => a - b);
+      const from = +(q.get('pageKey') ?? 0), size = Math.min(100, +(q.get('pageSize') ?? 100)), page = theirs.slice(from, from + size);
+      return Response.json({ ownedNfts: page.map((id) => ({ contractAddress: REKTGUY, tokenId: String(id), balance: '1' })), totalCount: theirs.length, pageKey: from + size < theirs.length ? String(from + size) : null });
+    }
+    if (what === 'getNFTMetadata') return Response.json({ tokenId: q.get('tokenId'), image: { cachedUrl: cached[q.get('tokenId')] ? `https://nft-cdn.stand-in/cdn/${q.get('tokenId')}` : null } });
+    return new Response('Not Found', { status: 404 });
+  }
+
   async function answer(request) {
-    const { pathname } = new URL(request.url);
+    const { pathname, searchParams } = new URL(request.url);
+    if (pathname.startsWith('/nft/v3/')) return alchemy(pathname.split('/').pop(), searchParams);
+    if (pathname.startsWith('/cdn/')) { const there = cached[pathname.slice('/cdn/'.length)]; return there ? new Response(there) : new Response('Not Found', { status: 404 }); }
     if (pathname.startsWith('/ipfs/')) {
       const there = ipfs[decodeURIComponent(pathname.slice('/ipfs/'.length))];
       if (there === undefined) return new Response('not pinned', { status: 404 });

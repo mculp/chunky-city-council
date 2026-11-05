@@ -63,6 +63,38 @@ test('a thousand asked with none answered is the chain not answering, and it say
   assert.deepEqual(await on(t).holds(me), [5]);
 });
 
+// ---------------- with the owner's Alchemy key, its index says what a wallet holds and the chain says whether it still does
+const KEY = 'a-key-for-the-stand-in';
+test('with an Alchemy key, what a wallet holds is found by its index, a hundred to a page, without looking through them all', async () => {
+  const me = someone().address, other = someone().address, owners = { 0: other, 8813: other };
+  for (let i = 1; i <= 250; i++) owners[i * 30] = me;
+  const s = chainStandIn({ owners, counter: 8814 }), c = on(s, { alchemy: KEY });
+  const ids = await c.holds(me);
+  assert.equal(ids.length, 250);
+  assert.deepEqual(ids.slice(0, 3), [30, 60, 90]);
+  assert.equal(asked(s, 'getNFTsForOwner'), 3);
+  assert.ok(asked(s, 'ownerOf') <= 250, `${asked(s, 'ownerOf')} looked at`);
+});
+
+test('and one the index has that the chain says has gone to someone else isn\'t theirs, nor one the chain has that the index hasn\'t caught up with', async () => {
+  const me = someone().address, buyer = someone().address;
+  const s = chainStandIn({ owners: { 4: me, 9: buyer, 12: me }, index: { 4: me, 9: me }, counter: 20 }), c = on(s, { alchemy: KEY });
+  assert.deepEqual(await c.holds(me), [4]);
+});
+
+test('and a vault delegated to them is asked of the index too', async () => {
+  const me = someone().address, vault = someone().address;
+  const s = chainStandIn({ owners: { 2: vault, 5: me }, delegations: [{ registry: 2, type: 'all', from: vault, to: me }], counter: 10 }), c = on(s, { alchemy: KEY });
+  assert.deepEqual(await c.holds(me), [2, 5]);
+  assert.equal(asked(s, 'getNFTsForOwner'), 2);
+});
+
+test('an index that doesn\'t answer is passed over for looking through them all', async () => {
+  const me = someone().address, s = chainStandIn({ owners: { 7: me, 1500: me }, counter: 2000, alchemyDown: true }), c = on(s, { alchemy: KEY });
+  assert.deepEqual(await c.holds(me), [7, 1500]);
+  assert.ok(asked(s, 'ownerOf') >= 2000);
+});
+
 test('a rektguy kept in another wallet counts for the one it\'s delegated to, by either of delegate.xyz\'s registries', async () => {
   const me = someone().address, [vault, vault2, vault3, vault4, vault5, vault6, stranger] = Array.from({ length: 7 }, () => someone().address);
   const s = chainStandIn({
@@ -114,6 +146,17 @@ test('a gateway that turns it down is passed over for the next, and none answeri
   assert.deepEqual([...(await c.picture(1386)).bytes], [...PNG]);
   assert.deepEqual(asked, ['busy.stand-in', 'gone.stand-in', 'chain.stand-in', 'busy.stand-in', 'gone.stand-in', 'chain.stand-in']);
   await assert.rejects(on(s, { gateway: ['http://busy.stand-in/ipfs/', 'http://gone.stand-in/ipfs/'], fetch }).picture(1386));
+});
+
+test('with an Alchemy key, a picture is Alchemy\'s own copy, and the gateways if it hasn\'t one', async () => {
+  const s = chainStandIn({ base: 'ipfs://QmMeta/', ipfs: { 'QmMeta/2': JSON.stringify({ image: 'ipfs://QmArt/2.png' }), 'QmArt/2.png': PNG }, cached: { 1386: PNG } });
+  // none of the gateways answers, as from Cloudflare
+  const fetch = (input, init) => (String(input instanceof Request ? input.url : input).includes('/ipfs/') ? new Response('Too Many Requests', { status: 429 }) : s.fetch(input, init));
+  const c = on(s, { alchemy: KEY, fetch });
+  assert.deepEqual([...(await c.picture(1386)).bytes], [...PNG]);
+  assert.equal(asked(s, 'tokenURI'), 0);
+  await assert.rejects(c.picture(2));
+  assert.deepEqual([...(await on(s, { alchemy: KEY }).picture(2)).bytes], [...PNG]);
 });
 
 test('a picture written into the address itself is read from there', async () => {

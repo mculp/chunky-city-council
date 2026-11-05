@@ -332,12 +332,12 @@ test('what\'s kept of a wallet is kept with the town, and goes with whoever the 
     try { ({ wearing } = await signIn(s.port, 'me-on-my-phone-0171', me)); await sleep(200); } finally { await s.close(); }
     const again = await startServer({ port: 0, quiet: true, save, saveEvery: 50, keeps: 1, chain });
     try {
-      assert.deepEqual(await (await askWallet(again.port, 'mine', { key: 'me-on-my-phone-0171' })).json(), { rekt: [wearing], wearing });
+      assert.deepEqual(await (await askWallet(again.port, 'mine', { key: 'me-on-my-phone-0171' })).json(), { rekt: [wearing], wearing, numbers: { [wearing]: 7 } });
       // they come and go, and then someone else does, which is one more than it keeps
       const a = client(again.port, { key: 'me-on-my-phone-0171' }); await a.in(); a.ws.close(); await sleep(100);
       const b = client(again.port); await b.in(); b.ws.close();
       await sleep(200);
-      assert.deepEqual(await (await askWallet(again.port, 'mine', { key: 'me-on-my-phone-0171' })).json(), { rekt: [], wearing: null });
+      assert.deepEqual(await (await askWallet(again.port, 'mine', { key: 'me-on-my-phone-0171' })).json(), { rekt: [], wearing: null, numbers: {} });
     } finally { await again.close(); }
     assert.equal(readFileSync(save, 'utf8').toLowerCase().includes(me.address.toLowerCase().slice(2)), false);
   } finally { rmSync(dir, { recursive: true, force: true }); }

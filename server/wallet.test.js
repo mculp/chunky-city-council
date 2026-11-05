@@ -181,7 +181,11 @@ test('the whole trip: the phone pairs, the wallet\'s page signs, and the phone\'
   assert.equal(told.rekt.length, 2);
   for (const h of told.rekt) assert.match(h, /^[\w-]{16,64}$/);
   assert.equal(told.wearing, null, 'with two, they\'ve not chosen yet');
-  assert.deepEqual((await t.ask('/wallet/mine', { key: PHONE })).json, { rekt: told.rekt, wearing: null });
+  // and each one's number, for the button when its picture can't be had, which is theirs to know and nobody else's
+  assert.deepEqual(told.rekt.map((h) => told.numbers[h]), [7, 1386]);
+  assert.deepEqual(Object.keys(told.numbers).sort(), [...told.rekt].sort());
+  assert.deepEqual((await t.ask('/wallet/mine', { key: PHONE })).json, { rekt: told.rekt, wearing: null, numbers: told.numbers });
+  assert.deepEqual((await t.ask('/wallet/mine', { key: 'another-phone-entirely' })).json, { rekt: [], wearing: null, numbers: {} });
   // the phone's never told the wallet's address, whatever it asked, and only the wallet's own page has it in the words it signs
   const phone = t.answers.filter((a) => a.path !== '/wallet/words');
   assert.equal(phone.length, t.answers.length - 1);
@@ -191,7 +195,7 @@ test('the whole trip: the phone pairs, the wallet\'s page signs, and the phone\'
 test('one rektguy is worn straight away, and they can change what they wear to another of theirs or a look of the town\'s', async () => {
   const me = someone(), t = trip({ owners: { 7: me.address } });
   const told = await signIn(t, me);
-  assert.deepEqual(told, { done: true, rekt: told.rekt, wearing: told.rekt[0] });
+  assert.deepEqual(told, { done: true, rekt: told.rekt, wearing: told.rekt[0], numbers: { [told.rekt[0]]: 7 } });
   assert.deepEqual((await t.ask('/wallet/wear', { key: PHONE, rekt: null })).json, { wearing: null });
   assert.deepEqual((await t.ask('/wallet/wear', { key: PHONE, rekt: told.rekt[0] })).json, { wearing: told.rekt[0] });
   assert.deepEqual((await t.ask('/wallet/wear', { key: PHONE, rekt: 'not-one-of-theirs-at-all' })).json, { no: 'rekt' });
@@ -201,14 +205,14 @@ test('one rektguy is worn straight away, and they can change what they wear to a
 
 test('a wallet with none, a wallet that never signs and one that\'s forgotten all leave the phone with nothing to wear and nothing said', async () => {
   const none = trip(), told = await signIn(none, someone());
-  assert.deepEqual(told, { done: true, rekt: [], wearing: null });
+  assert.deepEqual(told, { done: true, rekt: [], wearing: null, numbers: {} });
   const t = trip(), { json: { code } } = await t.ask('/wallet/pair', { key: PHONE });
   later(PAIR_FOR + 1);
   assert.deepEqual((await t.ask('/wallet/waiting', { code, key: PHONE })).json, { no: 'gone' });
   const me = someone(), f = trip({ owners: { 7: me.address } });
   await signIn(f, me);
   assert.deepEqual((await f.ask('/wallet/forget', { key: PHONE })).json, { forgotten: true });
-  assert.deepEqual((await f.ask('/wallet/mine', { key: PHONE })).json, { rekt: [], wearing: null });
+  assert.deepEqual((await f.ask('/wallet/mine', { key: PHONE })).json, { rekt: [], wearing: null, numbers: {} });
 });
 
 test('only the game\'s own pages are answered, with nothing kept along the way, and what isn\'t what\'s asked for is turned away before the chain\'s asked', async () => {
@@ -241,6 +245,19 @@ test('a rektguy\'s picture is had by its handle, the same for everyone and kept 
   assert.equal((await t.ask('/rektguy/nobody-at-all-like-this', undefined, { origin: null })).status, 404);
 });
 
+test('a picture that can\'t be had is nothing, which any page may read without an error, kept nowhere so it\'s asked for again', async () => {
+  const me = someone(), t = trip({ owners: { 77: me.address } });
+  const [handle] = (await signIn(t, me)).rekt;
+  const r = await t.ask(`/rektguy/${handle}`, undefined, { origin: null });
+  assert.equal(r.status, 204);
+  assert.equal(r.bytes.length, 0);
+  assert.equal(r.headers.get('access-control-allow-origin'), '*');
+  assert.equal(r.headers.get('cache-control'), 'no-store');
+  t.s.asked.length = 0;
+  assert.equal((await t.ask(`/rektguy/${handle}`, undefined, { origin: null })).status, 204);
+  assert.ok(t.s.asked.includes('tokenURI'), 'and the chain is asked again the next time');
+});
+
 test('what a wallet holds is read again once it\'s been an hour, so a rektguy that\'s been sold comes off', async () => {
   const me = someone(), t = trip({ owners: { 7: me.address } });
   await signIn(t, me);
@@ -248,5 +265,5 @@ test('what a wallet holds is read again once it\'s been an hour, so a rektguy th
   t.s.owners[7] = someone().address;
   assert.equal((await t.ask('/wallet/mine', { key: PHONE })).json.rekt.length, 1, 'what was known is said straight away');
   await t.routes.settled();
-  assert.deepEqual((await t.ask('/wallet/mine', { key: PHONE })).json, { rekt: [], wearing: null });
+  assert.deepEqual((await t.ask('/wallet/mine', { key: PHONE })).json, { rekt: [], wearing: null, numbers: {} });
 });

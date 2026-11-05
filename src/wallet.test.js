@@ -61,10 +61,10 @@ test('the whole trip: the phone pairs, the wallet\'s page signs what it\'s given
   assert.deepEqual(await signIn({ base: BASE, code, letters, origin: HERE, ethereum: walletApp(me, asked), fetch }), { done: true });
   assert.deepEqual(asked, ['eth_requestAccounts', 'personal_sign'], 'and nothing but its address and a signature is asked of the wallet');
   const told = await phone.waiting(code);
-  assert.deepEqual(told, { done: true, rekt: told.rekt, wearing: told.rekt[0] });
+  assert.deepEqual(told, { done: true, rekt: told.rekt, wearing: told.rekt[0], numbers: { [told.rekt[0]]: 7 } });
   assert.equal(phone.picture(told.rekt[0]), `${BASE}/rektguy/${told.rekt[0]}`);
   assert.deepEqual(await phone.wear(null), { wearing: null });
-  assert.deepEqual(await phone.mine(), { rekt: told.rekt, wearing: null });
+  assert.deepEqual(await phone.mine(), { rekt: told.rekt, wearing: null, numbers: told.numbers });
   assert.deepEqual(await phone.forget(), { forgotten: true });
   assert.ok(WAIT_EVERY >= 1000 && WAIT_EVERY <= 3000);
 });

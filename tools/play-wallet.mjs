@@ -3,7 +3,8 @@
 // and doesn't offer it. On a phone, the title card has Connect a wallet under Play, which shows four letters and the wallet apps that
 // open the game's own page in their browser. That page, in the wallet app's browser, shows the same four letters, takes them off its
 // address, and asks the wallet for its address and one signature, on words that say it costs nothing and moves nothing, and nothing
-// else, and says it's looking for their rektguys while the town looks, with the dots pulsing, or still with reduced motion. Back on the phone, the looks have their two rektguys' pictures over the town's, neither worn yet, with nothing said; they pick
+// else, and says it's looking for their rektguys while the town looks, with the dots pulsing, or still with reduced motion. Back on the phone, the looks have their three rektguys over the town's, two by their pictures and one whose picture can't be had
+// by its number, none worn yet, with nothing said; they pick
 // one and come in wearing it, and someone else in town sees it by its handle and has its picture, which a canvas can read. Nobody's
 // shown the wallet's address. Then backing out, and a wallet with none, each end at the looks with nothing said; a phone whose clock
 // is ten minutes fast waits for a wallet that takes its time; whoever's wearing rektguy 1386 comes in as the hero, in the hero's own
@@ -42,8 +43,9 @@ function png([r, g, b], size = 16) {
 const COLOUR = { 7: [236, 128, 58], 12: [111, 214, 200], 40: [227, 40, 92], 1386: [241, 230, 207] };
 const someone = () => privateKeyToAccount(generatePrivateKey());
 const W = { one: someone(), two: someone(), none: someone(), owner: someone() };
+// and 77, whose picture isn't anywhere, as none of them were from Cloudflare on 2026-11-04
 const standIn = chainStandIn({
-  owners: { 7: W.one.address, 12: W.two.address, 40: W.two.address, 1386: W.owner.address }, base: 'ipfs://QmMeta/',
+  owners: { 7: W.one.address, 12: W.two.address, 40: W.two.address, 77: W.two.address, 1386: W.owner.address }, base: 'ipfs://QmMeta/',
   ipfs: Object.fromEntries(Object.entries(COLOUR).flatMap(([id, rgb]) => [[`QmMeta/${id}`, JSON.stringify({ image: `ipfs://QmArt/${id}.png` })], [`QmArt/${id}.png`, png(rgb)]])),
 });
 const server = await startServer({ port: 0, quiet: true, chain: createChain({ rpc: ['http://chain.stand-in/'], gateway: 'http://chain.stand-in/ipfs/', fetch: standIn.fetch }) });
@@ -71,13 +73,19 @@ const pairPanel = (p) => on(p, () => {
   const panel = document.getElementById('pair');
   return !!panel && !panel.hidden && { letters: document.getElementById('pairLetters').textContent, apps: [...panel.querySelectorAll('#pairApps a')].map((a) => [a.textContent, a.href]), here: !!document.getElementById('pairHere') };
 });
-// what's shown of the looks: their own rektguys, which is pressed and whether each picture's there, and what's said
+// what's shown of the looks: their own rektguys, which is pressed and what's on each, its picture or its number, and what's said
 const looks = (p) => on(p, () => {
   const j = document.getElementById('join');
   if (!j || j.hidden) return null;
   const yours = j.querySelector('.yours'), rekt = yours.hidden ? [] : [...yours.querySelectorAll('.rekt')];
+  // a picture that's come, alone, or a number that's showing with no picture still to come
+  const what = (b) => {
+    const img = b.querySelector('img'), n = b.querySelector('.n'), number = n && n.checkVisibility() ? n.textContent : '';
+    if (img?.complete && img.naturalWidth > 0 && img.checkVisibility()) return number ? 'both' : 'picture';
+    return img ? '' : number;
+  };
   return {
-    yours: rekt.length, pressed: rekt.map((b) => b.getAttribute('aria-pressed') === 'true'), loaded: rekt.every((b) => b.querySelector('img').complete && b.querySelector('img').naturalWidth > 0),
+    yours: rekt.length, pressed: rekt.map((b) => b.getAttribute('aria-pressed') === 'true'), shown: rekt.map(what), loaded: rekt.every((b) => !!what(b)),
     town: [...j.querySelectorAll('.looks .look')].some((b) => b.getAttribute('aria-pressed') === 'true'), said: document.getElementById('joinSay').textContent,
   };
 });
@@ -157,16 +165,17 @@ try {
   const browser = a.page.context().browser();
   const app = await walletApp(browser, W.two, page);
   await snap(app.page, '02-wallet-page');
-  await signs(app.page, app.asked, pairing.letters, 'two rektguys');
+  await signs(app.page, app.asked, pairing.letters, 'three rektguys');
   await snap(app.page, '03-wallet-done');
 
-  // ---------------- back on the phone: their two over the town's looks, neither worn yet, and nothing said
+  // ---------------- back on the phone: their three over the town's looks, neither worn yet, and nothing said
   const mine = await until(async () => { const l = await looks(a); return l?.yours && l.loaded && l; }, 12000);
-  check(`the phone goes to the looks with their ${mine?.yours} rektguys' pictures over the town's, neither worn yet, with nothing said`, mine?.yours === 2 && mine.loaded && mine.pressed.every((p) => !p) && mine.said === '', mine);
+  check(`the phone goes to the looks with their ${mine?.yours} rektguys over the town's, two by their pictures and the one with none by its number, ${JSON.stringify(mine?.shown)}, none worn yet, with nothing said`,
+    mine?.yours === 3 && JSON.stringify(mine.shown) === '["picture","picture","#77"]' && mine.pressed.every((p) => !p) && mine.said === '', mine);
   await a.page.tap('#joinName'); await a.page.keyboard.type('Pickles');
   await a.page.tap('#join .yours .rekt:nth-child(2)');
   const picked = await looks(a);
-  check('they pick the second, and none of the town\'s looks is picked with it', JSON.stringify(picked?.pressed) === '[false,true]' && !picked.town, picked);
+  check('they pick the second, and none of the town\'s looks is picked with it', JSON.stringify(picked?.pressed) === '[false,true,false]' && !picked.town, picked);
   await snap(a.page, '04-their-rektguys');
   await press(a, '#joinGo');
   const you = await until(() => on(a, () => __game.S.mode === 'town' && __net.link?.id && __net.you()), 15000), worn = await on(a, () => __net.wallet());

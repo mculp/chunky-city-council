@@ -6,8 +6,10 @@
 //
 // The owner's OpenRouter key is the Worker's secret OPENROUTER_KEY, and only the owner puts it in. CAP_USD is the month's cap.
 // CHUNKY_HERO is the sha256, in hex, of the secret in the hero's link, and it's a secret too. Wearing your own rektguy (CHUNKY-170)
-// asks Ethereum's public nodes, unless ETH_RPC_URL names the owner's own, which is a secret if it has a key in it, and IPFS_GATEWAY
-// is where the pictures come through, a list in the order to try, server/chain.js's public ones unless it's said.
+// asks Ethereum's public nodes, unless ETH_RPC_URL names the owner's own, which is a secret if it has a key in it. ALCHEMY_KEY is the
+// owner's key for Alchemy's NFT API, a secret only the owner puts in: it's how what a wallet holds is found, and where the pictures
+// come from. Without it every rektguy's looked through, and the pictures come through IPFS_GATEWAY, a list in the order to try,
+// server/chain.js's public ones unless it's said, none of which answers Cloudflare now.
 import { DurableObject } from 'cloudflare:workers';
 import { createTalk, OPENROUTER_URL } from './talk.js';
 import { createTown } from './town.js';
@@ -44,7 +46,7 @@ export class Town extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.town = createTown({ aside: createAside(farm) });
-    const chain = createChain({ rpc: listOf(env.ETH_RPC_URL).length ? listOf(env.ETH_RPC_URL) : RPCS, gateway: listOf(env.IPFS_GATEWAY).length ? listOf(env.IPFS_GATEWAY) : GATEWAYS });
+    const chain = createChain({ rpc: listOf(env.ETH_RPC_URL).length ? listOf(env.ETH_RPC_URL) : RPCS, gateway: listOf(env.IPFS_GATEWAY).length ? listOf(env.IPFS_GATEWAY) : GATEWAYS, alchemy: env.ALCHEMY_KEY || null });
     this.wallet = createWalletRoutes({ store: ctx.storage, chain, pages: pagesOf(env) });
     // what the cast remember of each of them is kept on its own, beside the town, since everyone's together would be too much for one
     this.host = createHost({ town: this.town, heroHash: env.CHUNKY_HERO ?? '', mindsOf: (k) => ctx.storage.get(`mind:${k}`), rektOf: (k) => this.wallet.wearing(k) });

@@ -5,7 +5,8 @@
 //
 // CHUNKY_HERO is the sha256, in hex, of the secret in the hero's link, so that only a phone with that link is him. CHUNKY_SAVE is
 // where the town's kept between runs, data/raw/town.json if it isn't said. --talk answers the characters' words at /talk as well.
-// Wearing your own rektguy asks Ethereum's public nodes, or ETH_RPC_URL's, and IPFS_GATEWAY's for the pictures (server/chain.js).
+// Wearing your own rektguy asks Ethereum's public nodes, or ETH_RPC_URL's, and Alchemy's NFT API with ALCHEMY_KEY for what a wallet
+// holds and for the pictures, or without it IPFS_GATEWAY's for the pictures (server/chain.js).
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
@@ -132,7 +133,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     port: +args.find((a) => /^\d+$/.test(a)) || NET_PORT,
     talk: args.includes('--talk'),
     heroHash: process.env.CHUNKY_HERO ?? '',
-    chain: createChain({ rpc: process.env.ETH_RPC_URL ? process.env.ETH_RPC_URL.split(',').map((u) => u.trim()).filter(Boolean) : undefined, gateway: process.env.IPFS_GATEWAY ? process.env.IPFS_GATEWAY.split(',').map((u) => u.trim()).filter(Boolean) : undefined }),
+    chain: createChain({ rpc: process.env.ETH_RPC_URL ? process.env.ETH_RPC_URL.split(',').map((u) => u.trim()).filter(Boolean) : undefined, gateway: process.env.IPFS_GATEWAY ? process.env.IPFS_GATEWAY.split(',').map((u) => u.trim()).filter(Boolean) : undefined, alchemy: process.env.ALCHEMY_KEY || undefined }),
     save: process.env.CHUNKY_SAVE || join(fileURLToPath(new URL('..', import.meta.url)), 'data', 'raw', 'town.json'),
   });
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => s.close().then(() => process.exit(0)));
