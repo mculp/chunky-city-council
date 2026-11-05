@@ -803,7 +803,6 @@ try {
       const got = [], t0 = performance.now();
       (function look() { const h = __net.drawn().hero; if (h) got.push({ pan: h.pan, bat: h.bat, hands: h.hands }); if (performance.now() - t0 < 1600) requestAnimationFrame(look); else done(got); })();
     }));
-    await c.page.keyboard.press('f');
     // What A drew of a swing: the frames that aren't him at rest, which of his own screen's drawings each one is, any his screen never draws, and
     // him at rest after as he is on his own. A phone draws him at most every twelfth of a second, and only on a frame it draws at all, so a slow
     // one shows fewer of a swing's six drawings, as it would of his own. More than one shows it going through a swing and not stuck on one.
@@ -815,9 +814,9 @@ try {
     check(`A sees him carry the skillet at his right thigh, with his right hand at ${right(seen)}`, thigh(seen), seen);
     let swung = watched();
     let frames = await swung, m = mirrored(frames, hisOwn.pan), out = m.drawn.filter((f) => f.hands[1][0] > .65 && f.hands[1][1] > -.4);
+    await c.page.keyboard.press('f');
     check(`and A sees him swing the skillet as his own screen draws it, ${m.drawn.length} frames of ${frames.length} in ${m.drawings} of its drawings and ${m.odd.length} it never draws, his left out for balance in ${out.length}, and at his thigh after as he is on his own`, m.drawings > 1 && !m.odd.length && out.length > 3 && m.rest && frames.every((f) => f.pan && !f.bat) && thigh(m.last), { which: m.which, odd: m.odd.slice(0, 2), last: m.last, his: hisOwn.pan.rest });
     await snap(a, '06-a-sees-the-hero');
-    // and on everyone else's map he's in the orange of his own arrow, a way up the road so that A's arrow isn't over him
     // and with the bat, it's over his right shoulder between swings, and swung in both hands across him
     await on(c, () => { __game.S.flags.bat = true; });
     await sleep(600);
@@ -830,6 +829,7 @@ try {
     await snap(a, '06-a-sees-the-hero-with-the-bat');
     await on(c, () => { __game.S.flags.bat = false; });
     await onRoad(c, A.x + 60, await on(c, (x) => __game.map.zAt('us_80', x), A.x + 60));
+    // and on everyone else's map he's in the orange of his own arrow, a way up the road so that A's arrow isn't over him
     await sleep(600);
     const H = await me(c);
     await a.page.keyboard.press('m');
