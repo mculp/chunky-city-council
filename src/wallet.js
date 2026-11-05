@@ -75,8 +75,9 @@ const hexOf = (words) => `0x${Array.from(new TextEncoder().encode(words), (b) =>
 
 // The wallet's page: the wallet in front of it, `ethereum`, an EIP-1193 provider, is asked for its address and to sign the words for
 // pairing `code`, and that's all it's ever asked. { done } once the town has the signature, or { no } and why: `declined` if the wallet
-// said no, `words` if the words weren't what they should be, and otherwise whatever the town said.
-export async function signIn({ base, code, letters, origin, ethereum, fetch = (...a) => globalThis.fetch(...a) }) {
+// said no, `words` if the words weren't what they should be, and otherwise whatever the town said. `looking` is told once it's signed,
+// while the town looks at what the wallet holds, which takes a few seconds.
+export async function signIn({ base, code, letters, origin, ethereum, fetch = (...a) => globalThis.fetch(...a), looking = () => {} }) {
   const wallet = async (method, params) => {
     try { return { got: await ethereum.request({ method, ...(params && { params }) }) }; } catch (e) { return { no: e?.code === 4001 ? 'declined' : 'wallet' }; }
   };
@@ -88,5 +89,6 @@ export async function signIn({ base, code, letters, origin, ethereum, fetch = (.
   if (!sound(said.words, { origin, address, letters })) return { no: 'words' };
   const signed = await wallet('personal_sign', [hexOf(said.words), address]);
   if (signed.no) return signed;
+  looking();
   return ask(base, 'signed', { code, signature: signed.got }, fetch);
 }

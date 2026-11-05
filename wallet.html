@@ -37,6 +37,10 @@ button:focus-visible,a.app:focus-visible{outline:2px solid var(--cyan);outline-o
 a.app{display:flex;align-items:center;justify-content:center;min-height:48px;padding:8px 10px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;background:rgba(255,255,255,.05);border:1px solid var(--line)}
 .quiet{background:none;border:0;padding:8px 12px;color:var(--dusk);font-size:12px;letter-spacing:.06em;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 #said{min-height:1.6em;color:var(--cream)}
+/* while the town looks at what the wallet holds, which takes a few seconds, the dots pulse, and sit still for anyone who'd rather */
+#said.looking::after{content:'…';animation:looking 1.2s ease-in-out infinite}
+@keyframes looking{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){#said.looking::after{animation:none}}
 </style>
 </head>
 <body>
@@ -72,7 +76,8 @@ const SAY = {
   chain: 'Couldn\'t look at your wallet just now. Try again.',
   busy: 'Slow down a little, then try again.',
 };
-const $ = (id) => document.getElementById(id), said = (why) => { $('said').textContent = SAY[why] ?? 'Couldn\'t reach Chunky. Try again.'; };
+const $ = (id) => document.getElementById(id), said = (why) => { $('said').classList.remove('looking'); $('said').textContent = SAY[why] ?? 'Couldn\'t reach Chunky. Try again.'; };
+const looking = () => { $('said').textContent = 'Looking for your rektguys'; $('said').classList.add('looking'); };
 
 // The pairing's in the address the phone sent, which comes off it as soon as it's read, so it isn't passed on. It's kept for this
 // tab, in case the wallet's browser loads the page again.
@@ -97,7 +102,7 @@ else if (!window.ethereum) {
   $('check').hidden = false;
   $('sign').addEventListener('click', async () => {
     $('sign').disabled = true; $('said').textContent = '';
-    const r = await signIn({ base, code, letters: seen.letters, origin: location.origin, ethereum: window.ethereum });
+    const r = await signIn({ base, code, letters: seen.letters, origin: location.origin, ethereum: window.ethereum, looking });
     said(r.done ? 'done' : r.no);
     if (r.done || r.no === 'gone') { $('sign').hidden = true; try { sessionStorage.removeItem('chunky.pair'); } catch { /* not kept */ } }
     else $('sign').disabled = false;

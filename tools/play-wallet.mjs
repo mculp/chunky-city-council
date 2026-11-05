@@ -3,7 +3,7 @@
 // and doesn't offer it. On a phone, the title card has Connect a wallet under Play, which shows four letters and the wallet apps that
 // open the game's own page in their browser. That page, in the wallet app's browser, shows the same four letters, takes them off its
 // address, and asks the wallet for its address and one signature, on words that say it costs nothing and moves nothing, and nothing
-// else. Back on the phone, the looks have their two rektguys' pictures over the town's, neither worn yet, with nothing said; they pick
+// else, and says it's looking for their rektguys while the town looks, with the dots pulsing, or still with reduced motion. Back on the phone, the looks have their two rektguys' pictures over the town's, neither worn yet, with nothing said; they pick
 // one and come in wearing it, and someone else in town sees it by its handle and has its picture, which a canvas can read. Nobody's
 // shown the wallet's address. Then backing out, and a wallet with none, each end at the looks with nothing said; a phone whose clock
 // is ten minutes fast waits for a wallet that takes its time; whoever's wearing rektguy 1386 comes in as the hero, in the hero's own
@@ -95,8 +95,8 @@ const holding = (context, asked, account) => Promise.all([
   context.addInitScript(() => { window.ethereum = { request: ({ method, params }) => window.chunkyWallet(method, params ?? []) }; }),
 ]);
 // The wallet's page, opened in the wallet app's own browser with `account` in it, which is a browser apart from the game's
-async function walletApp(browser, account, url) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+async function walletApp(browser, account, url, { reducedMotion = 'no-preference' } = {}) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true, reducedMotion });
   await context.route(CDN, fromCache);
   const app = { context, asked: [], errors: [] };
   await holding(context, app.asked, account);
@@ -110,8 +110,13 @@ async function walletApp(browser, account, url) {
 async function signs(page, asked, letters, who, { tap = true } = {}) {
   const shown = await until(() => page.evaluate(() => { const c = document.getElementById('check'); return !!c && !c.hidden && { letters: document.getElementById('letters').textContent, address: location.href }; }));
   check(`${who}: the wallet's page shows the same four letters, "${shown?.letters}", and has taken the pairing off its address`, shown?.letters === letters && !/pair=|net=/.test(shown.address), shown);
+  // the town's a moment answering, as it is on the chain, where it looks at every rektguy there is
+  await page.route('**/wallet/signed', async (r) => { await new Promise((ok) => setTimeout(ok, 1500)); await r.continue(); });
   await (tap ? page.tap('#sign') : page.click('#sign'));
-  const said = await until(() => page.evaluate(() => document.getElementById('said').textContent));
+  const looking = await until(() => page.evaluate(() => { const s = document.getElementById('said'), after = getComputedStyle(s, '::after'); return s.classList.contains('looking') && { text: s.textContent + after.content.replace(/"/g, ''), pulse: after.animationName }; }));
+  const still = await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
+  check(`${who}: while the town looks it says "${looking?.text}", with the dots ${looking?.pulse === 'none' ? 'still' : `pulsing (${looking?.pulse})`}`, looking?.text === 'Looking for your rektguys…' && (still ? looking.pulse === 'none' : looking.pulse === 'looking'), { looking, still });
+  const said = await until(() => page.evaluate(() => { const s = document.getElementById('said'); return !s.classList.contains('looking') && s.textContent; }));
   check(`${who}: once it's signed it says "${said}"`, said === 'Done. Go back to Chunky.', said);
   check(`${who}: and the wallet was asked for its address and one signature, and nothing else`, JSON.stringify(asked) === '["eth_requestAccounts","personal_sign"]', asked);
   const words = asked.words?.split('\n')[3] ?? '';
@@ -194,7 +199,8 @@ try {
   await press(c, '#joinBack');
   await until(() => on(c, () => !document.getElementById('title').hidden));
   await press(c, '#connectWallet');
-  const empty = await until(() => pairPanel(c)), none = await walletApp(browser, W.none, pageIn(empty));
+  // in a wallet app on a phone set to reduced motion, where the dots sit still
+  const empty = await until(() => pairPanel(c)), none = await walletApp(browser, W.none, pageIn(empty), { reducedMotion: 'reduce' });
   await signs(none.page, none.asked, empty.letters, 'a wallet with none');
   const after = await until(async () => !(await pairPanel(c)) && looks(c), 12000);
   check('and a wallet with none ends at the looks too, with none of theirs and nothing said', after?.yours === 0 && after.said === '', after);

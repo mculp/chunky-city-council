@@ -83,6 +83,19 @@ test('the wallet\'s page signs nothing but the words it should, whoever sent the
   }
 });
 
+test('the page is told as soon as the wallet\'s signed, while the town looks at what it holds, and not when nothing\'s signed', async () => {
+  const me = someone(), fetch = town({ 7: me.address }), phone = walletOf({ base: BASE, key: 'a-phone-of-their-own-5678', fetch });
+  const { code, letters } = await phone.pair(), asked = [], when = [];
+  const asking = (url, init) => { if (url.endsWith('/wallet/signed')) when.push('the town asked'); return fetch(url, init); };
+  const looking = () => when.push(`told after ${asked.at(-1)}`);
+  assert.deepEqual(await signIn({ base: BASE, code, letters, origin: HERE, ethereum: walletApp(me, asked), fetch: asking, looking }), { done: true });
+  assert.deepEqual(when, ['told after personal_sign', 'the town asked']);
+  let told = 0;
+  const app = { request: async () => { throw Object.assign(new Error('User rejected the request.'), { code: 4001 }); } };
+  assert.deepEqual(await signIn({ base: BASE, code, letters, origin: HERE, ethereum: app, fetch, looking: () => told++ }), { no: 'declined' });
+  assert.equal(told, 0);
+});
+
 test('a wallet that won\'t, or a town that says no, is said as it is, with nothing signed', async () => {
   const me = someone(), app = { request: async () => { throw Object.assign(new Error('User rejected the request.'), { code: 4001 }); } };
   assert.deepEqual(await signIn({ base: BASE, code: 'x'.repeat(22), letters: 'BCDF', origin: HERE, ethereum: app, fetch: town({}) }), { no: 'declined' });
