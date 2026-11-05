@@ -12,6 +12,19 @@ export const WAIT_EVERY = 1500;   // ms between the phone asking whether it's do
 // when it asked, since the town's until is by the town's clock. Once it's over, the town says so.
 export const PAIR_FOR = 5 * 60 * 1000;
 
+// Every rektguy's picture is its number, as a GIF, in one folder on IPFS, as each one's metadata says (2026-11-04). The public
+// gateways turn the town on Cloudflare away, but not a phone's own browser, so the phone that paired has its own from one of them
+// whenever the town hasn't, by the numbers only it's told. Filebase's let a page read them and answered quickest.
+export const REKT_PICTURES = 'QmRuj3fqWkZkuruTkPgGSvSdTdjyAMiXyBDPQ5oFer43Rq';
+export const IPFS = 'https://ipfs.filebase.io/ipfs/';
+// Where the phone has them from: the public gateway, or with ?ipfs= one on this machine, as the checks give it. With ?test it's
+// nowhere unless that's said, so a test never asks the real one.
+export function ipfsFor({ search = '', test = false } = {}) {
+  const given = new URLSearchParams(search).get('ipfs');
+  try { if (given && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(given).hostname)) return given; } catch { /* not a place */ }
+  return test ? null : IPFS;
+}
+
 // where the wallet's side of a town is: beside it, at its own origin
 export function walletUrl(town) {
   try { return new URL(town.replace(/^ws/, 'http')).origin; } catch { return null; }
@@ -25,8 +38,8 @@ async function ask(base, what, body, fetch) {
   try { return await r.json(); } catch { return { no: 'town' }; }
 }
 
-// The phone's side, for whoever `key` is in the town whose wallet's side is at `base`
-export function walletOf({ base, key, fetch = (...a) => globalThis.fetch(...a) }) {
+// The phone's side, for whoever `key` is in the town whose wallet's side is at `base`, with its own pictures from `ipfs`
+export function walletOf({ base, key, fetch = (...a) => globalThis.fetch(...a), ipfs = null }) {
   return {
     pair: () => ask(base, 'pair', { key }, fetch),
     waiting: (code) => ask(base, 'waiting', { code, key }, fetch),
@@ -34,6 +47,7 @@ export function walletOf({ base, key, fetch = (...a) => globalThis.fetch(...a) }
     wear: (rekt) => ask(base, 'wear', { key, rekt }, fetch),
     forget: () => ask(base, 'forget', { key }, fetch),
     picture: (handle) => `${base}/rektguy/${encodeURIComponent(handle)}`,
+    pictureOf: (number) => (ipfs ? `${ipfs}${REKT_PICTURES}/${number}.gif` : null),
   };
 }
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { walletUrl, walletOf, pageFor, openIn, seenOf, signIn, WAIT_EVERY, PAIR_FOR } from './wallet.js';
+import { walletUrl, walletOf, pageFor, openIn, seenOf, signIn, ipfsFor, IPFS, REKT_PICTURES, WAIT_EVERY, PAIR_FOR } from './wallet.js';
 import { TOWN_URL } from './net.js';
 import { createWalletRoutes, createMemoryStore, PAIR_FOR as KEPT_FOR } from '../server/wallet.js';
 import { createChain } from '../server/chain.js';
@@ -102,4 +102,23 @@ test('a wallet that won\'t, or a town that says no, is said as it is, with nothi
   const asked = [];
   assert.deepEqual(await signIn({ base: BASE, code: 'x'.repeat(22), letters: 'BCDF', origin: HERE, ethereum: walletApp(me, asked), fetch: town({}) }), { no: 'gone' });
   assert.deepEqual(asked, ['eth_requestAccounts']);
+});
+
+test('the phone that paired has its own pictures from a public gateway by their numbers, when the town hasn\'t them', () => {
+  const phone = walletOf({ base: BASE, key: 'a-phone-of-their-own-1234', ipfs: 'https://gateway.example/ipfs/' });
+  assert.equal(phone.pictureOf(1386), `https://gateway.example/ipfs/${REKT_PICTURES}/1386.gif`);
+  assert.equal(walletOf({ base: BASE, key: 'a-phone-of-their-own-1234', ipfs: null }).pictureOf(1386), null, 'and none with nowhere to have them');
+  assert.match(REKT_PICTURES, /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/);
+});
+
+test('it\'s the public gateway, or with ?test none unless ?ipfs= names one on this machine, so a test never asks the real one', () => {
+  assert.equal(ipfsFor({ search: '?net', test: false }), IPFS);
+  assert.match(IPFS, /^https:\/\/[^/]+\/ipfs\/$/);
+  assert.equal(ipfsFor({ search: '?test&net=ws://localhost:8787', test: true }), null);
+  assert.equal(ipfsFor({ search: `?test&ipfs=${encodeURIComponent('http://127.0.0.1:5555/ipfs/')}`, test: true }), 'http://127.0.0.1:5555/ipfs/');
+  assert.equal(ipfsFor({ search: '?test&ipfs=http://localhost:5555/ipfs/', test: true }), 'http://localhost:5555/ipfs/');
+  // one anywhere else is never taken, however it's put
+  assert.equal(ipfsFor({ search: '?ipfs=https://elsewhere.example/ipfs/', test: false }), IPFS);
+  assert.equal(ipfsFor({ search: '?test&ipfs=https://elsewhere.example/ipfs/', test: true }), null);
+  assert.equal(ipfsFor({ search: '?test&ipfs=not a place', test: true }), null);
 });

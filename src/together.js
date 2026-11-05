@@ -13,7 +13,7 @@
 // driving nudges you aside and does you no harm.
 import * as THREE from 'three';
 import { connectNet, rollLook, makeKey, worldOf, townUrl, hereUrl, HOW, PHONE_KEY } from './net.js';
-import { walletUrl, walletOf, pageFor, openIn, WAIT_EVERY, PAIR_FOR } from './wallet.js';
+import { walletUrl, walletOf, pageFor, openIn, ipfsFor, WAIT_EVERY, PAIR_FOR } from './wallet.js';
 import { checkName, NAME_MOST } from './names.js';
 import { inVehicle, settle, KINDS } from './vehicles.js';
 import { toScreen, drawLabel, nameBeside, COLORS as MAPC } from './mapview.js';
@@ -82,7 +82,7 @@ export function together(G) {
   let link = null, you = { id: 0, name: '', look: 0, hero: false, rekt: null }, picked = null;
   // Wearing your own rektguy (CHUNKY-170): what their wallet holds, by handle, which the town says, and the one picked here, which
   // is null for a look of the town's. They come in wearing it from what the town has, so it's told first.
-  const wallet = walletOf({ base: walletUrl(url), key });
+  const wallet = walletOf({ base: walletUrl(url), key, ipfs: ipfsFor({ search: location.search, test: G.TEST }) });
   let mine = { rekt: [], wearing: null }, pickedRekt = null, wearingNow = null;
   // started: let into town, and saying where they are; alone: let go of the town; going: on their way in from the title card's Play
   let started = false, alone = false, going = false;
@@ -111,17 +111,19 @@ export function together(G) {
     for (const b of yours.children) b.setAttribute('aria-pressed', String(b.dataset.h === pickedRekt));
   };
   lookButtons.forEach((b, i) => b.addEventListener('click', () => { picked = i; pickedRekt = null; showLook(); }));
-  // their own rektguys, by their pictures, above the town's looks, each with its number until its picture comes, and for good if the
-  // town can't have it, so that a button's never empty
+  // Their own rektguys, by their pictures, above the town's looks. One the town can't have comes from a public gateway by its number
+  // instead, in this browser, and each has its number on it until its picture comes, and for good if neither has it, so that a
+  // button's never empty.
   function showYours() {
     yours.replaceChildren(...mine.rekt.map((h) => {
       const b = document.createElement('button'), img = new Image(), n = document.createElement('span'), number = mine.numbers?.[h];
       b.className = 'rekt'; b.dataset.h = h; b.setAttribute('aria-label', Number.isInteger(number) ? `Your rektguy #${number}` : 'Your rektguy');
       n.className = 'n'; n.textContent = Number.isInteger(number) ? `#${number}` : '';
       // asked for as a page can read it from the start, since what they wear is drawn from it, and it's fetched once
+      let instead = Number.isInteger(number) ? wallet.pictureOf(number) : null;
       img.crossOrigin = 'anonymous'; img.loading = 'lazy'; img.alt = '';
       img.addEventListener('load', () => { n.hidden = true; }, { once: true });
-      img.addEventListener('error', () => img.remove(), { once: true });
+      img.addEventListener('error', () => { if (instead) { img.src = instead; instead = null; } else img.remove(); });
       img.src = wallet.picture(h);
       b.append(n, img); b.addEventListener('click', () => { pickedRekt = h; showLook(); });
       return b;

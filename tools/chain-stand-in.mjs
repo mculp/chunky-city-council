@@ -124,10 +124,11 @@ export function chainStandIn({ owners = {}, minted = {}, counter = null, delegat
     const { pathname, searchParams } = new URL(request.url);
     if (pathname.startsWith('/nft/v3/')) return alchemy(pathname.split('/').pop(), searchParams);
     if (pathname.startsWith('/cdn/')) { const there = cached[pathname.slice('/cdn/'.length)]; return there ? new Response(there) : new Response('Not Found', { status: 404 }); }
+    // which any page may read, as the public gateways let it
     if (pathname.startsWith('/ipfs/')) {
-      const there = ipfs[decodeURIComponent(pathname.slice('/ipfs/'.length))];
-      if (there === undefined) return new Response('not pinned', { status: 404 });
-      return new Response(there, { headers: { 'Content-Type': typeof there === 'string' ? 'text/plain' : 'application/octet-stream' } });
+      const there = ipfs[decodeURIComponent(pathname.slice('/ipfs/'.length))], open = { 'Access-Control-Allow-Origin': '*' };
+      if (there === undefined) return new Response('not pinned', { status: 404, headers: open });
+      return new Response(there, { headers: { ...open, 'Content-Type': typeof there === 'string' ? 'text/plain' : 'application/octet-stream' } });
     }
     if (request.method !== 'POST') return new Response('JSON-RPC, by POST', { status: 405 });
     const body = await request.json();

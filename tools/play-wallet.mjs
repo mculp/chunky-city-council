@@ -3,9 +3,10 @@
 // and doesn't offer it. On a phone, the title card has Connect a wallet under Play, which shows four letters and the wallet apps that
 // open the game's own page in their browser. That page, in the wallet app's browser, shows the same four letters, takes them off its
 // address, and asks the wallet for its address and one signature, on words that say it costs nothing and moves nothing, and nothing
-// else, and says it's looking for their rektguys while the town looks, with the dots pulsing, or still with reduced motion. Back on the phone, the looks have their three rektguys over the town's, two by their pictures and one whose picture can't be had
-// by its number, none worn yet, with nothing said; they pick
-// one and come in wearing it, and someone else in town sees it by its handle and has its picture, which a canvas can read. Nobody's
+// else, and says it's looking for their rektguys while the town looks, with the dots pulsing, or still with reduced motion. Back on
+// the phone, the looks have their four rektguys over the town's: two by the town's pictures, one the town can't have by its picture
+// from a gateway, in the phone's own browser by its number, and one whose picture isn't anywhere by its number. None is worn yet,
+// with nothing said. They pick one and come in wearing it, and someone else in town sees it by its handle and has its picture, which a canvas can read. Nobody's
 // shown the wallet's address. Then backing out, and a wallet with none, each end at the looks with nothing said; a phone whose clock
 // is ten minutes fast waits for a wallet that takes its time; whoever's wearing rektguy 1386 comes in as the hero, in the hero's own
 // look; and a laptop whose browser has a wallet of its own does it in a tab beside the game, with one signature. Fails on anything out
@@ -20,6 +21,7 @@ import { CDN, fromCache, serveAndOpen } from './browser.mjs';
 import { chainStandIn } from './chain-stand-in.mjs';
 import { startServer } from '../server/index.js';
 import { createChain } from '../server/chain.js';
+import { REKT_PICTURES } from '../src/wallet.js';
 
 const args = process.argv.slice(2), shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : null;
 let failed = 0;
@@ -43,13 +45,19 @@ function png([r, g, b], size = 16) {
 const COLOUR = { 7: [236, 128, 58], 12: [111, 214, 200], 40: [227, 40, 92], 1386: [241, 230, 207] };
 const someone = () => privateKeyToAccount(generatePrivateKey());
 const W = { one: someone(), two: someone(), none: someone(), owner: someone() };
-// and 77, whose picture isn't anywhere, as none of them were from Cloudflare on 2026-11-04
+// And 41, whose picture the town can't have, as no gateway answered Cloudflare on 2026-11-04, but the phone can, from the gateway
+// in its own folder of them; and 77, whose picture isn't anywhere
 const standIn = chainStandIn({
-  owners: { 7: W.one.address, 12: W.two.address, 40: W.two.address, 77: W.two.address, 1386: W.owner.address }, base: 'ipfs://QmMeta/',
-  ipfs: Object.fromEntries(Object.entries(COLOUR).flatMap(([id, rgb]) => [[`QmMeta/${id}`, JSON.stringify({ image: `ipfs://QmArt/${id}.png` })], [`QmArt/${id}.png`, png(rgb)]])),
+  owners: { 7: W.one.address, 12: W.two.address, 40: W.two.address, 41: W.two.address, 77: W.two.address, 1386: W.owner.address }, base: 'ipfs://QmMeta/',
+  ipfs: {
+    ...Object.fromEntries(Object.entries(COLOUR).flatMap(([id, rgb]) => [[`QmMeta/${id}`, JSON.stringify({ image: `ipfs://QmArt/${id}.png` })], [`QmArt/${id}.png`, png(rgb)]])),
+    [`${REKT_PICTURES}/41.gif`]: png([169, 155, 192]),
+  },
 });
 const server = await startServer({ port: 0, quiet: true, chain: createChain({ rpc: ['http://chain.stand-in/'], gateway: 'http://chain.stand-in/ipfs/', fetch: standIn.fetch }) });
-const query = `?test&net=ws://localhost:${server.port}`, base = `http://localhost:${server.port}`;
+// the gateway the phones have their own pictures from, on this machine
+const gateway = await standIn.listen();
+const query = `?test&net=ws://localhost:${server.port}&ipfs=${encodeURIComponent(gateway.gateway)}`, base = `http://localhost:${server.port}`;
 const opened = [];
 // a phone, or with { touch: false } a laptop, on the title card
 async function open({ touch = true } = {}) {
@@ -86,6 +94,7 @@ const looks = (p) => on(p, () => {
   };
   return {
     yours: rekt.length, pressed: rekt.map((b) => b.getAttribute('aria-pressed') === 'true'), shown: rekt.map(what), loaded: rekt.every((b) => !!what(b)),
+    from: rekt.map((b) => b.querySelector('img')?.currentSrc ?? ''),
     town: [...j.querySelectorAll('.looks .look')].some((b) => b.getAttribute('aria-pressed') === 'true'), said: document.getElementById('joinSay').textContent,
   };
 });
@@ -165,17 +174,19 @@ try {
   const browser = a.page.context().browser();
   const app = await walletApp(browser, W.two, page);
   await snap(app.page, '02-wallet-page');
-  await signs(app.page, app.asked, pairing.letters, 'three rektguys');
+  await signs(app.page, app.asked, pairing.letters, 'four rektguys');
   await snap(app.page, '03-wallet-done');
 
-  // ---------------- back on the phone: their three over the town's looks, neither worn yet, and nothing said
+  // ---------------- back on the phone: their four over the town's looks, none worn yet, and nothing said
   const mine = await until(async () => { const l = await looks(a); return l?.yours && l.loaded && l; }, 12000);
-  check(`the phone goes to the looks with their ${mine?.yours} rektguys over the town's, two by their pictures and the one with none by its number, ${JSON.stringify(mine?.shown)}, none worn yet, with nothing said`,
-    mine?.yours === 3 && JSON.stringify(mine.shown) === '["picture","picture","#77"]' && mine.pressed.every((p) => !p) && mine.said === '', mine);
+  check(`the phone goes to the looks with their ${mine?.yours} rektguys over the town's, by their pictures and the one with none anywhere by its number, ${JSON.stringify(mine?.shown)}, none worn yet, with nothing said`,
+    mine?.yours === 4 && JSON.stringify(mine.shown) === '["picture","picture","picture","#77"]' && mine.pressed.every((p) => !p) && mine.said === '', mine);
+  check('two pictures from the town, and the one it can\'t have from the gateway, by its number, in the phone\'s own browser',
+    mine?.from[0].startsWith(`${base}/rektguy/`) && mine.from[1].startsWith(`${base}/rektguy/`) && mine.from[2] === `${gateway.gateway}${REKT_PICTURES}/41.gif`, mine?.from);
   await a.page.tap('#joinName'); await a.page.keyboard.type('Pickles');
   await a.page.tap('#join .yours .rekt:nth-child(2)');
   const picked = await looks(a);
-  check('they pick the second, and none of the town\'s looks is picked with it', JSON.stringify(picked?.pressed) === '[false,true,false]' && !picked.town, picked);
+  check('they pick the second, and none of the town\'s looks is picked with it', JSON.stringify(picked?.pressed) === '[false,true,false,false]' && !picked.town, picked);
   await snap(a.page, '04-their-rektguys');
   await press(a, '#joinGo');
   const you = await until(() => on(a, () => __game.S.mode === 'town' && __net.link?.id && __net.you()), 15000), worn = await on(a, () => __net.wallet());
@@ -256,7 +267,7 @@ try {
   check(`it played through: ${e.message}`, false, e.stack);
 } finally {
   for (const p of opened) await p.close();
-  await server.close(); await without?.close();
+  await server.close(); await without?.close(); await gateway.close();
 }
 console.log(failed ? `\n${failed} failed` : '\nwearing your own rektguy: all good');
 process.exit(failed ? 1 : 0);
