@@ -7086,9 +7086,14 @@ const questNow = () => new Date(signNow ?? Date.now());
 let questDecide = (ask) => talk.decide(ask);
 const quests = createQuests({ data: QUESTS, places: QUEST_PLACES, store: SHARED ? null : saveStore, decide: (ask) => questDecide(ask), now: questNow });
 const coopRounds = () => !net && !!S.flags.ended;
-// Where Coop is, from his round: `at`, the sign on his door, and the place when he's out at one. `came` is the day he was there with him,
-// `says` what he's saying over his head and since when, and `stays` until when he stays at the hole to say he's packing up.
-const coop = { at: 'counter', sign: null, t: 0, place: null, came: null, says: null, stays: 0, thought: -1e9 }, COOP_HOME_YAW = NPCS.coop.yaw;
+// Where Coop is, from his round: `at`, the sign on his door, and the place when he's out at one. `met` is the day he last talked to him
+// at the hole, `says` what he's saying over his head and since when, and `stays` until when he stays at the hole to say he's packing up.
+const coop = { at: 'counter', sign: null, t: 0, place: null, met: null, says: null, stays: 0, thought: -1e9 }, COOP_HOME_YAW = NPCS.coop.yaw;
+// and whether today's the day he came out to the hole with him, which is kept
+const cameToday = () => quests.cameOn('coop') === today();
+// How far off his spot anyone has to be before he steps back onto it
+const COOP_CLEAR = 1.2;
+const coopSpotClear = (n) => Math.hypot(player.pos.x - n.spot.x, player.pos.z - n.spot.z) > COOP_CLEAR && !goingNow().some((v) => inVehicle(v, n.spot.x, n.spot.z, .5)) && !parkedAt(n.spot.x, n.spot.z, n.spot.y + .5);
 const COOP_WAY = QUESTS.rounds.coop.way.map(([x, z]) => atTrue(x, z)), COOP_WAY_AT = [0];
 for (let i = 1; i < COOP_WAY.length; i++) COOP_WAY_AT.push(COOP_WAY_AT[i - 1] + Math.hypot(COOP_WAY[i][0] - COOP_WAY[i - 1][0], COOP_WAY[i][1] - COOP_WAY[i - 1][1]));
 // where he's got to on his walk, `t` of the way out to the river bridge and back, and which way he's facing
@@ -7176,16 +7181,19 @@ function showFish(lb) {
   const g = mergeGeometries(catfish(lb)).rotateX(-Math.PI / 2).translate(0, -catfishLong(lb) * 3.05 / 6.4, 0);
   heroFish.add(new THREE.Mesh(g, thingMat), new THREE.Mesh(smoothed(g), thingLine));
 }
-// What he's got to fish with and what he's caught, kept between visits on this phone, and in a town that's shared not at all
+// What he's got to fish with, what he's caught and the last day he caught one, kept between visits on this phone, and in a town that's
+// shared not at all
 const GEAR_KEY = 'chunky.gear.v1', caught = [];
-function saveGear() { if (SHARED) return; try { saveStore.setItem(GEAR_KEY, JSON.stringify({ rod: S.items.rod ? 1 : 0, worms: S.items.worms | 0, fish: caught })); } catch { /* not kept */ } }
-function forgetGear() { S.items.rod = 0; S.items.worms = 0; S.items.catfish = 0; caught.length = 0; try { saveStore.removeItem(GEAR_KEY); } catch { /* nothing to remove */ } }
+let caughtOn = null;
+function saveGear() { if (SHARED) return; try { saveStore.setItem(GEAR_KEY, JSON.stringify({ rod: S.items.rod ? 1 : 0, worms: S.items.worms | 0, fish: caught, on: caughtOn })); } catch { /* not kept */ } }
+function forgetGear() { S.items.rod = 0; S.items.worms = 0; S.items.catfish = 0; caught.length = 0; caughtOn = null; try { saveStore.removeItem(GEAR_KEY); } catch { /* nothing to remove */ } }
 if (!SHARED) try {
   const g = JSON.parse(saveStore.getItem(GEAR_KEY));
   if (g?.rod === 1) S.items.rod = 1;
   if (Number.isInteger(g?.worms)) S.items.worms = Math.max(0, Math.min(99, g.worms));
   if (Array.isArray(g?.fish)) caught.push(...g.fish.filter((lb) => Number.isFinite(lb) && lb > 0 && lb <= 61).slice(0, 99));
   S.items.catfish = caught.length;
+  if (Number.isInteger(g?.on)) caughtOn = g.on;
 } catch { /* nothing kept */ }
 // The sign on the store's wall by its door while he's away from the counter, in marker on a bit of cardboard: BACK AT 6, BACK AT NOON or
 // GONE FISHIN'
@@ -7238,17 +7246,21 @@ function coopHolds(n) {
 // once he has for the day.
 function stepCoop(dt) {
   const n = NPCS.coop, rounds = coopRounds(), P = n.root.position;
+  // nothing moves him while he's being talked to, or while the chapter's ending
+  if (S.mode === 'end' || (S.mode === 'dialog' && convo?.who === 'coop')) return;
   if (rounds && time - coop.thought > 10) { coop.thought = time; quests.think('coop'); }
   const w = rounds ? quests.where('coop') : { at: 'counter', sign: null, t: 0, place: null };
   // he stays at the hole long enough to say he's packing up, to whoever was out there with him
-  if (coop.at === 'hole' && w.at !== 'hole' && !coop.stays && coop.came === today() && Math.hypot(P.x - player.pos.x, P.z - player.pos.z) < 30) { coop.stays = time + readFor(FISHING.lines.done) + .5; coopSay(FISHING.lines.done); }
+  if (coop.at === 'hole' && w.at !== 'hole' && !coop.stays && cameToday() && Math.hypot(P.x - player.pos.x, P.z - player.pos.z) < 30) { coop.stays = time + readFor(FISHING.lines.done) + .5; coopSay(FISHING.lines.done); }
   if (coop.stays && time >= coop.stays) coop.stays = 0;
   const was = coop.at, at = coop.stays ? 'hole' : w.at;
   coop.at = at; coop.sign = w.sign; coop.t = w.t; if (w.place) coop.place = w.place;
   paintDoorSign(rounds ? w.sign : null);
   n.away = at === 'asleep' || at === 'church' || at === 'away';
-  // off his spot there's nothing of him to run into, and he doesn't hop back onto it
-  const off = at !== 'counter';
+  // Off his spot there's nothing of him to run into, and he doesn't hop back onto it. He doesn't come back to it with anyone on it, him
+  // or anything that's going or parked there, and he isn't in till there isn't.
+  let off = at !== 'counter';
+  if (!off && n.off && !coopSpotClear(n)) { off = true; n.away = true; }
   if (off !== !!n.off) {
     n.off = off; n.jump = null;
     if (off) n.box[4] = -Infinity;
@@ -7278,9 +7290,9 @@ function coopAsks() { return coopRounds() && !!quests.open('coop'); }
 function questLine(who) {
   if (who !== 'coop' || !coopRounds()) return null;
   if (coop.at === 'hole') {
+    coop.met = today();
     const c = quests.came('coop');
     if (c) {
-      coop.came = today();
       const { rod, worms = 0, trust = 0 } = c.reward;
       if (rod) S.items.rod = 1;
       S.items.worms = (S.items.worms | 0) + worms; saveGear();
@@ -7299,12 +7311,12 @@ function fishingObjective() {
   if (!coopRounds()) return null;
   const o = quests.open('coop');
   if (o?.yes) { const h = holeAt(o.at); return { text: `Go fishing with Coop at nine · ${o.at.name}`, at: { x: h.x, z: h.z } }; }
-  if (coop.came === today() && caughtOn !== today() && S.items.worms > 0) return { text: 'Catch a catfish', at: null };
+  if (cameToday() && caughtOn !== today() && S.items.worms > 0) return { text: 'Catch a catfish', at: null };
   return null;
 }
 
 // Fishing: with his rod and some worms, on his feet facing water close enough to cast into, and not with Gerald in his hand
-let fishTurn = 0, fishAt = null, caughtOn = null;
+let fishTurn = 0, fishAt = null;
 const fish = createFishing({ rand: () => hash(fishTurn++, 163, 112) });
 const castHere = () => (S.items.rod && S.items.worms > 0 && !S.items.gerald ? castFrom(player.pos.x, player.pos.z, player.yaw) : null);
 function castNow(to) {
@@ -7312,9 +7324,11 @@ function castNow(to) {
   fish.cast(to.d, to.water); SFX.play('swing');
   after(.45, () => { if (fish.view().state === 'waiting') SFX.play('splash.small'); });
 }
+// The line in, if there's one out: anything on it's gone, and its worm
+function reelIn() { const e = fish.stop(); if (e) fished(e); }
 function fished(e) {
   if (e.what === 'bite') { SFX.play('splash.small'); return; }
-  // a bite missed, a line snapped and a fish landed are each the end of a cast, and of its worm
+  // a bite missed, a line snapped or put away with something on it, and a fish landed are each the end of a cast, and of its worm
   S.items.worms = Math.max(0, (S.items.worms | 0) - 1);
   if (e.what === 'snapped') SFX.play('rope.snap');
   if (e.what === 'landed') { SFX.play('splash.big'); caught.push(e.fish.lb); S.items.catfish = caught.length; caughtOn = today(); toast(`A ${e.fish.lb} lb catfish`); }
@@ -7324,7 +7338,7 @@ function fished(e) {
 // his rod to it, tighter and redder the more it strains. Walking off from it, or anything but being on his feet in town, brings it in.
 function stepFishing(dt) {
   const v0 = fish.view();
-  if (v0.state !== 'idle' && (S.mode !== 'town' || Math.hypot(player.pos.x - fishAt.fromX, player.pos.z - fishAt.fromZ) > 2)) fish.stop();
+  if (v0.state !== 'idle' && (S.mode !== 'town' || Math.hypot(player.pos.x - fishAt.fromX, player.pos.z - fishAt.fromZ) > 2)) reelIn();
   else if (v0.state !== 'idle') { const e = fish.tick(dt, !!input.a); if (e) fished(e); }
   const v = fish.view();
   heroBobber.visible = v.state !== 'idle';
@@ -8632,6 +8646,8 @@ function aimWithCamera() { if (mouseHeld()) { player.yaw = cam.yaw + Math.PI; ai
 // Both hands, so not with Gerald in one. Once it's landed, another goes while he's following through, back the other way, at whoever's next.
 function swing() {
   if (S.mode !== 'town' || S.items.gerald || (swingT >= 0 && swingT < SWING_AT)) return;
+  // whatever line he has out comes in first
+  reelIn();
   swingSide = swingT >= 0 ? -swingSide : 1;
   giveAway(); aimWithCamera();
   swingWho = swingAt();
@@ -9001,7 +9017,7 @@ function pickUpLying(reach) {
 function throwOne() {
   if (S.mode !== 'town') return;
   const kind = inHand(haveNow(), S.hand); if (!kind) return;
-  aimWithCamera();
+  reelIn(); aimWithCamera();
   if (kind === 'gas' ? !throwCan() : !throwLure(kind)) return;
   S.hand = kind;
   if (kind === 'gas') S.gas--; else S.items[kind]--;
@@ -9597,9 +9613,10 @@ function tick(dt, draw = true) {
         else if (d < NEAR && comeBack.has(who) && wouldTalk(who)) { comeBack.delete(who); early.set(who, { at: time, answer: talk.ask(who, { here: talkHere(who), as: talkAs() }) }); }
       }
       // With his rod, water in front of him is to cast into (CHUNKY-163), and once there's a line out the button's for it, whatever else is
-      // near. At the hole he talks to Coop first, then fishes beside him.
-      const lineOut = fish.view().state !== 'idle', castTo = lineOut ? null : castHere();
-      const fishFirst = lineOut || (!!castTo && (!near || (near === 'coop' && coop.at === 'hole' && coop.came === today())));
+      // near, except anyone after him close enough to swing at, which it's for first, bringing the line in. At the hole he talks to Coop
+      // first, then fishes beside him.
+      const lineOut = fish.view().state !== 'idle', castTo = lineOut ? null : castHere(), foe = (lineOut || castTo) && swingAt();
+      const fishFirst = !(foe && foe.state >= HUNTING && foe.state <= GRABBING) && (lineOut || (!!castTo && (!near || (near === 'coop' && coop.at === 'hole' && (coop.met === today() || cameToday())))));
       if (fishFirst) near = null;
       const ride = near || fishFirst ? null : vehicleInReach();
       const meat = !near && !ride && skillet.visible && Math.hypot(HEARTH.x - player.pos.x, HEARTH.z - player.pos.z) < 2.2;
@@ -9618,9 +9635,9 @@ function tick(dt, draw = true) {
       if (!plate) railMarkerRead = false;
       if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (railMarkerRead && S.act === 'Read the marker') prompt(`<span class="words">${RAIL_MARKER.words}</span>`); else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH && !S.items.gerald) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
       if (input.aEdge) { if (fishFirst) { if (lineOut) fish.press(); else castNow(castTo); } else if (near === 'toni') toniSpoke(toni.talk(player.pos)); else if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) { stoneRead = true; SFX.clip(STONE_CLIP); } else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else if (ditch) letGeraldGo(); else if (ring >= 0) openMap(ring); else swing(); }
-      if (input.sEdge && !lineOut) swing();
+      if (input.sEdge) swing();
       if (input.hEdge) toggleShamble();
-      if (input.cEdge && !lineOut) throwOne();
+      if (input.cEdge) throwOne();
       if (input.nEdge) switchThrown();
     }
   }
@@ -9859,7 +9876,7 @@ const clickedIn = (e) => { if (e.isTrusted && e.detail > 0) takeMouse(); };
 $('start').addEventListener('click', (e) => { $('title').hidden = true; startHang(); clickedIn(e); });
 $('free').addEventListener('click', (e) => { startFree(); clickedIn(e); });
 $('forget').hidden = !people.hasSave() && !folks.hasSave() && !toni.mind.seen.length && !talk.hasSave() && !S.items.rod && !caught.length;
-$('forget').addEventListener('click', () => { people.forget(); folks.forget(); pantry.forget(); toni.forget(); talk.forget(); quests.forget(); forgetGear(); fish.stop(); coop.came = null; S.items.gerald = 0; showPantry(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
+$('forget').addEventListener('click', () => { people.forget(); folks.forget(); pantry.forget(); toni.forget(); talk.forget(); quests.forget(); forgetGear(); fish.stop(); coop.met = null; S.items.gerald = 0; showPantry(); for (const f of people.data.remember) delete S.flags[f]; $('forget').hidden = true; });
 // first frame: him hanging behind the title
 heroRoot.position.copy(ANCHOR); poseHero(0); drawPlanks();
 for (const s of SNAKES) s.update(.016); deckSnake.update(.016);
@@ -10036,12 +10053,12 @@ if (TEST) {
     // Coop's round and his fishing hole (CHUNKY-163): where he is and what's on his door, Jev's stand-in, which a page is given with
     // decide(fn) or has back as the talk server's with decide(null), and what he'd do now, by the church signs' clock
     coop: {
-      state: () => { const n = NPCS.coop; return { at: coop.at, sign: doorSign.text, signShown: doorSign.m.visible, place: coop.place?.id ?? null, came: coop.came, says: coop.says?.text ?? null, saysShown: !coopSays.hidden, x: n.root.position.x, z: n.root.position.z, yaw: n.yaw, away: !!n.away, off: !!n.off, solid: n.box[4] > -1e9, rod: coopRod.visible, bobber: coopBobber.visible, line: coopLine.visible }; },
+      state: () => { const n = NPCS.coop; return { at: coop.at, sign: doorSign.text, signShown: doorSign.m.visible, place: coop.place?.id ?? null, came: quests.cameOn('coop'), met: coop.met, says: coop.says?.text ?? null, saysShown: !coopSays.hidden, x: n.root.position.x, z: n.root.position.z, yaw: n.yaw, away: !!n.away, off: !!n.off, solid: n.box[4] > -1e9, rod: coopRod.visible, bobber: coopBobber.visible, line: coopLine.visible }; },
       decide(fn) { questDecide = fn ?? ((ask) => talk.decide(ask)); },
       think: () => quests.think('coop'), news: () => quests.news('coop'), open: () => quests.open('coop'), where: () => quests.where('coop'), trips: () => quests.trips('coop'),
       hole: (id) => { const h = holeAt(QUEST_PLACES.find((p) => p.id === id)); return { x: h.x, z: h.z, yaw: h.yaw, to: h.to }; },
       way: (t) => alongWay(t), home: () => ({ x: NPCS.coop.spot.x, z: NPCS.coop.spot.z }), door: () => ({ x: doorSign.m.position.x, y: doorSign.m.position.y, z: doorSign.m.position.z, nx: GAS_DOOR.nx, nz: GAS_DOOR.nz }),
-      forget() { quests.forget(); coop.came = null; coop.thought = -1e9; },
+      forget() { quests.forget(); coop.met = null; coop.thought = -1e9; },
     },
     // fishing: the line, what he's got and what he's caught, and where a cast from somewhere would land
     fishing: {

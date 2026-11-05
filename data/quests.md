@@ -59,14 +59,16 @@ For fishing, GONE FISHIN' goes on the door at 9:00. He's at the hole from 9:05 t
 
 Where he stands at a hole is worked out once, by `holeAt` in `index.html`. At a trestle it's the platform halfway over, by its railing and out of a train's way, as `data/places.md` has it. Anywhere else it's the nearest dry ground on the bank to the list's spot, at least 6 m from the railroad, a step back from the water and facing it. His own cast lands 9 m out.
 
-The chapters come first. Through Chapter 1, and whenever a chapter needs him, he's at the counter whatever the clock says.
+The chapters come first. Through Chapter 1 he's at the counter whatever the clock says, and he stays where he is while Chapter 1's end is on the screen. He never moves while he's being talked to, and he doesn't come back onto his spot behind the counter while anyone's standing on it, or anything's parked or going there: he isn't in until it's clear.
+
+The day he's there with him is kept on that phone, so after a reload that night he still says he's packing up, and it's still to catch a catfish. Once he's talked to Coop at the hole that night, A is for fishing beside him.
 
 ## Fishing
 
 Once he has the rod, he can fish wherever there's water in front of him within a cast: off the bank, a bridge or a trestle. A worm goes each time something takes it, whether he lands the fish or not, and with none left there's no casting. `src/fishing.js` has how it goes, with no three.js in it, and the page draws it.
 
-- **Casting.** A tap of A, facing the water, lands the bobber 5 to 9 m out, on water all the way and short of the far bank.
-- **The bite.** Something takes it 3 to 11 seconds later, and the bobber goes under. A tap within 1.1 seconds sets the hook. Any later and it's gone, and so is the worm.
+- **Casting.** A tap of A, facing the water, lands the bobber 5 to 9 m out, on water all the way and short of the far bank. With anyone after him close enough to swing at, A swings instead, and a swing or a throw brings any line in first.
+- **The bite.** Something takes it 3 to 11 seconds later, and the bobber goes under. A tap within 1.1 seconds sets the hook. Any later and it's gone, and so is the worm. Walking off with something on the line loses it and the worm too. A line nothing's taken keeps its worm.
 - **Reeling in.** Holding A brings it in 1.5 m a second, and the line strains, more for a bigger fish. Every so often it runs, for longer the bigger it is, and holding on then strains the line far faster. At its limit the line snaps, and the fish is gone. Letting go eases the strain and gives the fish line, twice as fast while it runs. Within 1.5 m it's landed.
 - **What he catches.** Catfish, from 2 to 20 lb in the river and 1 to 10 lb in a pond, the smaller ones more often. They're in his pockets, and the biggest hangs on a stringer from the hand he carries the rod in.
 - **What's kept.** The rod, the worms and what he's caught are kept on that phone, apart from the rest of the story, until he forgets everything. A town that's shared doesn't have them yet.

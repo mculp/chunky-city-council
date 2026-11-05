@@ -67,8 +67,9 @@ export function createFishing({ rand = Math.random } = {}) {
       if (s.line <= FISH.landed) { const caught = { lb: s.lb, water: s.water }; s = { state: 'idle' }; return { what: 'landed', fish: caught }; }
       return null;
     },
-    // Put away, as when he walks off or gets in something: the cast's over, and anything on the line's gone
-    stop() { s = { state: 'idle' }; },
+    // Put away, as when he walks off or gets in something: the cast's over, and anything on the line's gone with the bait it took,
+    // which it says as 'lost'. A line nothing's taken keeps its bait, the same as bringing it in.
+    stop() { const took = s.state === 'bite' || s.state === 'hooked'; s = { state: 'idle' }; return took ? { what: 'lost' } : null; },
     // What's drawn: how far out the bobber was cast and where it is now, how far under it's pulled, the strain, and whether it's running
     view() {
       const under = s.state === 'bite' ? 1 : s.state === 'hooked' ? .6 : 0;

@@ -76,6 +76,16 @@ test('the line strains held, more while it runs, and eases off let go, and never
   for (let t = 0; t < 60; t += DT) f.tick(DT, false);
   assert.equal(f.view().line, FISH.most);
   assert.equal(f.view().strain, 0);
-  f.stop();
+  assert.deepEqual(f.stop(), { what: 'lost' }, 'put away with a fish on, the fish and the worm are gone');
   assert.equal(f.view().state, 'idle');
+});
+
+test('put away, a line nothing has taken keeps its bait, and one with a bite on it loses it', () => {
+  const f = createFishing({ rand: seeded(4) });
+  assert.equal(f.stop(), null, 'nothing out');
+  f.cast(6, 'pond');
+  assert.equal(f.stop(), null, 'nothing on it');
+  f.cast(6, 'pond'); toBite(f);
+  assert.equal(f.view().state, 'bite');
+  assert.deepEqual(f.stop(), { what: 'lost' });
 });

@@ -228,9 +228,24 @@ test('it\'s remembered between visits, Forget everyone forgets it, and a place t
   assert.equal(without.where('coop').at, 'counter');
   Q.forget();
   assert.equal(store.m.size, 0);
-  for (const junk of ['[1,2]', '"x"', '{"coop":{"idea":{"shape":"fishing","place":"trestle-near","told":"x"},"trips":"two"}}']) {
+  for (const junk of ['[1,2]', '"x"', '{"coop":{"idea":{"shape":"fishing","place":"trestle-near","told":"x"},"trips":"two"}}', '{"coop":5}', '{"coop":"x"}', '{"coop":true}', '{"coop":[1]}']) {
     const odd = memory(); odd.setItem('chunky.quests.v1', junk);
     const q = quests(c, null, odd);
-    assert.doesNotThrow(() => [q.news('coop'), q.where('coop'), q.open('coop'), q.came('coop'), q.trips('coop')], junk);
+    assert.doesNotThrow(() => [q.news('coop'), q.where('coop'), q.open('coop'), q.came('coop'), q.trips('coop'), q.cameOn('coop')], junk);
+    await assert.doesNotReject(() => q.think('coop'), junk);
   }
+});
+
+test('the day he came is kept, through a reload, and only for the idea he came to', async () => {
+  const store = memory(), c = clock('11-10 08:00'), Q = quests(c, jev(TRESTLE), store);
+  await Q.think('coop'); Q.told('coop');
+  assert.equal(Q.cameOn('coop'), null, 'not yet');
+  c.set('11-10 21:30'); Q.came('coop');
+  const day = clockOf(c.now()).day;
+  assert.equal(Q.cameOn('coop'), day);
+  assert.equal(quests(c, null, store).cameOn('coop'), day, 'after a reload');
+  c.set('11-11 21:30');
+  assert.equal(quests(c, null, store).cameOn('coop'), day, 'and the next night it was still that day');
+  Q.forget();
+  assert.equal(Q.cameOn('coop'), null, 'forgotten');
 });

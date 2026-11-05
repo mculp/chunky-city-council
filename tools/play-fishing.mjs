@@ -117,6 +117,21 @@ await g(() => atDoor());
 await snap('1-back-at-6');
 await look(); await look();
 check(`with Jev off he's asked once more, an hour or more later, and then not again that day: asked ${decided.length} times`, decided.length === 2 && !(await news()), decided.length);
+// stood on his spot behind the counter when he comes back at six, he waits, and there's nothing of him there to be stuck in
+await g((h) => { G.place(h.x, h.z); G.step(.1); }, home);
+await clockTo('11-07 06:00');
+c = await g(() => G.coop.state());
+check(`stood where he stands when he's back at six, Coop isn't in yet, and there's nothing of him to run into: ${c.at}, ${c.away ? 'not in' : 'in'}`, c.at === 'counter' && c.away && !c.solid, c);
+const offSpot = await g((h) => {
+  for (const [x, y] of [[0, 1], [1, 0], [0, -1], [-1, 0], [.7, .7], [-.7, .7], [.7, -.7], [-.7, -.7]]) {
+    G.place(h.x, h.z); G.step(.05); G.stick(x, y); G.step(1); G.stick(0, 0); G.step(.05);
+    const d = Math.hypot(G.player.pos.x - h.x, G.player.pos.z - h.z);
+    if (d > 1.3) return d;
+  }
+  return 0;
+}, home);
+c = await g(() => G.coop.state());
+check(`he can walk off it, and once he has, Coop's in behind his counter: ${offSpot.toFixed(1)} m off`, offSpot > 1.3 && c.at === 'counter' && !c.away && c.solid && Math.hypot(c.x - home.x, c.z - home.z) < .01, { offSpot, c });
 
 // Sunday
 await clockTo('11-08 10:30');
@@ -125,6 +140,17 @@ check(`on Sunday morning he's at church, with BACK AT NOON on the door: ${c.at},
 await clockTo('11-08 12:00');
 c = await g(() => G.coop.state());
 check(`and at noon he's back at the counter: ${c.at}`, c.at === 'counter' && c.solid && !c.signShown && Math.hypot(c.x - home.x, c.z - home.z) < .01, c);
+
+// Monday, talked to as it comes time for his walk, he stays at the counter till they're done
+await clockTo('11-09 00:59');
+const talking = await talkToCoop();
+await clockTo('11-09 01:05');
+c = await g(() => G.coop.state());
+check(`talked to as it comes time for his walk, he stays till they're done: ${c.at}`, !!talking && c.at === 'counter' && c.solid && !c.away && Math.hypot(c.x - home.x, c.z - home.z) < .01, { talking, c });
+await tapOpt('Later.');
+await clockTo('11-09 01:05');
+c = await g(() => G.coop.state());
+check(`and then he goes: ${c.at}`, c.at === 'walk', c);
 
 // Tuesday, the day's idea, from Jev
 decisions.push(TRESTLE);
@@ -205,6 +231,18 @@ check(`he carries it, on a stringer at his hip, and it's in his pockets: "${s.po
 check(`and there's nothing more to do about it: "${s.obj}"`, s.obj === 'Chunky is yours. For now.', s);
 await snap('7-caught');
 
+// a reload that night, with Skip to town: Coop's still at the hole, and knows he came and that he's caught one
+const cameDay = (await g(() => G.coop.state())).came;
+await page.reload();
+await until(() => g(() => !!window.__game?.resume), 30000);
+await helpers();
+await g(() => { G.S.flags.ended = true; });
+await clockTo('11-10 21:50');
+await g((h) => { const to = beside(h, [[2, 0], [-2, 0], [1, -.4], [-1, -.4]]); G.place(to.x, to.z); G.player.yaw = h.yaw; G.look(h.yaw + Math.PI, .25); G.step(.2); }, hole);
+c = await g(() => G.coop.state());
+s = await g(() => G.state().obj);
+check(`after a reload that night, he's still at the hole and it's still the night he came, and he's caught one: ${c.at}, "${s}"`, c.at === 'hole' && Number.isInteger(cameDay) && c.came === cameDay && s === 'Chunky is yours. For now.', { c, s, cameDay });
+
 // ten o'clock
 await clockTo('11-10 22:00');
 c = await g(() => G.coop.state());
@@ -256,6 +294,43 @@ await until(() => g(() => !!window.__game?.resume), 30000);
 await helpers();
 gear = await g(() => G.fishing.gear());
 check(`after a reload he still has his rod, his worms and his catfish, and Coop that he came: ${JSON.stringify(gear)}`, JSON.stringify(gear) === JSON.stringify(keptGear) && (await g(() => G.coop.trips())) === 1, { gear, keptGear });
+
+// The rod never stops him fighting: with one of the crowd after him close enough to swing at, A's to swing, not for the line, and a
+// swing brings the line in first, with its worm if nothing had taken it
+await g(() => { G.S.flags.ended = true; G.bringOutCrowd(); });
+const standBy = () => g((h) => {
+  const to = beside(h, [[2, 0], [-2, 0], [1, -.4], [-1, -.4]]), P = G.player.pos;
+  G.place(to.x, to.z); G.player.yaw = h.yaw; G.look(h.yaw + Math.PI, .25);
+  G.horde.all.forEach((o, i) => Object.assign(o, { x: P.x + 900 + i, z: P.z + 600, tx: P.x + 900 + i, tz: P.z + 600, state: 0, alert: 0, sus: 0, flat: 0, moving: 0, knows: 0, lost: 0, reaching: 0 }));
+  G.step(.2);
+}, hole);
+await standBy();
+await page.tap('#bA'); await g(() => G.step(.6));
+const foe = await g(() => {
+  const P = G.player.pos, s = G.horde.all.find((o) => o.who), yaw = G.player.yaw;
+  for (const [r, f] of [[2.2, 0], [-2.2, 0], [0, -2.2], [1.6, -1.6], [-1.6, -1.6]]) {
+    const x = P.x + Math.cos(yaw) * r + Math.sin(yaw) * f, z = P.z - Math.sin(yaw) * r + Math.cos(yaw) * f;
+    if (!dry(x, z)) continue;
+    Object.assign(s, { x, z, y: G.floorAt(x, z), tx: P.x, tz: P.z, state: 2, alert: 1, sus: 0, knows: 1e9, lost: 0, flat: 0, moving: 0, reaching: 0, timer: 0 });
+    G.step(.05);
+    return { id: s.who.id, act: G.S.act, line: G.fishing.view().state, worms: G.fishing.gear().worms };
+  }
+  return null;
+});
+check(`with a line out and one of them after him in reach, A's to swing at it: ${foe?.act}, "${await button()}"`, foe?.line === 'waiting' && foe.act === null && (await button()) === 'SWING', foe);
+await page.tap('#bA'); await g(() => G.step(.6));
+const swung = await g((id) => { const s = G.horde.all.find((o) => o.who?.id === id); return { down: s.flat > 0, grabbed: !!G.horde.grab, line: G.fishing.view().state, worms: G.fishing.gear().worms }; }, foe?.id);
+check(`a tap swings and it goes down, with the line brought in first and its worm kept, since nothing had taken it: ${swung.worms} worms`, swung.down && !swung.grabbed && swung.line === 'idle' && swung.worms === foe?.worms, swung);
+// and walking off with something on the line, it's gone, and so is its worm
+await standBy();
+await page.tap('#bA'); await g(() => G.step(.6));
+const wormsOut = await g(() => G.fishing.gear().worms);
+t = 0;
+while ((await g(() => G.fishing.view().state)) === 'waiting' && t < 15) { await g(() => G.step(.1)); t += .1; }
+const bit = await g(() => G.fishing.view().state);
+await g(() => { const P = G.player.pos; G.place(P.x - Math.sin(G.player.yaw) * 3, P.z - Math.cos(G.player.yaw) * 3); G.step(.1); });
+const walked = await g(() => ({ line: G.fishing.view().state, worms: G.fishing.gear().worms }));
+check(`walking off with something on the line, it's gone, and so is its worm: ${wormsOut} to ${walked.worms}`, bit === 'bite' && walked.line === 'idle' && walked.worms === wormsOut - 1, { bit, walked, wormsOut });
 await shut();
 
 // ---------------- a town that's shared, where Coop keeps the counter

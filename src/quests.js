@@ -69,7 +69,10 @@ export function createQuests({ data, places, store = null, key = 'chunky.quests.
   let minds = {};
   try { const saved = JSON.parse(store.getItem(key)); if (saved && typeof saved === 'object' && !Array.isArray(saved)) minds = saved; } catch { /* nothing saved */ }
   const save = () => { try { store.setItem(key, JSON.stringify(minds)); } catch { /* not stored */ } };
-  const mind = (who) => (minds[who] ??= { thought: null, again: null, trips: 0, last: null, idea: null });
+  const mind = (who) => {
+    const m = minds[who];
+    return m && typeof m === 'object' && !Array.isArray(m) ? m : (minds[who] = { thought: null, again: null, trips: 0, last: null, idea: null });
+  };
   // their idea, at a place the list still has for it, or nothing
   const kept = (who) => { const idea = minds[who]?.idea; return idea && T[idea.shape] && byId.get(idea.place)?.shapes.includes(idea.shape) ? idea : null; };
   // and one that's still on for him: told and not over, or not told yet but thought of today
@@ -129,12 +132,12 @@ export function createQuests({ data, places, store = null, key = 'chunky.quests.
     open(who) { const idea = live(who); return idea?.told && stands(idea, clockOf(now())) ? of(idea) : null; },
     yes(who) { const idea = live(who); if (idea?.told && !idea.yes && stands(idea, clockOf(now()))) { idea.yes = true; save(); } },
     where,
-    // He's there with them while they're out at it: it's done for him. What it gives him is the template's, and the trust only the
-    // first time ever.
+    // He's there with them while they're out at it: it's done for him, that day. What it gives him is the template's, and the trust only
+    // the first time ever.
     came(who) {
       const m = mind(who), idea = live(who);
       if (!idea?.told || where(who)?.at !== 'hole') return null;
-      idea.over = 'done'; m.last = 'done'; m.trips = (m.trips | 0) + 1; save();
+      idea.over = 'done'; idea.came = clockOf(now()).day; m.last = 'done'; m.trips = (m.trips | 0) + 1; save();
       const { trust, ...rest } = T[idea.shape].reward;
       return { ...of(idea), reward: { ...rest, trust: m.trips === 1 ? trust : 0 }, note: named(T[idea.shape].notes.came, idea) };
     },
@@ -146,6 +149,8 @@ export function createQuests({ data, places, store = null, key = 'chunky.quests.
       return { note: idea.yes ? named(T[idea.shape].notes.missed, idea) : null };
     },
     trips: (who) => minds[who]?.trips | 0,
+    // the day he was there with them for their idea, or nothing
+    cameOn: (who) => { const idea = kept(who); return idea?.over === 'done' && Number.isInteger(idea.came) ? idea.came : null; },
     forget() { minds = {}; try { store.removeItem(key); } catch { /* nothing to remove */ } },
   };
 }
