@@ -351,6 +351,16 @@ const roof = await g(() => {
   return { gone: +D.gone(s).toFixed(2), down: S.lights.down, bench: S.bench.down, was, on: S.light.intensity, glow: S.glow.visible };
 });
 check(`the shop coming down (${roof.gone} of it gone) brings the strip lights down, and the room goes dark`, roof.gone > .3 && roof.down && roof.was.on > 0 && roof.was.glow && roof.on === 0 && !roof.glow, roof);
+// and their own mends, which a heal in a town everyone shares ends with (mendProp), undo what breaking did: the room's lit again, and what hangs over the bins
+// lands on them again. The compound's set aside online, so nothing there breaks today, but a heal mustn't leave it dark if that changes.
+const healed = await g(() => {
+  const G = __game, S = G.compound.SHOP;
+  if (!S.clutter.down) G.wreck.breakProp(S.clutter);
+  const flat = S.hung.filter((h) => h.over).every((h) => h.prop.drops[2] === 0);
+  for (const p of [S.lights, S.clutter]) p.mend?.(p);
+  return { flat, on: S.light.intensity, glow: S.glow.visible, over: S.hung.filter((h) => h.over).map((h) => [h.kind, h.prop.drops[2], h.over]) };
+});
+check(`  and mended, the strip lights light the room again (${healed.on}) and what hangs over the bins lands on them again`, healed.flat && healed.on === roof.was.on && healed.glow && healed.over.length > 1 && healed.over.every(([, at, over]) => at === over), healed);
 
 // ---------------- the room in the shed, with real taps
 await g(() => { const G = __game, d = doorsOf(G.compound.JAM_SHED); G.place(...d.in); G.sim(.1, .1); G.bringOutCrowd(); G.sim(.1, .1); });

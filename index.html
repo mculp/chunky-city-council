@@ -3391,12 +3391,12 @@ function tilted(tx, tz, deg, up = 0) {
   };
 }
 // What's made in src/things.js: one mesh and its outline, which goes over in one piece. `solid` is how wide, how deep and how high it stops him, and `walls` are any that aren't square to the map.
-// `drops` is for one hung on a wall: which way out from the wall it leans as it lands (breakProp).
+// `drops` is for one hung on a wall: which way out from the wall it leans as it lands (breakProp), and `mend` undoes whatever `broke` did, for a heal (mendProp).
 function thing(into, kind, parts, x, z, yaw, hp, o = {}) {
   const geo = mergeGeometries(parts), g = new THREE.Group(), [w, d, top] = o.solid ?? [0, 0, 0], c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw)), hx = (w * c + d * s) / 2, hz = (w * s + d * c) / 2;
   g.add(new THREE.Mesh(geo, thingMat), new THREE.Mesh(smoothed(geo), thingLine));
   g.position.set(x, Y0 + (o.y ?? 0), z); g.rotation.y = yaw; into.add(g);
-  return breakable(kind, hp, () => { if (top) solid(x - hx, x + hx, z - hz, z + hz, Y0 + top); for (const w of o.walls ?? []) { PROP_WALLS.push(w); PROP.walls.push(w); } }, { rigid: true, objs: [g], foot: [x, z], chip: o.chip, broke: o.broke, hit: o.hit, drops: o.drops });
+  return breakable(kind, hp, () => { if (top) solid(x - hx, x + hx, z - hz, z + hz, Y0 + top); for (const w of o.walls ?? []) { PROP_WALLS.push(w); PROP.walls.push(w); } }, { rigid: true, objs: [g], foot: [x, z], chip: o.chip, broke: o.broke, mend: o.mend, hit: o.hit, drops: o.drops });
 }
 // Chain-link anywhere but the ball field, drawn the same: a stretch goes over at a time, with the mesh on it
 function chainLink(group, pts, high = 1.25, spacing = 3) {
@@ -3665,20 +3665,20 @@ const SHOP_HOUSE = houseAt(...atTrue(1020.4, 626.9)), SHOP = { hung: [], bench: 
     SHOP.bench = thing(room, 'gator', gatorOnBench(4, .9), x, z, yaw, 3, { walls: [[ax, az, bx, bz, Y0 + 1.1, .45]], chip: '#3a3f30' });
   }
   // and the bins, which stop him square to the walls, since a solid is square to the map
-  { const [x, z] = F.at(7.05, .65), [ax, az] = F.at(6.55, .65), [bx, bz] = F.at(7.55, .65); SHOP.clutter = thing(room, 'bins', shopClutter(), x, z, yaw, 1, { walls: [[ax, az, bx, bz, Y0 + .75, .4]], chip: '#3e5f86', broke() { for (const h of SHOP.hung) h.prop.drops[2] = 0; } }); }
+  { const [x, z] = F.at(7.05, .65), [ax, az] = F.at(6.55, .65), [bx, bz] = F.at(7.55, .65); SHOP.clutter = thing(room, 'bins', shopClutter(), x, z, yaw, 1, { walls: [[ax, az, bx, bz, Y0 + .75, .4]], chip: '#3e5f86', broke() { for (const h of SHOP.hung) h.prop.drops[2] = 0; }, mend() { for (const h of SHOP.hung) h.prop.drops[2] = h.over; } }); }
   // Two strip lights over the bench on chains, the light they throw on the room, and its pool on the floor. The light's in the scene and not the room, which is hidden from
   // afar, so that how many lights there are never changes, which would build every material over again.
   const tube = lit('#eef3ff', 1.6), fixture = new THREE.MeshStandardMaterial({ color: '#d9d6cc', roughness: .6 }), [gx, gz] = F.at(2.9, 1.7), [lx, lz] = F.at(3.4, 1.9);
   const glow = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 2.6), new THREE.MeshBasicMaterial({ map: radialTex, color: '#262c32', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
   glow.position.set(gx, Y0 + .05, gz); glow.rotation.set(-Math.PI / 2, 0, yaw); room.add(glow); SHOP.glow = glow;
-  const light = new THREE.PointLight('#e3ebff', 1.9, 7.5, 1.2); light.position.set(lx, Y0 + 2.2, lz); scene.add(light); SHOP.light = light;
+  const shine = 1.9, light = new THREE.PointLight('#e3ebff', shine, 7.5, 1.2); light.position.set(lx, Y0 + 2.2, lz); scene.add(light); SHOP.light = light;
   SHOP.lights = breakable('light', .5, () => {
     for (const u of [1.75, 4.05]) {
       F.box(fixture, u, 2.34, 1.35, 1.25, .05, .16, .9);
       for (const dv of [-.04, .04]) F.box(tube, u, 2.3, 1.35 + dv, 1.2, .03, .03, 0);
       for (const du of [-.45, .45]) F.beam([u + du, 2.37, 1.35], [u + du, 3.05, 1.35], .012, .012, poleMat, 0);
     }
-  }, { rigid: true, drops: [Math.sin(yaw), Math.cos(yaw), 0], chip: '#d9d6cc', broke() { glow.visible = false; light.intensity = 0; } });
+  }, { rigid: true, drops: [Math.sin(yaw), Math.cos(yaw), 0], chip: '#d9d6cc', broke() { glow.visible = false; light.intensity = 0; }, mend() { glow.visible = true; light.intensity = shine; } });
   // what hangs on a wall comes down with it, and the lights come down with the roof, onto the alligator if the bench is still standing
   tieTo(SHOP_HOUSE, (s, p) => {
     for (const h of SHOP.hung) if (p.panel === h.panel) breakProp(h.prop);
