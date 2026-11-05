@@ -268,6 +268,66 @@ describe('kept between sessions', () => {
   });
 });
 
+// In a town everyone shares (CHUNKY-153) each player is a number, and what anyone remembers of one is that one's. Him in the story is no number.
+describe('each player in a town they share', () => {
+  test('what one player did is theirs: hit by one, the bold come back at that one, and are as they were with anyone else, him in the story too', () => {
+    const F = folks(), bold = someone(F, (w) => w.nerve > .7);
+    F.hurt(bold, 2, 3, 'hit', 7);
+    assert.equal(F.mood(bold, 7), AFTER); assert.equal(F.mood(bold, 9), BE); assert.equal(F.mood(bold), BE);
+    assert.equal(F.memory(bold, 7).hurt, 1); assert.equal(bold.hurt, 0, 'nothing of it is on them, which is what the story keeps');
+    assert.deepEqual(bold.shun, [2, 3], 'but where it happened is theirs to keep off, whoever did it');
+  });
+
+  test('asking about a player they know nothing of makes nothing, and what comes back can\'t be written to', () => {
+    const F = folks(), w = F.person(3);
+    assert.equal(F.mood(w, 5), BE); assert.equal(F.shock(w, 5), 0); assert.equal(F.hasNews(w, 5), false); assert.deepEqual(F.met(5), []);
+    assert.equal(w.by, undefined);
+    assert.throws(() => { F.memory(w, 5).hurt = 3; }, TypeError);
+    assert.equal(F.memory(w, 6).hurt, 0);
+  });
+
+  test('it gets around about each player on their own, within a family', () => {
+    const F = folks(), a = F.person(0), kin = F.person(4);
+    F.hurt(a, 0, 0, 'hit', 7);
+    assert.equal(F.tell(a, kin, 9), false, 'there\'s nothing to tell of anyone else'); assert.equal(F.tell(a, kin), false, 'or of him in the story');
+    assert.equal(F.tell(a, kin, 7), true); assert.equal(F.memory(kin, 7).told, 1); assert.equal(kin.told, 0);
+  });
+
+  test('each player gets to know their names for themselves, and the nosy only follow the one they\'ve been close to', () => {
+    const F = folks(), nosy = someone(F, (w) => w.nosy > .9);
+    for (let i = 0; i < 60; i++) F.close(nosy, .2, 7);
+    assert.equal(F.mood(nosy, 7), TAILING); assert.equal(F.mood(nosy, 9), BE); assert.equal(F.mood(nosy), BE);
+    assert.deepEqual(F.met(7).map((w) => w.id), [nosy.id]); assert.deepEqual(F.met(9), []); assert.deepEqual(F.met(), []);
+  });
+
+  test('getting hold of one player is about that one, and a lure they\'ve caught on to is caught on to whoever throws it', () => {
+    const F = folks(), nosy = someone(F, (w) => w.nosy > .95);
+    F.close(nosy, 60, 7); F.close(nosy, 60, 9); F.got(nosy, 7);
+    assert.equal(F.mood(nosy, 7), BE); assert.equal(F.mood(nosy, 9), TAILING);
+    F.fooled(nosy, 'bottle'); F.fooled(nosy, 'bottle'); assert.ok(F.wise(nosy, 'bottle'));
+  });
+
+  test('in the crowd, the one a player knocks over gets up and comes back at that one, and is nothing to anyone else', () => {
+    const F = folks(), h = createHorde(field(F)), bold = someone(F, (w) => w.nerve > .8 && w.temper > .5), s = bring(h, F, bold, 2, 0);
+    const A = { ...still, id: 1, canGrab: false }, B = { ...still, id: 2, x: -4, canGrab: false };
+    run(h, [A, B], .05);
+    assert.ok(h.knockOne(s, 0, 0, 1, 'hit', 1));
+    assert.equal(F.mood(bold, 1), AFTER); assert.equal(F.mood(bold, 2), BE); assert.equal(bold.hurt, 0);
+    run(h, [A, B], 1 + TUNING.rouseFor + 2.5);
+    assert.equal(s.state, HUNTING); assert.equal(s.him, 1);
+    assert.ok(Math.hypot(s.x - A.x, s.z - A.z) < 1.5, `at ${s.x.toFixed(2)}, ${s.z.toFixed(2)}`);
+  });
+
+  test('only what they remember of him in the story is kept between sessions, and forgetting forgets everyone\'s', () => {
+    const store = memory(), F = folks(store), w = F.person(2);
+    F.hurt(w, 4, 5, 'hit', 7); F.hurt(F.person(5), 0, 0, 'hit'); F.save();
+    const rows = JSON.parse(store.getItem(`chunky.folks.v${data.version}`)).rows;
+    assert.deepEqual(rows[2], { shun: [4, 5] }); assert.equal(rows[5].hurt, 1);
+    F.forget();
+    assert.equal(w.by, undefined); assert.equal(F.mood(w, 7), BE);
+  });
+});
+
 describe('what it does in the crowd', () => {
   test('a person\'s look and their number come with them, without changing what else the crowd draws', () => {
     const F = folks(), a = createHorde(field(F)), b = createHorde(field(null));

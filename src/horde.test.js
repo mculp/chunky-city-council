@@ -1156,3 +1156,81 @@ describe('only the ones nearby are out', () => {
     assert.equal(h.grab, null); assert.equal(freed, 1);
   });
 });
+
+// In a town everyone shares (CHUNKY-153) everyone playing has an id, and whoever's after one of them is after that one.
+describe('everyone in a town they share', () => {
+  const at = (id, x, z = 0, extra = {}) => ({ ...still, id, x, z, canGrab: false, ...extra });
+  // four of them round a spot, three metres off
+  const ring = (h, x) => Array.from({ length: 4 }, (_, i) => h.add(x + Math.sin(i * 1.6) * 3, Math.cos(i * 1.6) * 3));
+
+  test('him on his own in a list is him on his own: the same crowd does the same things, to the step', () => {
+    const play = (wrap) => {
+      seed = 1;
+      const h = createHorde(field()), got = [], p = { ...still };
+      for (let i = 0; i < 12; i++) h.add(Math.sin(i * 2.4) * (3 + i), Math.cos(i * 2.4) * (3 + i));
+      for (let k = 0; k < 360; k++) {
+        p.x = Math.sin(k / 75) * 6; p.noise = k > 90 && k < 150 ? 14 : 0;
+        if (k === 60) h.noise(p.x, p.z, 20, 1);
+        if (k === 180) h.knock(p.x, p.z, 4, 2);
+        h.update(1 / 30, wrap(p));
+        if (h.grab) { got.push(k); for (let i = 0; i < 6; i++) h.mash(); }
+      }
+      return { crowd: h.all.map((s) => [s.state, s.x.toFixed(6), s.z.toFixed(6), s.alert.toFixed(6), s.him ?? null]), got };
+    };
+    const alone = play((p) => p), listed = play((p) => [p]);
+    assert.deepEqual(listed, alone);
+    assert.ok(alone.got.length > 0 && alone.crowd.some(([state]) => state !== SHAMBLE), 'and plenty happened');
+  });
+
+  test('one roused by a player comes for that one, and a noise nobody\'s named for is the nearest one\'s', () => {
+    const h = createHorde(field()), s = h.add(3, 0), t = h.add(37, 0), them = [at(1, 0), at(2, 40)];
+    run(h, them, .05);
+    assert.equal(h.noise(0, 0, 14, 1, 'swing', 1), 1); assert.equal(s.him, 1);
+    assert.equal(h.noise(40, 0, 14, 1), 1); assert.equal(t.him, 2, 'the second was nearest to it');
+    run(h, them, ROUSE + 3);
+    assert.equal(s.state, HUNTING); assert.equal(t.state, HUNTING);
+    assert.ok(Math.hypot(s.x, s.z) < 1.5, `the first came to its own, at ${s.x.toFixed(2)}`); assert.ok(Math.hypot(t.x - 40, t.z) < 1.5, `and the second to its own, at ${t.x.toFixed(2)}`);
+  });
+
+  test('each has a grab of their own: hold of one isn\'t hold of the other, and breaking free is that one\'s', () => {
+    const freed = [], h = createHorde(field(), {}, { free: (id) => freed.push(id), grab() {} }), a = h.add(.5, 0), b = h.add(40.5, 0);
+    const them = [at(1, 0, 0, { canGrab: true }), at(2, 40, 0, { canGrab: true })];
+    a.state = HUNTING; a.him = 1; b.state = HUNTING; b.him = 2;
+    run(h, them, TUNING.windUp + .05);
+    assert.deepEqual([h.grabOf(1)?.who, h.grabOf(2)?.who], [[a], [b]]);
+    for (let i = 0; i < 6; i++) h.mash(1);
+    assert.equal(h.grabOf(1), null); assert.deepEqual(h.grabOf(2).who, [b], 'the other is still held'); assert.deepEqual(freed, [1]);
+    assert.equal(h.grab, null, 'h.grab is the first one\'s');
+  });
+
+  test('players within 25 m of each other share the three-at-most, and apart it\'s three each', () => {
+    const go = (gap) => {
+      seed = 1;
+      const h = createHorde(field()); ring(h, 0); ring(h, gap);
+      run(h, [at(1, 0), at(2, gap)], .05);
+      return [h.noise(0, 0, 8, 1, 'crash', 1), h.noise(gap, 0, 8, 1, 'crash', 2)];
+    };
+    assert.deepEqual(go(20), [3, 0], 'together, three in all');
+    assert.deepEqual(go(60), [3, 3], 'apart, three each');
+  });
+
+  test('and once together they stay together until they\'re more than 35 m apart', () => {
+    const h = createHorde(field()), A = at(1, 0), B = at(2, 20);
+    ring(h, 0); run(h, [A, B], .05);
+    assert.equal(h.noise(0, 0, 8, 1, 'crash', 1), 3);
+    B.x = 30; ring(h, 30); run(h, [A, B], .05);
+    assert.equal(h.noise(30, 0, 8, 1, 'crash', 2), 0, 'at 30 m they\'re still together, and three are already coming');
+    B.x = 50; ring(h, 50); run(h, [A, B], .05);
+    assert.equal(h.noise(50, 0, 8, 1, 'crash', 2), 3, 'and past 35 m they\'re not');
+  });
+
+  test('when someone leaves town, whoever was after them gives up, and anyone holding them lets go', () => {
+    const h = createHorde(field()), a = h.add(.5, 0), c = h.add(4, 0), A = at(1, 0, 0, { canGrab: true }), B = at(2, 60);
+    a.state = HUNTING; a.him = 1;
+    run(h, [A, B], TUNING.windUp + .05);
+    assert.deepEqual(h.grabOf(1)?.who, [a]);
+    h.noise(4, 0, 3, 1, 'crash', 1); assert.equal(c.state, ROUSED);
+    run(h, [B], .05);
+    assert.equal(h.grabOf(1), null); assert.equal(a.state, SHAMBLE); assert.equal(c.state, SHAMBLE);
+  });
+});

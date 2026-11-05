@@ -268,6 +268,18 @@ The driver's drawn from the same instances as the crowd, sitting where he'd sit,
 
 **Nothing can touch them.** They aren't in `horde.active` or marked as solid, so a swing, a blast or a truck goes through, and they can't be got off the four-wheeler. They get out of his way first: from 16 m on foot or 30 m if he's driving, they go 7 m off the line, away from his side, or turn back if there's no room. They're smaller, and hardly gone at all.
 
+## In a town everyone shares
+
+Online (CHUNKY-153) the town runs the crowd for everyone in it, and everything above is about each of them on their own. `horde.update` takes everyone playing, each with the town's `id` for them. The story gives it him on his own, and he has no id.
+
+- **Who they're after.** One roused by a player is after that one, which is their id in `him`. It turns to them, comes for them, reaches for them and gives up on them. A noise, a thrown thing, a knock or a blow can say who did it with a `pid` on the end of the call, and without one it's whoever's nearest to where it happened. Anyone who isn't after anyone thinks about whoever's nearest.
+- **Grabs.** Each player has their own, and their own mercy after it: `horde.grabOf(pid)`, and `horde.mash(pid)` to break free. `horde.grab` is the first one's, which in the story is his.
+- **Three at most** is shared by players together. Two within 25 m of each other (`together`) share three, and stay together until they're more than 35 m apart, and so does anyone together with either of them. Apart, it's three each.
+- **What they remember** is of each player, by id: `folks.mood(w, pid)` and the rest take one on the end. Him in the story is no id, and what they remember of him is on them as it always was. That's the only thing kept between sessions. Of anyone else it's under `by`, and not kept here: what the town keeps of it is 153c's. Where they were hurt, and what they've caught on to being thrown, is theirs whoever did it.
+- **Leaving.** When someone leaves town, whoever was after them, keeping away from them or following them gives up, and whoever had hold of them lets go.
+
+With him on his own all of it comes to exactly what it was. `npm test` plays the same crowd with him given alone and in a list, and gets the same, step by step.
+
 ## Schema of `data/folks.json`
 
 | Field | What it is |

@@ -75,6 +75,12 @@ export function personOf(id, data, looks = []) {
   };
 }
 
+// What they remember of each player, by their id. In the story there's only him, whose id is nothing, and what they remember of him is on them, which is
+// what's kept between sessions. Anyone else, in the town everyone shares, has their own under `by`, which isn't. Reading it never makes one.
+const MEMORY = Object.freeze({ hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, when: 0, seen: 0, met: false });
+const of = (w, pid) => (pid == null ? w : ((w.by ??= {})[pid] ??= { ...MEMORY }));
+const peek = (w, pid) => (pid == null ? w : w.by?.[pid] ?? MEMORY);
+
 // What's worth keeping. Nothing that's zero, so most of them take up no room at all.
 // There was a `gone` here once, for whoever the river had. Nobody is lost to it now, so an old save that has one is read with it left out, and the next save doesn't write it.
 const KEPT = ['hurt', 'truck', 'there', 'told', 'got', 'slipped', 'near', 'when', 'seen', 'met', 'shun', 'where'];
@@ -111,18 +117,18 @@ export function createFolks(data, { store = null, looks = [] } = {}) {
   }
 
   const holdOf = (w) => HOW.hold[0] + w.temper * (HOW.hold[1] - HOW.hold[0]);
-  // How much of what he's done is still with them
-  function shock(w) {
-    const was = w.hurt + (w.there + w.told) * HOW.there + w.slipped * HOW.slipped;
+  // How much of what he's done is still with them. pid is which player, and nothing is him in the story, here and all through what follows.
+  function shock(w, pid) {
+    const m = peek(w, pid), was = m.hurt + (m.there + m.told) * HOW.there + m.slipped * HOW.slipped;
     if (!was) return 0;
-    const now = was * 2 ** (-(clock - w.when) / holdOf(w));
-    return w.hurt ? Math.max(now, HOW.never) : now;
+    const now = was * 2 ** (-(clock - m.when) / holdOf(w));
+    return m.hurt ? Math.max(now, HOW.never) : now;
   }
-  function moodOf(w) {
-    const k = shock(w);
-    if (k < HOW.acts) return !w.got && !w.hurt && w.nosy > HOW.nosy && w.near >= HOW.nearFor ? TAILING : BE;
-    const bold = w.nerve + (w.temper - .5) * .4 - Math.max(0, w.hurt - 1) * HOW.brokenBy;
-    if (w.hurt) return bold > HOW.stands[0] ? AFTER : AWAY;
+  function moodOf(w, pid) {
+    const k = shock(w, pid), m = peek(w, pid);
+    if (k < HOW.acts) return !m.got && !m.hurt && w.nosy > HOW.nosy && m.near >= HOW.nearFor ? TAILING : BE;
+    const bold = w.nerve + (w.temper - .5) * .4 - Math.max(0, m.hurt - 1) * HOW.brokenBy;
+    if (m.hurt) return bold > HOW.stands[0] ? AFTER : AWAY;
     return bold > HOW.stands[1] ? AFTER : bold < HOW.flees ? AWAY : BE;
   }
   // Anything that's happened to someone goes through here, so that it's saved
@@ -139,49 +145,54 @@ export function createFolks(data, { store = null, looks = [] } = {}) {
     now: () => clock,
     save,
     hasSave() { try { return !!store.getItem(KEY); } catch { return false; } },
-    forget() { for (const w of everyone.values()) { Object.assign(w, { hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, fooled: {}, when: 0, seen: 0, met: false, shun: null, where: null }); } clock = 0; turn = 0; dirty = false; try { store.removeItem(KEY); } catch { /* nothing to remove */ } },
+    forget() { for (const w of everyone.values()) { Object.assign(w, { hurt: 0, truck: 0, there: 0, told: 0, got: 0, slipped: 0, near: 0, fooled: {}, when: 0, seen: 0, met: false, shun: null, where: null }); delete w.by; } clock = 0; turn = 0; dirty = false; try { store.removeItem(KEY); } catch { /* nothing to remove */ } },
 
     mood: moodOf,
     shock,
+    // what they remember of a player, to read
+    memory: peek,
     // How far off they can make him out. It averages out at what the crowd's tuning says, and someone with a grudge can tell from further.
-    senses: (w, mood) => (.85 + w.temper * .3) * (mood === AFTER ? 1 + Math.min(1.5, shock(w)) : 1),
+    senses: (w, mood, pid) => (.85 + w.temper * .3) * (mood === AFTER ? 1 + Math.min(1.5, shock(w, pid)) : 1),
     roam: (w) => 40 + (1 - w.homebody) ** 2 * 400,
     wise: (w, kind) => (w.fooled[kind] ?? 0) >= HOW.wiseAfter[0] + Math.round((1 - w.nosy) * (HOW.wiseAfter[1] - HOW.wiseAfter[0])),
     shuns: (w, x, z) => !!w.shun && Math.hypot(x - w.shun[0], z - w.shun[1]) < HOW.shunReach,
 
-    // What's happened to them
-    hurt(w, x, z, by) {
+    // What's happened to them. Where they were hurt is theirs, whoever did it.
+    hurt(w, x, z, by, pid) {
       note(w, () => {
         w.shun = [Math.round(x), Math.round(z)];
         // nobody thinks of a fire, a train or the river as something he did to them
         if (by === 'fire' || by === 'train' || by === 'river') return;
-        w.hurt++; if (by === 'truck') w.truck++; w.when = clock;
+        const m = of(w, pid); m.hurt++; if (by === 'truck') m.truck++; m.when = clock;
       });
     },
     // Was there when he hurt somebody
-    wasThere(w) {
-      if (clock - (w.thereAt ?? -1e9) < HOW.thereEvery) return;
-      w.thereAt = clock;
-      note(w, () => { w.there++; w.when = clock; });
+    wasThere(w, pid) {
+      const m = of(w, pid);
+      if (clock - (m.thereAt ?? -1e9) < HOW.thereEvery) return;
+      m.thereAt = clock;
+      note(w, () => { m.there++; m.when = clock; });
     },
     // Who's got something to tell anyone: only what they saw for themselves, and only for a while
-    hasNews: (w) => (w.hurt > 0 || w.there > 0) && clock - w.when < HOW.news,
-    tell(from, to) {
-      if (from === to || from.family !== to.family || !folks.hasNews(from) || ((to.hurt || to.there || to.told) && clock - to.when < HOW.news)) return false;
-      note(to, () => { to.told++; to.when = clock; });
+    hasNews: (w, pid) => { const m = peek(w, pid); return (m.hurt > 0 || m.there > 0) && clock - m.when < HOW.news; },
+    tell(from, to, pid) {
+      const t = peek(to, pid);
+      if (from === to || from.family !== to.family || !folks.hasNews(from, pid) || ((t.hurt || t.there || t.told) && clock - t.when < HOW.news)) return false;
+      note(to, () => { const m = of(to, pid); m.told++; m.when = clock; });
       return true;
     },
-    got(w) { note(w, () => { w.got++; }); },
-    slipped(w) { note(w, () => { w.slipped++; w.when = clock; }); },
+    got(w, pid) { note(w, () => { of(w, pid).got++; }); },
+    slipped(w, pid) { note(w, () => { const m = of(w, pid); m.slipped++; m.when = clock; }); },
+    // what they've been fooled by is theirs, whoever threw it
     fooled(w, kind) { note(w, () => { w.fooled[kind] = (w.fooled[kind] ?? 0) + 1; }); },
     // Close to him. He gets to know their name, and the nosy ones get curious.
-    close(w, dt) {
-      w.seen = clock; w.near += dt; dirty = true;
-      if (!w.met && w.near >= HOW.meetAfter) w.met = true;
+    close(w, dt, pid) {
+      const m = of(w, pid); m.seen = clock; m.near += dt; dirty = true;
+      if (!m.met && m.near >= HOW.meetAfter) m.met = true;
     },
 
     // Who he's met
-    met() { const list = []; for (const w of everyone.values()) if (w.met) list.push(w); return list; },
+    met(pid) { const list = []; for (const w of everyone.values()) if (peek(w, pid).met) list.push(w); return list; },
   };
   load();
   return folks;
