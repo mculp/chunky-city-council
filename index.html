@@ -4764,16 +4764,15 @@ function poseHero(tq) {
   else if (tool.visible) {
     // and back the other way, from over his other shoulder
     const n = Math.min(SWING_POSES.length - 1, Math.floor(swingT * 12)), [x0, y, z, turn] = SWING_POSES[swingLands ? Math.max(n, SWING_AFTER) : n], x = x0 * swingSide;
-    if (tool === batTool) {
-      tool.position.copy(R.arm(1, V3(x, y, z), V3(.7, -.3, -.25), V3(0, 1, .25)));
-      R.arm(0, V3(x - .05, y - Math.cos(turn) * .24, z - Math.sin(turn) * .24), V3(-.7, -.3, -.25), V3(0, 1, .25));
-    } else {
+    // the bat in both hands, nearer his middle than the drawing, where both can reach it
+    if (tool === batTool) holdBat(R, batTool, _hb.set(x * BAT_HOLD.middle, y, z), _hu.set(0, Math.cos(turn), Math.sin(turn)));
+    else {
       // in his right hand, so the swing's the bat's the other way about
       const f = n / (SWING_POSES.length - 1);
       tool.position.copy(R.arm(0, V3(-x, y, z), V3(-.7, -.3, -.25), V3(0, Math.cos(turn), Math.sin(turn))));
       R.arm(1, V3(.6 + .06 * f, -.16 + .06 * f, .24 - .4 * f), V3(.7, -.3, -.25));
+      tool.quaternion.setFromEuler(new THREE.Euler(turn, 0, 0));
     }
-    tool.quaternion.setFromEuler(new THREE.Euler(turn, 0, 0));
   } else if (throwT > 0 && k === 'run') R.arm(1, V3(.3, .28, .42), V3(.8, -.1, -.2));
   else if (bumpT > 0 && k === 'run') { R.arm(1, V3(.08, -.2, .46), V3(.7, -.3, -.25)); R.arm(0, V3(-.08, -.2, .46), V3(-.7, -.3, -.25)); }
   // Between swings he carries it on foot, so it's always there to see: the skillet hanging at his right thigh and swinging a little behind his step, and the bat over his
@@ -8257,12 +8256,34 @@ function landSkillet(R, { at, part }) {
 }
 // and with the bat: his left fist on the grip where that puts it, the way his right is on the skillet's handle, and his right hand below it on the grip
 function landBat(R, { at, part }) {
-  const { fist, run } = swungOn(at, part, BAT_ON), hint = _kf.set(.7, -.3, -.25);
-  const wrist = _ke.copy(fist).addScaledVector(_ka.subVectors(fist, R.S[1]).normalize(), -.08 * HERO_BUILD.thick); wrist.x -= HERO_BUILD.out;
-  wrist.add(_ka.subVectors(fist, R.arm(1, wrist, hint, run)));
-  batTool.position.copy(R.arm(1, wrist, hint, run));
-  batTool.quaternion.setFromUnitVectors(UP, run);
-  R.arm(0, _ke.copy(fist).addScaledVector(run, -.24).setX(_ke.x + HERO_BUILD.out), _kf.set(-.7, -.3, -.25), run);
+  const { fist, run } = swungOn(at, part, BAT_ON);
+  holdBat(R, batTool, fist, run, true);
+}
+// The bat in both hands: the left fist on the grip at `fist`, which is where the bat's held, and the right `grip` further down the handle, the way `run` points from the
+// knob. rig.arm puts each wrist HERO_BUILD.out further out than it's asked for, so each is asked for that much further in, and then again by what its fist missed by.
+// While he swings, both move together, the least they can, to where each fist's in its own arm's reach. Where it lands, the left stays where it landed, and the right
+// comes up the handle towards it, as far as half way, until it's in reach. `bat` is whatever's drawn as the bat, his own or anyone else's.
+const BAT_HOLD = { grip: .24, middle: .35, reach: HERO_BUILD.reach[0] + HERO_BUILD.reach[1] + .08 * HERO_BUILD.thick };
+const _ht = new THREE.Vector3(), _hd = new THREE.Vector3(), _hr = new THREE.Vector3(), _hw = new THREE.Vector3(), _hh = new THREE.Vector3(), _hb = new THREE.Vector3(), _hu = new THREE.Vector3();
+function holdBat(R, bat, fist, run, landed = false) {
+  const most = BAT_HOLD.reach, right = _hr.copy(fist).addScaledVector(run, -BAT_HOLD.grip);
+  if (!landed) {
+    // a step onto each arm's reach and then the other's, a few times over, comes out where both are
+    _ht.set(0, 0, 0);
+    for (let k = 0; k < 8; k++) for (let i = 0; i < 2; i++) {
+      const d = _hd.copy(i ? fist : right).add(_ht).sub(R.S[i]), l = d.length();
+      if (l > most) _ht.addScaledVector(d, (most - l) / l);
+    }
+    fist.add(_ht); right.add(_ht);
+  } else for (let g = BAT_HOLD.grip; g > BAT_HOLD.grip / 2 && right.distanceTo(R.S[0]) > most; g -= .01) right.copy(fist).addScaledVector(run, -g);
+  const put = (i, at) => {
+    const hint = _hh.set(i ? .7 : -.7, -.3, -.25), w = _hw.copy(at).addScaledVector(_hd.subVectors(at, R.S[i]).normalize(), -.08 * HERO_BUILD.thick);
+    w.x += i ? -HERO_BUILD.out : HERO_BUILD.out;
+    w.add(_hd.subVectors(at, R.arm(i, w, hint, run)));
+    return R.arm(i, w, hint, run);
+  };
+  bat.position.copy(put(1, fist)); bat.quaternion.setFromUnitVectors(UP, run);
+  put(0, right);
 }
 // how near the nearest of them is to him, their middle or their head, which hangs out in front of anyone folded over
 function nearestOf(s) {

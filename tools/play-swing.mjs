@@ -314,6 +314,28 @@ const batOff = (part) => batted.filter((r) => r.pan?.on === part).map((r) => r.p
 console.log(`     with the bat, the middle of its barrel a hand from the end is ${spread(batOff('head'))} from the middle of their head the ${batOff('head').length} times it lands on their head, and ${spread(batOff('chest'))} from their chest's the ${batOff('chest').length} times it's on that`);
 check(`the bat lands on them every time too: the middle of its barrel a hand from its end is within ${BAT_ON.head} m of the middle of their head or ${BAT_ON.chest} m of their chest's as it lands (${batOn.length} of ${batted.length})`, batOn.length === batted.length, batted.filter((r) => !batOn.includes(r)).slice(0, 16).map((r) => `${r.kind} ${r.a.toFixed(1)} rad ${r.d}: ${JSON.stringify({ down: r.down, grab: r.grab, ...r.pan })}`));
 
+// ---- and all through a swing with the bat both his fists are on its handle, a hand's width apart, and each is where his arm reaches, on his own screen. A frame's only
+// counted once he's drawn swinging it, with his left fist on its grip, since the one before still has it over his shoulder.
+await g(() => { clear(); G.S.flags.bat = true; G.sim(.2, T); });
+await tap();
+const grip = await g(() => {
+  const R = G.hero, bat = G.skillet.tools[1], V = bat.position.constructor, frames = [];
+  let last = '', started = false;
+  // the tap's taken on the next step, so it steps until the swing's started and then until it's over
+  for (let t = 0; t < 1.2; t += T) {
+    G.step(T, T);
+    if (!G.swinging()) { if (started) break; continue; }
+    started = true;
+    const f = R.arms.map((a) => a.fist.position.clone()), w = R.arms.map((a) => a.cuff.position.clone()), p = bat.position, b = new V(0, 1, 0).applyQuaternion(bat.quaternion);
+    if (!bat.visible || f[1].distanceTo(p) > .01) continue;
+    const d = f[0].clone().sub(p), r = { apart: +f[0].distanceTo(f[1]).toFixed(3), off: +d.sub(b.clone().multiplyScalar(d.dot(b))).length().toFixed(3), reach: +Math.max(w[0].distanceTo(R.S[0]), w[1].distanceTo(R.S[1])).toFixed(3) };
+    const k = JSON.stringify(r); if (k !== last) frames.push(r); last = k;
+  }
+  G.S.flags.bat = false; G.sim(.2, T);
+  return { frames: frames.length, apart: [Math.min(...frames.map((r) => r.apart)), Math.max(...frames.map((r) => r.apart))], off: Math.max(...frames.map((r) => r.off)), reach: Math.max(...frames.map((r) => r.reach)) };
+});
+check(`  and all through a swing with it both his fists are on its handle, ${grip.apart.join(' to ')} m apart, the right one ${grip.off} m off its line at most, and each where his arm reaches (${grip.reach} m from his shoulder at most) (${grip.frames} frames)`, grip.frames >= 4 && grip.apart[0] > .2 && grip.apart[1] < .3 && grip.off < .04 && grip.reach < .6, grip);
+
 // ---- and between swings he carries it, so it's always there to see: hanging by the handle at his right thigh with its bottom out and turned a little back, which is what
 // the camera behind him sees. With the bat it's the bat, over his right shoulder, and in a pickup it's neither.
 const carried = await g(() => {
