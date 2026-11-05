@@ -2,6 +2,7 @@
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHorde, SHAMBLE, CURIOUS, HUNTING, SWARM, GRABBING, STUNNED, AVOIDING, ROUSED, TUNING, RUN_SPEED } from './horde.js';
+import { AWAY } from './agents.js';
 
 let seed = 1;
 // each test starts from the same place, so that what one of them asks the random numbers for doesn't change what the next one sees
@@ -1232,5 +1233,28 @@ describe('everyone in a town they share', () => {
     h.noise(4, 0, 3, 1, 'crash', 1); assert.equal(c.state, ROUSED);
     run(h, [B], .05);
     assert.equal(h.grabOf(1), null); assert.equal(a.state, SHAMBLE); assert.equal(c.state, SHAMBLE);
+  });
+
+  test('and when the last one goes, everyone gives up and nobody\'s held', () => {
+    const h = createHorde(field()), a = h.add(.5, 0), c = h.add(4, 0), A = at(1, 0, 0, { canGrab: true });
+    a.state = HUNTING; a.him = 1;
+    run(h, [A], TUNING.windUp + .05);
+    h.noise(4, 0, 3, 1, 'crash', 1); assert.equal(c.state, ROUSED);
+    run(h, [], 1);
+    assert.equal(h.grabOf(1), null); assert.equal(h.grab, null); assert.equal(a.state, SHAMBLE); assert.equal(c.state, SHAMBLE);
+    run(h, [A], .05);
+    assert.equal(h.grab, null, 'and they come back to nobody holding them');
+  });
+
+  test('one that\'s still minded of someone it gave up on keeps away from whoever it\'s scared of', () => {
+    const F = { mood: (w, pid) => (pid === 1 ? AWAY : 0), senses: () => 1, close() {}, hasNews: () => false, fooled() {}, wise: () => false, tick() {}, hurt() {}, wasThere() {}, next: () => ({ looks: {}, temper: .5, nerve: .5, nosy: .5 }) };
+    const h = createHorde({ ...field(), folks: F }), s = h.add(4, 0), A = at(1, 0, 0, { noise: 14 }), B = at(2, 60);
+    run(h, [A, B], .05);
+    // curious about A, and turned so that it isn't startled, with B left over from a chase it gave up
+    Object.assign(s, { state: CURIOUS, alert: 1, him: 2, turned: 5, cool: 0, tx: 0, tz: 0 });
+    run(h, [A, B], TUNING.thinkEvery + .05);
+    assert.equal(s.state, AVOIDING); assert.equal(s.him, 1, 'it\'s A it keeps away from');
+    run(h, [A, B], 3);
+    assert.ok(Math.hypot(s.x, s.z) > 6, `and it goes from A, to ${s.x.toFixed(2)}`);
   });
 });

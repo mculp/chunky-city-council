@@ -674,7 +674,7 @@ export function createHorde(world, tuning = {}, on = {}) {
     } else if (s.state === CURIOUS) {
       // it has been long enough, and it's him it has found. It stops, turns to him and flares first, unless it's the kind to keep away, or it's only just been sent off.
       if (s.alert >= 1) {
-        if (scared) { s.state = AVOIDING; s.lost = 0; return; }
+        if (scared) { s.state = AVOIDING; s.him = pid; s.lost = 0; return; }
         if (clock >= (s.cool ?? 0)) { rouse(s, whyOf(s, p, sharp, mood), 0, p); return; }
         s.alert = .9;
       }
