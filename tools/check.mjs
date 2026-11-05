@@ -12,8 +12,9 @@
 // - talk:host, for the talk server's own files in server/
 // - talk, for server/talk.js and server/index.js, whose talk server on this machine it plays against
 // - town:host, for the town's own files in server/, its wallets and the chain, their stand-in and the Worker that hosts it
-// - net, for the town's own files in server/ and the name check in src/names.js
-// - wallet, for the wallet's page, the town's wallets and the chain, their stand-in, and the town on this machine it plays against
+// - net, for the town's own files in server/, the name check in src/names.js and the phone's side of the town, src/together.js
+// - wallet, for the wallet's page, the town's wallets and the chain, their stand-in, the town on this machine it plays against, and
+//   src/together.js, whose looks have the wallet's rektguys
 // - for index.html, the checks named in its changed lines, but for names it uses everywhere, and the sound checks,
 //   which are the slowest and come from sound files instead, and the checks that look after what those lines touch,
 //   such as fling for the crowd's pose, aura and shoes
@@ -112,8 +113,8 @@ if (args.includes('--changed')) {
       if ((/^server\/(talk|worker|wrangler)\b/.test(f) || f === 'tools/wrangler-dev.mjs') && c.name === 'talk:host') add(c, f);
       if (/^server\/(talk|index)\b/.test(f) && c.name === 'talk') add(c, f);
       if ((/^server\/(town|host|worker|wrangler|wallet|chain)\b/.test(f) || /^tools\/(wrangler-dev|chain-stand-in)\.mjs$/.test(f)) && c.name === 'town:host') add(c, f);
-      if ((/^server\/(town|index|host)\b/.test(f) || f === 'src/names.js') && c.name === 'net') add(c, f);
-      if ((/^server\/(town|index|host|wallet|chain)\b/.test(f) || f === 'wallet.html' || f === 'tools/chain-stand-in.mjs') && c.name === 'wallet') add(c, f);
+      if ((/^server\/(town|index|host)\b/.test(f) || f === 'src/names.js' || f === 'src/together.js') && c.name === 'net') add(c, f);
+      if ((/^server\/(town|index|host|wallet|chain)\b/.test(f) || ['wallet.html', 'tools/chain-stand-in.mjs', 'src/together.js'].includes(f)) && c.name === 'wallet') add(c, f);
     }
   }
   const stems = new Set(files.filter((f) => /^(src|data)\//.test(f)).map((f) => f.split('/').pop().replace(/(\.test)?\.[^.]+$/, '')));
