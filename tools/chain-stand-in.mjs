@@ -33,16 +33,19 @@ const V1_TYPE = { all: 1, contract: 2, token: 3 }, V2_TYPE = { all: 1, contract:
 
 class Reverted extends Error {}
 
-// `owners` is rektguy number → address. `delegations` are { registry: 1 or 2, type: 'all', 'contract' or 'token', from, to }, with
-// `contract`, `tokenId` and `rights` where they're wanted. `smart` is a smart wallet's address → (hash, signature) → whether it takes
-// it. `ipfs` is 'cid/path' → what's there, words or bytes. `base` is what tokenURI puts the number on the end of, as rektguy's does.
-export function chainStandIn({ owners = {}, counter = null, delegations = [], smart = {}, ipfs = {}, base = 'ipfs://QmStandInMeta/' } = {}) {
+// `owners` is rektguy number → address. `minted` is address → how many it minted, which is all rektguy's balanceOf says: it's the
+// contract's tokenBalancePerOwner, which only its mint counts and no transfer changes, and not the ERC-721 balance it keeps beside
+// it, so on the chain it's none for most who hold one (CHUNKY-170). `delegations` are { registry: 1 or 2, type: 'all', 'contract' or
+// 'token', from, to }, with `contract`, `tokenId` and `rights` where they're wanted. `smart` is a smart wallet's address → (hash,
+// signature) → whether it takes it. `ipfs` is 'cid/path' → what's there, words or bytes. `base` is what tokenURI puts the number on
+// the end of, as rektguy's does.
+export function chainStandIn({ owners = {}, minted = {}, counter = null, delegations = [], smart = {}, ipfs = {}, base = 'ipfs://QmStandInMeta/' } = {}) {
   const asked = [];
   const ownerOf = (id) => owners[id] ?? null;
   const contracts = {
     [REKTGUY]: {
       abi: rektguyAbi,
-      balanceOf: (who) => BigInt(Object.values(owners).filter((o) => isAddressEqual(o, who)).length),
+      balanceOf: (who) => BigInt(Object.entries(minted).find(([a]) => isAddressEqual(a, who))?.[1] ?? 0),
       ownerOf: (id) => { const o = ownerOf(Number(id)); if (!o) throw new Reverted('ERC721: invalid token ID'); return o; },
       tokenURI: (id) => `${base}${id}`,
       tokenCounter: () => BigInt(counter ?? Math.max(-1, ...Object.keys(owners).map(Number)) + 1),

@@ -1,12 +1,14 @@
 // What the chain says, for wearing your own rektguy online (CHUNKY-170): whether a signature is a wallet's own, which rektguys a wallet
 // holds, and what each one looks like. It only ever reads. There's no key in here, and nothing that could send a transaction.
 //
-// rektguy's contract can't list what an address holds, so it's asked how many first, which is all there is to it for a wallet with
-// none, and then whose each one is, a thousand to an ask through Multicall3, until as many as it holds have been found. A rektguy kept
-// in another wallet counts for the one it's delegated to by either of delegate.xyz's registries, whether that's for all the vault's,
-// for rektguy's or for the one, but not if it's only for something in particular, such as an airdrop. A picture's found from what
-// tokenURI says, and anything on IPFS comes through the one gateway, since the one an old address names can be long gone: rektguy's
-// own was.
+// rektguy's contract can't list what an address holds, and can't say how many either: its balanceOf is its tokenBalancePerOwner, how
+// many an address minted, which no transfer changes, and not the ERC-721 balance it keeps beside it, so it's none for most who hold
+// one. So whose every one is is asked, a thousand to an ask through Multicall3, a few asks at once. A rektguy kept in another wallet
+// counts for the one it's delegated to by either of delegate.xyz's registries, whether that's for all the vault's, for rektguy's or
+// for the one, but not if it's only for something in particular, such as an airdrop. A picture's found from what tokenURI says, and
+// anything on IPFS comes through the first of the gateways here that answers, and never the one an old address names, which can be
+// long gone: rektguy's own was. Any one of them can stop answering a server: ipfs.io now puts anyone who isn't a person in a browser
+// through a challenge, and rektguy's addresses all name it.
 //
 // `fetch` is what asks the chain and the gateway, so a test can stand in for both (tools/chain-stand-in.mjs).
 import { createPublicClient, fallback, getAddress, http, isAddressEqual, parseAbi, zeroHash } from 'viem';
@@ -16,12 +18,12 @@ export const REKTGUY = '0xb852c6b5892256c264cc2c888ea462189154d8d7';
 const DELEGATE_V1 = '0x00000000000076a84fef008cdabe6409d2fe638b', DELEGATE_V2 = '0x00000000000000447e69651d841bd8d104bed493';
 // the public nodes that are asked unless the owner's put one of their own in ETH_RPC_URL
 export const RPCS = [...mainnet.rpcUrls.default.http, 'https://ethereum-rpc.publicnode.com'];
-export const GATEWAY = 'https://ipfs.io/ipfs/';
-const BATCH = 1000;                         // rektguys to an ask
+// the public gateways, in the order they're tried, quickest first as they were on 2026-11-04
+export const GATEWAYS = ['https://ipfs.filebase.io/ipfs/', 'https://gateway.pinata.cloud/ipfs/', 'https://ipfs.io/ipfs/', 'https://dweb.link/ipfs/'];
+const BATCH = 1000, AT_ONCE = 3;            // rektguys to an ask, and asks at once, which a public node lets by
 const MOST = 8 << 20, MOST_WORDS = 1 << 20;  // bytes: the biggest picture there'll be, and the most a token's description runs to
 
 const rektguyAbi = parseAbi([
-  'function balanceOf(address owner) view returns (uint256)',
   'function ownerOf(uint256 tokenId) view returns (address)',
   'function tokenURI(uint256 tokenId) view returns (string)',
   'function tokenCounter() view returns (uint256)',
@@ -76,28 +78,35 @@ async function upTo(r, most) {
   return out;
 }
 
-export function createChain({ rpc = RPCS, gateway = GATEWAY, fetch = (...a) => globalThis.fetch(...a), most = MOST } = {}) {
+export function createChain({ rpc = RPCS, gateway = GATEWAYS, fetch = (...a) => globalThis.fetch(...a), most = MOST } = {}) {
   const client = createPublicClient({ chain: mainnet, transport: fallback(rpc.map((url) => http(url, { fetchFn: fetch, retryCount: 1, timeout: 15000 }))) });
+  const gateways = [].concat(gateway);
   // many asks as one, however many: viem would otherwise split them up by how long they are, into hundreds
   const all = (contracts, allowFailure = false) => client.multicall({ contracts, allowFailure, batchSize: 0 });
   const rektguy = (functionName, ...args) => ({ address: REKTGUY, abi: rektguyAbi, functionName, args });
 
-  // where something a token names is: IPFS through the gateway, whichever gateway it named; Arweave; or a site's own https
+  // where something a token names can be had, in the order to try: IPFS through each gateway, whichever gateway it named; Arweave; or
+  // a site's own https
   function where(address) {
     if (typeof address !== 'string') throw new Error('There\'s no address there.');
     const ipfs = address.match(/^ipfs:\/\/(?:ipfs\/)?(.+)$/) ?? address.match(/^https:\/\/[^/]+\/ipfs\/(.+)$/);
-    if (ipfs) return gateway + ipfs[1];
-    if (address.startsWith('ar://')) return `https://arweave.net/${address.slice(5)}`;
-    if (address.startsWith('https://')) return address;
+    if (ipfs) return gateways.map((g) => g + ipfs[1]);
+    if (address.startsWith('ar://')) return [`https://arweave.net/${address.slice(5)}`];
+    if (address.startsWith('https://')) return [address];
     throw new Error(`${address.slice(0, 40)} isn't anywhere a picture's taken from.`);
   }
   async function get(address, most) {
     if (typeof address === 'string' && address.startsWith('data:')) return written(address, most);
-    const r = await fetch(where(address), { signal: AbortSignal.timeout(20000) });
-    if (!r.ok) throw new Error(`${r.status} from ${where(address).slice(0, 60)}`);
-    // and wherever it was sent on to, it ended up somewhere it could have been asked for
-    if (r.url && !r.url.startsWith('https://') && !r.url.startsWith(gateway)) throw new Error(`It ended up at ${r.url.slice(0, 40)}.`);
-    return upTo(r, most);
+    let why = null;
+    for (const url of where(address)) {
+      let r;
+      try { r = await fetch(url, { signal: AbortSignal.timeout(15000) }); } catch (e) { why = new Error(`${e.message} from ${url.slice(0, 60)}`); continue; }
+      if (!r.ok) { why = new Error(`${r.status} from ${url.slice(0, 60)}`); r.body?.cancel().catch(() => {}); continue; }
+      // and wherever it was sent on to, it ended up somewhere it could have been asked for
+      if (r.url && !r.url.startsWith('https://') && !gateways.some((g) => r.url.startsWith(g))) throw new Error(`It ended up at ${r.url.slice(0, 40)}.`);
+      return upTo(r, most);
+    }
+    throw why;
   }
 
   return {
@@ -122,19 +131,22 @@ export function createChain({ rpc = RPCS, gateway = GATEWAY, fetch = (...a) => g
       for (const d of v2) if (d.rights === zeroHash) take(d.type_, d.contract_, d.from, d.tokenId);
 
       const ids = new Set();
-      const counts = await all([...whole.values()].map((a) => rektguy('balanceOf', a)));
-      let want = counts.reduce((n, c) => n + Number(c), 0);
       // a single one's only his while it's still the vault's that said so
       if (single.length) {
         const owners = await all(single.map(([, id]) => rektguy('ownerOf', id)), true);
         single.forEach(([whose, id], i) => { if (owners[i].status === 'success' && isAddressEqual(owners[i].result, whose)) ids.add(Number(id)); });
       }
-      // Whose each one is, until as many as they hold have been found. The numbers start at 0, and the counter's the next one, which
-      // is looked at too in case it's the last.
-      for (let from = 0, last = Number(counter); want > 0 && from <= last; from += BATCH) {
-        const some = Array.from({ length: Math.min(BATCH, last + 1 - from) }, (_, i) => from + i);
-        const owners = await all(some.map((id) => rektguy('ownerOf', BigInt(id))), true);
-        owners.forEach((o, i) => { if (o.status === 'success' && whole.has(o.result.toLowerCase())) { ids.add(some[i]); want--; } });
+      // Whose every one is. The numbers start at 0, and the counter's the next one, which is looked at too in case it's the last. An
+      // ask the node didn't answer comes back as each rektguy in it failing with the ask's own failure, which is aggregate3's and not
+      // ownerOf's, and that's said rather than that they're nobody's.
+      const last = Number(counter), asks = [];
+      for (let from = 0; from <= last; from += BATCH) asks.push(Array.from({ length: Math.min(BATCH, last + 1 - from) }, (_, i) => from + i));
+      for (let i = 0; i < asks.length; i += AT_ONCE) {
+        await Promise.all(asks.slice(i, i + AT_ONCE).map(async (some) => {
+          const owners = await all(some.map((id) => rektguy('ownerOf', BigInt(id))), true), unasked = owners.find((o) => o.error && o.error.functionName !== 'ownerOf');
+          if (unasked) throw unasked.error;
+          owners.forEach((o, k) => { if (o.status === 'success' && whole.has(o.result.toLowerCase())) ids.add(some[k]); });
+        }));
       }
       return [...ids].sort((a, b) => a - b);
     },

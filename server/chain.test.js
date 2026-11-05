@@ -39,20 +39,28 @@ test('what a wallet holds is found by looking through every rektguy, a thousand 
   const c = on(s, { fetch: (...a) => { asks++; return s.fetch(...a); } });
   assert.deepEqual(await c.holds(me), [7, 1386, 2400]);
   assert.ok(asked(s, 'ownerOf') >= 2401, `${asked(s, 'ownerOf')} looked at`);
-  // who's delegated to it and how many there are, how many it holds, and three thousands
-  assert.equal(asks, 5);
+  // who's delegated to it and how many there are, and three thousands
+  assert.equal(asks, 4);
 });
 
-test('a wallet that holds none is told so straight away, without looking through them', async () => {
-  const s = chainStandIn({ owners: { 1: someone().address }, counter: 9000 }), c = on(s);
-  assert.deepEqual(await c.holds(someone().address), []);
-  assert.equal(asked(s, 'ownerOf'), 0);
+test('rektguy\'s balanceOf is what an address minted and not what it holds, so it\'s never gone by', async () => {
+  // as on the chain, where it's none for most who hold one, and still counts what's been sold for whoever minted it
+  const me = someone().address, minter = someone().address;
+  const s = chainStandIn({ owners: { 3: me, 4: someone().address, 8000: me }, minted: { [minter]: 2 }, counter: 8814 }), c = on(s);
+  assert.deepEqual(await c.holds(me), [3, 8000]);
+  assert.deepEqual(await c.holds(minter), []);
+  assert.equal(asked(s, 'balanceOf'), 0);
 });
 
-test('and the looking stops once it\'s found as many as the wallet holds', async () => {
-  const me = someone().address, s = chainStandIn({ owners: { 3: me, 4: someone().address }, counter: 8814 }), c = on(s);
-  assert.deepEqual(await c.holds(me), [3]);
-  assert.ok(asked(s, 'ownerOf') <= 1000, `${asked(s, 'ownerOf')} asked`);
+test('a thousand asked with none answered is the chain not answering, and it says so rather than say there\'s nothing', async () => {
+  const me = someone().address, s = chainStandIn({ owners: { 5: me, 1500: me }, counter: 2000 });
+  // the node answers who's delegated to it and how many there are, and then turns down every ask after, as public ones do when they're busy
+  let calls = 0;
+  const busy = async (input, init) => (++calls > 1 ? Response.json({ jsonrpc: '2.0', id: JSON.parse(init.body).id, error: { code: -32005, message: 'rate limited' } }) : s.fetch(input, init));
+  await assert.rejects(on(s, { fetch: busy }).holds(me));
+  // and the last ask, which is only the counter's own number in case it's the last, can come back with nothing in it
+  const t = chainStandIn({ owners: { 5: me }, counter: 1000 });
+  assert.deepEqual(await on(t).holds(me), [5]);
 });
 
 test('a rektguy kept in another wallet counts for the one it\'s delegated to, by either of delegate.xyz\'s registries', async () => {
@@ -92,6 +100,20 @@ test('a rektguy\'s picture is what its tokenURI says, through the gateway, which
   const p = await c.picture(1386);
   assert.equal(p.type, 'image/png');
   assert.deepEqual([...p.bytes], [...PNG]);
+});
+
+test('a gateway that turns it down is passed over for the next, and none answering is said', async () => {
+  // as ipfs.io does now, which puts anyone who isn't a person in a browser through a challenge a server can't pass
+  const s = chainStandIn({ base: 'ipfs://QmMeta/', ipfs: { 'QmMeta/1386': JSON.stringify({ image: 'ipfs://QmArt/1386.png' }), 'QmArt/1386.png': PNG } });
+  const asked = [], fetch = async (input, init) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.includes('/ipfs/')) asked.push(new URL(url).host);
+    return url.startsWith('http://busy.stand-in/') ? new Response('Too Many Requests', { status: 429 }) : url.startsWith('http://gone.stand-in/') ? Promise.reject(new TypeError('fetch failed')) : s.fetch(input, init);
+  };
+  const c = on(s, { gateway: ['http://busy.stand-in/ipfs/', 'http://gone.stand-in/ipfs/', 'http://chain.stand-in/ipfs/'], fetch });
+  assert.deepEqual([...(await c.picture(1386)).bytes], [...PNG]);
+  assert.deepEqual(asked, ['busy.stand-in', 'gone.stand-in', 'chain.stand-in', 'busy.stand-in', 'gone.stand-in', 'chain.stand-in']);
+  await assert.rejects(on(s, { gateway: ['http://busy.stand-in/ipfs/', 'http://gone.stand-in/ipfs/'], fetch }).picture(1386));
 });
 
 test('a picture written into the address itself is read from there', async () => {

@@ -132,7 +132,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     port: +args.find((a) => /^\d+$/.test(a)) || NET_PORT,
     talk: args.includes('--talk'),
     heroHash: process.env.CHUNKY_HERO ?? '',
-    chain: createChain({ rpc: process.env.ETH_RPC_URL ? process.env.ETH_RPC_URL.split(',').map((u) => u.trim()).filter(Boolean) : undefined, gateway: process.env.IPFS_GATEWAY || undefined }),
+    chain: createChain({ rpc: process.env.ETH_RPC_URL ? process.env.ETH_RPC_URL.split(',').map((u) => u.trim()).filter(Boolean) : undefined, gateway: process.env.IPFS_GATEWAY ? process.env.IPFS_GATEWAY.split(',').map((u) => u.trim()).filter(Boolean) : undefined }),
     save: process.env.CHUNKY_SAVE || join(fileURLToPath(new URL('..', import.meta.url)), 'data', 'raw', 'town.json'),
   });
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => s.close().then(() => process.exit(0)));
