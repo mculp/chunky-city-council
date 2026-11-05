@@ -161,6 +161,9 @@ body.talking #mini,body.talking #miniName{visibility:hidden}
 #btns{right:calc(max(16px, env(safe-area-inset-right, 0px)) + 6px);gap:14px;align-items:flex-end}
 .btn{border-radius:50%;border:3px solid var(--ink);font-family:var(--f-display);display:grid;place-items:center;touch-action:none;box-shadow:0 4px 0 var(--ink);padding:0}
 #bA{width:78px;height:78px;font-size:24px;background:var(--rust);color:var(--ink)}
+#bA.bite,#prompt.bite{animation:bite .34s steps(1) infinite}
+@keyframes bite{50%{background:var(--cream);color:var(--ink)}}
+@media (prefers-reduced-motion: reduce){#bA.bite,#prompt.bite{animation:none;background:var(--cream);color:var(--ink)}}
 #bB{width:64px;height:64px;font-size:19px;background:var(--cyan);color:var(--ink);margin-bottom:38px}
 #bR{position:absolute;right:9px;bottom:90px;width:60px;height:60px;font-size:13px;background:var(--cream);color:var(--ink)}
 #bR[hidden]{display:none}
@@ -4953,7 +4956,8 @@ function poseHero(tq) {
   heroGerald.visible = !!S.items.gerald && (k === 'run' || k === 'air');
   const thick = HERO_BUILD.thick; R.arms[0].fist.scale.set(thick, thick * (heroGerald.visible ? GERALD_HOLD.flat : 1), thick);
   if (heroGerald.visible) heroGerald.position.copy(R.arm(0, GERALD_HOLD.at, GERALD_HOLD.hint, UP)).y += GERALD_HOLD.sit;
-  // His rod (CHUNKY-163): in both hands out over the water while there's a line out, its tip up the harder it pulls, and otherwise in his
+  // His rod (CHUNKY-163): in both hands out over the water while there's a line out, its tip up the harder it pulls and dipped to the
+  // water while something has the bobber under (CHUNKY-192), and otherwise in his
   // left hand at his side with its tip trailing behind him, while that hand's not throwing or bumping the ball. What he's caught hangs
   // on a stringer from that hand along with the rod, the biggest of it showing, and while both hands are on the rod, at his left hip out
   // past his hoodie, which hides anything nearer in.
@@ -4962,7 +4966,7 @@ function poseHero(tq) {
   let fistFish = null;
   if (heroRod.visible && fishing) {
     tool.visible = false;
-    const up = .5 + .5 * fv.strain + (fv.running && !reduceMotion ? Math.sin(time * 14) * .05 : 0), d = new THREE.Vector3(0, Math.sin(up), Math.cos(up));
+    const up = .5 + .5 * fv.strain - (fv.state === 'bite' ? .55 : 0) + (fv.running && !reduceMotion ? Math.sin(time * 14) * .05 : 0), d = new THREE.Vector3(0, Math.sin(up), Math.cos(up));
     heroRod.position.copy(R.arm(0, V3(-.06, -.3, .34), V3(-.7, -.3, -.25), d)).addScaledVector(d, -.16); heroRod.quaternion.setFromUnitVectors(UP, d);
     R.arm(1, heroRod.position.clone().addScaledVector(d, .5), V3(.7, -.3, -.25), d);
   } else if (heroRod.visible) {
@@ -4986,6 +4990,8 @@ const zombieLine = (far, hot = 0, out = new THREE.Color()) => {
   return out.setRGB((.72 - k * .3 + hot * .34) * b, (.78 + k * .22 + hot * .05) * b, (.68 - k * .4 + hot * .02) * b);
 };
 const townBody = buildHoodie(.1, 0, 0, 3, 32, ZOMBIE_SHAPE);
+// the middle of a face in it, in the hood's own metres, which is what the camera looks at while one of the cast talks (CHUNKY-192)
+const TOWN_FACE = (() => { const p = townBody.faceGeo.attributes.position, idx = townBody.faceGeo.index.array, c = new THREE.Vector3(), v = new THREE.Vector3(); for (const i of idx) c.add(v.fromBufferAttribute(p, i)); return c.divideScalar(idx.length); })();
 function ghostMat(m) {
   const c = m.clone(), before = m.onBeforeCompile;
   c.onBeforeCompile = (sh, r) => {
@@ -6305,8 +6311,8 @@ function frogWord(s) {
   if (!seen.length || Math.hypot(s.x - TONI_HOME.x, s.z - TONI_HOME.z) > 220 || hash2(s.who.id, Math.floor(time / 40)) > .35) return null;
   return TONI_WORDS.word.replace('{frog}', seen[Math.floor(hash2(s.who.id, 9) * seen.length)]);
 }
-// Talking to her, the camera goes over his shoulder the way it does for the cast (TALK), but she's short and close up, so it's further round to the side, lower
-// and looking more at her, or he'd hide her. It only ever looks over his.
+// Talking to her, the camera goes over his shoulder the way it does for the cast, but she's short and close up, so it's further round to the side, lower
+// and looking more at her, or he'd hide her.
 const TONI_TALK = { back: 1.9, out: 2.6, up: 2.1, look: 1.1, along: .5 };
 // Talking to her (CHUNKY-166): her words in the words box and his answers on its buttons, the same as with the cast, with a number key for each on a laptop.
 // She asks when she comes up to him, which is once every time he comes by, or whenever he asks her (TALK), and everything else she says is what she says back.
@@ -6316,7 +6322,7 @@ function toniSpoke(said) {
   const T = toni.T, W = TONI_WORDS, A = W.answers;
   if (!toniTalking) {
     toniTalking = true; convo = null;
-    S.talkTo = toniBody; cam.yaw = Math.atan2(player.pos.x - T.x, player.pos.z - T.z); S.talk = shoulderFor(T, [1], TONI_TALK);
+    S.talkTo = toniBody; cam.yaw = Math.atan2(player.pos.x - T.x, player.pos.z - T.z); S.talk = shoulderFor(T, TONI_TALK);
     S.mode = 'dialog'; HP.speed = 0; $('dialog').hidden = false; prompt(null);
     $('dWho').textContent = 'Toni'; $('dHeard').hidden = true; $('dCare').hidden = true; waiting(false); showType(false);
   }
@@ -6393,9 +6399,11 @@ function lightToniFrog() {
 // what dialogue reads and changes
 const played = { flags: S.flags, items: S.items, get beans() { return S.beans; }, addBeans, get pantry() { return pantryOwes(); }, fromPantry };
 const player = { pos: new THREE.Vector3(), vy: 0, yaw: Math.PI, grounded: true, inv: 0, stamina: 1, running: false, winded: false, ran: false, runK: 0, boostT: 0, kb: new THREE.Vector2(), fallV: new THREE.Vector3(), lastSafe: new THREE.Vector3() };
-const cam = { yaw: -.6, pitch: .28, shake: 0, snap: false, talk: 0 };
-// over his shoulder when he's talking: how far back, how far out, how high, how high it looks, and how far along towards them
-const TALK = { back: 3, out: 1.7, up: 2.45, look: 1.5, along: .27 }, _talk = new THREE.Vector3();
+const cam = { yaw: -.6, pitch: .28, shake: 0, snap: false, talk: 0, fish: 0 };
+// over his shoulder when one of the cast is talking, looking at their face (CHUNKY-192): how far back, how far out from the line to their face his
+// hood has to be, which is .73 m wide, and the least and most that puts the camera out to the side, how high, and how far under their face it looks
+// for each metre it's away, so that their face and shoulders are in the top half of a phone, over the words
+const FACE = { back: 1.4, clear: .55, out: [.8, 1.6], up: 2, under: .3 }, _talk = new THREE.Vector3(), _face = new THREE.Vector3();
 let toastT = 0, cardT = 0;
 // game-clock timers, so story beats wait for the game when the tab sleeps or a test holds the clock
 const timers = [];
@@ -6828,19 +6836,38 @@ function stepOut() {
   $('dHeard').hidden = true; $('dSay').textContent = talk.data.care.say; $('dCare').hidden = false;
   setOpts([{ say: talk.data.care.back, act: closeDialog }]);
 }
-// He turns to them, and the camera goes over whichever shoulder has room. With his back to a wall, it goes over theirs and looks at him.
+// He turns to them, and the camera comes round over whichever of his shoulders has room, to their face
 function faceWhoever(n) {
   S.talkTo = n; if (!n) return;
   const P = player.pos, N = n.root.position;
   cam.yaw = Math.atan2(P.x - N.x, P.z - N.z);
-  S.talk = shoulderFor(N);
+  S.talk = faceFrom(faceOf(n, _face));
 }
-// Which shoulder there's room to look over at someone N: his, or else theirs, looking at him, unless `dirs` says only his will do. `shape` is where the camera goes, as TALK.
-function shoulderFor(N, dirs = [1, -1], shape = TALK) {
+// the middle of one of the cast's faces, wherever it is now, standing over or nodding
+function faceOf(n, out) { n.rig.hm.updateWorldMatrix(true, false); return n.rig.hm.localToWorld(out.copy(TOWN_FACE)); }
+// Where the camera goes to look over his shoulder, from his feet at H, at a face F: `side` 1 is his right, and `k` brings it in closer where there's
+// less room behind him. It's out to the side far enough that the line from it to their face misses his hood.
+function faceCam(H, F, { side, k }, out) {
+  const L = Math.hypot(F.x - H.x, F.z - H.z) || 1, ux = (F.x - H.x) / L, uz = (F.z - H.z) / L, back = FACE.back * k, o = clamp(FACE.clear * (back + L) / L, ...FACE.out);
+  return out.set(H.x - ux * back - uz * side * o, H.y + FACE.up, H.z - uz * back + ux * side * o);
+}
+// Which of his shoulders there's room to look over at a face F from, as far back as there's room for
+function faceFrom(F) {
+  const P = player.pos, c = new THREE.Vector3();
+  for (const k of [1, .8, .62, .45]) for (const side of [1, -1]) {
+    faceCam(P, F, { side, k }, c);
+    let clear = true;
+    for (let t = .3; t <= 1 && clear; t += .1) clear = !blocked(P.x + (c.x - P.x) * t, P.z + (c.z - P.z) * t, P.y + 1);
+    if (clear) return { side, k };
+  }
+  return { side: 1, k: .45 };
+}
+// Which of his shoulders there's room to look over at someone N from, for Toni. `shape` is where the camera goes, as TONI_TALK.
+function shoulderFor(N, shape) {
   const P = player.pos, L = Math.hypot(N.x - P.x, N.z - P.z) || 1, ux = (N.x - P.x) / L, uz = (N.z - P.z) / L;
-  const clear = (from, dir, side, k) => { for (let t = .3; t <= 1; t += .1) if (blocked(from.x + t * k * (-dir * ux * shape.back - dir * uz * side * shape.out), from.z + t * k * (-dir * uz * shape.back + dir * ux * side * shape.out), P.y + 1)) return false; return true; };
-  for (const k of [1, .8, .62, .45]) for (const dir of dirs) for (const side of [1, -1]) if (clear(dir > 0 ? P : N, dir, side, k)) return { side, k, dir };
-  return { side: 1, k: .45, dir: 1 };
+  const clear = (side, k) => { for (let t = .3; t <= 1; t += .1) if (blocked(P.x + t * k * (-ux * shape.back - uz * side * shape.out), P.z + t * k * (-uz * shape.back + ux * side * shape.out), P.y + 1)) return false; return true; };
+  for (const k of [1, .8, .62, .45]) for (const side of [1, -1]) if (clear(side, k)) return { side, k };
+  return { side: 1, k: .45 };
 }
 function closeDialog() {
   $('dialog').hidden = true; $('dCare').hidden = true; waiting(false); showType(false);
@@ -7202,24 +7229,30 @@ if (!SHARED) try {
   if (Number.isInteger(g?.on)) caughtOn = g.on;
 } catch { /* nothing kept */ }
 // The sign on the store's wall by its door while he's away from the counter, in marker on a bit of cardboard: BACK AT 6, BACK AT NOON or
-// GONE FISHIN'
+// GONE FISHIN'. It's on the side of the door the pumps are, and bigger than life, as the street signs are, so that it reads from the
+// pumps on a phone (CHUNKY-192): metres across and up, and the picture's width.
+const DOOR_SIGN = { w: 1.05, h: .7, px: 512 };
 const doorSign = (() => {
-  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128;
+  const cv = document.createElement('canvas'); cv.width = DOOR_SIGN.px; cv.height = Math.round(DOOR_SIGN.px * DOOR_SIGN.h / DOOR_SIGN.w);
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(.5, .25), new THREE.MeshStandardMaterial({ map: tex, roughness: 1 })), D = GAS_DOOR, along = D.wide / 2 + .45;
-  m.position.set(D.x + D.ex * along + D.nx * .06, Y0 + 1.5, D.z + D.ez * along + D.nz * .06); m.rotation.y = Math.atan2(D.nx, D.nz); m.visible = false; scene.add(m);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(DOOR_SIGN.w, DOOR_SIGN.h), new THREE.MeshStandardMaterial({ map: tex, roughness: 1 })), D = GAS_DOOR;
+  const along = D.wide / 2 + .3 + DOOR_SIGN.w / 2, px = PLACES.gas.x + 53, pz = PLACES.gas.z + 10, way = Math.hypot(D.x + D.ex * along - px, D.z + D.ez * along - pz) < Math.hypot(D.x - D.ex * along - px, D.z - D.ez * along - pz) ? along : -along;
+  m.position.set(D.x + D.ex * way + D.nx * .06, Y0 + 1.45, D.z + D.ez * way + D.nz * .06); m.rotation.y = Math.atan2(D.nx, D.nz); m.visible = false; scene.add(m);
   return { m, cv, tex, text: null };
 })();
+// in two lines when there's more than a word of it, broken at the last space, as big as it goes. Bungee runs wide, so it's set a little narrower.
 function paintDoorSign(text) {
   if (doorSign.text === text) return;
   doorSign.text = text; doorSign.m.visible = !!text;
   if (!text) return;
-  const g = doorSign.cv.getContext('2d');
-  g.fillStyle = '#b58f5e'; g.fillRect(0, 0, 256, 128); g.strokeStyle = '#8a6a40'; g.lineWidth = 6; g.strokeRect(3, 3, 250, 122);
+  const g = doorSign.cv.getContext('2d'), W = doorSign.cv.width, H = doorSign.cv.height, cut = text.lastIndexOf(' '), lines = cut > 0 ? [text.slice(0, cut), text.slice(cut + 1)] : [text], narrow = .85;
+  g.fillStyle = '#b58f5e'; g.fillRect(0, 0, W, H); g.strokeStyle = '#8a6a40'; g.lineWidth = 12; g.strokeRect(6, 6, W - 12, H - 12);
   g.fillStyle = '#1d1a1e'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  let size = 46; g.font = `${size}px Bungee, Impact, sans-serif`;
-  const w = g.measureText(text).width; if (w > 228) { size = Math.floor(size * 228 / w); g.font = `${size}px Bungee, Impact, sans-serif`; }
-  g.fillText(text, 128, 68); doorSign.tex.needsUpdate = true;
+  let size = Math.floor(H * .78 / lines.length); g.font = `${size}px Bungee, Impact, sans-serif`;
+  const w = Math.max(...lines.map((l) => g.measureText(l).width)) * narrow; if (w > W * .86) { size = Math.floor(size * W * .86 / w); g.font = `${size}px Bungee, Impact, sans-serif`; }
+  g.save(); g.translate(W / 2, H / 2); g.scale(narrow, 1);
+  lines.forEach((l, i) => g.fillText(l, 0, (i - (lines.length - 1) / 2) * size * 1.04 + size * .06));
+  g.restore(); doorSign.tex.needsUpdate = true;
 }
 // what Coop's saying over his head, the way Toni's is
 const coopSays = $('coopSays'), _coopAt = new THREE.Vector3();
@@ -7322,18 +7355,72 @@ function fishingObjective() {
 }
 
 // Fishing: with his rod and some worms, on his feet facing water close enough to cast into, and not with Gerald in his hand
-let fishTurn = 0, fishAt = null;
+let fishTurn = 0, fishAt = null, biteShown = false;
 const fish = createFishing({ rand: () => hash(fishTurn++, 163, 112) });
 const castHere = () => (S.items.rod && S.items.worms > 0 && !S.items.gerald ? castFrom(player.pos.x, player.pos.z, player.yaw) : null);
 function castNow(to) {
   fishAt = { fromX: player.pos.x, fromZ: player.pos.z, x: to.x, z: to.z };
   fish.cast(to.d, to.water); SFX.play('swing');
+  fishView = chooseFishView();
   after(.45, () => { if (fish.view().state === 'waiting') SFX.play('splash.small'); });
+}
+// A bite you can see (CHUNKY-192): the bobber goes right under, how far, with a ring on the water, and another a moment later if it's still under.
+// The rod's tip dips with it, in his pose, and A flashes until the hook's set or it's got away.
+const BITE = { under: .14, ring: .55, again: .35 };
+const biteRing = () => addRipple(heroBobber.position.x, heroBobber.position.z, BITE.ring);
+// With a line out (CHUNKY-192) the camera lifts off his shoulder so the water's in view, with the bobber above the buttons and clear of him and of
+// the bank or the trestle's deck, and Coop beside him if he's at the hole. Where it sits is chosen as the line goes out: of a few spots behind him
+// and out over one shoulder or the other, nearest first, the first that does all of that, as high as it has to be to see over the edge for how far
+// down the water is. It looks at where the bobber went, a little under it. If none of them does all of that, it keeps him in view and leaves Coop
+// out, and failing that it lets him go too. Behind him by, out to the side by, at least this high, how far in front of him the edge is, how far
+// under the bobber it looks for each metre away, and how near Coop has to be.
+const FISH_VIEW = { backs: [4.6, 5.6, 6.8, 8], outs: [1.2, 1.6, 2.1], up: 3.4, edge: .8, under: .14, coop: 5 };
+let fishView = null;
+const _eye = new THREE.PerspectiveCamera(), _fe = new THREE.Vector3(), _ft = new THREE.Vector3(), _fp = new THREE.Vector3();
+// where the camera is, and what it looks at, for a view `v` of the line from his feet at H
+function fishCam(H, v, eye, at) {
+  const sx = fishAt.x, sz = fishAt.z, d = Math.hypot(sx - H.x, sz - H.z) || 1, ux = (sx - H.x) / d, uz = (sz - H.z) / d;
+  eye.set(H.x - ux * v.back - uz * v.side * v.out, H.y + v.up, H.z - uz * v.back + ux * v.side * v.out);
+  return at.set(sx, WATER.level(sx, sz) - FISH_VIEW.under * Math.hypot(sx - eye.x, sz - eye.z), sz);
+}
+// whether the bobber at (sx, sy, sz) can be seen from E, with nothing between of the ground or a deck, a wall, him or Coop
+function fishSeen(E, sx, sy, sz, H, C) {
+  const n = Math.ceil(Math.hypot(sx - E.x, sy - E.y, sz - E.z) / .25);
+  for (let i = 1; i < n - 1; i++) {
+    const k = i / n, x = E.x + (sx - E.x) * k, y = E.y + (sy - E.y) * k, z = E.z + (sz - E.z) * k, h = y - H.y;
+    if (y < floorOnce(x, z) || blocked(x, z, y)) return false;
+    if (h > 0 && h < 2.4 && Math.hypot(x - H.x, z - H.z) < (h < 1.4 ? .68 : .5)) return false;
+    if (C && y > C.y && y < C.y + 2.2 && Math.hypot(x - C.x, z - C.z) < .45) return false;
+  }
+  return true;
+}
+function chooseFishView() {
+  const H = player.pos, sx = fishAt.x, sz = fishAt.z, d = Math.hypot(sx - H.x, sz - H.z) || 1, ux = (sx - H.x) / d, uz = (sz - H.z) / d, sy = WATER.level(sx, sz), drop = Math.max(0, H.y - sy);
+  // Coop, if he's at the hole with him, and over the shoulder that's on his side first
+  const n = NPCS.coop, C = coop.at === 'hole' && n.root.visible && Math.hypot(n.root.position.x - H.x, n.root.position.z - H.z) < FISH_VIEW.coop ? n.root.position : null;
+  const sides = C && (C.x - H.x) * -uz + (C.z - H.z) * ux < 0 ? [-1, 1] : [1, -1];
+  // as far down the page as the bobber can be: over the buttons and the words over them, whichever are showing
+  let top = innerHeight;
+  for (const id of ['bA', 'bB', 'bR', 'bC', 'bN', 'bH', 'stick', 'prompt']) { const r = $(id).getBoundingClientRect(); if (r.width && r.height) top = Math.min(top, r.top); }
+  const low = 1 - 2 * (top - 12) / innerHeight;
+  _eye.fov = camera.fov; _eye.aspect = camera.aspect; _eye.updateProjectionMatrix();
+  const inView = (x, y, z) => { _fp.set(x, y, z).project(_eye); return _fp.z < 1 && Math.abs(_fp.x) < .9 && _fp.y > -.95 && _fp.y < .9; };
+  let best = null, most = -1;
+  for (const back of FISH_VIEW.backs) for (const side of sides) for (const out of FISH_VIEW.outs) {
+    const v = { back, side, out, up: Math.max(FISH_VIEW.up, drop * (back + FISH_VIEW.edge) / Math.max(1, d - FISH_VIEW.edge) + .6) };
+    fishCam(H, v, _eye.position, _ft); _eye.lookAt(_ft); _eye.updateMatrixWorld();
+    _fp.set(sx, sy, sz).project(_eye);
+    if (!(_fp.z < 1 && Math.abs(_fp.x) < .8 && _fp.y > low && _fp.y < .85) || !fishSeen(_eye.position, sx, sy, sz, H, C)) continue;
+    const got = (inView(H.x, H.y + 1.9, H.z) ? 2 : 0) + (!C || inView(C.x, C.y + 1.75, C.z) ? 1 : 0);
+    if (got === 3) return v;
+    if (got > most) { best = v; most = got; }
+  }
+  return best ?? { back: FISH_VIEW.backs[1], side: sides[0], out: FISH_VIEW.outs[1], up: Math.max(FISH_VIEW.up, drop + .6) };
 }
 // The line in, if there's one out: anything on it's gone, and its worm
 function reelIn() { const e = fish.stop(); if (e) fished(e); }
 function fished(e) {
-  if (e.what === 'bite') { SFX.play('splash.small'); return; }
+  if (e.what === 'bite') { SFX.play('splash.small'); biteRing(); after(BITE.again, () => { if (fish.view().state === 'bite') biteRing(); }); return; }
   // a bite missed, a line snapped or put away with something on it, and a fish landed are each the end of a cast, and of its worm
   S.items.worms = Math.max(0, (S.items.worms | 0) - 1);
   if (e.what === 'snapped') SFX.play('rope.snap');
@@ -7346,12 +7433,13 @@ function stepFishing(dt) {
   const v0 = fish.view();
   if (v0.state !== 'idle' && (S.mode !== 'town' || Math.hypot(player.pos.x - fishAt.fromX, player.pos.z - fishAt.fromZ) > 2)) reelIn();
   else if (v0.state !== 'idle') { const e = fish.tick(dt, !!input.a); if (e) fished(e); }
-  const v = fish.view();
+  const v = fish.view(), biting = v.state === 'bite';
+  if (biting !== biteShown) { biteShown = biting; $('bA').classList.toggle('bite', biting); $('prompt').classList.toggle('bite', biting); }
   heroBobber.visible = v.state !== 'idle';
   if (!heroBobber.visible) { heroLine.visible = false; return; }
   const k = v.out ? Math.min(1, v.line / v.out) : 1, fx = fishAt.fromX, fz = fishAt.fromZ, dx = fishAt.x - fx, dz = fishAt.z - fz, dl = Math.hypot(dx, dz) || 1;
   const side = v.running && !reduceMotion ? Math.sin(time * 9) * .4 : 0, x = fx + dx * k - dz / dl * side, z = fz + dz * k + dx / dl * side;
-  const y = WATER.level(x, z) + (reduceMotion ? 0 : Math.sin(time * 2.4) * .012) - v.under * .055;
+  const y = WATER.level(x, z) + (reduceMotion ? 0 : Math.sin(time * 2.4) * .012) - (biting ? BITE.under : v.under * .055);
   heroBobber.position.set(x, y, z);
   drawLine(heroLine, heroRod, x, y + .04, z, .3 * (1 - v.strain) * (v.state === 'hooked' ? .4 : 1));
   heroLine.material.color.lerpColors(LINE_SLACK, LINE_TIGHT, v.strain);
@@ -9897,17 +9985,27 @@ function tick(dt, draw = true) {
     V.y = Math.max(V.y, .35, WATER.level(V.x, V.z) + .35);
     { const up = hillUp(V.x, V.z); if (up > 0) V.y = Math.max(V.y, TOWN_Y + up + .6); }
     if (fw) fightClear(V);
-    // talking: over his shoulder, looking between them, or a hood that size is all you'd see of whoever it is
-    cam.talk = clamp(cam.talk + (M === 'dialog' && S.talkTo ? dt : -dt) * 2.5, 0, 1);
-    const overShoulder = (N, { side, k, dir }, w, shape = TALK) => {
-      const H = heroRoot.position, L = Math.hypot(N.x - H.x, N.z - H.z) || 1, A = dir > 0 ? H : N, ux = (N.x - H.x) / L * dir, uz = (N.z - H.z) / L * dir;
-      V.lerp(_talk.set(A.x + k * (-ux * shape.back - uz * side * shape.out), H.y + shape.up, A.z + k * (-uz * shape.back + ux * side * shape.out)), w);
-      tgt.lerp(_talk.set(A.x + ux * L * shape.along, H.y + shape.look, A.z + uz * L * shape.along), w);
+    // With a line out, up off his shoulder and looking out at where the bobber went, unless someone's after him (CHUNKY-192). With reduced
+    // motion it cuts there and back.
+    { const on = !!fishView && S.mode === 'town' && fish.view().state !== 'idle', was = cam.fish; cam.fish = reduceMotion ? +on : clamp(cam.fish + (on ? dt : -dt) * 2, 0, 1); if (reduceMotion && cam.fish !== was) cam.snap = true; }
+    if (cam.fish > 0 && fishView) { const w = sstep(0, 1, cam.fish) * (1 - fw); fishCam(heroRoot.position, fishView, _fe, _ft); V.lerp(_fe, w); tgt.lerp(_ft, w); }
+    // Talking: over his shoulder, to their face, or a hood that size is all you'd see of whoever it is. With reduced motion it cuts there and back.
+    { const on = M === 'dialog' && !!S.talkTo, was = cam.talk; cam.talk = reduceMotion ? +on : clamp(cam.talk + (on ? dt : -dt) * 2.5, 0, 1); if (reduceMotion && cam.talk !== was) cam.snap = true; }
+    // Toni's as TONI_TALK has it, between them
+    const overShoulder = (N, { side, k }, w, shape) => {
+      const H = heroRoot.position, L = Math.hypot(N.x - H.x, N.z - H.z) || 1, ux = (N.x - H.x) / L, uz = (N.z - H.z) / L;
+      V.lerp(_talk.set(H.x + k * (-ux * shape.back - uz * side * shape.out), H.y + shape.up, H.z + k * (-uz * shape.back + ux * side * shape.out)), w);
+      tgt.lerp(_talk.set(H.x + ux * L * shape.along, H.y + shape.look, H.z + uz * L * shape.along), w);
+    };
+    // and the cast's at their face, a little over it, so that it's in the top half and the words box is under it
+    const faceOver = (n, at, w) => {
+      const F = faceOf(n, _face), E = faceCam(heroRoot.position, F, at, _talk), d = Math.hypot(F.x - E.x, F.z - E.z);
+      V.lerp(E, w); tgt.lerp(_talk.set(F.x, F.y - FACE.under * d, F.z), w);
     };
     if (cam.talk > 0 && S.talkTo) {
-      const H = heroRoot.position, N = S.talkTo.root.position;
+      const H = heroRoot.position, N = S.talkTo.root.position, w = sstep(0, 1, cam.talk);
       if (M === 'dialog') player.yaw += angDiff(player.yaw, Math.atan2(N.x - H.x, N.z - H.z)) * Math.min(1, dt * 7);
-      overShoulder(N, S.talk, sstep(0, 1, cam.talk), S.talkTo === toniBody ? TONI_TALK : TALK);
+      if (S.talkTo === toniBody) overShoulder(N, S.talk, w, TONI_TALK); else faceOver(S.talkTo, S.talk, w);
     }
     // right up to the glass, and him out of the way while it's there
     if (crtLook && M !== 'town') crtLook = false;
