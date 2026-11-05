@@ -91,7 +91,7 @@ try {
   assert.deepEqual(await (await hereOf(url)).json(), { here: 2, wallets: true });
   console.log('the title card is told how many are in town, nobody and then the two of them, and that the town can pair a wallet');
 
-  a.ws.send(say({ t: 'keep', beans: 4, items: { bottle: 1 }, gas: 0 }));
+  a.ws.send(say({ t: 'keep', beans: 4, items: { bottle: 1 }, gas: 0, pantry: { day: 20761, stock: 6, swept: 20761 } }));
   a.ws.send(say({ t: 'mind', who: 'coop', said: 'Hey.' })); a.ws.send(say({ t: 'mind', who: 'coop', visit: true }));
   // a fence knocked down, and something at Robby's lot, where nothing's kept broken
   const fence = { k: 'pfence:1:0', x: .1, z: 0, d: 9 }, atTheLot = { k: 'pfence:2:0', x: -254.5 - BRIDGE[0], z: 200 - BRIDGE[1], d: 9 };
@@ -141,11 +141,12 @@ try {
   await until(() => back.id, 'someone coming back to be let in');
   const had = back.welcome().saved;
   assert.deepEqual([had?.x, had?.z, had?.beans, had?.items?.bottle], [5, 6, 4, 1]);
+  assert.deepEqual(had?.pantry, { day: 20761, stock: 6, swept: 20761 }, 'and their pantry at the church as it was');
   assert.deepEqual(back.welcome().minds, { coop: { notes: [], said: ['Hey.'], visits: 1 } });
   assert.deepEqual(n.welcome().minds, {});
   assert.deepEqual(await askWallet(url, 'mine', { key: 'w'.repeat(32) }), { rekt: told.rekt, wearing: told.wearing, numbers: told.numbers });
   assert.deepEqual(back.welcome().wrecks, [fence]);
-  console.log('stopped and started again, someone coming back finds where they were, what they had, Coop remembering them, what they wear of their own, and the fence still down');
+  console.log('stopped and started again, someone coming back finds where they were, what they had, their pantry, Coop remembering them, what they wear of their own, and the fence still down');
 
   // a thousand more come and go, twenty at a time, so that they're the thousand the town keeps
   back.ws.close();

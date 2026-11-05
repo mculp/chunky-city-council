@@ -123,6 +123,38 @@ test('someone coming back is welcomed with where they were and what they had', (
   assert.deepEqual({ beans: saved.beans, items: saved.items, gas: saved.gas }, { beans: 4, items: { bottle: 2, crackers: 1 }, gas: 1 });
 });
 
+test('their pantry is kept with what they had, and comes back as it was, swept or not (CHUNKY-182)', () => {
+  const t = createTown(), me = hello(), you = hello(), a = t.join(me).id, b = t.join(you).id;
+  t.move(a, pose()); t.move(b, pose());
+  t.keep(a, { beans: 2, items: {}, gas: 0, pantry: { day: 20761, stock: 4, swept: 20761 } });
+  t.keep(b, { beans: 0, items: {}, gas: 0, pantry: { day: 20759, stock: 9, swept: null } });
+  t.leave(a); t.leave(b);
+  const back = t.join(me), again = t.join(you);
+  assert.deepEqual(to(back.out, back.id)[0].saved.pantry, { day: 20761, stock: 4, swept: 20761 });
+  assert.deepEqual(to(again.out, again.id)[0].saved.pantry, { day: 20759, stock: 9, swept: null });
+});
+
+test('a pantry\'s kept only as one the game could have, and anything else leaves the one that was kept', () => {
+  const t = createTown(), me = hello(), a = t.join(me).id;
+  t.move(a, pose());
+  const kept = () => { t.leave(a); const r = t.join(me); return to(r.out, r.id)[0].saved; };
+  assert.equal(kept().pantry, null, 'someone who\'s never had one comes back with none');
+  t.keep(t.join(me).id, {});
+  for (const [given, want] of [
+    [{ day: 20761, stock: 50, swept: 20761 }, { day: 20761, stock: 9, swept: 20761 }],
+    [{ day: 20761, stock: -2, swept: 'today', more: 'x'.repeat(5000) }, { day: 20761, stock: 0, swept: null }],
+    [{ day: 20762, stock: 3, swept: 1e12 }, { day: 20762, stock: 3, swept: null }],
+  ]) {
+    const id = t.join(me).id; t.keep(id, { beans: 1, pantry: given });
+    assert.deepEqual(kept().pantry, want, JSON.stringify(given));
+  }
+  // what isn't a pantry at all, and a phone from before there was one, keep the one there was
+  for (const given of [undefined, null, 'full', { day: 'today', stock: 3 }, { day: 20763, stock: 'lots' }, { day: 2.5, stock: 3 }, { day: -1, stock: 3 }]) {
+    const id = t.join(me).id; t.keep(id, { beans: 1, ...(given !== undefined && { pantry: given }) });
+    assert.deepEqual(kept().pantry, { day: 20762, stock: 3, swept: null }, JSON.stringify(given));
+  }
+});
+
 test('someone new has nothing saved, even with a name someone else used', () => {
   const t = createTown(), a = t.join(hello({ name: 'Junebug' })); t.move(a.id, pose()); t.leave(a.id);
   const b = t.join(hello({ name: 'Junebug' }));

@@ -4,7 +4,7 @@
 // It's told what each phone says, and answers with who to tell what: `{ to, msg, close }`, where `to` is a player's id or 'all',
 // and `close` means that phone's to be let go once it's been told. It believes where people say they are, as long as it's on the
 // map. Who someone is, is the hash of the key their phone keeps, which is all the town ever sees, and what it keeps for them is
-// their name and look, where they were and what they had. It also keeps where each vehicle was left, by its place in the game's
+// their name and look, where they were, what they had and their pantry at the church. It also keeps where each vehicle was left, by its place in the game's
 // list, which is the same on every phone that has the same vehicles. What the cast remember of each of them is kept apart, since
 // there can be a lot of it: it comes in with them, and goes out to be kept with keepMinds().
 //
@@ -18,6 +18,7 @@
 import { NET_MAX, POSE_BYTES, encodeSnapshot, decodePose } from '../src/net.js';
 import { checkName } from '../src/names.js';
 import { tidy, merge, lasting, partsIn, kindOf, AT_ONCE } from '../src/wrecks.js';
+import { PANTRY } from '../src/pantry.js';
 
 const EDGE = 40000;   // metres from Stuckey's Bridge, well past anything on the map
 const KINDS_MOST = 32, EACH_MOST = 999, KEY = /^[0-9a-f]{64}$/, ITEM = /^[a-z][a-z0-9_]{0,23}$/i;
@@ -48,6 +49,14 @@ function carried(state) {
     }
   }
   return { beans: counted(state?.beans), items, gas: counted(state?.gas) };
+}
+// Their pantry at the church (CHUNKY-182), as one the game could have: the church signs' day it was last looked at, what's on its
+// shelves and the day the steps were last swept, if ever. Days are src/signs.js's, counted from 1970, and none's near a million.
+// Anything else isn't a pantry, and leaves the one that was kept.
+const aDay = (d) => Number.isInteger(d) && d >= 0 && d < 1e6;
+function pantryOf(p) {
+  if (!p || typeof p !== 'object' || !aDay(p.day) || !Number.isInteger(p.stock)) return null;
+  return { day: p.day, stock: Math.max(0, Math.min(PANTRY.most, p.stock)), swept: aDay(p.swept) ? p.swept : null };
 }
 
 // What the cast remember of someone, by which of them it is, as much as src/talk.js keeps and no more: what they've said to them,
@@ -182,7 +191,7 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
       saved.delete(keyHash); letGoOf.delete(keyHash);
       saved.set(keyHash, { beans: 0, items: {}, gas: 0, ...before, name: p.name, look: p.look }); dirty = true;
       makeRoom();
-      const back = before && 'x' in before ? { x: before.x, y: before.y, z: before.z, yaw: before.yaw, beans: before.beans, items: before.items, gas: before.gas } : null;
+      const back = before && 'x' in before ? { x: before.x, y: before.y, z: before.z, yaw: before.yaw, beans: before.beans, items: before.items, gas: before.gas, pantry: before.pantry ?? null } : null;
       if (!minds.has(keyHash)) minds.set(keyHash, tidyMinds(kept));
       // and what time it is in town, which the trains run to (CHUNKY-153)
       out.push({ to: id, msg: { t: 'welcome', id, name: p.name, look: p.look, hero: p.hero, ...(p.rekt && { rekt: p.rekt }), saved: back, minds: minds.get(keyHash), cars: carList(), wrecks: [...wrecks.values()].map((e) => e.w), now: wall() } });
@@ -209,7 +218,7 @@ export function createTown({ max = NET_MAX, keeps = KEEPS, clock = () => perform
     // what they carry, which is also how a phone that's nowhere yet, watching the opening, says it's still there
     keep(id, state) {
       const p = here.get(id);
-      if (p) { p.heard = clock(); Object.assign(saved.get(p.keyHash), carried(state)); dirty = true; }
+      if (p) { p.heard = clock(); const pantry = pantryOf(state?.pantry); Object.assign(saved.get(p.keyHash), carried(state), pantry && { pantry }); dirty = true; }
       return [];
     },
     // one of the cast said something to them, kept something about them, a visit's over, or how they feel about them has moved:
