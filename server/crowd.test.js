@@ -1,14 +1,18 @@
 // The town's people, run by the town everyone shares (CHUNKY-153b): out on the streets and at their homes near whoever's in town, put
 // back once nobody's near and out again just as they were, coming for players, and each grab and everything else that happens told for
-// whoever it's about. None of it hangs on one run of random numbers: it's what happens, not who it happens to first.
+// whoever it's about. The trains to the town's clock, in the way and throwing anyone on the tracks clear, and what's broken, as the town
+// keeps it. None of it hangs on one run of random numbers: it's what happens, not who it happens to first.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createWorld } from './world.js';
 import { createCrowd, STREETS, HOME_SEE, HOME_PUT } from './crowd.js';
+import { TIMETABLE } from '../src/trains.js';
+import { partsOf } from '../src/damage.js';
+import { keyOf, encodeParts } from '../src/wrecks.js';
 
 const json = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url)));
-const data = { roads: json('../data/roads.json'), lanes: json('../data/lanes.json'), water: json('../data/water.json'), solids: json('../data/solids.json'), structures: json('../data/structures.json'), crowd: json('../data/crowd.json') };
+const data = { roads: json('../data/roads.json'), lanes: json('../data/lanes.json'), water: json('../data/water.json'), solids: json('../data/solids.json'), structures: json('../data/structures.json'), crowd: json('../data/crowd.json'), railroad: json('../data/railroad.json') };
 const folks = json('../data/folks.json'), looks = json('../data/looks.json').crowd;
 // a world each, since a crowd parks and drives its vehicles and takes its random numbers
 const town = () => { const world = createWorld(data); return { world, crowd: createCrowd(world, { folks, looks }) }; };
@@ -163,6 +167,116 @@ describe('the vehicles', () => {
     assert.ok(!crowd.blocked(driving.x, driving.z, 0, true), 'but not to anyone thrown over it');
     crowd.step(.1, [player('a', [driving.x + 3, driving.z])]);
     assert.ok(world.stops(driving.x, driving.z, 0) && !world.stops(x0, z0, 0), 'left where they got out');
+  });
+});
+
+describe('the trains', () => {
+  // the railroad where it's nearest the middle of town, with open ground either side of it, and which way's across it
+  function track(world, crowd) {
+    const line = crowd.trains.line, { s } = line.nearest(...at(world, ...MID)), A = line.at(s);
+    return { s, x: A.x, z: A.z, ax: A.tz, az: -A.tx };
+  }
+  // the town's clock when a freight coming down the line at full speed has its nose so far short of s
+  function freightShort(crowd, s, short) {
+    for (let now = TIMETABLE.epoch - TIMETABLE.every; now < TIMETABLE.epoch + TIMETABLE.every; now += .05) {
+      const w = crowd.trains.plan.where(1, now);
+      if (w && w.speed > 20 && w.head > s && w.head - s <= short) return now;
+    }
+    throw new Error('no freight comes by');
+  }
+  const thrown = (got, s) => got.some((e) => e.t === 'thrown' && e.id === s.who.id), going = (tr) => tr.speed >= 1;
+
+  test('there are none without the town\'s clock, which is all they run to', () => {
+    const { world, crowd } = town(), P = player('a', at(world, ...MID));
+    run(crowd, 1, [P]);
+    assert.equal(crowd.trains.trains.length, 0);
+    crowd.step(.1, [P], TIMETABLE.epoch + 60);
+    assert.ok(crowd.trains.trains.some((tr) => tr.local && tr.standing), 'the local standing on the siding');
+  });
+
+  test('one that\'s going throws anyone on the tracks clear of them, and they lie there longer than anything else keeps anyone down', () => {
+    const { world, crowd } = town(), T = track(world, crowd), P = player('a', [T.x + T.ax * 120, T.z + T.az * 120]);
+    let now = freightShort(crowd, T.s, 25);
+    crowd.step(.1, [P], now);
+    const s = crowd.horde.add(T.x, T.z), got = [];
+    for (let i = 0; i < 40 && !thrown(got, s); i++) got.push(...crowd.step(.1, [P], now += .1));
+    assert.ok(thrown(got, s), 'never thrown');
+    for (let i = 0; i < 50 && s.thrown; i++) crowd.step(.1, [P], now += .1);
+    assert.ok(!s.thrown, 'still in the air');
+    const off = crowd.trains.line.nearest(s.x, s.z).d;
+    assert.ok(off > 3, `${off.toFixed(1)} m from the tracks`);
+    assert.ok(crowd.horde.down(s) > 20, `down for ${crowd.horde.down(s).toFixed(1)} s`);
+  });
+
+  test('the local standing on the siding is in everyone\'s way and hides whoever\'s behind it, and throws nobody', () => {
+    const { world, crowd } = town();
+    let now = TIMETABLE.epoch + 60;
+    crowd.step(.1, [player('a', at(world, ...MID))], now);
+    const c = crowd.trains.trains.find((tr) => tr.local && tr.standing).cars[2], ax = c.fz, az = -c.fx;
+    assert.ok(crowd.blocked(c.x, c.z, 0) && crowd.blocked(c.x, c.z, 0, true), 'in the way, of anyone thrown into it too');
+    const a = { x: c.x + ax * 6, z: c.z + az * 6, y: 0 }, b = { x: c.x - ax * 6, z: c.z - az * 6, y: 0 };
+    assert.ok(world.sees(a, b) && !crowd.sees(a, b), 'hiding them');
+    assert.ok(crowd.sees({ ...a, y: -4 }, { ...b, y: -4 }), 'though not anyone below it, as under a trestle');
+    // right up against it, with someone near enough that the crowd's about there, out of their sight, and the freight going by
+    const P = player('a', [c.x + ax * 60, c.z + az * 60]), s = crowd.horde.add(c.x + ax * (c.half + .25), c.z + az * (c.half + .25)), got = [];
+    for (let i = 0; i < 30; i++) got.push(...crowd.step(.1, [P], now += .1));
+    assert.ok(crowd.trains.trains.some((tr) => !tr.local && going(tr)), 'nothing going by');
+    assert.ok(!thrown(got, s));
+  });
+});
+
+describe('what\'s broken', () => {
+  const prop = (k, x, z) => ({ k, x, z, d: 0 });
+
+  test('a light\'s out while any prop that puts it out is broken, and lit again once they\'re all healed', () => {
+    const { world, crowd } = town(), lit = (l) => crowd.horde.lights.includes(l);
+    const cinema = world.lights.find((l) => l.k.length === 2), gas = world.lights.find((l) => l.k[0].startsWith('pcanopy')), [screen, projector] = cinema.k;
+    assert.ok(world.lights.every(lit));
+    crowd.wreck(prop(gas.k[0], gas.x, gas.z));
+    assert.ok(!lit(gas) && lit(cinema));
+    crowd.wreck(prop(screen, cinema.x, cinema.z)); crowd.wreck(prop(projector, cinema.x, cinema.z));
+    crowd.heal(screen);
+    assert.ok(!lit(cinema), 'with the projector still broken');
+    crowd.heal(projector); crowd.heal(gas.k[0]);
+    assert.ok(world.lights.every(lit));
+  });
+
+  test('what\'s built stops nobody where it\'s come down, and does again once it\'s healed', () => {
+    const { world, crowd } = town(), k = world.lights.find((l) => l.k[0].startsWith('pbarrel')).k[0], [x, z] = k.split(':').slice(1).map((n) => +n / 10);
+    assert.ok(crowd.blocked(x, z, 0));
+    crowd.wreck(prop(k, x, z));
+    assert.ok(!crowd.blocked(x, z, 0));
+    crowd.heal(k);
+    assert.ok(crowd.blocked(x, z, 0));
+  });
+
+  test('the church on Church St is no refuge once more than .4 of its walls are down, whatever else is, and is again once it\'s healed', () => {
+    const { world, crowd } = town(), s = world.churchHouse, { parts, walls } = partsOf(s), k = keyOf.building(s.id);
+    const down = (list) => ({ k, x: world.church.x, z: world.church.z, n: parts.length, p: encodeParts(list.map((q) => ({ part: q.part, gone: true, cracked: false, burning: false, dir: 0, hp: 0, shade: 255 }))) });
+    const refuge = () => crowd.horde.inSanctuary(world.church.x, world.church.z), most = Math.floor(walls.length * .4);
+    assert.ok(walls.length >= 10 && refuge());
+    crowd.wreck(down([...parts.filter((q) => !walls.includes(q)), ...walls.slice(0, most)]));
+    assert.ok(refuge(), 'with everything but its walls down, and .4 of them');
+    crowd.wreck(down(walls.slice(0, most + 1)));
+    assert.ok(!refuge(), 'with more than .4 of its walls down');
+    crowd.heal(k);
+    assert.ok(refuge(), 'healed');
+  });
+
+  test('a vehicle that\'s been sent somewhere lies there, and it\'s back where it was parked once it\'s healed, unless someone\'s in it', () => {
+    const { world, crowd } = town(), open = (x, z) => !world.blocked(x, z, 0) && !world.water(x, z) && !world.solids.stops(x + 3, z, 0);
+    const [v, u] = world.parked.filter((q) => open(q.x + 30, q.z) && open(q.x + 60, q.z));
+    const home = [v.x, v.z], there = [v.x + 30, v.z];
+    crowd.wreck({ k: `v${v.i}`, x: there[0], z: there[1], y: 0, yaw: 1, h: 0, f: 2 });
+    assert.ok(world.stops(...there, 0) && !world.stops(...home, 0), 'where it was sent');
+    crowd.heal(`v${v.i}`);
+    assert.ok(world.stops(...home, 0) && !world.stops(...there, 0), 'back where it was parked');
+    const P = player('a', [u.x + 30, u.z], { ride: u.i + 1, yaw: u.yaw, driving: true });
+    crowd.step(.1, [P]);
+    crowd.wreck({ k: `v${u.i}`, x: u.x + 60, z: u.z, y: 0, yaw: 0, h: 0, f: 1 });
+    assert.ok(!world.stops(u.x + 60, u.z, 0) && crowd.blocked(P.x, P.z, 0), 'where whoever\'s in it has it');
+    crowd.heal(`v${u.i}`);
+    assert.ok(!world.stops(u.x, u.z, 0) && crowd.blocked(P.x, P.z, 0), 'and not back where it was parked either');
   });
 });
 

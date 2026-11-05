@@ -8,8 +8,9 @@
 // whatever's built, a parked vehicle, and anything that's more than 0.7 m up from where they're standing. What they see and where they
 // wander, who's burnt down and how far over they stand, where nobody goes and the doors the people at home come out of are the page's own
 // (index.html, where the crowd's world is made). The river brings anyone it's had up as the page has it, by src/river.js, and never inside
-// `keepOut`, which is the compound on Pine Forest Rd's grounds.
+// `keepOut`, which is the compound on Pine Forest Rd's grounds. With data/railroad.json it has the siding in town the trains pass on.
 import { buildMap } from '../src/map.js';
+import { makeLine, makeSiding } from '../src/trains.js';
 import { buildWater } from '../src/water.js';
 import { createSolids } from '../src/solids.js';
 import { channel, createWet } from '../src/wet.js';
@@ -22,7 +23,7 @@ const STEP = .7, SEED = 20260214, HOUSE_CELL = 32, VEH_CELL = 16;
 // what the first of the people at home is numbered, and each after is one more, as the game has them
 export const HOME_ID = 1000;
 
-export function createWorld({ roads, lanes, water, solids: solidsData, structures = null, crowd = null, seed = SEED, keepOut = null }) {
+export function createWorld({ roads, lanes, water, solids: solidsData, structures = null, crowd = null, railroad = null, seed = SEED, keepOut = null }) {
   const map = buildMap(roads, { riverAtBridge: channel, lanes }), ponds = buildWater(water, map), solids = createSolids(solidsData);
   const wet = createWet({ map, ponds, raised: solids.raised });
   const at = (x, z) => map.fromTrue(x, z);
@@ -43,7 +44,7 @@ export function createWorld({ roads, lanes, water, solids: solidsData, structure
   // Every vehicle where the game parks it, by its place in the game's list, which is its number on the wire. Once someone's left one
   // somewhere else it's there (park), and while someone's in it it's wherever they are and parked nowhere (ride). It stops anyone within
   // .3 m of it and under its roof, and it's kept by cells 16 m on a side, as the page keeps them.
-  const parked = (crowd?.parked ?? []).map(([kind, x, z, yaw], i) => ({ i, kind, K: KINDS[kind], x, z, yaw, y: 0, on: false })), vehCells = new Map();
+  const parked = (crowd?.parked ?? []).map(([kind, x, z, yaw], i) => ({ i, kind, K: KINDS[kind], x, z, yaw, y: 0, on: false, home: { x, z, yaw } })), vehCells = new Map();
   const vehCell = (cx, cz) => (cx + 32768) * 65536 + cz + 32768;
   function mark(v, on) {
     const r = Math.hypot(v.K.length, v.K.width) / 2 + .4;
@@ -55,8 +56,10 @@ export function createWorld({ roads, lanes, water, solids: solidsData, structure
     v.on = on;
   }
   const ride = (i) => { const v = parked[i]; if (v?.on) mark(v, false); };
+  // and with nowhere said, it's back where the game parks it
   function park(i, x, z, yaw) {
     const v = parked[i]; if (!v) return;
+    if (x === undefined) ({ x, z, yaw } = v.home);
     ride(i); v.x = x; v.z = z; v.yaw = yaw; v.y = floorAt(x, z); mark(v, true);
   }
   parked.forEach((v) => park(v.i, v.x, v.z, v.yaw));
@@ -72,9 +75,10 @@ export function createWorld({ roads, lanes, water, solids: solidsData, structure
   const blocked = (x, z, y) => stops(x, z, y) || floorAt(x, z) - y > STEP;
   // Round a corner, behind a wall or a building, he can't be seen. His head's at the height of theirs, which is what the wall has to be
   // higher than, and the last 0.8 m short of him is left out, so that a wall he's standing against doesn't hide him from what's in front of it.
-  function sees(s, p) {
+  // `also` is anything else in the way, which for the town's crowd is the trains.
+  function sees(s, p, also = null) {
     const dx = p.x - s.x, dz = p.z - s.z, d = Math.hypot(dx, dz), y = Math.max(s.y, p.y) + 1.5, n = Math.ceil((d - .8) / .5);
-    for (let i = 1; i <= n; i++) { const k = Math.min(i * .5, d - .8) / (d || 1); if (stops(s.x + dx * k, s.z + dz * k, y)) return false; }
+    for (let i = 1; i <= n; i++) { const k = Math.min(i * .5, d - .8) / (d || 1), x = s.x + dx * k, z = s.z + dz * k; if (stops(x, z, y) || also?.(x, z, y)) return false; }
     return true;
   }
   // How far out of town someone is, from its middle in true metres: more of them have burnt down the further out they came out, and how
@@ -116,6 +120,10 @@ export function createWorld({ roads, lanes, water, solids: solidsData, structure
   }
   // the lights that draw them at night, each with the props that put it out when they're broken
   const lights = (crowd?.lights ?? []).map(([x, z, r, k]) => ({ x, z, r, k }));
+  // the church on Church St, whose walls coming down make it no refuge, as the page has it
+  const churchHouse = houseAt(...at(-307, -230));
+  // The railroad the trains run on, and the siding in town they pass on, as the page has them (index.html, by what's by the railroad)
+  const rail = makeLine(map.rail[0]), siding = railroad && makeSiding(rail, { ...railroad.siding, west: at(...railroad.siding.west), east: at(...railroad.siding.east) });
 
   const comeUp = surfacing(createRiver(map.river), {
     water: isWet, pond: wet.pond, floorAt,
@@ -124,7 +132,7 @@ export function createWorld({ roads, lanes, water, solids: solidsData, structure
   });
   return {
     map, ponds, solids, wet, structures: placed, floorAt, water: isWet, level: wet.level, stops, blocked, sees, wander, rand, houseAt, comeUp,
-    parked, park, ride, homes, doorOf, lights,
-    quiet: (s) => !burntDown(s.who, fromTown(s)), hips: (s) => hipsOf(s.who, fromTown(s)), grounds, church, keepOut,
+    parked, park, ride, homes, doorOf, lights, rail, siding,
+    quiet: (s) => !burntDown(s.who, fromTown(s)), hips: (s) => hipsOf(s.who, fromTown(s)), grounds, church, churchHouse, keepOut,
   };
 }
