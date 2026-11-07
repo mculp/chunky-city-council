@@ -1,0 +1,49 @@
+# Manual-only: builds the offline changelog site from one immutable ref and attaches it to the run as a downloadable artifact.
+# It publishes nothing and deploys nothing; hosting, imagery and DNS are handled elsewhere (CHUNKY-181).
+name: Changelog package
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Immutable source ref to package (commit SHA or tag)
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Package the changelog
+        env:
+          SOURCE_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          stage="$(mktemp -d "$RUNNER_TEMP/changelog.XXXXXX")"
+          # the packager refuses any existing --out, so use a child that does not exist yet
+          node tools/package-changelog.mjs --ref "$SOURCE_REF" --out "$stage/site"
+          echo "CHANGELOG_OUT=$stage/site" >> "$GITHUB_ENV"
+      - name: Verify the package
+        run: |
+          set -euo pipefail
+          test -d "$CHANGELOG_OUT" || { echo "output directory missing"; exit 1; }
+          test -n "$(ls -A "$CHANGELOG_OUT")" || { echo "output directory empty"; exit 1; }
+          for f in index.html feed.xml version.txt; do
+            test -s "$CHANGELOG_OUT/$f" || { echo "missing $f"; exit 1; }
+          done
+          ls -l "$CHANGELOG_OUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: changelog-${{ github.run_id }}
+          path: ${{ env.CHANGELOG_OUT }}
+          retention-days: 7
+          if-no-files-found: error
