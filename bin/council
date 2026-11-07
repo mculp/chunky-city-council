@@ -62,9 +62,10 @@ begin
   if command == "recover"
     recovery = Council::Recovery.new(manifest: options[:manifest], state_dir: options[:state_dir], config_path: options[:config],
       candidate_file: options[:candidate_file], linear_factory: -> { Council::Linear.new })
-    result = options[:execute] ? recovery.execute(id) : recovery.plan(id)
+    execute_recovery = options[:execute] && !options[:dry_run]
+    result = execute_recovery ? recovery.execute(id) : recovery.plan(id)
     puts JSON.pretty_generate(result)
-    exit(options[:execute] && result["status"] != "ready" ? 3 : 0)
+    exit(execute_recovery && result["status"] != "ready" ? 3 : 0)
   end
   if command == "dispatch"
     if options[:dry_run]

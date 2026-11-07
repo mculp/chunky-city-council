@@ -266,11 +266,13 @@ class RecoveryTest < Minitest::Test
     cand = candidate_file(sha: commit_fix)
     before = snapshot
     env = {"LINEAR_API_KEY" => nil, "ANTHROPIC_API_KEY" => nil, "CLAUDE_CODE_OAUTH_TOKEN" => nil}
-    out, err, status = Open3.capture3(env, "ruby", File.expand_path("../bin/council", __dir__), "recover", ID, "--manifest", @manifest,
-      "--state-dir", @state, "--candidate-file", cand, "--config", @config_file)
-    assert status.success?, err
-    assert_equal "plan", JSON.parse(out)["mode"]
-    assert_equal before, snapshot
+    [[], ["--execute", "--dry-run"]].each do |flags|
+      out, err, status = Open3.capture3(env, "ruby", File.expand_path("../bin/council", __dir__), "recover", ID, "--manifest", @manifest,
+        "--state-dir", @state, "--candidate-file", cand, "--config", @config_file, *flags)
+      assert status.success?, err
+      assert_equal "plan", JSON.parse(out)["mode"]
+      assert_equal before, snapshot
+    end
     _o, usage_err, usage_status = Open3.capture3(env, "ruby", File.expand_path("../bin/council", __dir__), "recover", ID, "--manifest", @manifest)
     refute usage_status.success?
     assert_match(/Usage/, usage_err)
