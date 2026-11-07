@@ -14,5 +14,12 @@
     "max_turns": 200,
     "call_timeout": 5400
   },
+  "allowed": [],
+  "roles": {
+    "director": {"model": "sonnet", "budget_usd": 1.5, "max_turns": 24, "call_timeout": 300},
+    "engineer": {"model": "sonnet", "budget_usd": 3.0, "max_turns": 60, "call_timeout": 900},
+    "platform": {"model": "sonnet", "budget_usd": 3.0, "max_turns": 60, "call_timeout": 900},
+    "qa": {"model": "sonnet", "budget_usd": 2.0, "max_turns": 45, "call_timeout": 600}
+  },
   "linear": {"done": true, "comment": true}
 }

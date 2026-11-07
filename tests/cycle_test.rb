@@ -144,6 +144,44 @@ class CycleTest < Minitest::Test
     assert_equal 1, w.tasks.length
   end
 
+  def test_qa_only_recheck_never_restarts_the_writer
+    w = writer; first = cycle(w, Script.new { |task| report(task) }).call(TICKET)
+    candidate = Council::Builder::Candidate.new(**first["candidate"])
+    builder = Council::Builder.new(@config, runner: nil, role: "engineer", out: @out)
+    q = Script.new { |task| report(task) }
+    qa = Council::Role.new(@config, name: "qa", runner: q, out: @out)
+    result = Council::Cycle.new(builder: builder, qa: qa, run_dir: File.join(@tmp, "recheck")).review(TICKET, candidate)
+    assert_equal "ready", result["status"]
+    assert_equal 1, w.tasks.length
+    assert_includes q.tasks.first.profile.bash, "node tools/package-changelog.mjs"
+    assert_equal @base, origin_main
+    assert File.exist?(File.join(@tmp, "run/qa-1.json"))
+    assert File.exist?(File.join(@tmp, "recheck/qa-1.json"))
+  end
+
+  def test_qa_only_recheck_refuses_a_stale_candidate_before_calling_qa
+    first = cycle(writer, Script.new { |task| report(task) }).call(TICKET)
+    candidate = Council::Builder::Candidate.new(**first["candidate"].merge(sha: @base))
+    builder = Council::Builder.new(@config, runner: nil, role: "engineer", out: @out)
+    q = Script.new { raise "must not run" }; qa = Council::Role.new(@config, name: "qa", runner: q, out: @out)
+    assert_raises(Council::Error) { Council::Cycle.new(builder: builder, qa: qa, run_dir: File.join(@tmp, "recheck")).review(TICKET, candidate) }
+    assert_empty q.tasks
+    assert_equal @base, origin_main
+  end
+
+  def test_director_refuses_overlapping_queues_before_model_or_linear_calls
+    linear = LinearStandIn.new
+    overlap = brief.merge("lanes" => {"engineer" => {"allowed" => ["tools/"]}, "platform" => {"allowed" => ["tools/package.mjs"]}})
+    assert_raises(Council::Error) { director(linear).call(overlap, run_dir: File.join(@tmp, "direction"), publish: true) }
+    assert_empty linear.requests
+  end
+
+  def test_run_directory_cannot_overwrite_existing_unrelated_files
+    dir = File.join(@tmp, "unrelated"); FileUtils.mkdir_p(dir); File.write(File.join(dir, "brief.json"), "keep")
+    assert_raises(Council::Error) { director(LinearStandIn.new).call(brief, run_dir: dir) }
+    assert_equal "keep", File.read(File.join(dir, "brief.json"))
+  end
+
   def test_repair_budget_cannot_be_unbounded
     assert_raises(Council::Error) { cycle(writer, Script.new {}, max_revisions: 2) }
   end

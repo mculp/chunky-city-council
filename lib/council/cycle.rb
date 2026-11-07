@@ -34,10 +34,32 @@ module Council
             feedback = report
           end
           @run.save("state", "status" => "parked", "ticket" => ticket["id"], "candidate" => candidate.to_h,
-            "reason" => "QA did not pass within the repair budget", "engineer_usage" => @builder.usage, "qa_usage" => @qa.usage)
+            "reason" => "QA did not approve; inspect its retained report before restarting", "engineer_usage" => @builder.usage, "qa_usage" => @qa.usage)
         rescue StandardError => e
           @run.save("state", "status" => "failed", "ticket" => ticket["id"], "reason" => e.message,
             "candidate" => candidate&.to_h, "engineer_usage" => @builder.usage, "qa_usage" => @qa.usage)
+          raise
+        end
+      end
+    end
+
+    # Explicit QA-only rerun for a corrected tool permission or an integrator-recorded rebased commit.
+    # A fresh run directory preserves the original blocked/approved report; no writer is restarted.
+    def review(ticket, candidate)
+      @run.start do
+        begin
+          @run.save("ticket", ticket)
+          @run.save("candidate", candidate.to_h.transform_keys(&:to_s))
+          @run.save("state", "status" => "checking", "ticket" => ticket["id"], "sha" => candidate.sha)
+          @builder.verify_candidate!(ticket, candidate)
+          @run.save("state", "status" => "qa", "ticket" => ticket["id"], "sha" => candidate.sha)
+          report = @qa.call({"ticket" => ticket, "base_sha" => candidate.base, "candidate_sha" => candidate.sha}, cwd: candidate.worktree)
+          @run.save("qa-1", report)
+          validate_report!(report, candidate.worktree)
+          @run.save("state", "status" => report["verdict"] == "pass" ? "ready" : "parked", "ticket" => ticket["id"],
+            "candidate" => candidate.to_h, "qa_usage" => @qa.usage, "merged" => false, "deployed" => false)
+        rescue StandardError => e
+          @run.save("state", "status" => "failed", "ticket" => ticket["id"], "reason" => e.message, "candidate" => candidate.to_h)
           raise
         end
       end

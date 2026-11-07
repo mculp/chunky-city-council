@@ -43,6 +43,17 @@ module Council
       result
     end
 
+    # Recheck an existing candidate without invoking a writer or landing it.
+    def verify_candidate!(ticket, candidate)
+      id = ticket.fetch("id")
+      validate_id!(id)
+      expected = File.realpath(File.join(@config["worktrees"], id))
+      raise Error, "candidate does not belong to this ticket/worktree" unless candidate.ticket == id && File.realpath(candidate.worktree) == expected
+      @git.clean!(expected)
+      raise Error, "candidate HEAD changed; record the new candidate before reviewing" unless @git.head(expected) == candidate.sha
+      check!(id, expected, candidate.base, candidate.sha)
+    end
+
     private
 
     IDENTITY = %w[head branch common_git_dir origin push_origin].freeze

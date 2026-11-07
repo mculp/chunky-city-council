@@ -10,6 +10,7 @@ USAGE = <<~TEXT
          bin/council discard TICKET [--config FILE]
          bin/council plan --brief FILE --run-dir DIR [--publish] [--config FILE]
          bin/council cycle TICKET --run-dir DIR [--ticket-file FILE] [--lane engineer|platform] [--max-revisions 0|1] [--config FILE]
+         bin/council qa TICKET --candidate-file FILE --run-dir DIR [--ticket-file FILE] [--lane engineer|platform] [--config FILE]
 TEXT
 
 options = {config: File.join(Council::ROOT, "config/council.json"), linear: true, max_revisions: 1}
@@ -22,6 +23,7 @@ parser = OptionParser.new do |opts|
   opts.on("--brief FILE") { |value| options[:brief] = value }
   opts.on("--run-dir DIR") { |value| options[:run_dir] = value }
   opts.on("--publish", "Explicitly create the director's child tickets in Linear") { options[:publish] = true }
+  opts.on("--candidate-file FILE") { |value| options[:candidate_file] = value }
   opts.on("--lane NAME") { |value| options[:lane] = value }
   opts.on("--max-revisions N", Integer) { |value| options[:max_revisions] = value }
 end
@@ -29,10 +31,11 @@ end
 begin
   parser.parse!(ARGV)
   command, id = ARGV.shift(2)
-  abort USAGE unless %w[build discard plan cycle].include?(command)
-  abort USAGE if %w[build discard cycle].include?(command) && !(id || options[:ticket_file])
-  abort USAGE if %w[plan cycle].include?(command) && !options[:run_dir]
+  abort USAGE unless %w[build discard plan cycle qa].include?(command)
+  abort USAGE if %w[build discard cycle qa].include?(command) && !(id || options[:ticket_file])
+  abort USAGE if %w[plan cycle qa].include?(command) && !options[:run_dir]
   abort USAGE if command == "plan" && !options[:brief]
+  abort USAGE if command == "qa" && !options[:candidate_file]
   raise Council::Error, "--publish is only for plan and cannot use --no-linear" if options[:publish] && (command != "plan" || !options[:linear])
   config = Council::Config.load(options[:config])
   Council.boot(config)
@@ -51,9 +54,9 @@ begin
     puts JSON.pretty_generate(result)
     exit(result["status"] == "questions" ? 3 : 0)
   end
-  ticket = command == "cycle" && options[:ticket_file] ? JSON.parse(File.read(options[:ticket_file])) : Giraffe::Tickets.load(identifier: id, file: options[:ticket_file])
+  ticket = %w[cycle qa].include?(command) && options[:ticket_file] ? JSON.parse(File.read(options[:ticket_file])) : Giraffe::Tickets.load(identifier: id, file: options[:ticket_file])
   raise Council::Error, "ticket file and identifier differ" if id && ticket["id"] != id
-  if command == "cycle"
+  if %w[cycle qa].include?(command)
     lane = options[:lane] || ticket["lane"] || "engineer"
     raise Council::Error, "invalid or mismatched lane" unless %w[engineer platform].include?(lane) && (!ticket["lane"] || ticket["lane"] == lane)
     raise Council::Error, "cycle requires explicit owned paths in config.allowed" unless config.data["allowed"].is_a?(Array) && config.data["allowed"].any?
@@ -61,9 +64,16 @@ begin
       puts JSON.pretty_generate("ticket" => ticket, "lane" => lane, "run_dir" => options[:run_dir], "allowed" => config["allowed"], "landing" => "review only; no push, merge, Done or deploy")
       exit
     end
-    writer = Council::Builder.new(config, role: lane, runner: Council.subscription_runner(config, role: lane))
+    writer = Council::Builder.new(config, role: lane, runner: command == "qa" ? nil : Council.subscription_runner(config, role: lane))
     qa = Council::Role.new(config, name: "qa", runner: Council.subscription_runner(config, role: "qa"))
-    result = Council::Cycle.new(builder: writer, qa: qa, run_dir: options[:run_dir], max_revisions: options[:max_revisions]).call(ticket)
+    cycle = Council::Cycle.new(builder: writer, qa: qa, run_dir: options[:run_dir], max_revisions: options[:max_revisions])
+    result = if command == "qa"
+      data = JSON.parse(File.read(options[:candidate_file]))
+      candidate = Council::Builder::Candidate.new(**data.transform_keys(&:to_sym))
+      cycle.review(ticket, candidate)
+    else
+      cycle.call(ticket)
+    end
     puts JSON.pretty_generate(result)
     exit(result["status"] == "ready" ? 0 : 3)
   end
