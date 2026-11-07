@@ -10,6 +10,7 @@ import { burntDown, hipsOf } from '../src/agents.js';
 import { insideRing } from '../src/structures.js';
 import { KINDS } from '../src/vehicles.js';
 import { HOME_ID } from './world.js';
+import { GROUNDS, GROUNDS_OUT } from '../src/aside.js';
 
 const json = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url)));
 const data = { roads: json('../data/roads.json'), lanes: json('../data/lanes.json'), water: json('../data/water.json'), solids: json('../data/solids.json'), structures: json('../data/structures.json'), crowd: json('../data/crowd.json') };
@@ -204,6 +205,8 @@ describe('who they are', () => {
 describe('where nobody goes', () => {
   test('the compound on Pine Forest Rd\'s grounds, with a way out of them for anyone caught inside, on ground they can stand on', () => {
     const g = W.grounds, [ox, oz] = g.out, off = Math.max(g.x0 - ox, ox - g.x1, g.z0 - oz, oz - g.z1);
+    assert.deepEqual([g.x0, g.z0, g.x1, g.z1], [...W.map.fromTrue(...GROUNDS.slice(0, 2)), ...W.map.fromTrue(...GROUNDS.slice(2))]);
+    assert.deepEqual(g.out, W.map.fromTrue(...GROUNDS_OUT));
     assert.ok(!g.on(ox, oz) && off > 0 && off < 10, `${off} m off its edge`);
     assert.ok(!W.water(ox, oz) && !W.blocked(ox, oz, W.floorAt(ox, oz)));
   });

@@ -18,6 +18,7 @@ import { createRiver, surfacing } from '../src/river.js';
 import { placeStructures, boundsOf, insideRing, wallsOf } from '../src/structures.js';
 import { burntDown, hipsOf } from '../src/agents.js';
 import { KINDS, inVehicle } from '../src/vehicles.js';
+import { GROUNDS, GROUNDS_OUT } from '../src/aside.js';
 
 const STEP = .7, SEED = 20260214, HOUSE_CELL = 32, VEH_CELL = 16;
 // what the first of the people at home is numbered, and each after is one more, as the game has them
@@ -29,7 +30,7 @@ export function createWorld({ roads, lanes, water, solids: solidsData, structure
   const at = (x, z) => map.fromTrue(x, z);
   // The compound on Pine Forest Rd's grounds, where the owner wants nobody, with the way out for anyone caught inside, and the church on
   // Church St, where nobody comes for anyone while it stands
-  const grounds = (() => { const [x0, z0] = at(855.5, 572), [x1, z1] = at(1088, 739); return { x0, z0, x1, z1, out: at(850, 737), on: (x, z) => x > x0 && x < x1 && z > z0 && z < z1 }; })();
+  const grounds = (() => { const [x0, z0] = at(...GROUNDS.slice(0, 2)), [x1, z1] = at(...GROUNDS.slice(2)); return { x0, z0, x1, z1, out: at(...GROUNDS_OUT), on: (x, z) => x > x0 && x < x1 && z > z0 && z < z1 }; })();
   const church = (() => { const [x, z] = at(-309, -228); return { x, z, r: 28 }; })();
   keepOut ??= grounds.on;
   // their own random numbers, the same way the page's are, and the same from the same start
