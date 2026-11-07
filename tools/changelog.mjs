@@ -254,6 +254,11 @@ export function build(from, out, { icon = '' } = {}) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = join(fileURLToPath(new URL('.', import.meta.url)), '..'), i = process.argv.indexOf('--out'), out = i > 0 ? process.argv[i + 1] : join(root, 'data', 'raw', 'changelog');
+  // --out has to be followed by a directory: not nothing, not an empty value and not another flag
+  if (i > 0 && (typeof out !== 'string' || !out.trim() || out.startsWith('-'))) {
+    console.error('--out needs a directory to make the changelog in.\nusage: node tools/changelog.mjs [--out dir]');
+    process.exit(2);
+  }
   const html = readFileSync(join(root, 'index.html'), 'utf8'), icon = decodeURIComponent(html.match(/<link rel="icon" href="data:image\/svg\+xml,([^"]+)"/)?.[1] ?? '');
   for (const [name, bytes] of build(root, out, { icon })) console.log(`${name}  ${bytes} bytes`);
   console.log(`made in ${out}`);
