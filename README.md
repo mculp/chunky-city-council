@@ -18,14 +18,17 @@ Step 1 of the rollout: one ticket end to end with the Builder, on the subscripti
    and edit the worktree and run only these commands: `node tools/check.mjs`, `node --test`, `npm test`, and read-only git.
 3. Refuses the change if it touches `docs/lore.md`, `CLAUDE.md`, `.claude/` or `.github/`.
 4. Commits as `CHUNKY-123: <subject>` with the ticket link in the body.
-5. Runs `node tools/check.mjs --changed <base>` itself. Nothing lands unless that passes.
+5. Runs `node tools/check.mjs --changed <base>` itself. Nothing lands unless that passes and leaves the candidate's files and commit unchanged.
 6. Fast-forwards main. If main moved, it rebases, checks again and lands that.
 7. Comments the commit link on the ticket and moves it to Done.
 
 The flow stops without landing anything when:
 - the Builder has questions: they're printed, and the run exits 3;
 - the checks fail: the worktree is kept;
-- the Builder touched a protected path.
+- the Builder touched a protected path;
+- the checks changed the candidate's tracked files or commit.
+
+Ticket ids must be plain Linear identifiers such as `CHUNKY-123`; build and discard reject paths before any Git operation.
 
 `bin/council discard CHUNKY-123` removes a kept worktree once you've looked at it.
 
@@ -34,7 +37,7 @@ and the Managed Agents backend.
 
 ## Setup on the Mac mini
 
-You need Ruby 3.3 or newer, Claude Code 2.1.312 or newer signed in to your subscription, and checkouts of
+You need Ruby 3.4 or newer, Claude Code 2.1.312 or newer signed in to your subscription, and checkouts of
 chunky-survival and giraffe-rb (main has the runner profile and landing the council uses).
 
 ```sh

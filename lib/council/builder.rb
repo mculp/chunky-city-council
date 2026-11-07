@@ -19,6 +19,7 @@ module Council
 
     # A worktree left by a failed or parked run, and its branch, once Matt has looked at it.
     def discard(id)
+      validate_id!(id)
       path = File.join(@config["worktrees"], id)
       clean(id, path)
       say "#{id}: discarded #{path}"
@@ -26,6 +27,7 @@ module Council
 
     def build(ticket)
       id = ticket.fetch("id")
+      validate_id!(id)
       worktree, base = prepare(id)
       answer = ask(ticket, worktree, base)
       return parked(id, worktree, answer["questions"]) if answer["questions"].any?
@@ -95,12 +97,12 @@ module Council
     end
 
     def land(ticket, worktree, base, sha)
-      check!(ticket["id"], worktree, base)
+      check!(ticket["id"], worktree, base, sha)
       result = @landing.land(worktree, sha: sha, branch: branch)
       if result.behind?
         say "#{ticket['id']}: main moved; rebasing and checking again"
         sha = @landing.rebase(worktree, branch: branch)
-        check!(ticket["id"], worktree, result.base_sha)
+        check!(ticket["id"], worktree, result.base_sha, sha)
         result = @landing.land(worktree, sha: sha, branch: branch)
         raise Error, "main moved again while checking; run the ticket again" unless result.landed?
       end
@@ -110,13 +112,16 @@ module Council
       Outcome.new(status: "landed", ticket: ticket["id"], detail: {"sha" => sha, "commit" => commit_url(sha)})
     end
 
-    def check!(id, worktree, base)
+    def check!(id, worktree, base, sha)
       argv = @config.check_argv(base)
       say "#{id}: running #{argv.join(' ')}"
       result = @command.capture(argv, cwd: worktree, env: ENV.slice(*::Giraffe::Command::PROJECT_ENV), clean_env: true,
                                 timeout: @config["check_timeout"], limit: 50_000_000)
-      return if result["status"].zero?
-      raise Error, "checks failed, so nothing landed; the worktree is left at #{worktree}:\n#{::Giraffe::Command.tail(result['stdout'] + result['stderr'])}"
+      unless result["status"].zero?
+        raise Error, "checks failed, so nothing landed; the worktree is left at #{worktree}:\n#{::Giraffe::Command.tail(result['stdout'] + result['stderr'])}"
+      end
+      @git.clean!(worktree)
+      raise Error, "checks changed the candidate commit; nothing landed, and the worktree is left at #{worktree}" unless @git.head(worktree) == sha
     end
 
     def commit_url(sha) = "https://github.com/#{@config['github_repo']}/commit/#{sha}"
@@ -136,6 +141,10 @@ module Council
     end
 
     def work_branch(id) = "council/#{id.downcase}"
+
+    def validate_id!(id)
+      raise Error, "invalid ticket id: #{id.inspect}" unless id.is_a?(String) && id.match?(/\A[A-Z][A-Z0-9]*-[1-9][0-9]*\z/)
+    end
 
     def parked(id, worktree, questions)
       say "#{id}: the Builder has questions; nothing landed, and the worktree is left at #{worktree}"

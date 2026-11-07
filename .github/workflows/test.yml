@@ -1,0 +1,30 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: council
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: mculp/giraffe-rb
+          ref: 33ddd27fdf2afb73f8931f965c979048edf19bd1
+          path: giraffe-rb
+      - uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a
+        with:
+          ruby-version: "3.4"
+      - run: gem install json_schemer -v 2.5.0 --no-document
+      - run: bin/test
+        working-directory: council
+        env:
+          GIRAFFE: ${{ github.workspace }}/giraffe-rb

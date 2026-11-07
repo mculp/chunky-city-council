@@ -79,7 +79,7 @@ class BuilderTest < Minitest::Test
       "check_timeout" => 60, "linked" => ["node_modules"], "protected" => ["docs/lore.md", ".github/"],
       "builder" => {"model" => "opus", "budget_usd" => 1.0, "max_turns" => 5, "call_timeout" => 60},
       "linear" => {"done" => true, "comment" => true}
-    }.merge(overrides))
+    }.merge(overrides.transform_keys(&:to_s)))
   end
 
   def done(subject = "Add a sign by the gate") = {"questions" => [], "subject" => subject, "summary" => "Added it.", "checks_run" => ["node tools/check.mjs --changed"]}
@@ -169,6 +169,42 @@ class BuilderTest < Minitest::Test
   def test_a_builder_answer_outside_the_schema_lands_nothing
     before = origin_main
     assert_raises(Giraffe::InvalidOutput) { builder(FakeRunner.new { |dir| write(dir, "sign.txt", "x") && {"questions" => []} }).build(TICKET) }
+    assert_equal before, origin_main
+  end
+
+  def test_a_ticket_id_cannot_escape_the_worktree_directory
+    runner = FakeRunner.new { |_| raise "the Builder must not run" }
+    ["../CHUNKY-9", "/tmp/CHUNKY-9", "CHUNKY-9/other", "CHUNKY-9\n", nil].each do |id|
+      assert_raises(Council::Error) { builder(runner).build(TICKET.merge("id" => id)) }
+    end
+    assert_empty runner.tasks
+  end
+
+  def test_discard_cannot_remove_another_worktree_with_a_relative_path
+    valuable = File.join(@tmp, "valuable")
+    FileUtils.mkdir_p(File.join(@tmp, "worktrees"))
+    git(@game, "worktree", "add", "-q", "-b", "valuable", valuable, "origin/main")
+    write(valuable, "unfinished.txt", "Keep this work\n")
+    assert_raises(Council::Error) { builder(nil).discard("../valuable") }
+    assert_equal "Keep this work\n", File.read(File.join(valuable, "unfinished.txt"))
+  end
+
+  def test_checks_that_modify_the_candidate_cannot_land_it
+    before = origin_main
+    runner = FakeRunner.new { |dir| write(dir, "sign.txt", "Welcome\n") && done }
+    checker = config(check: ["ruby", "-e", "File.write('sign.txt', 'different code')"])
+    council = Council::Builder.new(checker, runner: runner, out: @out)
+    assert_raises(Giraffe::Error) { council.build(TICKET) }
+    assert_equal before, origin_main
+    assert File.directory?(File.join(@tmp, "worktrees", TICKET["id"]))
+  end
+
+  def test_checks_that_commit_a_new_candidate_cannot_land_the_old_one
+    before = origin_main
+    runner = FakeRunner.new { |dir| write(dir, "sign.txt", "Welcome\n") && done }
+    checker = config(check: ["git", "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-m", "unverified"])
+    council = Council::Builder.new(checker, runner: runner, out: @out)
+    assert_raises(Council::Error) { council.build(TICKET) }
     assert_equal before, origin_main
   end
 
