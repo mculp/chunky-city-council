@@ -2,4 +2,9 @@
 # Runs the council's tests against the giraffe-rb checkout named by GIRAFFE (default: ../giraffe-rb).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-for test in tests/*_test.rb; do ruby "$test"; done
+# Expose the actual check runtime through this already permitted named command; QA needs no generic ruby permission.
+ruby --version
+for test in tests/*_test.rb; do
+  printf '\n==> %s\n' "$test"
+  ruby "$test"
+done
