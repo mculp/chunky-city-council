@@ -88,8 +88,10 @@ API-equivalent usage for dispatched writer/QA calls only, not planning or total 
 Reservations, call count, job count and the admission deadline survive restart; editing the manifest cannot reset them.
 Provider-reported usage can overshoot a turn's cap; no further call is admitted against insufficient remaining budget.
 
-Each job supplies its own exact owned paths and check command. Its approved title/description must still match Linear,
-its state must be **Todo**, and incoming `blocks` dependencies must be completed (unknown pagination stops dispatch).
+Each job supplies its own exact owned paths and check command. Approve a **read-back of persisted Linear content**:
+Linear can normalize Markdown when saving, so a Director's submitted request is not necessarily that snapshot. Review
+any differences before recording approval; do not weaken matching by stripping markup. The approved title/description
+must still match Linear, its state must be **Todo**, and incoming `blocks` dependencies must be completed (unknown pagination stops dispatch).
 The controller records a local claim before moving it to In Progress; a ready result moves to In Review, never Done.
 This is single-coordinator/local-repository exclusion, **not a distributed Linear lease**. Do not run another host or
 clone against the same inbox. Ticket locks also protect cycles, QA rechecks and discard in the same Git repository.
