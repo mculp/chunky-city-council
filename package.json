@@ -7,6 +7,7 @@
     "check": "node tools/check.mjs",
     "deploy": "node tools/deploy.mjs",
     "changelog": "node tools/changelog.mjs",
+    "changelog:play": "node tools/play-changelog.mjs",
     "net:server": "node server/index.js",
     "talk:host": "node tools/talk-host.mjs",
     "town:host": "node tools/town-host.mjs",
