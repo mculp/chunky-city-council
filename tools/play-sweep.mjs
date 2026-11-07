@@ -38,7 +38,7 @@ async function open(how) {
   });
 }
 async function shut() { check('no console errors', !errors.length, errors); await close(); }
-const snap = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.jpg`, type: 'jpeg', quality: 82 }); };
+const snap = async (name) => { if (shots) { if (await g(() => !!window.__net)) await sleep(800); else await g(() => G.step(1)); await page.screenshot({ path: `${shots}/${name}.jpg`, type: 'jpeg', quality: 82 }); } };
 const lastAsk = () => page.heard.at(-1)?.messages[0]?.content ?? '';
 // A down with a real finger, while the clock goes on by `seconds`: stepped, with the clock held, or as it runs
 async function holdA(seconds, running = false) {
@@ -74,10 +74,15 @@ const sweepIt = async () => {
 // In Chapter 1, with her written lines: the choice is on her first line, before he's asked for beans, and it sweeps and pays his three
 let d = await talk();
 check(`in Chapter 1, with her written lines, "${SWEEP}" is one of the choices from the first: ${d?.opts.join(' | ')}`, d?.opts.includes(SWEEP) && d.opts.includes('Can I get some beans?') && d.opts.at(-1) === 'Later.', d);
+const face = await g(() => { G.step(1); return { ...G.talkView(), words: document.querySelector('#dialog .box').getBoundingClientRect().top }; });
+check('Miss Bobby is visible above her words before sweeping, not hidden behind his hood', face.clear && face.behind && face.face.depth < 1 && face.face.y > 60 && face.face.y < face.words - 30, face);
 await snap('1-her-written-line');
 let r = await sweepIt();
 check(`and picking it sweeps the steps, and pays his three: +${r.paid}, ${r.off} off the church's shelf`, r.mode === 'sweep' && r.paid === 3 && r.off === 3 && r.drawn, r);
 check(`then she has her say, and neither asks nor offers it again: ${r.d?.opts.join(' | ')}`, /lantern man/.test(r.d?.say) && !r.d.opts.includes(SWEEP) && !r.d.opts.includes('Can I get some beans?'), r.d);
+const thankedFace = await g(() => { G.step(1); return G.talkView(); });
+check('the speaker stays in view when sweeping returns to her words', thankedFace.clear && thankedFace.behind && thankedFace.face.x > 24 && thankedFace.face.x < 366, thankedFace);
+await snap('1b-after-sweeping');
 await tapOpt('Later.');
 d = await talk();
 check(`and talking to her again that day, it isn't there: ${d?.opts.join(' | ')}`, d && !d.opts.includes(SWEEP), d);

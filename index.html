@@ -161,8 +161,8 @@ body.talking #mini,body.talking #miniName{visibility:hidden}
 #btns{right:calc(max(16px, env(safe-area-inset-right, 0px)) + 6px);gap:14px;align-items:flex-end}
 .btn{border-radius:50%;border:3px solid var(--ink);font-family:var(--f-display);display:grid;place-items:center;touch-action:none;box-shadow:0 4px 0 var(--ink);padding:0}
 #bA{width:78px;height:78px;font-size:24px;background:var(--rust);color:var(--ink)}
-#bA.bite,#prompt.bite{animation:bite .34s steps(1) infinite}
-@keyframes bite{50%{background:var(--cream);color:var(--ink)}}
+#bA.bite,#prompt.bite{background:var(--cream);color:var(--ink);animation:bite .34s steps(1) infinite}
+@keyframes bite{50%{background:var(--rust);color:var(--ink)}}
 @media (prefers-reduced-motion: reduce){#bA.bite,#prompt.bite{animation:none;background:var(--cream);color:var(--ink)}}
 #bB{width:64px;height:64px;font-size:19px;background:var(--cyan);color:var(--ink);margin-bottom:38px}
 #bR{position:absolute;right:9px;bottom:90px;width:60px;height:60px;font-size:13px;background:var(--cream);color:var(--ink)}
@@ -5798,6 +5798,8 @@ function updateLamp(dt, step) {
   else if (lampLit) { lampLit = false; gLight.position.set(0, 0, 0); gLight.color.set('#ff9a46'); }
 }
 
+// The fishing view's projection probe is made before the opening's particle seed, so it cannot move that sequence.
+const _eye = new THREE.PerspectiveCamera();
 // ================================================================ particles: leaves, fireflies, cyan drips, mist. They wrap around the camera, and phones get fewer.
 seedRandom();
 const LOW = matchMedia('(pointer:coarse)').matches;
@@ -7184,7 +7186,7 @@ function holeAt(place) {
   return h;
 }
 // the rod, the bobber and the line: Coop's at the hole, and his once he has one
-const ROD_GEO = mergeGeometries(fishingRod()), BOBBER_GEO = mergeGeometries(bobber()), LINE_N = 12, LINE_SLACK = new THREE.Color('#ded8c8'), LINE_TIGHT = new THREE.Color('#e0452e');
+const ROD_GEO = mergeGeometries(fishingRod()), BOBBER_GEO = mergeGeometries(bobber(.09)), LINE_N = 12, LINE_SLACK = new THREE.Color('#ded8c8'), LINE_TIGHT = new THREE.Color('#e0452e');
 function rodMesh(into) { const g = new THREE.Group(); g.add(new THREE.Mesh(ROD_GEO, thingMat), new THREE.Mesh(smoothed(ROD_GEO), thingLine)); g.visible = false; into.add(g); return g; }
 function bobberMesh() { const m = new THREE.Mesh(BOBBER_GEO, thingMat); m.visible = false; scene.add(m); return m; }
 function lineMesh() {
@@ -7236,8 +7238,8 @@ const doorSign = (() => {
   const cv = document.createElement('canvas'); cv.width = DOOR_SIGN.px; cv.height = Math.round(DOOR_SIGN.px * DOOR_SIGN.h / DOOR_SIGN.w);
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   const m = new THREE.Mesh(new THREE.PlaneGeometry(DOOR_SIGN.w, DOOR_SIGN.h), new THREE.MeshStandardMaterial({ map: tex, roughness: 1 })), D = GAS_DOOR;
-  const along = D.wide / 2 + .3 + DOOR_SIGN.w / 2, px = PLACES.gas.x + 53, pz = PLACES.gas.z + 10, way = Math.hypot(D.x + D.ex * along - px, D.z + D.ez * along - pz) < Math.hypot(D.x - D.ex * along - px, D.z - D.ez * along - pz) ? along : -along;
-  m.position.set(D.x + D.ex * way + D.nx * .06, Y0 + 1.45, D.z + D.ez * way + D.nz * .06); m.rotation.y = Math.atan2(D.nx, D.nz); m.visible = false; scene.add(m);
+  const along = D.wide / 2 + .6 + DOOR_SIGN.w / 2, px = PLACES.gas.x + 53, pz = PLACES.gas.z + 10, way = Math.hypot(D.x + D.ex * along - px, D.z + D.ez * along - pz) < Math.hypot(D.x - D.ex * along - px, D.z - D.ez * along - pz) ? along : -along;
+  m.position.set(D.x + D.ex * way + D.nx * .06, Y0 + 2.15, D.z + D.ez * way + D.nz * .06); m.rotation.y = Math.atan2(D.nx, D.nz); m.visible = false; scene.add(m);
   return { m, cv, tex, text: null };
 })();
 // in two lines when there's more than a word of it, broken at the last space, as big as it goes. Bungee runs wide, so it's set a little narrower.
@@ -7366,7 +7368,7 @@ function castNow(to) {
 }
 // A bite you can see (CHUNKY-192): the bobber goes right under, how far, with a ring on the water, and another a moment later if it's still under.
 // The rod's tip dips with it, in his pose, and A flashes until the hook's set or it's got away.
-const BITE = { under: .14, ring: .55, again: .35 };
+const BITE = { under: .18, ring: .55, again: .35 };
 const biteRing = () => addRipple(heroBobber.position.x, heroBobber.position.z, BITE.ring);
 // With a line out (CHUNKY-192) the camera lifts off his shoulder so the water's in view, with the bobber above the buttons and clear of him and of
 // the bank or the trestle's deck, and Coop beside him if he's at the hole. Where it sits is chosen as the line goes out: of a few spots behind him
@@ -7374,9 +7376,9 @@ const biteRing = () => addRipple(heroBobber.position.x, heroBobber.position.z, B
 // down the water is. It looks at where the bobber went, a little under it. If none of them does all of that, it keeps him in view and leaves Coop
 // out, and failing that it lets him go too. Behind him by, out to the side by, at least this high, how far in front of him the edge is, how far
 // under the bobber it looks for each metre away, and how near Coop has to be.
-const FISH_VIEW = { backs: [4.6, 5.6, 6.8, 8], outs: [1.2, 1.6, 2.1], up: 3.4, edge: .8, under: .14, coop: 5 };
+const FISH_VIEW = { backs: [4.6, 5.6, 6.8, 8], outs: [1.2, 1.6, 2.1], lifts: [0, 2, 4], up: 4.5, edge: 1.5, under: .14, coop: 5 };
 let fishView = null;
-const _eye = new THREE.PerspectiveCamera(), _fe = new THREE.Vector3(), _ft = new THREE.Vector3(), _fp = new THREE.Vector3();
+const _fe = new THREE.Vector3(), _ft = new THREE.Vector3(), _fp = new THREE.Vector3();
 // where the camera is, and what it looks at, for a view `v` of the line from his feet at H
 function fishCam(H, v, eye, at) {
   const sx = fishAt.x, sz = fishAt.z, d = Math.hypot(sx - H.x, sz - H.z) || 1, ux = (sx - H.x) / d, uz = (sz - H.z) / d;
@@ -7388,7 +7390,8 @@ function fishSeen(E, sx, sy, sz, H, C) {
   const n = Math.ceil(Math.hypot(sx - E.x, sy - E.y, sz - E.z) / .25);
   for (let i = 1; i < n - 1; i++) {
     const k = i / n, x = E.x + (sx - E.x) * k, y = E.y + (sy - E.y) * k, z = E.z + (sz - E.z) * k, h = y - H.y;
-    if (y < floorOnce(x, z) || blocked(x, z, y)) return false;
+    // The trestle's visible wooden rail isn't a collision wall; leave sightline clearance over it too.
+    if (y < floorOnce(x, z) + hillUp(x, z) + (onTrestle(x, z) ? .65 : .1) || blocked(x, z, y)) return false;
     if (h > 0 && h < 2.4 && Math.hypot(x - H.x, z - H.z) < (h < 1.4 ? .68 : .5)) return false;
     if (C && y > C.y && y < C.y + 2.2 && Math.hypot(x - C.x, z - C.z) < .45) return false;
   }
@@ -7406,8 +7409,8 @@ function chooseFishView() {
   _eye.fov = camera.fov; _eye.aspect = camera.aspect; _eye.updateProjectionMatrix();
   const inView = (x, y, z) => { _fp.set(x, y, z).project(_eye); return _fp.z < 1 && Math.abs(_fp.x) < .9 && _fp.y > -.95 && _fp.y < .9; };
   let best = null, most = -1;
-  for (const back of FISH_VIEW.backs) for (const side of sides) for (const out of FISH_VIEW.outs) {
-    const v = { back, side, out, up: Math.max(FISH_VIEW.up, drop * (back + FISH_VIEW.edge) / Math.max(1, d - FISH_VIEW.edge) + .6) };
+  for (const back of FISH_VIEW.backs) for (const side of sides) for (const out of FISH_VIEW.outs) for (const lift of FISH_VIEW.lifts) {
+    const v = { back, side, out, up: Math.max(FISH_VIEW.up, drop * (back + FISH_VIEW.edge) / Math.max(1, d - FISH_VIEW.edge) + .6) + lift };
     fishCam(H, v, _eye.position, _ft); _eye.lookAt(_ft); _eye.updateMatrixWorld();
     _fp.set(sx, sy, sz).project(_eye);
     if (!(_fp.z < 1 && Math.abs(_fp.x) < .8 && _fp.y > low && _fp.y < .85) || !fishSeen(_eye.position, sx, sy, sz, H, C)) continue;
@@ -10240,6 +10243,7 @@ if (TEST) {
   const builtAt = (x, z, y) => builtBlocks(x, z, y, (Math.floor(x / 16) + 32768) * 65536 + Math.floor(z / 16) + 32768);
   // and where the game has a floor raised off the ground: the dock, the cabin's decks, a trestle, or a road over a bridge
   const raisedAt = (x, z) => onDock(x, z) || onCabinDeck(x, z) || onTrestle(x, z) || (!!spanAt(x, z) && onRoad(x, z));
+  const screenAt = (v) => { const p = v.clone().project(camera); return { x: (p.x * .5 + .5) * innerWidth, y: (.5 - p.y * .5) * innerHeight, depth: p.z }; };
   window.__game = {
     S, player, HP, cam, G, renderer, camera, scene, hero, heroRoot, map: MAP, water: WATER, farm: FARM, dock: DOCK, onDock, sound: SFX, singers, surfaceUnder, pavedAt, floorAt, groundH, onRoad, blocked, solids: { now: solidsNow, blocks: builtAt, rails: onRails, raised: raisedAt }, places: PLACES, signs: SIGNS, charlie: CHARLIE, lamp: LAMP, lampGroup, station: { house: GAS_HOUSE, door: GAS_DOOR, bar: gasBarProp, boards: gasBar, barred: () => gasBarred, barredIn: () => barredIn(player.pos), loot: LOOT, spot: gasSpot, strip: gasStrip, light: gasLight, canopy: canopyProp, cans: GAS_CANS }, robby: { lot: LOT, at: ROBBY, hearth: HEARTH, flies: () => fliesLeft, stir: () => fliesStir, shown: () => (flies.visible ? flyGeo.drawRange.count : 0), where: () => flyPos[0] + flyPos[1] + flyPos[2], cooking: () => skillet.visible, loop: () => SFX.state().loopLevels['amb.flies'] ?? 0 }, churchSigns: { list: CHURCH_SIGNS, day: () => signDay, says: (id) => SIGN_SHEET.says(id, signDay), clock(ms) { signNow = ms; } }, church: { house: CHURCH_HOUSE, at: CF.at, door: () => wallsOf(CHURCH_HOUSE, Y0).doors[0], steeple: churchSteeple, steeplePos: STEEPLE, steepleShown: () => churchSteepleOn.visible, us80: US80_CHURCH, us80Shown: () => us80Steeple.visible, roundWindow, rope: ROPE, bellInReach, ring: ringBell, ringing: () => bellLeft > 0, strokes: () => bellStrokes, BELL, pantry, PANTRY, today, owes: pantryOwes, shown: () => pantryCans.count, shelf: PANTRY_SHELF }, pointer, people, chunks: () => chunks.size, structures: STRUCTURES, houseAt, houseCells,
     mouse: { state: () => ({ ...mouse, held: mouseHeld(), element: document.pointerLockElement === canvas }), take: takeMouse }, swinging: () => swingT >= 0, skillet: { tools: [castIron, batTool], SKILLET, LANDS, ARM: SWING_ARM, bottom: () => castIron.localToWorld(new THREE.Vector3(0, SKILLET.at, SKILLET.deep)).toArray(), barrel: () => batTool.localToWorld(new THREE.Vector3(0, BAT_ON.at, 0)).toArray(), lands: () => swingLands && { at: swingLands.at.toArray(), part: swingLands.part }, side: () => swingSide, who: () => swingWho, through: () => throughWho.map((i) => crowdShown[i]), frame(off) { throughOff = !!off; renderFrame(0); throughOff = false; } }, flyingLures: () => flying.filter((t) => t.on).map((t) => ({ kind: t.kind, vx: t.vx, vz: t.vz })),
@@ -10263,6 +10267,16 @@ if (TEST) {
     roused: { log: rousedLog, FLARE: ROUSE_FLARE },
     mutters: () => mutterSlots.filter((m) => m.s && !m.e.hidden).map((m) => ({ says: m.e.textContent, id: m.s.who.id, opacity: +m.e.style.opacity, transform: m.e.style.transform, box: m.e.getBoundingClientRect().toJSON() })),
     // Toni: what she's doing and where, what she remembers, what's over her head, which frog's in her hand, and Gerald, in his or let go
+    // CHUNKY-192: the actual face under the camera, not just whether a dialogue box is open.
+    talkView() {
+      const n = S.talkTo; if (!n) return null;
+      const F = faceOf(n, new THREE.Vector3()), H = heroRoot.position, E = camera.position;
+      F.y += hillUp(F.x, F.z);
+      const ray = new THREE.Raycaster(E, F.clone().sub(E).normalize(), 0, E.distanceTo(F) - .05);
+      heroRoot.updateWorldMatrix(true, true);
+      return { face: screenAt(F), clear: !ray.intersectObject(hero.hm, false).length, blend: cam.talk,
+        behind: (E.x - H.x) * (F.x - H.x) + (E.z - H.z) * (F.z - H.z) < 0 };
+    },
     // Coop's round and his fishing hole (CHUNKY-163): where he is and what's on his door, Jev's stand-in, which a page is given with
     // decide(fn) or has back as the talk server's with decide(null), and what he'd do now, by the church signs' clock
     coop: {
@@ -10270,12 +10284,17 @@ if (TEST) {
       decide(fn) { questDecide = fn ?? ((ask) => talk.decide(ask)); },
       think: () => quests.think('coop'), news: () => quests.news('coop'), open: () => quests.open('coop'), where: () => quests.where('coop'), trips: () => quests.trips('coop'),
       hole: (id) => { const h = holeAt(QUEST_PLACES.find((p) => p.id === id)); return { x: h.x, z: h.z, yaw: h.yaw, to: h.to }; },
-      way: (t) => alongWay(t), home: () => ({ x: NPCS.coop.spot.x, z: NPCS.coop.spot.z }), door: () => ({ x: doorSign.m.position.x, y: doorSign.m.position.y, z: doorSign.m.position.z, nx: GAS_DOOR.nx, nz: GAS_DOOR.nz }),
+      way: (t) => alongWay(t), home: () => ({ x: NPCS.coop.spot.x, z: NPCS.coop.spot.z }), door: () => ({ x: doorSign.m.position.x, y: doorSign.m.position.y, z: doorSign.m.position.z, nx: GAS_DOOR.nx, nz: GAS_DOOR.nz, screen: screenAt(doorSign.m.position), edges: [-1, 1].map((side) => screenAt(doorSign.m.position.clone().add(new THREE.Vector3(GAS_DOOR.ex, 0, GAS_DOOR.ez).multiplyScalar(side * DOOR_SIGN.w / 2)))), width: DOOR_SIGN.w, height: DOOR_SIGN.h }),
       forget() { quests.forget(); coop.met = null; coop.thought = -1e9; },
     },
     // fishing: the line, what he's got and what he's caught, and where a cast from somewhere would land
     fishing: {
       view: () => fish.view(), at: () => fishAt, caught: () => [...caught], castFrom, castHere,
+      seen: () => ({ screen: screenAt(heroBobber.position), world: heroBobber.position.toArray(), blend: cam.fish,
+        pixels: 2 * Math.abs(screenAt(heroBobber.position.clone().add(new THREE.Vector3(.09, 0, 0).applyQuaternion(camera.quaternion))).x - screenAt(heroBobber.position).x),
+        clear: !!fishAt && fishSeen(camera.position, fishAt.x, WATER.level(fishAt.x, fishAt.z), fishAt.z, player.pos, coop.at === 'hole' ? NPCS.coop.root.position : null) }),
+      rings: () => rip.filter((r) => fishAt && time - r.z < 1 && r.w === BITE.ring && Math.hypot(r.x - fishAt.x, r.y - fishAt.z) < .5).map((r) => ({ age: time - r.z, strength: r.w })),
+      tip: () => { heroRod.updateWorldMatrix(true, false); return heroRod.localToWorld(new THREE.Vector3(0, ROD_TIP, 0)).toArray(); },
       gear: () => ({ rod: S.items.rod | 0, worms: S.items.worms | 0, catfish: caught.length }),
       give(rod = 1, worms = 6) { S.items.rod = rod; S.items.worms = worms; saveGear(); },
       shown: () => ({ rod: heroRod.visible, bobber: heroBobber.visible, line: heroLine.visible, fish: heroFish.visible, lb: heroFishLb, red: heroLine.material.color.r - heroLine.material.color.b }),

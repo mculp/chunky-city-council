@@ -41,7 +41,7 @@ async function open(how) {
 }
 // what's on the console is checked for each page, but for asking a server that isn't there, which a phone with no signal does too
 async function shut() { const noise = errors.filter((e) => !/ERR_CONNECTION_REFUSED/.test(e)); check('no console errors', !noise.length, noise); await close(); }
-const snap = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.jpg`, type: 'jpeg', quality: 82 }); };
+const snap = async (name) => { if (shots) { await g(() => G.step(1)); await page.screenshot({ path: `${shots}/${name}.jpg`, type: 'jpeg', quality: 82 }); } };
 // talking to them and answering, with a real tap on a phone or a real key on a laptop
 const talkTap = async (who) => { if (who) await g((w) => near(w), who); await page.tap('#bA'); await g(() => G.step(.05)); await g(() => settle()); return g(() => seen()); };
 const tapOpt = async (text) => { await page.locator('#dOpts button', { hasText: text }).first().tap(); await g(() => G.step(.05)); await g(() => settle()); return g(() => seen()); };
@@ -57,6 +57,20 @@ async function rounds() {
   for (let i = 0; i < 2; i++) { out.push(await talkTap('bobby')); await tapOpt('Later.'); }
   return out;
 }
+
+// CHUNKY-192: talking must show the actual speaker, not just their words over the back of his hood.
+await open(PHONE);
+for (const who of ['coop', 'bobby', 'rocky']) {
+  await talkTap(who);
+  const view = await g(() => { G.step(1); return { ...G.talkView(), words: document.querySelector('#dialog .box').getBoundingClientRect().top }; });
+  const f = view.face;
+  check(`${who}'s face is clear of his hood, over his shoulder and above the words on a phone`, view.blend === 1 && view.behind && view.clear && f.depth < 1 && f.x > 24 && f.x < 366 && f.y > 60 && f.y < view.words - 30, view);
+  await snap(`phone-${who}-framing`);
+  await tapOpt('Later.');
+  const back = await g(() => { G.step(1); return { mode: G.S.mode, blend: G.cam.talk }; });
+  check(`closing ${who}'s words releases the dialogue camera`, back.mode === 'town' && back.blend === 0, back);
+}
+await shut();
 
 // ---- nowhere to ask, which is what a test, the work link and every other page that isn't the game's own get: just as it was
 await open(PHONE);

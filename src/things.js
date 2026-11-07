@@ -583,7 +583,7 @@ export function fishingRod(blank = '#6b4a2e') {
 // A red and white bobber, floating on its middle
 export function bobber(r = .032) {
   const half = (top, color) => painted(new THREE.SphereGeometry(r, 10, 4, 0, Math.PI * 2, top ? 0 : Math.PI / 2, Math.PI / 2), color);
-  return [half(true, '#c8352c'), half(false, '#efe9dc'), cyl(0, r + .012, 0, .004, .028, '#efe9dc', 5)];
+  return [half(true, '#efe9dc'), half(false, '#c8352c'), cyl(0, r + .012, 0, .004, .028, '#efe9dc', 5)];
 }
 // A channel catfish of `lb` pounds, slate on its back and pale under, with its whiskers, lying on its belly with its nose to +z. It's
 // about as long as one that weighs that much: a foot for a pound, and near three foot for twenty.
