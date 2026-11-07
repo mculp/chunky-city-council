@@ -181,6 +181,11 @@ class DispatcherTest < Minitest::Test
     assert_equal 2, published.size
   end
 
+  def test_publication_requires_a_real_boolean_not_a_truthy_serialized_false
+    ["false", "true", 1, nil].each { |flag| assert_raises(Council::Error) { dispatcher(publish_candidates: flag) } }
+    refute File.exist?(@root)
+  end
+
   def test_default_execution_never_calls_a_publisher
     dispatcher(factory: method(:full_candidate_cycle), handoff_factory: ->(*) { flunk "not opted in" }).run(once: true)
     refute saved["jobs"].values.any? { |job| job.key?("handoff") }

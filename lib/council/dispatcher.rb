@@ -45,6 +45,7 @@ module Council
     def initialize(manifest:, state_dir:, linear:, cycle_factory: nil, direction: nil, publish_candidates: false, planner_factory: nil, handoff_factory: nil, clock: -> { Time.now.to_f }, sleeper: ->(seconds) { sleep(seconds) })
       @manifest, @dir, @linear = File.expand_path(manifest), File.expand_path(state_dir), linear
       @factory, @clock, @sleep = cycle_factory || method(:cycle), clock, sleeper
+      raise Error, "publish_candidates must be true or false" unless [true, false].include?(publish_candidates)
       @direction_file, @publish_candidates = direction && File.expand_path(direction), publish_candidates
       @planner_factory, @handoff_factory = planner_factory, handoff_factory
       @mutex, @threads, @stopping = Mutex.new, {}, false
