@@ -117,6 +117,8 @@ module Council
       say "#{id}: running #{argv.join(' ')}"
       result = @command.capture(argv, cwd: worktree, env: ENV.slice(*::Giraffe::Command::PROJECT_ENV), clean_env: true,
                                 timeout: @config["check_timeout"], limit: 50_000_000)
+      @out.write(result["stdout"])
+      @out.write(result["stderr"])
       unless result["status"].zero?
         raise Error, "checks failed, so nothing landed; the worktree is left at #{worktree}:\n#{::Giraffe::Command.tail(result['stdout'] + result['stderr'])}"
       end
