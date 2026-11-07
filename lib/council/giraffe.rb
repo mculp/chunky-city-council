@@ -3,7 +3,7 @@
 module Council
   # Giraffe is a checkout, not a gem: the council loads the parts it uses from the path its config names.
   module Giraffe
-    PARTS = %w[command git schema tickets landing runners/claude runners/task runners/tool_profile runners/scripted].freeze
+    PARTS = %w[command git schema tickets landing runners/claude runners/task runners/tool_profile runners/scripted call_ledger].freeze
 
     def self.load!(root)
       raise Error, "no giraffe-rb checkout at #{root}" unless File.file?(File.join(root, "lib/giraffe/command.rb"))
