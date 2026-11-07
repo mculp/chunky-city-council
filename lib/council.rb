@@ -11,13 +11,16 @@ module Council
     Giraffe.load!(config["giraffe"])
     require_relative "council/linear"
     require_relative "council/builder"
+    require_relative "council/role"
+    require_relative "council/cycle"
+    require_relative "council/director"
   end
 
   # The subscription backend: claude -p, signed in as Matt. An API key in the environment would bill that key
   # instead, so it is dropped for this process. The Managed Agents backend is where the key is meant to be used.
-  def self.subscription_runner(config)
+  def self.subscription_runner(config, role: "builder")
     ENV.delete("ANTHROPIC_API_KEY")
-    builder = config.builder
+    builder = config.role(role)
     ::Giraffe::Runners::Claude.new({"claude_bin" => "claude", "model" => builder["model"], "models" => {},
                                     "max_turns" => builder["max_turns"], "call_timeout" => builder["call_timeout"]})
   end

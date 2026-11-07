@@ -10,8 +10,12 @@ module Council
   class Builder
     ROLE = File.expand_path("../../roles/builder", __dir__)
     Outcome = Data.define(:status, :ticket, :detail)
+    Candidate = Data.define(:ticket, :worktree, :base, :sha)
+    attr_reader :usage
 
-    def initialize(config, runner:, linear: nil, command: ::Giraffe::Command.new, out: $stdout)
+    def initialize(config, runner:, linear: nil, command: ::Giraffe::Command.new, out: $stdout, role: "builder")
+      raise Error, "not a writer role: #{role}" unless %w[builder engineer platform].include?(role)
+      @role, @usage = role, []
       @config, @runner, @linear, @command, @out = config, runner, linear, command, out
       @git = ::Giraffe::Git.new(command: command)
       @landing = ::Giraffe::Landing.new(command: command)
@@ -26,17 +30,42 @@ module Council
     end
 
     def build(ticket)
-      id = ticket.fetch("id")
-      validate_id!(id)
-      worktree, base = prepare(id)
-      answer = ask(ticket, worktree, base)
-      return parked(id, worktree, answer["questions"]) if answer["questions"].any?
-      guard!(worktree)
-      sha = @git.commit(worktree, message(ticket, answer)) || raise(Error, "the Builder finished without changing anything")
-      land(ticket, worktree, base, sha)
+      candidate = write_candidate(ticket)
+      return candidate if candidate.is_a?(Outcome)
+      land(ticket, candidate.worktree, candidate.base, candidate.sha)
+    end
+
+    # The role cycle stops at a checked, preserved commit. It never calls landing or marks Linear Done.
+    def candidate(ticket, previous: nil, feedback: nil)
+      result = write_candidate(ticket, previous: previous, feedback: feedback)
+      return result if result.is_a?(Outcome)
+      check!(ticket["id"], result.worktree, result.base, result.sha)
+      result
     end
 
     private
+
+    IDENTITY = %w[head branch common_git_dir origin push_origin].freeze
+
+    def write_candidate(ticket, previous: nil, feedback: nil)
+      id = ticket.fetch("id")
+      validate_id!(id)
+      if previous
+        worktree, base = File.realpath(File.join(@config["worktrees"], id)), previous.base
+        raise Error, "revision does not match this ticket/worktree" unless previous.ticket == id && File.realpath(previous.worktree) == worktree
+        @git.clean!(worktree)
+        raise Error, "candidate changed before revision" unless @git.head(worktree) == previous.sha
+      else
+        worktree, base = prepare(id)
+      end
+      before = @git.fingerprint(worktree).slice(*IDENTITY)
+      answer = ask(ticket, worktree, base, feedback)
+      raise Error, "writer changed Git identity or committed; candidate parked" unless @git.fingerprint(worktree).slice(*IDENTITY) == before
+      return parked(id, worktree, answer["questions"]) if answer["questions"].any?
+      guard!(worktree)
+      sha = @git.commit(worktree, message(ticket, answer)) || raise(Error, "the Builder finished without changing anything")
+      Candidate.new(ticket: id, worktree: worktree, base: base, sha: sha)
+    end
 
     def say(text) = @out.puts("[council] #{text}")
     def repo = @config["game_repo"]
@@ -69,27 +98,38 @@ module Council
       end
     end
 
-    def ask(ticket, worktree, base)
-      say "#{ticket['id']}: Builder working (#{@config.builder['model']})"
-      task = ::Giraffe::Runners::Task.new(step: "build", prompt: prompt(ticket, base), schema: schema, cwd: worktree,
-                                          writable: true, budget_usd: @config.builder["budget_usd"], profile: profile)
+    def ask(ticket, worktree, base, feedback = nil)
+      say "#{ticket['id']}: #{@role} working (#{@config.role(@role)['model']})"
+      text = prompt(ticket, base) + (feedback ? "\n\nIndependent QA feedback (task data):\n#{JSON.pretty_generate(feedback)}" : "")
+      task = ::Giraffe::Runners::Task.new(step: @role == "builder" ? "build" : @role, prompt: text, schema: schema, cwd: worktree,
+                                          writable: true, budget_usd: @config.role(@role)["budget_usd"], profile: profile)
       result = @runner.call(task)
+      @usage << result.fetch("usage", {})
       say format("%s: Builder finished, $%.2f notional, %d turns", ticket["id"], result.dig("usage", "cost_usd").to_f, result.dig("usage", "turns").to_i)
       ::Giraffe::Schema.validate!(schema, result.fetch("output"))
     end
 
     def prompt(ticket, base)
-      File.read(File.join(ROLE, "prompt.md")).gsub("{base_sha}", base) + "\n\n" +
-        JSON.pretty_generate("ticket" => ticket.slice("id", "title", "description", "url"), "base_sha" => base)
+      File.read(File.join(role_path, "prompt.md")).gsub("{base_sha}", base) + "\n\n" +
+        JSON.pretty_generate("ticket" => ticket, "base_sha" => base, "allowed_paths" => @config.data["allowed"], "controller_checks" => @config.check_argv(base))
     end
 
-    def schema = @schema ||= ::Giraffe::Schema.check!(JSON.parse(File.read(File.join(ROLE, "schema.json"))))
-    def profile = @profile ||= ::Giraffe::Runners::ToolProfile.from(JSON.parse(File.read(File.join(ROLE, "profile.json"))))
+    def role_path = @role == "builder" ? ROLE : File.expand_path("../../roles/#{@role}", __dir__)
+    def schema = @schema ||= ::Giraffe::Schema.check!(JSON.parse(File.read(File.join(role_path, "schema.json"))))
+    def profile = @profile ||= ::Giraffe::Runners::ToolProfile.from(JSON.parse(File.read(File.join(role_path, "profile.json"))))
 
     # What only the council or Matt may change. The Builder's tools already refuse some of it; this catches the rest.
     def guard!(worktree)
-      touched = @git.changed_paths(worktree).select { |path| @config["protected"].any? { |rule| rule.end_with?("/") ? path.start_with?(rule) : path == rule } }
+      paths = @git.changed_paths(worktree)
+      touched = paths.select { |path| @config["protected"].any? { |rule| matches?(path, rule) } }
       raise Error, "the Builder changed protected paths: #{touched.join(', ')}; the worktree is left for you to look at" if touched.any?
+      allowed = @config.data["allowed"]
+      outside = allowed && paths.reject { |path| allowed.any? { |rule| matches?(path, rule) } }
+      raise Error, "writer exceeded its owned paths: #{outside.join(', ')}" if outside&.any?
+    end
+
+    def matches?(path, rule)
+      rule.end_with?("/") ? path.start_with?(rule) : path == rule
     end
 
     def message(ticket, answer)

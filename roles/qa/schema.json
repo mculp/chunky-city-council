@@ -1,0 +1,88 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict": {
+      "enum": [
+        "pass",
+        "fail",
+        "blocked"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "command",
+          "observation",
+          "artifacts"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "issue": {
+            "type": "string",
+            "minLength": 1
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          },
+          "expected": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actual": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "issue",
+          "steps",
+          "expected",
+          "actual"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "verdict",
+    "summary",
+    "evidence",
+    "findings"
+  ],
+  "additionalProperties": false
+}
