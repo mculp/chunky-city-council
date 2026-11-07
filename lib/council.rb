@@ -14,6 +14,8 @@ module Council
     require_relative "council/role"
     require_relative "council/cycle"
     require_relative "council/director"
+    require_relative "council/planner"
+    require_relative "council/handoff"
     require_relative "council/dispatcher"
   end
 

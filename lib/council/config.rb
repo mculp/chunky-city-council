@@ -8,7 +8,7 @@ module Council
   # config/council.json, with paths expanded. Every key the council reads is named here, so a typo fails at start.
   class Config
     KEYS = %w[game_repo giraffe worktrees branch github_repo check check_timeout linked protected builder linear].freeze
-    OPTIONAL = %w[roles allowed].freeze
+    OPTIONAL = %w[roles allowed check_evidence].freeze
     PATHS = %w[game_repo giraffe worktrees].freeze
     attr_reader :data
 
@@ -24,6 +24,7 @@ module Council
       raise Error, "unknown config key(s): #{unknown.join(', ')}" if unknown.any?
       missing = KEYS - data.keys
       raise Error, "missing config key(s): #{missing.join(', ')}" if missing.any?
+      raise Error, "check_evidence must be true or false" if data.key?("check_evidence") && ![true, false].include?(data["check_evidence"])
       @data = data.merge(PATHS.to_h { |key| [key, File.expand_path(data.fetch(key))] })
     end
 

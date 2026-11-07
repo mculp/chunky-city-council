@@ -63,7 +63,8 @@ module Council
 
     def body(ticket, candidate, plan, qa)
       url = ticket["url"].to_s
-      qa_line = qa ? "pass (#{qa['summary'].to_s.gsub(/[[:cntrl:]]/, ' ').strip[0, 500]})" : "a passing final QA report is required before publishing"
+      # Private QA prose can contain local paths/operations. Publish only controller-generated provenance.
+      qa_line = qa ? "pass (retained exact-candidate report checked; private QA text omitted)" : "a passing final QA report is required before publishing"
       lines = ["Draft handoff for #{ticket['id']}; review only.", ""]
       lines << "- Ticket: #{url}" if url.start_with?("https://")
       lines += ["- Candidate SHA: #{candidate.sha}", "- Cut from: #{candidate.base}", "- Target: #{plan['github_repo']} #{plan['base']}",

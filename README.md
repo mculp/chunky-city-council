@@ -113,6 +113,64 @@ than silently resuming it. Ambiguous Linear mutations are likewise not retried. 
 This automates approved-ticket execution, **not the whole factory**: recurring Director planning/approval, PR publication,
 and the single integration/release authority are still separate. It does not install a launch agent or enable itself.
 
+## Opt-in direction refill and draft-PR handoff
+
+The dispatcher can now consume a **finite ordered list of explicitly approved directions** and hand independently
+QA-ready candidates to **draft** PRs. This is not an unbounded roadmap generator or a merge/release service.
+Default dispatch/cycle/qa behavior remains review-only: no remote push or PR without explicit publication authority.
+
+```json
+{
+  "briefs": [
+    {
+      "parent": "CHUNKY-201",
+      "owner_direction": "The already approved bounded task; agent scopes are proposals, not new owner requirements",
+      "lanes": {
+        "engineer": {"allowed": ["tests/cli_flow_test.rb"], "task": "Approved Engineer task"},
+        "platform": {"allowed": ["tests/check_evidence_test.rb"], "task": "Approved Platform task"}
+      }
+    }
+  ],
+  "configs": {"engineer": "engineer.json", "platform": "platform.json"},
+  "max_plans": 1
+}
+```
+
+Config paths are relative to the direction file. Owned paths must match the brief exactly and be disjoint. All
+repositories/workspaces must already be in the initial approved manifest so their locks are acquired up front.
+Each refill delegates one Director call through the **same persistent call/dollar/deadline ledger as writers/QA**,
+binds newly created authoritative Linear UUID/parent/team/title/description to fresh exact read-back, moves only
+those verified children to Todo, then atomically appends private snapshots. No stripping or fuzzy Markdown matching.
+Directions and publication authority are pinned on restart. A failed/interrupted plan or publication retains its
+intent and stops for inspection, not blind retry. Existing candidates keep ownership until exact integration proof.
+
+```sh
+bin/council dispatch --manifest queue.json --state-dir runs/campaign \
+  --direction direction.json --publish-candidates --config engineer.json
+
+# Individual controller stages; proposal/plan only unless --publish is explicit:
+bin/council refill --brief brief.json --lane-configs lanes.json --manifest queue.json --run-dir runs/plan --config engineer.json
+bin/council handoff CHUNKY-204 --ticket-file ticket.json --candidate-file candidate.json \
+  --review-dir runs/cycle --run-dir runs/publication --config engineer.json
+```
+
+`--publish-candidates` rechecks fresh Linear In Review scope, the exact retained ticket/candidate/final-QA records,
+current clean HEAD and owned/protected diff, and configured checks under the per-ticket lock. Only a deterministic
+full-SHA branch and draft PR are published, with intent before each write. It never changes source origin, merges,
+deploys or marks Linear Done. Private model QA prose is **not** copied into the public PR body. Human/integrator
+review remains a separate gate; a passing suite is not evidence that the entire factory is autonomously releasing.
+`--once` includes completion and optional handoff of its admitted batch. `--dry-run` starts nothing, writes nothing,
+and does not instantiate Linear credentials. Legacy `build` below still auto-lands; do not confuse the modes.
+
+### Controller-retained check evidence across projects
+
+Set `"check_evidence": true` in a per-lane config to retain SHA/observed-HEAD/command/exit/version/digests plus actual
+stdout/stderr under privately ignored `data/raw/council-check-*/`. The controller creates these before QA; no model
+Write/mkdir or generic Ruby permission is needed. Symlink directories and tracked-file overlap are refused.
+QA receives the **exact** report/stdout paths, must directly read them, distinguish controller from independent
+execution, and cite both for a pass. An instruction README is not test evidence. Reports of failed checks remain
+available without being labelled successful QA. Source tests still execute as the local user; this is not an OS sandbox.
+
 ## Legacy Builder command
 
 `bin/council build CHUNKY-123` retains the original rollout behavior: Builder → checks → automatic fast-forward (or
