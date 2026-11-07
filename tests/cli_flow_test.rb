@@ -9,8 +9,8 @@ require "digest"
 require "rbconfig"
 
 # Runs the real bin/council as a subprocess (current Ruby) for refill, handoff and dispatch --direction/--publish-candidates.
-# Every case uses a disposable directory and Git repo, and the child has neither LINEAR_API_KEY nor ANTHROPIC_API_KEY, so
-# any Linear client or model/provider call would fail: a successful dry run proves none was attempted. No network is used.
+# Every case uses a disposable directory and Git repo. LINEAR_API_KEY is absent; Claude/gh executables are trapped,
+# because removing ANTHROPIC_API_KEY alone does NOT disable subscription login. Remote Git protocols are disabled.
 class CliFlowTest < Minitest::Test
   COUNCIL = File.expand_path("../bin/council", __dir__)
   GIRAFFE = ENV.fetch("GIRAFFE", File.expand_path("../../giraffe-rb", __dir__))
@@ -44,6 +44,12 @@ class CliFlowTest < Minitest::Test
     @run_dir = File.join(@root, "run")
     @review_dir = File.join(@root, "review")
     @state_dir = File.join(@root, "state")
+    @guards = File.join(@root, "guard-bin"); FileUtils.mkdir_p(@guards)
+    %w[claude gh curl wget].each do |name|
+      path = File.join(@guards, name)
+      File.write(path, "#!#{RbConfig.ruby}\nFile.write(ENV.fetch('COUNCIL_FORBIDDEN_CALL'), File.basename($PROGRAM_NAME)); exit 77\n")
+      File.chmod(0o700, path)
+    end
   end
 
   def teardown = FileUtils.remove_entry(@root)
@@ -80,7 +86,9 @@ class CliFlowTest < Minitest::Test
   end
 
   def council(*args, cwd: @cwd)
-    env = {"LINEAR_API_KEY" => nil, "ANTHROPIC_API_KEY" => nil}
+    env = {"LINEAR_API_KEY" => nil, "ANTHROPIC_API_KEY" => nil, "GH_TOKEN" => nil, "GITHUB_TOKEN" => nil,
+      "GIT_ALLOW_PROTOCOL" => "none", "COUNCIL_FORBIDDEN_CALL" => File.join(@root, "FORBIDDEN_CALL"),
+      "PATH" => "#{@guards}:#{ENV.fetch('PATH')}"}
     stdout, stderr, status = Open3.capture3(env, RbConfig.ruby, COUNCIL, *args, chdir: cwd)
     Result.new(stdout, stderr, status.exitstatus)
   end
@@ -281,6 +289,26 @@ class CliFlowTest < Minitest::Test
   def dispatch_with_direction(data)
     path = write_json("bad-direction.json", data)
     council("dispatch", "--dry-run", *dispatch_args, "--direction", path)
+  end
+
+  def test_provider_guards_really_refuse_subscription_and_github_commands
+    env = {"COUNCIL_FORBIDDEN_CALL" => File.join(@root, "FORBIDDEN_CALL")}
+    %w[claude gh].each do |name|
+      _out, _err, status = Open3.capture3(env, File.join(@guards, name), "--version")
+      assert_equal 77, status.exitstatus
+      assert_equal name, File.read(env["COUNCIL_FORBIDDEN_CALL"])
+      File.delete(env["COUNCIL_FORBIDDEN_CALL"])
+    end
+  end
+
+  def test_direction_rejects_actual_owned_path_mismatch_and_overlap
+    data = direction_data
+    data["briefs"][0]["lanes"] = {"engineer" => {"allowed" => ["other.rb"]}, "platform" => {"allowed" => ["tools/"]}}
+    assert_error dispatch_with_direction(data), "direction/config ownership mismatch"
+    data["briefs"][0]["lanes"]["engineer"]["allowed"] = ["tools/file.rb"]
+    result = dispatch_with_direction(data)
+    assert_equal 1, result.status
+    assert_includes result.stderr, "overlap"
   end
 
   def test_direction_with_wrong_top_level_keys
