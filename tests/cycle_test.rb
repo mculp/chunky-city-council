@@ -144,6 +144,14 @@ class CycleTest < Minitest::Test
     assert_equal 1, w.tasks.length
   end
 
+  def test_council_roles_can_run_only_the_named_project_test_entrypoint
+    %w[engineer platform qa].each do |name|
+      profile = JSON.parse(File.read(File.expand_path("../roles/#{name}/profile.json", __dir__)))
+      assert_includes profile.fetch("bash"), "bin/test"
+      assert_empty(profile.fetch("bash") & %w[ruby bash sh])
+    end
+  end
+
   def test_qa_only_recheck_never_restarts_the_writer
     w = writer; first = cycle(w, Script.new { |task| report(task) }).call(TICKET)
     candidate = Council::Builder::Candidate.new(**first["candidate"])

@@ -1,5 +1,6 @@
 {
   "bash": [
+    "bin/test",
     "node tools/check.mjs",
     "node --test",
     "npm test",
