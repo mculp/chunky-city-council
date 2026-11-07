@@ -139,7 +139,7 @@ test('the changelog as it stands on this commit is as it should be', () => {
 
 describe('the command line\'s --out', () => {
   const cli = fileURLToPath(new URL('./changelog.mjs', import.meta.url));
-  const run = (...args) => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' });
+  const run = (cwd, ...args) => spawnSync(process.execPath, [cli, ...args], { cwd, encoding: 'utf8' });
   const inTemp = (fn) => { const dir = mkdtempSync(join(tmpdir(), 'changelog-cli-')); try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); } };
   const refused = (r) => {
     assert.notEqual(r.status, 0);
@@ -149,15 +149,20 @@ describe('the command line\'s --out', () => {
     assert.equal(r.stdout, '');
   };
 
-  test('a final --out is refused with a message, not a stack trace', () => refused(run('--out')));
-  test('an empty --out value is refused', () => refused(run('--out', '')));
+  test('a final --out is refused with a message, not a stack trace', () => inTemp((dir) => {
+    refused(run(dir, '--out'));
+    assert.deepEqual(readdirSync(dir), []);
+  }));
+  test('an empty --out value is refused', () => inTemp((dir) => {
+    refused(run(dir, '--out', ''));
+    assert.deepEqual(readdirSync(dir), []);
+  }));
   test('another flag where the directory should be is refused, and nothing is made', () => inTemp((dir) => {
-    const out = join(dir, 'site');
-    refused(run('--out', '--verbose', out));
-    assert.equal(existsSync(out), false);
+    refused(run(dir, '--out', '--verbose'));
+    assert.deepEqual(readdirSync(dir), []);
   }));
   test('--out with a directory still makes the page and the feed there', () => inTemp((dir) => {
-    const out = join(dir, 'site'), r = run('--out', out);
+    const out = join(dir, 'site'), r = run(dir, '--out', out);
     assert.equal(r.status, 0, r.stderr);
     assert.ok(existsSync(join(out, 'index.html')) && existsSync(join(out, 'feed.xml')));
   }));
