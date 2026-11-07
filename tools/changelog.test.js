@@ -3,7 +3,11 @@
 // it shows, a feed, and what stays out of it caught. And the changelog as it stands on this commit, which is what goes up.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { page, feed, problems, sizeOf, whenOf } from './changelog.mjs';
 
 const entry = (more = {}) => ({ build: 312, date: '2026-11-05', time: '07:38', ticket: 'CHUNKY-153', title: 'The trains run for everyone', text: ['Two trains pass on the siding in town.'], image: null, alt: null, ...more });
@@ -131,4 +135,35 @@ test('the changelog as it stands on this commit is as it should be', () => {
   // and every picture in it is in an entry, so nothing goes up that nobody wrote about
   const used = new Set(entries.map((e) => e.image).filter(Boolean));
   for (const n of images.keys()) assert.ok(used.has(n), `changelog/img/${n} isn't in any entry`);
+});
+
+describe('the command line\'s --out', () => {
+  const cli = fileURLToPath(new URL('./changelog.mjs', import.meta.url));
+  const run = (cwd, ...args) => spawnSync(process.execPath, [cli, ...args], { cwd, encoding: 'utf8' });
+  const inTemp = (fn) => { const dir = mkdtempSync(join(tmpdir(), 'changelog-cli-')); try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); } };
+  const refused = (r) => {
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /--out needs a directory/);
+    assert.match(r.stderr, /usage: node tools\/changelog\.mjs \[--out dir\]/);
+    assert.doesNotMatch(r.stderr, /ERR_INVALID_ARG_TYPE|\n\s+at /);
+    assert.equal(r.stdout, '');
+  };
+
+  test('a final --out is refused with a message, not a stack trace', () => inTemp((dir) => {
+    refused(run(dir, '--out'));
+    assert.deepEqual(readdirSync(dir), []);
+  }));
+  test('an empty --out value is refused', () => inTemp((dir) => {
+    refused(run(dir, '--out', ''));
+    assert.deepEqual(readdirSync(dir), []);
+  }));
+  test('another flag where the directory should be is refused, and nothing is made', () => inTemp((dir) => {
+    refused(run(dir, '--out', '--verbose'));
+    assert.deepEqual(readdirSync(dir), []);
+  }));
+  test('--out with a directory still makes the page and the feed there', () => inTemp((dir) => {
+    const out = join(dir, 'site'), r = run(dir, '--out', out);
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(existsSync(join(out, 'index.html')) && existsSync(join(out, 'feed.xml')));
+  }));
 });
