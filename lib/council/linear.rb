@@ -28,6 +28,20 @@ module Council
       state["name"]
     end
 
+    def context(identifier)
+      query(<<~GRAPHQL, "id" => identifier).fetch("issue") || raise(Error, "Linear has no #{identifier}")
+        query($id: String!) { issue(id: $id) { id identifier team { id key } project { id } } }
+      GRAPHQL
+    end
+
+    def create(parent, request)
+      input = request.merge("teamId" => parent.fetch("team").fetch("id"), "parentId" => parent.fetch("id"))
+      input["projectId"] = parent["project"]["id"] if parent["project"]
+      result = query("mutation($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier url } } }", "input" => input).fetch("issueCreate")
+      raise Error, "Linear did not confirm ticket creation" unless result["success"] && result["issue"]
+      result.fetch("issue")
+    end
+
     private
 
     def issue(identifier)
