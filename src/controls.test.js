@@ -65,6 +65,13 @@ test('a phone\'s act button says what it does, and it\'s gone when it does nothi
   assert.equal(buttonsFor('town', { act: 'Read the stone' }).a, 'READ');
 });
 
+test('fishing labels distinguish casting, setting the hook and reeling', () => {
+  for (const [act, label] of [['Cast', 'CAST'], ['Set the hook', 'HOOK'], ['Reel in', 'REEL']]) {
+    assert.equal(buttonsFor('town', { act }).a, label);
+    assert.ok(keysFor('town', { act }).some(([key, what]) => key === 'E' && what === act));
+  }
+});
+
 test('near something to drive, the button says so, and driving has its own controls', () => {
   assert.equal(buttonsFor('town', { act: 'Get in the pickup' }).a, 'GET IN');
   assert.deepEqual(buttonsFor('drive'), { a: 'GET OUT', b: 'BRAKE', run: false });

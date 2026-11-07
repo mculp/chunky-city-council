@@ -63,8 +63,8 @@ const helpers = () => g((talkAt) => {
     G.step(.05); G.place(to.x, to.z); G.step(.1);
   };
   window.seen = () => { const d = G.state().dialog; return d && !d.waiting ? { ...d, opts: d.opts.map((o) => o.replace(/^\d\. /, '')) } : null; };
-  // out front of the station facing the wall, a step toward the door from the sign beside it, so it's there past him
-  window.atDoor = () => { const d = G.coop.door(), ex = -d.nz, ez = d.nx; G.place(d.x + d.nx * 3.6 - ex * 1.4, d.z + d.nz * 3.6 - ez * 1.4); G.player.yaw = Math.atan2(-d.nx, -d.nz); G.look(Math.atan2(d.nx, d.nz), .12); G.step(.3); };
+  // From the pumps, looking at the store normally: the sign has to read without posing the camera in front of it.
+  window.atDoor = () => { const d = G.coop.door(); G.place(G.places.gas.x + 53, G.places.gas.z + 12.5); G.player.yaw = Math.atan2(-d.nx, -d.nz); G.look(Math.atan2(d.nx, d.nz), .12); G.step(1); };
 }, TALK_AT);
 const clockTo = (when) => g((t) => clockTo(t), ms(when));
 // the next time he looks at what he's thinking over, which is every ten seconds, and long enough for Jev to answer
@@ -114,6 +114,8 @@ await g((h) => { G.place(h.x + 1.5, h.z); G.step(.1); }, home);
 const act = await g(() => G.S.act);
 check(`at 3 he's asleep in the back, with BACK AT 6 on the door and nobody to talk to at his spot: ${c.at}, "${c.sign}", ${act}`, c.at === 'asleep' && c.away && c.signShown && c.sign === 'BACK AT 6' && !c.solid && act !== 'Talk to Coop', { c, act });
 await g(() => atDoor());
+const sign = await g(() => G.coop.door());
+check('BACK AT 6 is wholly in view from the pumps, at a readable size above the controls', sign.edges.every((e) => e.depth < 1 && e.x > 8 && e.x < 382) && Math.abs(sign.edges[1].x - sign.edges[0].x) > 50 && sign.screen.y > 180 && sign.screen.y < 600, sign);
 await snap('1-back-at-6');
 await look(); await look();
 check(`with Jev off he's asked once more, an hour or more later, and then not again that day: asked ${decided.length} times`, decided.length === 2 && !(await news()), decided.length);
@@ -198,18 +200,25 @@ check(`then he's to catch one: "${s}"`, s === 'Catch a catfish', s);
 await g((h) => { const to = beside(h, [[2, 0], [-2, 0], [1, -.4], [-1, -.4]]); G.place(to.x, to.z); G.player.yaw = h.yaw; G.look(h.yaw + Math.PI, .25); G.step(.2); }, hole);
 s = await g(() => ({ act: G.S.act, mode: G.S.mode, rod: G.fishing.shown().rod }));
 check(`facing the water beside him with his rod, it's for casting: ${s.act}, "${await button()}", rod ${s.rod}`, s.mode === 'town' && s.act === 'Cast' && (await button()) === 'CAST' && s.rod, s);
-await page.tap('#bA'); await g(() => G.step(.6));
+await page.tap('#bA'); await g(() => G.step(1.5));
 let v = await g(() => ({ ...G.fishing.view(), shown: G.fishing.shown(), act: G.S.act }));
 check(`a tap casts, and the bobber's out on the water on a line: ${v.state}, ${v.out} m out, "${await button()}"`, v.state === 'waiting' && v.out >= 3 && v.shown.bobber && v.shown.line && v.act === 'Reel in' && (await button()) === 'REEL', v);
+const waiting = await g(() => ({ tip: G.fishing.tip(), seen: G.fishing.seen() }));
+check('beside Coop, the bobber is clear of him, the hood, the deck and the controls', waiting.seen.clear && waiting.seen.screen.depth < 1 && waiting.seen.screen.y > 180 && waiting.seen.screen.y < 600 && waiting.seen.pixels >= 6, waiting);
 await snap('5-cast');
 let t = 0;
 while ((await g(() => G.fishing.view().state)) === 'waiting' && t < 15) { await g(() => G.step(.1)); t += .1; }
 v = await g(() => G.fishing.view());
 check(`then something takes it, and the bobber goes under: ${v.state} after ${t.toFixed(1)} s`, v.state === 'bite' && v.under === 1, v);
+const bite = await g(() => { G.step(.1); const v = G.fishing.seen(); return { ...v, tip: G.fishing.tip(), rings: G.fishing.rings(), water: G.water.level(v.world[0], v.world[2]), flash: document.getElementById('bA').classList.contains('bite') && document.getElementById('prompt').classList.contains('bite') }; });
+check('the bite pulls the bobber under, dips the rod tip and lights the control, with a ring where it went', bite.world[1] < bite.water - .15 && bite.tip[1] < waiting.tip[1] - .5 && bite.flash && bite.rings.length >= 1, bite);
+const rings = await g(() => { G.step(.36); return G.fishing.rings(); });
+check('a second ring makes the bite visible on the water, not just audible', rings.length >= 2, rings);
 await snap('6-bite');
 await page.tap('#bA'); await g(() => G.step(.05));
 v = await g(() => G.fishing.view());
 check(`a tap then sets the hook: ${v.state}`, v.state === 'hooked', v);
+check('setting the hook ends the bite highlight', !(await page.locator('#bA').evaluate((e) => e.classList.contains('bite'))), null);
 // reeling, with a finger down while it's calm and the line isn't straining too hard, and up while it runs
 let holding = false, reddest = 0, ran = false, landed = null;
 for (let i = 0; i < 900 && !landed; i++) {
@@ -331,6 +340,20 @@ const bit = await g(() => G.fishing.view().state);
 await g(() => { const P = G.player.pos; G.place(P.x - Math.sin(G.player.yaw) * 3, P.z - Math.cos(G.player.yaw) * 3); G.step(.1); });
 const walked = await g(() => ({ line: G.fishing.view().state, worms: G.fishing.gear().worms }));
 check(`walking off with something on the line, it's gone, and so is its worm: ${wormsOut} to ${walked.worms}`, bit === 'bite' && walked.line === 'idle' && walked.worms === wormsOut - 1, { bit, walked, wormsOut });
+await shut();
+
+// CHUNKY-192: an actual cast at every listed bank, pond and trestle, with the normal phone camera.
+await open(PHONE);
+await helpers();
+for (const { id } of FISHING_PLACES) {
+  await g((id) => { const h = G.coop.hole(id); G.fishing.give(); G.place(h.x, h.z); G.player.yaw = h.yaw; G.look(h.yaw + Math.PI, .25); G.step(.2); }, id);
+  await page.tap('#bA');
+  const seen = await g(() => { G.step(1.5); return { ...G.fishing.seen(), state: G.fishing.view().state, controls: document.getElementById('prompt').getBoundingClientRect().top }; });
+  check(`${id}: the bobber is visible above the controls, clear of the bank or railing, at least 6 phone pixels across`, seen.state === 'waiting' && seen.clear && seen.pixels >= 6 && seen.screen.depth < 1 && seen.screen.x > 24 && seen.screen.x < 366 && seen.screen.y > 180 && seen.screen.y < seen.controls - 12, seen);
+  await snap(`view-${id}`);
+  await g(() => { G.fishing.forget(); G.step(1); });
+  check(`${id}: reeling in releases the fishing camera`, (await g(() => G.cam.fish)) === 0, null);
+}
 await shut();
 
 // ---------------- a town that's shared, where Coop keeps the counter
