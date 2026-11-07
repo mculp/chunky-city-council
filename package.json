@@ -43,6 +43,7 @@
     "talk": "node tools/play-talk.mjs",
     "sweep": "node tools/play-sweep.mjs",
     "fishing": "node tools/play-fishing.mjs",
+    "fishing:input": "node tools/play-fishing-input.mjs",
     "deaths": "node tools/play-deaths.mjs",
     "fling": "node tools/play-fling.mjs",
     "bail": "node tools/play-bail.mjs",

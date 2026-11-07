@@ -107,6 +107,7 @@ body.talking #mini,body.talking #miniName{visibility:hidden}
 @media (pointer:coarse){.rep-head{min-height:40px}}
 #prompt{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom, 0px) + 176px);transform:translateX(-50%);z-index:4;pointer-events:none;
   font-family:var(--f-display);font-size:15px;letter-spacing:.03em;background:var(--panel);border:1px solid var(--line);padding:8px 14px;width:max-content;max-width:calc(100vw - 62px);text-align:center}
+#prompt.fish-action{pointer-events:auto;touch-action:none;user-select:none;cursor:pointer}
 #prompt .words{display:block;white-space:normal;width:min(520px,calc(100vw - 62px));text-align:center;line-height:1.35}
 #prompt .bar{display:block;height:5px;margin-top:7px;background:rgba(255,255,255,.14)}
 #prompt .bar i{display:block;height:100%;width:0;background:var(--rust)}
@@ -5998,10 +5999,10 @@ function moveStick(e) {
   touchStick.set(x, -y); knob.style.transform = `translate(${x * 38}px,${y * 38}px)`;
 }
 // RUN stays held a moment after it's let go, so a thumb can slide off it to jump
-const touchBtn = { a: false, b: false, c: false, n: false, r: false, h: false, rUntil: 0 };
-for (const [id, k] of [['bA', 'a'], ['bB', 'b'], ['bR', 'r'], ['bC', 'c'], ['bN', 'n'], ['bH', 'h']]) {
+const touchBtn = { a: false, fish: false, b: false, c: false, n: false, r: false, h: false, rUntil: 0 };
+for (const [id, k] of [['bA', 'a'], ['prompt', 'fish'], ['bB', 'b'], ['bR', 'r'], ['bC', 'c'], ['bN', 'n'], ['bH', 'h']]) {
   const el = $(id);
-  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); touchBtn[k] = true; el.classList.add('on'); if (k === 'a') input.aEdge = true; else if (k === 'b') input.bEdge = true; else if (k === 'c') input.cEdge = true; else if (k === 'n') input.nEdge = true; else if (k === 'h') input.hEdge = true; });
+  el.addEventListener('pointerdown', (e) => { if (k === 'fish' && !el.classList.contains('fish-action')) return; e.preventDefault(); el.setPointerCapture(e.pointerId); touchBtn[k] = true; el.classList.add('on'); if (k === 'a' || k === 'fish') input.aEdge = true; else if (k === 'b') input.bEdge = true; else if (k === 'c') input.cEdge = true; else if (k === 'n') input.nEdge = true; else if (k === 'h') input.hEdge = true; });
   const up = () => { touchBtn[k] = false; el.classList.remove('on'); if (k === 'r') touchBtn.rUntil = time + .2; };
   el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up);
 }
@@ -6071,7 +6072,7 @@ function readInput() {
   if (keys.has('a') || keys.has('arrowleft')) x -= 1; if (keys.has('d') || keys.has('arrowright')) x += 1;
   if (keys.has('w') || keys.has('arrowup')) y += 1; if (keys.has('s') || keys.has('arrowdown')) y -= 1;
   const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; }
-  input.x = x; input.y = y; input.a = touchBtn.a || keys.has('e') || keys.has('enter'); input.run = touchBtn.r || time < touchBtn.rUntil || keys.has('shift'); input.b = touchBtn.b || keys.has(' ') || input.run;
+  input.x = x; input.y = y; input.a = touchBtn.a || touchBtn.fish || keys.has('e') || keys.has('enter'); input.run = touchBtn.r || time < touchBtn.rUntil || keys.has('shift'); input.b = touchBtn.b || keys.has(' ') || input.run;
 }
 
 // ================================================================ game state + UI
@@ -6443,10 +6444,11 @@ function pointAtObjective() {
   if (hudCache.dist !== shown) { hudCache.dist = shown; $('objDist').textContent = `${shown} m`; }
 }
 let lastPrompt = '', promptHTML = '';
-function prompt(html, prog = null) {
+function prompt(html, prog = null, interactive = false) {
+  const el = $('prompt'); el.classList.toggle('fish-action', interactive);
   const key = html ? html + '|' + (prog === null ? '' : Math.round(prog * 100)) : '';
   if (key === lastPrompt) return; lastPrompt = key;
-  const el = $('prompt'); if (!html) { el.hidden = true; promptHTML = ''; return; }
+  if (!html) { el.hidden = true; promptHTML = ''; return; }
   el.hidden = false; el.innerHTML = html + (prog !== null ? `<span class="bar"><i style="width:${Math.round(prog * 100)}%"></i></span>` : '');
   if (html !== promptHTML) { promptHTML = html; placePrompt(); }
 }
@@ -7426,7 +7428,8 @@ function fished(e) {
   if (e.what === 'bite') { SFX.play('splash.small'); biteRing(); after(BITE.again, () => { if (fish.view().state === 'bite') biteRing(); }); return; }
   // a bite missed, a line snapped or put away with something on it, and a fish landed are each the end of a cast, and of its worm
   S.items.worms = Math.max(0, (S.items.worms | 0) - 1);
-  if (e.what === 'snapped') SFX.play('rope.snap');
+  if (e.what === 'snapped') { SFX.play('rope.snap'); toast('The line snapped'); }
+  if (e.what === 'missed') toast('Missed the bite');
   if (e.what === 'landed') { SFX.play('splash.big'); caught.push(e.fish.lb); S.items.catfish = caught.length; caughtOn = today(); toast(`A ${e.fish.lb} lb catfish`); }
   saveGear(); hudVitals(); townObjective();
 }
@@ -9836,10 +9839,14 @@ function tick(dt, draw = true) {
       const showTo = near && S.items.gerald && GERALD_SEEN[near] && !S.flags[GERALD_SEEN[near]], ditch = !!S.items.gerald && inDitch(player.pos.x, player.pos.z);
       // and in a ring of mushrooms, one to eat (CHUNKY-176)
       const ring = ringAt(RINGS, player.pos.x, player.pos.z);
-      S.act = fishFirst ? (lineOut ? 'Reel in' : 'Cast') : near ? `${showTo ? 'Show Gerald to' : 'Talk to'} ${near === 'toni' ? 'Toni' : NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : bell ? 'Ring the bell' : gear && S.flags.sixInARow ? 'Take the bat' : ditch ? 'Let Gerald go' : ring >= 0 ? 'Eat a mushroom' : null;
+      S.act = fishFirst ? (fish.view().state === 'bite' ? 'Set the hook' : lineOut ? 'Reel in' : 'Cast') : near ? `${showTo ? 'Show Gerald to' : 'Talk to'} ${near === 'toni' ? 'Toni' : NPCS[near].name}` : ride ? `Get in the ${ride.K.name}` : meat ? 'Eat the deer meat' : door ? (gasBarred ? 'Unbar the door' : 'Bar the door') : jam ? `Play the ${jam.name}` : ball ? 'Bump the ball' : crt ? (crtLook ? 'Back' : 'Look at the screen') : stone ? 'Read the stone' : plate ? 'Read the marker' : bell ? 'Ring the bell' : gear && S.flags.sixInARow ? 'Take the bat' : ditch ? 'Let Gerald go' : ring >= 0 ? 'Eat a mushroom' : null;
       if (!stone) stoneRead = false;
       if (!plate) railMarkerRead = false;
-      if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (railMarkerRead && S.act === 'Read the marker') prompt(`<span class="words">${RAIL_MARKER.words}</span>`); else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH && !S.items.gerald) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
+      if (crtLook) prompt(null); else if (stoneRead && S.act === 'Read the stone') prompt(stoneWords()); else if (railMarkerRead && S.act === 'Read the marker') prompt(`<span class="words">${RAIL_MARKER.words}</span>`); else if (fishFirst && lineOut) {
+        const v = fish.view(), hooked = v.state === 'hooked';
+        const how = hooked ? (v.running ? 'Fish running · Let go' : v.strain >= .75 ? 'Line tight · Let go' : `Hooked · Hold ${press('REEL')} to reel`) : v.state === 'bite' ? `Bite · ${touchUI ? 'Tap' : 'Press E'} to hook` : `Wait for a bite<br>${touchUI ? 'Tap' : 'Press E'} to bring line in`;
+        prompt(how + (hooked ? `<br>${Math.ceil(v.line)} m out · Line strain` : ''), hooked ? v.strain : null, touchUI);
+      } else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH && !S.items.gerald) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
       if (input.aEdge) { if (fishFirst) { if (lineOut) fish.press(); else castNow(castTo); } else if (near === 'toni') toniSpoke(toni.talk(player.pos)); else if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) { stoneRead = true; SFX.clip(STONE_CLIP); } else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else if (ditch) letGeraldGo(); else if (ring >= 0) openMap(ring); else swing(); }
       if (input.sEdge) swing();
       if (input.hEdge) toggleShamble();
