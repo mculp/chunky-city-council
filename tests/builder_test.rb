@@ -114,6 +114,16 @@ class BuilderTest < Minitest::Test
     assert_equal "sign.txt", files
   end
 
+  def test_check_output_reaches_the_controller_before_worktree_cleanup
+    runner = FakeRunner.new { |dir| write(dir, "sign.txt", "Welcome\n") && done }
+    checker = config(check: ["ruby", "-e", "puts 'check stdout retained'; warn 'check stderr retained'"])
+    outcome = Council::Builder.new(checker, runner: runner, out: @out).build(TICKET)
+    assert_equal "landed", outcome.status
+    assert_includes @out.string, "check stdout retained\n"
+    assert_includes @out.string, "check stderr retained\n"
+    refute File.exist?(File.join(@tmp, "worktrees", TICKET["id"]))
+  end
+
   def test_failing_checks_land_nothing_and_leave_the_worktree
     before = origin_main
     runner = FakeRunner.new { |dir| write(dir, "FAIL", "x") && done }
