@@ -13,13 +13,15 @@ USAGE = <<~TEXT
          bin/council qa TICKET --candidate-file FILE --run-dir DIR [--ticket-file FILE] [--lane engineer|platform] [--config FILE]
          bin/council refill --brief FILE --lane-configs FILE --manifest FILE --run-dir DIR [--publish] [--dry-run] [--config FILE]
          bin/council handoff TICKET --candidate-file FILE --ticket-file FILE --review-dir DIR --run-dir DIR [--publish] [--dry-run] [--config FILE]
+         bin/council recover TICKET --manifest FILE --state-dir DIR --candidate-file FILE [--execute] --config FILE
          bin/council dispatch --manifest FILE --state-dir DIR [--direction FILE] [--publish-candidates] [--once] [--dry-run] [--config FILE]
 TEXT
 
 options = {config: File.join(Council::ROOT, "config/council.json"), linear: true, max_revisions: 1}
 parser = OptionParser.new do |opts|
   opts.banner = USAGE
-  opts.on("--config FILE") { |value| options[:config] = value }
+  opts.on("--config FILE") { |value| options[:config] = value; options[:config_given] = true }
+  opts.on("--execute", "recover: trusted-controller QA-only recovery; the default is a pure plan") { options[:execute] = true }
   opts.on("--ticket-file FILE") { |value| options[:ticket_file] = value }
   opts.on("--no-linear", "Leave Linear alone after landing") { options[:linear] = false }
   opts.on("--dry-run", "Say what would happen, and start nothing") { options[:dry_run] = true }
@@ -41,7 +43,9 @@ end
 begin
   parser.parse!(ARGV)
   command, id = ARGV.shift(2)
-  abort USAGE unless %w[build discard plan cycle qa dispatch refill handoff].include?(command)
+  abort USAGE unless %w[build discard plan cycle qa dispatch refill handoff recover].include?(command)
+  abort USAGE if command == "recover" && (!id || !options[:manifest] || !options[:state_dir] || !options[:candidate_file] || !options[:config_given] || !ARGV.empty?)
+  raise Council::Error, "--execute is only for recover" if options[:execute] && command != "recover"
   abort USAGE if %w[build discard cycle qa handoff].include?(command) && !(id || options[:ticket_file])
   abort USAGE if %w[plan cycle qa refill handoff].include?(command) && !options[:run_dir]
   abort USAGE if command == "plan" && !options[:brief]
@@ -55,6 +59,14 @@ begin
   raise Council::Error, "direction/publication flags are only for dispatch" if (options[:direction] || options[:publish_candidates]) && command != "dispatch"
   config = Council::Config.load(options[:config])
   Council.boot(config)
+  if command == "recover"
+    recovery = Council::Recovery.new(manifest: options[:manifest], state_dir: options[:state_dir], config_path: options[:config],
+      candidate_file: options[:candidate_file], linear_factory: -> { Council::Linear.new })
+    execute_recovery = options[:execute] && !options[:dry_run]
+    result = execute_recovery ? recovery.execute(id) : recovery.plan(id)
+    puts JSON.pretty_generate(result)
+    exit(execute_recovery && result["status"] != "ready" ? 3 : 0)
+  end
   if command == "dispatch"
     if options[:dry_run]
       puts JSON.pretty_generate(Council::Dispatcher.read_manifest(options[:manifest]).merge("state_dir" => options[:state_dir],

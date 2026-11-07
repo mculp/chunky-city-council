@@ -22,11 +22,11 @@ module Council
           @run.save("ticket", ticket)
           (0..@max).each do |attempt|
             @run.save("state", "status" => "engineering", "attempt" => attempt + 1, "ticket" => ticket["id"])
-            candidate = @builder.candidate(ticket, previous: candidate, feedback: feedback)
+            candidate = @builder.candidate(ticket, previous: candidate, feedback: feedback) { |made| checkpoint(ticket, made, attempt + 1) }
             if candidate.is_a?(Builder::Outcome)
               return @run.save("state", candidate.to_h.transform_keys(&:to_s))
             end
-            @run.save("candidate", candidate.to_h.transform_keys(&:to_s))
+            checkpoint(ticket, candidate, attempt + 1)
             @run.save("state", "status" => "qa", "attempt" => attempt + 1, "ticket" => ticket["id"], "sha" => candidate.sha)
             report = @qa.call(qa_input(ticket, candidate), cwd: candidate.worktree)
             @run.save("qa-#{attempt + 1}", report)
@@ -48,6 +48,14 @@ module Council
       end
     end
 
+    # Retained before the checks run, so a failed check still leaves the exact commit and its identity for review.
+    def checkpoint(ticket, candidate, attempt)
+      @run.save("candidate", candidate.to_h.transform_keys(&:to_s))
+      identity = @builder.respond_to?(:identity) ? @builder.identity(candidate.worktree) : nil
+      @run.save("attempt-#{attempt}", "version" => 1, "kind" => "candidate-checkpoint", "ticket" => ticket["id"], "attempt" => attempt,
+        "candidate" => candidate.to_h.transform_keys(&:to_s), "identity" => identity)
+    end
+
     # Explicit QA-only rerun for a corrected tool permission or an integrator-recorded rebased commit.
     # A fresh run directory preserves the original blocked/approved report; no writer is restarted.
     def review_candidate(ticket, candidate)
@@ -55,16 +63,17 @@ module Council
         begin
           @run.save("ticket", ticket)
           @run.save("candidate", candidate.to_h.transform_keys(&:to_s))
-          @run.save("state", "status" => "checking", "ticket" => ticket["id"], "sha" => candidate.sha)
+          @run.save("state", "status" => "checking", "ticket" => ticket["id"], "sha" => candidate.sha, "qa_only" => true)
           @builder.verify_candidate!(ticket, candidate)
-          @run.save("state", "status" => "qa", "ticket" => ticket["id"], "sha" => candidate.sha)
+          @run.save("state", "status" => "qa", "ticket" => ticket["id"], "sha" => candidate.sha, "qa_only" => true)
           report = @qa.call(qa_input(ticket, candidate), cwd: candidate.worktree)
           @run.save("qa-1", report)
           validate_report!(report, candidate.worktree)
           @run.save("state", "status" => report["verdict"] == "pass" ? "ready" : "parked", "ticket" => ticket["id"],
-            "candidate" => candidate.to_h, "qa_usage" => @qa.usage, "merged" => false, "deployed" => false)
+            "candidate" => candidate.to_h, "qa_usage" => @qa.usage, "merged" => false, "deployed" => false, "qa_only" => true,
+            "verdict" => report["verdict"])
         rescue StandardError => e
-          @run.save("state", "status" => "failed", "ticket" => ticket["id"], "reason" => e.message, "candidate" => candidate.to_h)
+          @run.save("state", "status" => "failed", "ticket" => ticket["id"], "reason" => e.message, "candidate" => candidate.to_h, "qa_only" => true)
           raise
         end
       end
