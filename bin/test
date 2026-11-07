@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Runs the council's tests against the giraffe-rb checkout named by GIRAFFE (default: ../giraffe-rb).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+for test in tests/*_test.rb; do ruby "$test"; done
