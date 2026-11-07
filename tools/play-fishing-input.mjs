@@ -19,7 +19,7 @@ async function hold(down, target = '#prompt', cancel = false) {
   await cdp.send('Input.dispatchTouchEvent', { type: down ? 'touchStart' : cancel ? 'touchCancel' : 'touchEnd', touchPoints: down ? [point] : [] });
   held = down;
 }
-async function start(hole) {
+async function start(hole, target = '#prompt') {
   await hold(false);
   await page.reload();
   await page.waitForFunction(() => window.__game);
@@ -29,7 +29,7 @@ async function start(hole) {
     G.fishing.give(); const h = G.coop.hole(id); G.place(h.x, h.z); G.player.yaw = h.yaw; G.look(h.yaw + Math.PI, .25);
     G.step(.1); G.resume();
   }, hole);
-  await page.locator('#bA').filter({ hasText: 'CAST' }).tap();
+  await page.locator(target).filter({ hasText: /cast/i }).tap();
 }
 const waitWords = (text, timeout = 15000) => page.waitForFunction((text) => document.getElementById('prompt').innerText.toLowerCase().includes(text), text, { timeout });
 try {
@@ -71,7 +71,7 @@ try {
   await snap('2-caught');
   console.log('ok a complete catch using visible instructions and real-time touch input, without stepping or reading state to steer');
 
-  await start('under-us80-east');
+  await start('under-us80-east', '#bA');
   await page.waitForFunction(() => document.getElementById('bA').textContent === 'HOOK', null, { timeout: 15000 });
   await page.locator('#bA').tap();
   await waitWords('hooked', 2000);
@@ -85,9 +85,9 @@ try {
   assert.equal((await view()).state, 'idle');
   await page.waitForFunction(() => document.getElementById('bA').textContent === 'CAST', null, { timeout: 1000 });
   assert.equal(await page.locator('#bA').innerText(), 'CAST');
-  assert.equal(await page.locator('#prompt').evaluate((e) => getComputedStyle(e).pointerEvents), 'none', 'the prompt only captures fishing actions, not other game prompts');
+  assert.equal(await page.locator('#prompt').evaluate((e) => getComputedStyle(e).pointerEvents), 'auto', 'the central CAST control is ready for another attempt too');
   await snap('3-missed');
-  console.log('ok missing a bite says so and returns to CAST; no invisible interactive prompt left behind');
+  console.log('ok missing a bite says so and returns to a usable central CAST control');
   assert.deepEqual(errors, []);
 } catch (e) {
   await snap('failure'); throw e;

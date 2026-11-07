@@ -9846,7 +9846,7 @@ function tick(dt, draw = true) {
         const v = fish.view(), hooked = v.state === 'hooked';
         const how = hooked ? (v.running ? 'Fish running · Let go' : v.strain >= .75 ? 'Line tight · Let go' : `Hooked · Hold ${press('REEL')} to reel`) : v.state === 'bite' ? `Bite · ${touchUI ? 'Tap' : 'Press E'} to hook` : `Wait for a bite<br>${touchUI ? 'Tap' : 'Press E'} to bring line in`;
         prompt(how + (hooked ? `<br>${Math.ceil(v.line)} m out · Line strain` : ''), hooked ? v.strain : null, touchUI);
-      } else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH && !S.items.gerald) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
+      } else if (S.act) prompt(touchUI ? S.act : `E · ${S.act}`, null, touchUI && fishFirst); else if (gear) prompt('6 in a row takes the bat'); else if (fliesToDo && lot < FLY_REACH && !S.items.gerald) prompt(touchUI ? 'SWING at the flies' : 'F · Swing at the flies'); else prompt(null);
       if (input.aEdge) { if (fishFirst) { if (lineOut) fish.press(); else castNow(castTo); } else if (near === 'toni') toniSpoke(toni.talk(player.pos)); else if (near) openDialog(near); else if (ride) getIn(ride); else if (meat) eatDeerMeat(); else if (door) barGasDoor(); else if (jam) playJam(jam); else if (ball) hitBall(); else if (crt) crtLook = !crtLook; else if (stone) { stoneRead = true; SFX.clip(STONE_CLIP); } else if (plate) railMarkerRead = true; else if (bell) ringBell(); else if (gear && S.flags.sixInARow) takeBat(); else if (ditch) letGeraldGo(); else if (ring >= 0) openMap(ring); else swing(); }
       if (input.sEdge) swing();
       if (input.hEdge) toggleShamble();
