@@ -13,7 +13,7 @@ module Council
     def call(brief, run_dir:, publish: false)
       Run.new(run_dir).start do |run|
         begin
-          validate_lanes!(brief.fetch("lanes"))
+          self.class.validate_lanes!(brief.fetch("lanes"))
           run.save("brief", brief)
           proposal = @role.call(brief)
           run.save("proposal", proposal)
@@ -37,8 +37,12 @@ module Council
             run.save("request-#{lane}", request)
             run.save("state", "status" => "creating-ticket", "lane" => lane, "request_id" => request["id"], "created" => tickets)
             issue = @linear.create(parent, request)
-            ticket = {"id" => issue.fetch("identifier"), "linear_id" => issue.fetch("id"), "url" => issue.fetch("url"),
-              "title" => item["title"], "description" => body, "lane" => lane, "acceptance" => item["acceptance"]}
+            # Adapters that return the persisted title/description are authoritative (Linear may normalise Markdown).
+            # Older adapters only confirm creation; they stay proposal-only and Planner refuses them.
+            authoritative = issue["title"].is_a?(String) && issue["description"].is_a?(String)
+            ticket = {"id" => issue.fetch("identifier"), "linear_id" => issue.fetch("id"), "request_id" => request["id"], "url" => issue.fetch("url"),
+              "title" => authoritative ? issue["title"] : item["title"], "description" => authoritative ? issue["description"] : body,
+              "authoritative" => authoritative, "lane" => lane, "acceptance" => item["acceptance"]}
             run.save("ticket-#{lane}", ticket)
             tickets << ticket
           end
@@ -50,9 +54,7 @@ module Council
       end
     end
 
-    private
-
-    def validate_lanes!(lanes)
+    def self.validate_lanes!(lanes)
       raise Error, "assign exactly the engineer and platform lanes" unless lanes.keys.sort == %w[engineer platform]
       lanes.each_value do |lane|
         paths = lane.fetch("allowed")
