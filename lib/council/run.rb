@@ -30,6 +30,7 @@ module Council
       Tempfile.create([".council-", ".json"], dir) do |file|
         file.write(JSON.pretty_generate(data) + "\n")
         file.flush
+        file.fsync
         File.rename(file.path, File.join(dir, "#{name}.json"))
       end
       data

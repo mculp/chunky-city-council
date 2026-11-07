@@ -10,7 +10,12 @@ module Council
       @builder, @qa, @run, @max = builder, qa, Run.new(run_dir), max_revisions
     end
 
-    def call(ticket)
+    def call(ticket) = @builder.with_ticket_lock(ticket) { execute(ticket) }
+    def review(ticket, candidate) = @builder.with_ticket_lock(ticket) { review_candidate(ticket, candidate) }
+
+    private
+
+    def execute(ticket)
       @run.start do
         candidate, feedback = nil, nil
         begin
@@ -45,7 +50,7 @@ module Council
 
     # Explicit QA-only rerun for a corrected tool permission or an integrator-recorded rebased commit.
     # A fresh run directory preserves the original blocked/approved report; no writer is restarted.
-    def review(ticket, candidate)
+    def review_candidate(ticket, candidate)
       @run.start do
         begin
           @run.save("ticket", ticket)

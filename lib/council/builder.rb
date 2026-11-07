@@ -2,6 +2,7 @@
 
 require "fileutils"
 require "json"
+require_relative "lock"
 
 module Council
   # One ticket, end to end: a worktree from the newest main, the Builder, the game's checks run again by the council,
@@ -22,17 +23,25 @@ module Council
     end
 
     # A worktree left by a failed or parked run, and its branch, once Matt has looked at it.
+    def with_ticket_lock(ticket, &block)
+      validate_id!(ticket.fetch("id"))
+      Lock.with(File.join(@git.common(repo), "council-locks", "#{ticket['id']}.lock"), &block)
+    end
+
     def discard(id)
-      validate_id!(id)
-      path = File.join(@config["worktrees"], id)
-      clean(id, path)
-      say "#{id}: discarded #{path}"
+      with_ticket_lock("id" => id) do
+        path = File.join(@config["worktrees"], id)
+        clean(id, path)
+        say "#{id}: discarded #{path}"
+      end
     end
 
     def build(ticket)
-      candidate = write_candidate(ticket)
-      return candidate if candidate.is_a?(Outcome)
-      land(ticket, candidate.worktree, candidate.base, candidate.sha)
+      with_ticket_lock(ticket) do
+        candidate = write_candidate(ticket)
+        return candidate if candidate.is_a?(Outcome)
+        land(ticket, candidate.worktree, candidate.base, candidate.sha)
+      end
     end
 
     # The role cycle stops at a checked, preserved commit. It never calls landing or marks Linear Done.

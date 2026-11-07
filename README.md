@@ -8,7 +8,7 @@ Chunky is the product, not a competing orchestration roadmap.
 
 The review-gated path is **Creative Director → real Linear child ticket → Engineer → independent QA → integrator**.
 A Platform Engineer can run a distinct ticket in parallel, with disjoint file ownership and the same review gate.
-These are explicit one-shot commands, not a daemon or an unattended queue.
+`plan`, `cycle` and `qa` are explicit one-shot commands. `dispatch` can supervise approved tickets repeatedly within a persisted lifetime budget; it is not a self-refilling planner or an automatic integration service.
 
 ```sh
 bin/council plan --brief /private/brief.json --run-dir /private/run/direction --config /private/council.json
@@ -60,6 +60,55 @@ Use a local bare mirror as the execution origin for first-cycle trials. Add a pu
 stop and the integrator reviews their results. Model profiles restrict tools and scrub command credentials; they are
 not an OS filesystem sandbox. Project code still executes as the local user, as ordinary tests do.
 
+## Sustained, bounded dispatch
+
+`dispatch` watches a private, explicitly approved inbox and runs the existing role cycles. It does not discover arbitrary
+backlog, create requirements, merge, push, deploy or mark Done. One Engineer and one Platform cycle can overlap;
+within each ticket, implementation, checks, QA and at most one repair remain ordered.
+
+```sh
+bin/council dispatch --manifest /private/queue.json --state-dir /private/dispatch --config /private/council.json --dry-run
+bin/council dispatch --manifest /private/queue.json --state-dir /private/dispatch --config /private/council.json
+```
+
+The manifest contains exactly `limits` and `jobs` (file paths resolve relative to it):
+
+```json
+{
+  "limits": {"max_jobs": 4, "max_calls": 12, "budget_usd": 25, "run_seconds": 1800, "poll_seconds": 15},
+  "jobs": [
+    {"id": "CHUNKY-123", "lane": "engineer", "config": "engineer.json", "ticket_file": "approved-ticket.json"}
+  ]
+}
+```
+
+These are example operating limits, not owner requirements or dollar invoices. `budget_usd` is subscription
+API-equivalent usage for dispatched writer/QA calls only, not planning or total coordination cost. Giraffe's existing
+`CallLedger` reserves each call's full cap **before** invocation, settles known usage and keeps unknown charges.
+Reservations, call count, job count and the admission deadline survive restart; editing the manifest cannot reset them.
+Provider-reported usage can overshoot a turn's cap; no further call is admitted against insufficient remaining budget.
+
+Each job supplies its own exact owned paths and check command. Its approved title/description must still match Linear,
+its state must be **Todo**, and incoming `blocks` dependencies must be completed (unknown pagination stops dispatch).
+The controller records a local claim before moving it to In Progress; a ready result moves to In Review, never Done.
+This is single-coordinator/local-repository exclusion, **not a distributed Linear lease**. Do not run another host or
+clone against the same inbox. Ticket locks also protect cycles, QA rechecks and discard in the same Git repository.
+
+Append approved jobs to the manifest while the watcher runs. Existing specs and limits are immutable, and new jobs
+must use already locked workspaces. Same-lane work is serial. Overlapping paths remain held by parked/unintegrated
+work. A ready candidate releases its paths only after Linear completion **and** the exact reviewed SHA is observed
+on the configured source branch. Rebased/squashed candidates require explicit integrator reconciliation; tracker Done
+alone is not proof. With local-mirror origins, the integrator must advance the mirror after a reviewed merge.
+
+`--once` performs one admission pass and drains its jobs. Otherwise polling continues within the admission window;
+active calls/checks drain under their own timeouts. `SIGINT`, `SIGTERM`, or a `STOP` file in the state directory prevents
+new calls/jobs. No blanket process killing or worktree cleanup. On restart, completed jobs are not replayed; any
+interrupted running job is parked, all artifacts/reservations survive, and the controller requires inspection rather
+than silently resuming it. Ambiguous Linear mutations are likewise not retried. Inspect `dispatch.json` and `jobs/`.
+
+This automates approved-ticket execution, **not the whole factory**: recurring Director planning/approval, PR publication,
+and the single integration/release authority are still separate. It does not install a launch agent or enable itself.
+
 ## Legacy Builder command
 
 `bin/council build CHUNKY-123` retains the original rollout behavior: Builder → checks → automatic fast-forward (or
@@ -92,6 +141,6 @@ Tests use real disposable Git repositories and scripted role outputs; they make 
 
 ## Deliberately not activated
 
-No continuous service, automatic integration/deployment, generic queue/lease rewrite, new paid service, Managed Agents
-backend or livestream. Streaming requires separate platform/access selection and an allowlisted capture view that
+No OS service installation, self-refilling planning loop, automatic integration/deployment, generic queue/lease rewrite,
+new paid service, Managed Agents backend or livestream. Streaming requires separate platform/access selection and an allowlisted capture view that
 excludes account pages, credentials, private controls and logs. The owner need not watch for acceptance.
