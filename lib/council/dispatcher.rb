@@ -73,8 +73,9 @@ module Council
           deadline: @state.fetch("deadline"), stopped: method(:stopped?))
         loop do
           begin
-            update_manifest(roots)
             @threads.delete_if { |_id, thread| !thread.alive? && thread.join }
+            update_manifest(roots, repositories)
+            @state["jobs"].each { |id, job| integrated?(@state["specs"].fetch(id)) if job["status"] == "ready" }
             break if @state["attention"] && @threads.empty?
             admit unless stopped? || @state["attention"]
           rescue StandardError => e
@@ -100,7 +101,7 @@ module Council
     def stopped? = @stopping || File.exist?(File.join(@dir, "STOP")) || @clock.call >= @state.fetch("deadline")
     def persist = @store.save("dispatch", @state)
 
-    def update_manifest(roots)
+    def update_manifest(roots, repositories)
       data = self.class.read_manifest(@manifest)
       raise Error, "dispatch limits changed" unless data["limits"] == @limits
       jobs = data["jobs"].to_h { |job| [job["id"], job] }
@@ -109,6 +110,7 @@ module Council
           raise Error, "approved job changed or disappeared: #{id}" unless jobs[id] == old
         end
         raise Error, "new workspace requires a separate dispatcher" unless jobs.values.all? { |j| roots.include?(j["config"]["worktrees"]) }
+        raise Error, "new repository requires a separate dispatcher" unless jobs.values.all? { |j| repositories.include?(::Giraffe::Git.new.common(j["config"]["game_repo"])) }
         @state["specs"] = jobs
         @state["status"] = "watching"
         persist
