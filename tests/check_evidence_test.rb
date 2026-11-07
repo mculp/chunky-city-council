@@ -97,7 +97,9 @@ class CheckEvidenceTest < Minitest::Test
     retain
     assert_equal "", git(@tree, "status", "--porcelain")
     assert_equal "", git(@tree, "ls-files", "data/raw")
-    assert_equal "", git(@tree, "ls-files", "--others", "--", "data")
+    # --others alone deliberately lists ignored files too. Exclude standard rules for publication-risk status.
+    assert_equal "", git(@tree, "ls-files", "--others", "--exclude-standard", "--", "data")
+    assert_match(/council-check-/, git(@tree, "ls-files", "--others", "--ignored", "--exclude-standard", "--", "data"))
   end
 
   def test_existing_exclude_patterns_preserved_and_added_once
