@@ -110,6 +110,10 @@ module Council
     def bind_state!(id, state, manifest, spec)
       raise Error, "unsupported dispatcher state" unless state["version"] == 1
       raise Error, "dispatch limits changed; use a separately reviewed run" unless state["limits"] == manifest["limits"]
+      live_specs = manifest["jobs"].to_h { |row| [row["id"], row] }
+      state.fetch("specs").each do |key, saved|
+        raise Error, "saved approved job differs from the manifest or disappeared: #{key}" unless live_specs[key] == saved
+      end
       manifest["jobs"].each do |job|
         saved = state["specs"][job["id"]]
         raise Error, "saved approved job differs from the manifest: #{job['id']}" if saved && saved != job
@@ -127,6 +131,9 @@ module Council
       open = Array(job["recoveries"]).find { |row| OPEN_RECOVERY.include?(row["status"]) }
       raise Error, "an earlier recovery is #{open['status']}; inspect it first" if open
       raise Error, "#{id} run directory is not the dispatcher's own" unless job["run_dir"] == File.join(@dir, "jobs", id)
+      original = job["run_dir"]
+      raise Error, "original run escaped dispatcher state" if File.symlink?(original) || !File.realpath(original).start_with?(File.realpath(@dir) + File::SEPARATOR)
+      raise Error, "original saved ticket differs from the exact approved snapshot" unless read_record(original, "ticket") == spec.fetch("ticket")
       job
     end
 
@@ -173,7 +180,7 @@ module Council
       expected = File.realpath(File.join(config["worktrees"], id))
       raise Error, "candidate does not belong to this ticket/worktree" unless candidate.ticket == id && File.realpath(candidate.worktree) == expected
       identity = builder.identity(expected)
-      raise Error, "worktree is not on the ticket's council branch" unless identity["branch"].to_s.end_with?("council/#{id.downcase}")
+      raise Error, "worktree is not on the ticket's council branch" unless identity["branch"] == "council/#{id.downcase}"
       if proof[:identity]
         keys = %w[branch common_git_dir origin push_origin]
         raise Error, "worktree Git identity or ownership changed since the original run" unless identity.slice(*keys) == proof[:identity].slice(*keys)
@@ -228,7 +235,7 @@ module Council
       snapshot = JSON.parse(JSON.generate(job))
       store = Run.new(@dir)
       persist = -> { store.save("dispatch", state) }
-      entry = {"qa_only" => true, "writer_started" => false, "status" => "running", "sha" => candidate.sha, "base" => candidate.base, "run_dir" => run_dir}
+      entry = {"qa_only" => true, "writer_started" => false, "status" => "running", "sha" => candidate.sha, "base" => candidate.base, "run_dir" => run_dir, "previous_job" => snapshot}
       job["recoveries"] = Array(snapshot["recoveries"]) + [entry]
       job["status"] = "running" # an interruption is parked, never replayed, by the dispatcher's own handling
       persist.call # the fresh transaction exists before any check or call

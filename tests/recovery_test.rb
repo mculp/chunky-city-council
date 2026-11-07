@@ -164,6 +164,44 @@ class RecoveryTest < Minitest::Test
 
   # --- origin checkpoints ----------------------------------------------------------------------------------
 
+  def test_original_ticket_drift_is_rejected_before_qa
+    seed(:failed)
+    sha = commit_fix
+    path = File.join(@state, "jobs", ID, "ticket.json")
+    original = JSON.parse(File.read(path)); original["description"] += " changed retained original scope"
+    File.write(path, JSON.generate(original))
+    assert_raises(Council::Error) { recovery(candidate_file(sha: sha)).execute(ID) }
+    assert_empty @qa_script.tasks
+  end
+
+  def test_dropped_unrelated_spec_is_rejected_before_qa
+    seed(:failed)
+    sha = commit_fix
+    data = dispatch
+    extra = JSON.parse(JSON.generate(data["specs"][ID])); extra["id"] = "CHUNKY-10"; extra["ticket"]["id"] = "CHUNKY-10"
+    data["specs"]["CHUNKY-10"] = extra
+    data["jobs"]["CHUNKY-10"] = {"status" => "integrated", "lane" => "engineer"}
+    write_dispatch(data)
+    assert_raises(Council::Error) { recovery(candidate_file(sha: sha)).execute(ID) }
+    assert_empty @qa_script.tasks
+  end
+
+  def test_original_job_snapshot_is_durable_before_transition
+    seed(:failed)
+    sha = commit_fix
+    original = JSON.parse(JSON.generate(job))
+    @tracker.on_transition = -> { assert_equal original, dispatch.dig("jobs", ID, "recoveries", -1, "previous_job") }
+    assert_equal "ready", recovery(candidate_file(sha: sha)).execute(ID)["status"]
+  end
+
+  def test_questions_branch_must_match_exactly_not_just_a_suffix
+    seed(:questions)
+    sha = commit_fix
+    git(worktree, "branch", "-m", "not-council/#{ID.downcase}")
+    assert_raises(Council::Error) { recovery(candidate_file(sha: sha)).execute(ID) }
+    assert_empty @qa_script.tasks
+  end
+
   def test_failed_checks_retain_the_candidate_and_a_versioned_attempt_checkpoint
     seed(:failed)
     assert_equal "parked", job["status"]
