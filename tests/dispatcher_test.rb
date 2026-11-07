@@ -269,6 +269,10 @@ class DispatcherTest < Minitest::Test
     end
     factory = lambda do |config, lane, dir, b, id|
       w = script.call do |task|
+        if lane == "platform"
+          assert_includes task.profile.bash, "node tools/package-changelog.mjs"
+          refute task.profile.bash.any? { |prefix| prefix.start_with?("ruby") }
+        end
         File.write(File.join(task.cwd, config["allowed"].first), "#{id}: checked\n")
         {"questions" => [], "subject" => "Add result", "summary" => "Scoped", "checks_run" => ["local"]}
       end

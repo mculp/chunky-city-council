@@ -169,6 +169,19 @@ class CycleTest < Minitest::Test
     assert_equal @base, origin_main
   end
 
+  def test_qa_recheck_rejects_committed_scope_changes_before_a_model_call
+    first = cycle(writer, Script.new { |task| report(task) }).call(TICKET)
+    original = first["candidate"]
+    File.write(File.join(original[:worktree], "README.md"), "outside scope\n")
+    git(original[:worktree], "add", "-A"); git(original[:worktree], "commit", "-qm", "unreviewed unrelated edit")
+    candidate = Council::Builder::Candidate.new(**original.merge(sha: git(original[:worktree], "rev-parse", "HEAD")))
+    builder = Council::Builder.new(@config, runner: nil, role: "engineer", out: @out)
+    q = Script.new { |task| report(task) }; qa = Council::Role.new(@config, name: "qa", runner: q, out: @out)
+    assert_raises(Council::Error) { Council::Cycle.new(builder: builder, qa: qa, run_dir: File.join(@tmp, "recheck")).review(TICKET, candidate) }
+    assert_empty q.tasks
+    assert_equal @base, origin_main
+  end
+
   def test_director_refuses_overlapping_queues_before_model_or_linear_calls
     linear = LinearStandIn.new
     overlap = brief.merge("lanes" => {"engineer" => {"allowed" => ["tools/"]}, "platform" => {"allowed" => ["tools/package.mjs"]}})

@@ -60,6 +60,8 @@ module Council
       raise Error, "candidate does not belong to this ticket/worktree" unless candidate.ticket == id && File.realpath(candidate.worktree) == expected
       @git.clean!(expected)
       raise Error, "candidate HEAD changed; record the new candidate before reviewing" unless @git.head(expected) == candidate.sha
+      raise Error, "candidate base must be a full commit SHA" unless candidate.base.is_a?(String) && candidate.base.match?(/\A[0-9a-f]{40}\z/)
+      guard_paths!(@command.run!(["git", "diff", "--name-only", "-z", candidate.base, candidate.sha, "--"], cwd: expected, timeout: 120).split("\0"))
       check!(id, expected, candidate.base, candidate.sha)
     end
 
@@ -139,8 +141,9 @@ module Council
     def profile = @profile ||= ::Giraffe::Runners::ToolProfile.from(JSON.parse(File.read(File.join(role_path, "profile.json"))))
 
     # What only the council or Matt may change. The Builder's tools already refuse some of it; this catches the rest.
-    def guard!(worktree)
-      paths = @git.changed_paths(worktree)
+    def guard!(worktree) = guard_paths!(@git.changed_paths(worktree))
+
+    def guard_paths!(paths)
       touched = paths.select { |path| @config["protected"].any? { |rule| matches?(path, rule) } }
       raise Error, "the Builder changed protected paths: #{touched.join(', ')}; the worktree is left for you to look at" if touched.any?
       allowed = @config.data["allowed"]

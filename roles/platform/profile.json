@@ -1,6 +1,7 @@
 {
   "bash": [
     "node tools/check.mjs",
+    "node tools/package-changelog.mjs",
     "node --test",
     "npm test",
     "git status",
