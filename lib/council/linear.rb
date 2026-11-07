@@ -37,7 +37,7 @@ module Council
     def create(parent, request)
       input = request.merge("teamId" => parent.fetch("team").fetch("id"), "parentId" => parent.fetch("id"))
       input["projectId"] = parent["project"]["id"] if parent["project"]
-      result = query("mutation($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier url } } }", "input" => input).fetch("issueCreate")
+      result = query("mutation($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier url title description } } }", "input" => input).fetch("issueCreate")
       raise Error, "Linear did not confirm ticket creation" unless result["success"] && result["issue"]
       result.fetch("issue")
     end
@@ -49,6 +49,17 @@ module Council
           id identifier title description url state { name type }
           team { states { nodes { id name type } } }
           inverseRelations(first: 100) { nodes { type issue { identifier state { type } } } pageInfo { hasNextPage } }
+        } }
+      GRAPHQL
+    end
+
+    # Fresh, read-only identity/body/state read of one planned child for Council::Planner.
+    def planning_ticket(identifier)
+      query(<<~GRAPHQL, "id" => identifier).fetch("issue") || raise(Error, "Linear has no #{identifier}")
+        query($id: String!) { issue(id: $id) {
+          id identifier title description url state { name type }
+          parent { id identifier }
+          team { id key states { nodes { id name type } } }
         } }
       GRAPHQL
     end
