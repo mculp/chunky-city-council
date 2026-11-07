@@ -17,6 +17,7 @@ module Council
     require_relative "council/planner"
     require_relative "council/handoff"
     require_relative "council/dispatcher"
+    require_relative "council/recovery"
   end
 
   # The subscription backend: claude -p, signed in as Matt. An API key in the environment would bill that key

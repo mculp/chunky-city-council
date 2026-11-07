@@ -171,6 +171,31 @@ QA receives the **exact** report/stdout paths, must directly read them, distingu
 execution, and cite both for a pass. An instruction README is not test evidence. Reports of failed checks remain
 available without being labelled successful QA. Source tests still execute as the local user; this is not an OS sandbox.
 
+### QA-only recovery of an unpublished job
+
+```sh
+# Pure local plan: no lock, file, check, Linear client, credential or model call.
+bin/council recover CHUNKY-206 --manifest queue.json --state-dir runs/campaign --candidate-file candidate.json --config lane.json
+# Trusted-controller execution (explicit):
+bin/council recover CHUNKY-206 --manifest queue.json --state-dir runs/campaign --candidate-file candidate.json --config lane.json --execute
+```
+
+`recover` re-reviews one **unpublished parked/questions/failed** dispatcher job on the SAME ledger. It never starts a
+writer, rebases, pushes, opens a PR, merges, deploys or marks Done. `--execute` takes the dispatcher's own root,
+workspace and common-repo locks first, then the ticket lock, and binds manifest, spec, config, limits and saved ticket
+exactly. It refuses global attention, running/integrated/ready jobs, any handoff/publication record or intent, changed
+live title/description, a tracker state other than In Progress/In Review, and altered candidate identity or ownership.
+The candidate must keep the ORIGINAL recorded base and descend from the originally recorded SHA (`candidate.json` plus the
+versioned `attempt-N.json` checkpoint, or the base/pre-writer HEAD in a writer-question outcome). A nearer base, a
+non-descendant, a SHA already reviewed or recovered, a reused recovery run, and legacy records without that identity
+proof are refused; they need a separate explicit review. STOP, an expired deadline, exhausted calls or dollars stop
+before any check or QA call; QA is charged to the same persistent budget with a fresh run under `recoveries/`.
+Only a validated pass reads the live scope again, saves the intent, applies In Progress -> In Review if necessary, confirms
+the readback, and adopts the new ready candidate (original run and result are kept under `recovered_from`). An ambiguous
+transition is retained, sets dispatcher attention and is not marked ready; blocked/fail/error leaves the old job metadata
+intact. An interrupted recovery leaves a `running` job that the dispatcher parks on its next start. There is no automatic
+QA-report retry. Configured checks are local user code run as the local user; this is not an OS sandbox.
+
 ## Legacy Builder command
 
 `bin/council build CHUNKY-123` retains the original rollout behavior: Builder → checks → automatic fast-forward (or

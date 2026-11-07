@@ -46,12 +46,17 @@ module Council
     end
 
     # The role cycle stops at a checked, preserved commit. It never calls landing or marks Linear Done.
+    # The committed candidate is yielded BEFORE the checks, so a caller can retain it even when the checks then fail.
     def candidate(ticket, previous: nil, feedback: nil)
       result = write_candidate(ticket, previous: previous, feedback: feedback)
       return result if result.is_a?(Outcome)
+      yield result if block_given?
       check!(ticket["id"], result.worktree, result.base, result.sha)
       result
     end
+
+    # The Git identity a candidate must keep (branch, common dir, remotes, HEAD); retained in attempt checkpoints.
+    def identity(worktree) = @git.fingerprint(worktree).slice(*IDENTITY)
 
     # Recheck an existing candidate without invoking a writer or landing it.
     def verify_candidate!(ticket, candidate)
@@ -82,9 +87,10 @@ module Council
         worktree, base = prepare(id)
       end
       before = @git.fingerprint(worktree).slice(*IDENTITY)
+      pre_writer_head = before.fetch("head")
       answer = ask(ticket, worktree, base, feedback)
       raise Error, "writer changed Git identity or committed; candidate parked" unless @git.fingerprint(worktree).slice(*IDENTITY) == before
-      return parked(id, worktree, answer["questions"]) if answer["questions"].any?
+      return parked(id, worktree, answer["questions"], base, pre_writer_head) if answer["questions"].any?
       guard!(worktree)
       sha = @git.commit(worktree, message(ticket, answer)) || raise(Error, "the Builder finished without changing anything")
       Candidate.new(ticket: id, worktree: worktree, base: base, sha: sha)
@@ -217,9 +223,11 @@ module Council
       raise Error, "invalid ticket id: #{id.inspect}" unless id.is_a?(String) && id.match?(/\A[A-Z][A-Z0-9]*-[1-9][0-9]*\z/)
     end
 
-    def parked(id, worktree, questions)
+    # Writer work stays uncommitted and uncleaned. The original base and pre-writer HEAD are the identity a later
+    # QA-only recovery must descend from.
+    def parked(id, worktree, questions, base, pre_writer_head)
       say "#{id}: the Builder has questions; nothing landed, and the worktree is left at #{worktree}"
-      Outcome.new(status: "questions", ticket: id, detail: {"questions" => questions, "worktree" => worktree})
+      Outcome.new(status: "questions", ticket: id, detail: {"questions" => questions, "worktree" => worktree, "base" => base, "pre_writer_head" => pre_writer_head})
     end
   end
 end
