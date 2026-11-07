@@ -306,6 +306,30 @@ class DispatcherTest < Minitest::Test
     assert_equal "ready", resumed["jobs"]["CHUNKY-3"]["status"]
     assert_equal 6, resumed["runtime"]["calls"].size
     assert_equal sha, git("--git-dir", origin, "rev-parse", "main", cwd: @tmp)
+    third = resumed["jobs"]["CHUNKY-3"]["result"]["candidate"]
+    @linear.issues["CHUNKY-3"]["state"] = {"name" => "Done", "type" => "completed"}
+    git("push", "-q", "origin", "#{third[:sha] || third['sha']}:main")
+    assert_equal "integrated", dispatcher(factory: factory).run(once: true)["jobs"]["CHUNKY-3"]["status"]
+  end
+
+  def test_a_live_append_cannot_introduce_an_unlocked_repository
+    added = false
+    sleeper = lambda do |_n|
+      Thread.pass
+      unless added
+        repo = File.join(@tmp, "other-game")
+        git("init", "-q", repo, cwd: @tmp)
+        add("CHUNKY-3", "engineer", "other.txt")
+        File.write(@jobs.last["config"], JSON.generate(@config.merge("game_repo" => repo, "allowed" => ["other.txt"])))
+        save_manifest
+        added = true
+      end
+      @now += 1
+    end
+    result = Timeout.timeout(5) { dispatcher(sleeper: sleeper).run }
+    assert_equal "attention", result["status"]
+    assert_includes result["attention"], "new repository"
+    refute_includes @calls, "CHUNKY-3"
   end
 
   def test_ambiguous_linear_claim_is_parked_without_starting_or_retrying_a_writer

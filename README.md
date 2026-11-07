@@ -97,10 +97,12 @@ This is single-coordinator/local-repository exclusion, **not a distributed Linea
 clone against the same inbox. Ticket locks also protect cycles, QA rechecks and discard in the same Git repository.
 
 Append approved jobs to the manifest while the watcher runs. Existing specs and limits are immutable, and new jobs
-must use already locked workspaces. Same-lane work is serial. Overlapping paths remain held by parked/unintegrated
+must use already locked workspaces and repositories. Same-lane work is serial. Overlapping paths remain held by parked/unintegrated
 work. A ready candidate releases its paths only after Linear completion **and** the exact reviewed SHA is observed
 on the configured source branch. Rebased/squashed candidates require explicit integrator reconciliation; tracker Done
-alone is not proof. With local-mirror origins, the integrator must advance the mirror after a reviewed merge.
+alone is not proof. Integration is reconciled even while the queue is idle, so a finished candidate does not remain
+mislabelled ready merely because no overlapping task arrived. With local-mirror origins, the integrator must advance
+the mirror after a reviewed merge.
 
 `--once` performs one admission pass and drains its jobs. Otherwise polling continues within the admission window;
 active calls/checks drain under their own timeouts. `SIGINT`, `SIGTERM`, or a `STOP` file in the state directory prevents
