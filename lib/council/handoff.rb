@@ -81,8 +81,8 @@ module Council
       raise Error, "review record is for #{state['ticket'].inspect}, not #{ticket['id']}" unless state["ticket"] == ticket["id"]
       same_candidate!("ready state", state["candidate"], candidate)
       same_candidate!("candidate record", read!(dir, "candidate"), candidate)
-      raise Error, "ticket record does not match #{ticket['id']}" unless read!(dir, "ticket")["id"] == ticket["id"]
-      final_qa!(dir)
+      raise Error, "ticket record does not match the exact snapshot for #{ticket['id']}" unless read!(dir, "ticket") == ticket
+      final_qa!(dir, candidate.worktree)
     end
 
     def read!(dir, name)
@@ -103,7 +103,7 @@ module Council
       end
     end
 
-    def final_qa!(dir)
+    def final_qa!(dir, worktree)
       numbers = Dir.children(dir).filter_map { |name| name[/\Aqa-([1-9][0-9]*)\.json\z/, 1]&.to_i }
       raise Error, "no QA report in the review record; nothing published" if numbers.empty?
       report = read!(dir, "qa-#{numbers.max}")
@@ -112,6 +112,13 @@ module Council
       evidence = report["evidence"]
       artifacts = evidence.is_a?(Array) ? evidence.flat_map { |e| e.is_a?(Hash) ? Array(e["artifacts"]) : [] } : []
       raise Error, "final QA report has no retained evidence" if artifacts.empty?
+      # Match Cycle#validate_report!: a claimed path is not evidence unless it still exists inside this candidate.
+      root = File.realpath(worktree) + File::SEPARATOR
+      artifacts.each do |relative|
+        raise Error, "invalid QA evidence path" unless relative.is_a?(String) && !relative.empty?
+        path = File.expand_path(relative, worktree)
+        raise Error, "QA evidence is missing or outside the candidate: #{relative}" unless File.file?(path) && File.realpath(path).start_with?(root)
+      end
       report
     end
 

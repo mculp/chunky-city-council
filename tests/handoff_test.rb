@@ -93,6 +93,8 @@ class HandoffTest < Minitest::Test
     FileUtils.rm_rf(@review)
     FileUtils.mkdir_p(@review)
     c = @candidate.to_h.transform_keys(&:to_s)
+    FileUtils.mkdir_p(File.join(@work, "data/raw"))
+    File.write(File.join(@work, "data/raw/e.txt"), "Actual retained fixture evidence for #{@sha}\n")
     review("ticket", TICKET)
     review("candidate", c)
     review("qa-1", {"verdict" => "fail", "summary" => "first", "evidence" => [], "findings" => [{"issue" => "x"}]})
@@ -108,6 +110,36 @@ class HandoffTest < Minitest::Test
     assert_empty command.writes
     assert_empty command.calls.reject { |a| a[0, 2] == %w[git ls-remote] || a[0, 3] == %w[gh pr list] }
     error
+  end
+
+  def test_supplied_ticket_snapshot_drift_is_rejected_before_verification_or_commands
+    {"title" => "A different request", "description" => "Changed acceptance", "url" => "https://example.invalid/changed"}.each do |field, value|
+      h, builder, command = handoff
+      error = assert_raises(Council::Error) { publish(h, ticket: TICKET.merge(field => value)) }
+      assert_match(/exact snapshot/, error.message)
+      assert_empty builder.calls
+      assert_empty command.calls
+      refute File.exist?(@run)
+    end
+  end
+
+  def test_retained_ticket_snapshot_drift_is_rejected_for_the_same_identifier
+    review("ticket", TICKET.merge("title" => "Changed after QA"))
+    assert_rejected(/exact snapshot/) { |h| publish(h) }
+  end
+
+  def test_missing_retained_evidence_is_rejected_before_any_remote_command
+    File.unlink(File.join(@work, "data/raw/e.txt"))
+    assert_rejected(/evidence is missing/) { |h| publish(h) }
+  end
+
+  def test_evidence_symlink_escaping_the_candidate_is_rejected
+    outside = File.join(@tmp, "outside-evidence.txt")
+    File.write(outside, "not evidence in this candidate")
+    path = File.join(@work, "data/raw/e.txt")
+    File.unlink(path)
+    File.symlink(outside, path)
+    assert_rejected(/outside the candidate/) { |h| publish(h) }
   end
 
   def assert_untouched
