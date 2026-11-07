@@ -28,7 +28,7 @@ module Council
             end
             @run.save("candidate", candidate.to_h.transform_keys(&:to_s))
             @run.save("state", "status" => "qa", "attempt" => attempt + 1, "ticket" => ticket["id"], "sha" => candidate.sha)
-            report = @qa.call({"ticket" => ticket, "base_sha" => candidate.base, "candidate_sha" => candidate.sha}, cwd: candidate.worktree)
+            report = @qa.call(qa_input(ticket, candidate), cwd: candidate.worktree)
             @run.save("qa-#{attempt + 1}", report)
             validate_report!(report, candidate.worktree)
             if report["verdict"] == "pass"
@@ -58,7 +58,7 @@ module Council
           @run.save("state", "status" => "checking", "ticket" => ticket["id"], "sha" => candidate.sha)
           @builder.verify_candidate!(ticket, candidate)
           @run.save("state", "status" => "qa", "ticket" => ticket["id"], "sha" => candidate.sha)
-          report = @qa.call({"ticket" => ticket, "base_sha" => candidate.base, "candidate_sha" => candidate.sha}, cwd: candidate.worktree)
+          report = @qa.call(qa_input(ticket, candidate), cwd: candidate.worktree)
           @run.save("qa-1", report)
           validate_report!(report, candidate.worktree)
           @run.save("state", "status" => report["verdict"] == "pass" ? "ready" : "parked", "ticket" => ticket["id"],
@@ -72,6 +72,11 @@ module Council
 
     private
 
+    def qa_input(ticket, candidate)
+      {"ticket" => ticket, "base_sha" => candidate.base, "candidate_sha" => candidate.sha,
+        "controller_evidence" => @builder.respond_to?(:check_evidence) ? @builder.check_evidence : []}
+    end
+
     def validate_report!(report, worktree)
       verdict = report.fetch("verdict")
       raise Error, "QA passed with unresolved findings" if verdict == "pass" && report.fetch("findings").any?
@@ -80,6 +85,8 @@ module Council
       root = File.realpath(worktree) + File::SEPARATOR
       artifacts = report.fetch("evidence").flat_map { |e| e.fetch("artifacts") }
       raise Error, "QA pass needs retained evidence" if artifacts.empty?
+      expected = @builder.respond_to?(:check_evidence) ? @builder.check_evidence : []
+      raise Error, "QA pass must cite the actual controller report and stdout, not an instruction file" unless (expected - artifacts).empty?
       artifacts.each do |relative|
         path = File.expand_path(relative, worktree)
         raise Error, "QA evidence is missing or outside the candidate: #{relative}" unless File.file?(path) && File.realpath(path).start_with?(root)

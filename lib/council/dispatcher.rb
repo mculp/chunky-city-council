@@ -4,10 +4,12 @@ require "thread"
 require_relative "lock"
 require_relative "run"
 require_relative "dispatch_budget"
+require_relative "dispatch_flow"
 
 module Council
   # A bounded local supervisor over approved tickets and existing Cycle objects. No landing or deployment.
   class Dispatcher
+    include DispatchFlow
     LIMITS = %w[max_jobs max_calls budget_usd run_seconds poll_seconds].freeze
     attr_reader :state
 
@@ -40,9 +42,11 @@ module Council
       {"limits" => limits, "jobs" => jobs}
     end
 
-    def initialize(manifest:, state_dir:, linear:, cycle_factory: nil, clock: -> { Time.now.to_f }, sleeper: ->(seconds) { sleep(seconds) })
+    def initialize(manifest:, state_dir:, linear:, cycle_factory: nil, direction: nil, publish_candidates: false, planner_factory: nil, handoff_factory: nil, clock: -> { Time.now.to_f }, sleeper: ->(seconds) { sleep(seconds) })
       @manifest, @dir, @linear = File.expand_path(manifest), File.expand_path(state_dir), linear
       @factory, @clock, @sleep = cycle_factory || method(:cycle), clock, sleeper
+      @direction_file, @publish_candidates = direction && File.expand_path(direction), publish_candidates
+      @planner_factory, @handoff_factory = planner_factory, handoff_factory
       @mutex, @threads, @stopping = Mutex.new, {}, false
     end
 
@@ -69,6 +73,7 @@ module Council
           @state = {"version" => 1, "limits" => initial["limits"], "deadline" => @clock.call + initial["limits"]["run_seconds"], "specs" => {}, "jobs" => {}, "runtime" => {}, "status" => "starting"}
         end
         @limits = @state.fetch("limits")
+        initialize_flow(roots, repositories)
         @budget = DispatchBudget.new(state: @state, limits: @limits, mutex: @mutex, persist: method(:persist), clock: @clock,
           deadline: @state.fetch("deadline"), stopped: method(:stopped?))
         loop do
@@ -76,14 +81,19 @@ module Council
             @threads.delete_if { |_id, thread| !thread.alive? && thread.join }
             update_manifest(roots, repositories)
             @state["jobs"].each { |id, job| integrated?(@state["specs"].fetch(id)) if job["status"] == "ready" }
+            handoff_ready
             break if @state["attention"] && @threads.empty?
-            admit unless stopped? || @state["attention"]
+            unless stopped? || @state["attention"]
+              update_manifest(roots, repositories) if @threads.empty? && refill
+              admit
+            end
           rescue StandardError => e
             @mutex.synchronize { @state["attention"] = e.message; persist }
           end
-          break if @threads.empty? && (once || stopped? || @state["jobs"].size >= @limits["max_jobs"] || @state["attention"])
+          break if @threads.empty? && (once || stopped? || @state["jobs"].size >= @limits["max_jobs"] || calls_exhausted? || direction_finished? || @state["attention"])
           if once
             @threads.each_value(&:join)
+            handoff_ready
             break
           end
           @sleep.call(@limits["poll_seconds"])
@@ -103,6 +113,7 @@ module Council
 
     def update_manifest(roots, repositories)
       data = self.class.read_manifest(@manifest)
+      raise Error, "approved direction changed during dispatch" unless DispatchFlow.direction(@direction_file) == @state["direction"]
       raise Error, "dispatch limits changed" unless data["limits"] == @limits
       jobs = data["jobs"].to_h { |job| [job["id"], job] }
       @mutex.synchronize do

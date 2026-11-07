@@ -11,7 +11,9 @@ USAGE = <<~TEXT
          bin/council plan --brief FILE --run-dir DIR [--publish] [--config FILE]
          bin/council cycle TICKET --run-dir DIR [--ticket-file FILE] [--lane engineer|platform] [--max-revisions 0|1] [--config FILE]
          bin/council qa TICKET --candidate-file FILE --run-dir DIR [--ticket-file FILE] [--lane engineer|platform] [--config FILE]
-         bin/council dispatch --manifest FILE --state-dir DIR [--once] [--dry-run] [--config FILE]
+         bin/council refill --brief FILE --lane-configs FILE --manifest FILE --run-dir DIR [--publish] [--dry-run] [--config FILE]
+         bin/council handoff TICKET --candidate-file FILE --ticket-file FILE --review-dir DIR --run-dir DIR [--publish] [--dry-run] [--config FILE]
+         bin/council dispatch --manifest FILE --state-dir DIR [--direction FILE] [--publish-candidates] [--once] [--dry-run] [--config FILE]
 TEXT
 
 options = {config: File.join(Council::ROOT, "config/council.json"), linear: true, max_revisions: 1}
@@ -23,34 +25,45 @@ parser = OptionParser.new do |opts|
   opts.on("--dry-run", "Say what would happen, and start nothing") { options[:dry_run] = true }
   opts.on("--brief FILE") { |value| options[:brief] = value }
   opts.on("--run-dir DIR") { |value| options[:run_dir] = value }
-  opts.on("--publish", "Explicitly create the director's child tickets in Linear") { options[:publish] = true }
+  opts.on("--publish", "Explicitly authorize refill or draft-PR publication; never merge/deploy") { options[:publish] = true }
   opts.on("--candidate-file FILE") { |value| options[:candidate_file] = value }
   opts.on("--lane NAME") { |value| options[:lane] = value }
   opts.on("--max-revisions N", Integer) { |value| options[:max_revisions] = value }
   opts.on("--manifest FILE") { |value| options[:manifest] = value }
   opts.on("--state-dir DIR") { |value| options[:state_dir] = value }
   opts.on("--once", "One admission pass, then wait for its jobs to finish") { options[:once] = true }
+  opts.on("--lane-configs FILE") { |value| options[:lane_configs] = value }
+  opts.on("--review-dir DIR") { |value| options[:review_dir] = value }
+  opts.on("--direction FILE") { |value| options[:direction] = value }
+  opts.on("--publish-candidates", "Trusted controller opens checked draft PRs; no merge/deploy/Done") { options[:publish_candidates] = true }
 end
 
 begin
   parser.parse!(ARGV)
   command, id = ARGV.shift(2)
-  abort USAGE unless %w[build discard plan cycle qa dispatch].include?(command)
-  abort USAGE if %w[build discard cycle qa].include?(command) && !(id || options[:ticket_file])
-  abort USAGE if %w[plan cycle qa].include?(command) && !options[:run_dir]
+  abort USAGE unless %w[build discard plan cycle qa dispatch refill handoff].include?(command)
+  abort USAGE if %w[build discard cycle qa handoff].include?(command) && !(id || options[:ticket_file])
+  abort USAGE if %w[plan cycle qa refill handoff].include?(command) && !options[:run_dir]
   abort USAGE if command == "plan" && !options[:brief]
   abort USAGE if command == "qa" && !options[:candidate_file]
   abort USAGE if command == "dispatch" && (!options[:manifest] || !options[:state_dir] || id || !ARGV.empty?)
   raise Council::Error, "dispatch needs Linear readiness/claim checks" if command == "dispatch" && !options[:linear]
-  raise Council::Error, "--publish is only for plan and cannot use --no-linear" if options[:publish] && (command != "plan" || !options[:linear])
+  abort USAGE if command == "refill" && (!options[:brief] || !options[:manifest] || !options[:lane_configs] || id || !ARGV.empty?)
+  abort USAGE if command == "handoff" && (!options[:candidate_file] || !options[:ticket_file] || !options[:review_dir] || !ARGV.empty?)
+  raise Council::Error, "--publish is only for plan/refill/handoff" if options[:publish] && !%w[plan refill handoff].include?(command)
+  raise Council::Error, "Linear required for plan/refill publication" if options[:publish] && %w[plan refill].include?(command) && !options[:linear]
+  raise Council::Error, "direction/publication flags are only for dispatch" if (options[:direction] || options[:publish_candidates]) && command != "dispatch"
   config = Council::Config.load(options[:config])
   Council.boot(config)
   if command == "dispatch"
     if options[:dry_run]
-      puts JSON.pretty_generate(Council::Dispatcher.read_manifest(options[:manifest]).merge("state_dir" => options[:state_dir], "landing" => "review only; no push, merge, Done or deploy"))
+      puts JSON.pretty_generate(Council::Dispatcher.read_manifest(options[:manifest]).merge("state_dir" => options[:state_dir],
+        "direction" => Council::DispatchFlow.direction(options[:direction]), "publish_candidates" => !!options[:publish_candidates],
+        "landing" => options[:publish_candidates] ? "explicit draft-PR handoff only; no merge, Done or deploy" : "review only; no push, merge, Done or deploy"))
       exit
     end
-    dispatcher = Council::Dispatcher.new(manifest: options[:manifest], state_dir: options[:state_dir], linear: Council::Linear.new)
+    dispatcher = Council::Dispatcher.new(manifest: options[:manifest], state_dir: options[:state_dir], linear: Council::Linear.new,
+      direction: options[:direction], publish_candidates: !!options[:publish_candidates])
     previous = %w[INT TERM].to_h { |signal| [signal, Signal.trap(signal) { dispatcher.stop }] }
     begin
       result = dispatcher.run(once: !!options[:once])
@@ -59,6 +72,32 @@ begin
     ensure
       previous.each { |signal, handler| Signal.trap(signal, handler) }
     end
+  end
+  if command == "refill"
+    brief = JSON.parse(File.read(options[:brief]))
+    brief["direction"] ||= brief["owner_direction"]
+    configs = JSON.parse(File.read(options[:lane_configs])).transform_values { |path| File.expand_path(path, File.dirname(File.expand_path(options[:lane_configs]))) }
+    if options[:dry_run]
+      puts JSON.pretty_generate("brief" => brief, "configs" => configs, "manifest" => options[:manifest], "publish" => !!options[:publish])
+      exit
+    end
+    linear = options[:publish] ? Council::Linear.new : nil
+    director = Council::Director.new(config, role: Council::Role.new(config, name: "director", runner: Council.subscription_runner(config, role: "director")), linear: linear)
+    result = Council::Planner.new(config, director: director, linear: linear).call(brief, run_dir: options[:run_dir], manifest: options[:manifest], configs: configs, publish: !!options[:publish])
+    puts JSON.pretty_generate(result)
+    exit(result["status"] == "questions" ? 3 : 0)
+  end
+  if command == "handoff"
+    ticket = JSON.parse(File.read(options[:ticket_file]))
+    raise Council::Error, "ticket file and identifier differ" unless ticket["id"] == id
+    candidate = Council::Builder::Candidate.new(**JSON.parse(File.read(options[:candidate_file])).transform_keys(&:to_sym))
+    builder = Council::Builder.new(config, role: ticket["lane"] || "engineer", runner: nil)
+    handoff = Council::Handoff.new(config, builder: builder, command: Giraffe::Command.new)
+    publish = options[:publish] && !options[:dry_run]
+    action = -> { handoff.call(ticket, candidate, review_dir: options[:review_dir], run_dir: options[:run_dir], publish: !!publish) }
+    result = publish ? builder.with_ticket_lock(ticket, &action) : action.call
+    puts JSON.pretty_generate(result)
+    exit
   end
   if command == "discard"
     Council::Builder.new(config, runner: nil).discard(id)

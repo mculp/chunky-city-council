@@ -3,6 +3,7 @@
 require "fileutils"
 require "json"
 require_relative "lock"
+require_relative "check_evidence"
 
 module Council
   # One ticket, end to end: a worktree from the newest main, the Builder, the game's checks run again by the council,
@@ -12,11 +13,11 @@ module Council
     ROLE = File.expand_path("../../roles/builder", __dir__)
     Outcome = Data.define(:status, :ticket, :detail)
     Candidate = Data.define(:ticket, :worktree, :base, :sha)
-    attr_reader :usage
+    attr_reader :usage, :check_evidence
 
     def initialize(config, runner:, linear: nil, command: ::Giraffe::Command.new, out: $stdout, role: "builder")
       raise Error, "not a writer role: #{role}" unless %w[builder engineer platform].include?(role)
-      @role, @usage = role, []
+      @role, @usage, @check_evidence = role, [], []
       @config, @runner, @linear, @command, @out = config, runner, linear, command, out
       @git = ::Giraffe::Git.new(command: command)
       @landing = ::Giraffe::Landing.new(command: command)
@@ -182,6 +183,11 @@ module Council
                                 timeout: @config["check_timeout"], limit: 50_000_000)
       @out.write(result["stdout"])
       @out.write(result["stderr"])
+      if @config.data["check_evidence"]
+        evidence = CheckEvidence.retain(worktree: worktree, sha: sha, argv: argv, result: result, git: @command)
+        @check_evidence = ["#{evidence}/report.json", "#{evidence}/stdout.log"]
+        say "#{id}: retained controller evidence at #{evidence}/report.json (not independent QA)"
+      end
       unless result["status"].zero?
         raise Error, "checks failed, so nothing landed; the worktree is left at #{worktree}:\n#{::Giraffe::Command.tail(result['stdout'] + result['stderr'])}"
       end

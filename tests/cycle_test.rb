@@ -64,6 +64,47 @@ class CycleTest < Minitest::Test
   def origin_main = git(@tmp, "--git-dir", @origin, "rev-parse", "main")
   def state = JSON.parse(File.read(File.join(@tmp, "run/state.json")))
 
+  def test_opt_in_controller_evidence_is_retained_supplied_to_qa_and_not_committed
+    @config = Council::Config.new(@config.data.merge("check_evidence" => true))
+    q = Script.new do |task|
+      data = JSON.parse(task.prompt.split("Task data:\n").last)
+      paths = data.fetch("controller_evidence")
+      assert_equal 2, paths.size
+      actual = JSON.parse(File.read(File.join(task.cwd, paths.first)))
+      assert_equal data["candidate_sha"], actual["candidate_sha"]
+      assert_equal data["candidate_sha"], actual["observed_head"]
+      assert_equal 0, actual["exit_status"]
+      assert actual["candidate_unchanged"]
+      assert_includes actual["controller_ruby"], "ruby 3.4"
+      {"verdict" => "pass", "summary" => "Inspected controller log and tested independently", "evidence" => [{"command" => "check", "observation" => "actual retained output", "artifacts" => paths}], "findings" => []}
+    end
+    result = cycle(writer, q).call(TICKET)
+    assert_equal "ready", result["status"]
+    work = result["candidate"][:worktree]
+    assert_empty git(work, "ls-files", "data/raw")
+    assert_empty git(work, "status", "--porcelain")
+    assert File.directory?(File.join(work, "data/raw"))
+  end
+
+  def test_instruction_only_citations_cannot_replace_supplied_actual_check_evidence
+    @config = Council::Config.new(@config.data.merge("check_evidence" => true))
+    assert_raises(Council::Error) { cycle(writer, Script.new { |task| report(task) }).call(TICKET) }
+    assert_equal "failed", state["status"]
+    assert_equal @base, origin_main
+  end
+
+  def test_evidence_symlink_is_refused_without_writing_outside_the_worktree
+    outside = File.join(@tmp, "outside"); FileUtils.mkdir_p(outside)
+    @config = Council::Config.new(@config.data.merge("check_evidence" => true))
+    w = writer do |task|
+      File.write(File.join(task.cwd, "sign.txt"), "Welcome")
+      FileUtils.mkdir_p(File.join(task.cwd, "data"))
+      File.symlink(outside, File.join(task.cwd, "data/raw"))
+    end
+    assert_raises(Council::Error) { cycle(w, Script.new { flunk "must not call QA" }).call(TICKET) }
+    assert_empty Dir.children(outside)
+  end
+
   def test_ready_is_not_merged_or_done_and_candidate_is_preserved
     w = writer; q = Script.new { |task| report(task) }
     result = cycle(w, q).call(TICKET)

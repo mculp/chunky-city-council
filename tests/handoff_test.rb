@@ -142,6 +142,14 @@ class HandoffTest < Minitest::Test
     assert_rejected(/outside the candidate/) { |h| publish(h) }
   end
 
+  def test_public_body_never_copies_private_qa_prose
+    review("qa-2", load_review("qa-2").merge("summary" => "PRIVATE_REVIEW_TEXT"))
+    h, = handoff
+    publish(h)
+    assert_includes saved("plan")["body"], "Independent QA: pass"
+    refute_includes saved("plan")["body"], "PRIVATE_REVIEW_TEXT"
+  end
+
   def assert_untouched
     assert_equal @refs, git(@work, "for-each-ref")
     assert_equal "https://example.invalid/source.git", git(@work, "remote", "get-url", "origin")
@@ -187,7 +195,7 @@ class HandoffTest < Minitest::Test
     text = pr.join("\n")
     assert_includes text, "CHUNKY-9"
     assert_includes text, @sha
-    assert_includes text, "Sign reads well"
+    assert_includes text, "Independent QA: pass"
     assert_equal "published", saved("state")["status"]
     assert_equal [["CHUNKY-9", @sha]], builder.calls
     assert_untouched

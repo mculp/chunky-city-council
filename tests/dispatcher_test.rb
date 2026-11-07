@@ -67,8 +67,145 @@ class DispatcherTest < Minitest::Test
     @calls << id
     Object.new.tap { |o| o.define_singleton_method(:call) { |_ticket| {"status" => "ready", "merged" => false, "deployed" => false, "candidate" => {"sha" => "a" * 40}} } }
   end
-  def dispatcher(factory: method(:fake_cycle), sleeper: ->(_n) { @now += 1 }, root: @root)
-    Council::Dispatcher.new(manifest: @manifest, state_dir: root, linear: @linear, cycle_factory: factory, clock: -> { @now }, sleeper: sleeper)
+  def dispatcher(factory: method(:fake_cycle), sleeper: ->(_n) { @now += 1 }, root: @root, **flow)
+    Council::Dispatcher.new(manifest: @manifest, state_dir: root, linear: @linear, cycle_factory: factory, clock: -> { @now }, sleeper: sleeper, **flow)
+  end
+
+  def direction_file
+    @direction ||= begin
+      configs = %w[engineer platform].to_h do |lane|
+        path = File.join(@tmp, "future-#{lane}.json")
+        File.write(path, JSON.pretty_generate(@config.merge("allowed" => ["future-#{lane}.txt"], "roles" => @config["roles"].merge("director" => @config["builder"]))))
+        [lane, path]
+      end
+      brief = {"parent" => "CHUNKY-201", "owner_direction" => "Approved source-only work", "lanes" => configs.to_h { |lane, _p| [lane, {"allowed" => ["future-#{lane}.txt"]}] }}
+      path = File.join(@tmp, "direction.json")
+      File.write(path, JSON.pretty_generate("briefs" => [brief], "configs" => configs, "max_plans" => 1))
+      path
+    end
+  end
+
+  def refill_factory(counter, fail: false)
+    lambda do |_config, _budget, _index|
+      Object.new.tap do |planner|
+        planner.define_singleton_method(:call) do |brief, **options|
+          counter << [brief, options]
+          raise Council::Error, "ambiguous create; inspect UUID" if fail
+          {"status" => "queued"}
+        end
+      end
+    end
+  end
+
+  def full_candidate_cycle(_config, _lane, _dir, _budget, id)
+    @calls << id
+    result = {"status" => "ready", "merged" => false, "deployed" => false, "candidate" => {"ticket" => id, "worktree" => File.join(@config["worktrees"], id), "base" => "b" * 40, "sha" => "a" * 40}}
+    Object.new.tap { |o| o.define_singleton_method(:call) { |_t| result } }
+  end
+
+  def draft_factory(calls)
+    lambda do |_config, _builder|
+      Object.new.tap do |handoff|
+        handoff.define_singleton_method(:call) do |ticket, candidate, **options|
+          calls << [ticket, candidate, options]
+          {"status" => "published", "draft" => true, "sha" => candidate.sha, "merged" => false, "deployed" => false}
+        end
+      end
+    end
+  end
+
+  def test_direction_refills_once_after_existing_jobs_and_admits_the_appended_batch
+    count = []
+    factory = lambda do |_config, _budget, _index|
+      controller = self
+      Object.new.tap do |planner|
+        planner.define_singleton_method(:call) do |brief, **options|
+          count << [brief, options]
+          controller.add("CHUNKY-3", "engineer", "future-engineer.txt")
+          controller.add("CHUNKY-4", "platform", "future-platform.txt")
+          controller.save_manifest
+          controller.instance_variable_get(:@linear).issues.merge!(Linear.new(Council::Dispatcher.read_manifest(options[:manifest])["jobs"]).issues.reject { |id, _| %w[CHUNKY-1 CHUNKY-2].include?(id) })
+          {"status" => "queued"}
+        end
+      end
+    end
+    result = dispatcher(direction: direction_file, planner_factory: factory).run
+    assert_equal %w[CHUNKY-1 CHUNKY-2 CHUNKY-3 CHUNKY-4], @calls.sort
+    assert_equal 1, count.size
+    assert_equal "Approved source-only work", count.first[0]["direction"]
+    assert_equal true, count.first[1][:publish]
+    assert_equal "queued", result["plans"].first["status"]
+    assert_equal "paused", result["status"]
+    dispatcher(direction: direction_file, planner_factory: factory).run(once: true)
+    assert_equal 1, count.size
+  end
+
+  def test_ambiguous_planner_failure_is_preserved_and_never_replayed
+    count = []
+    assert_equal "attention", dispatcher(direction: direction_file, planner_factory: refill_factory(count, fail: true)).run["status"]
+    assert_equal "failed", saved["plans"].first["status"]
+    dispatcher(direction: direction_file, planner_factory: refill_factory(count, fail: true)).run(once: true)
+    assert_equal 1, count.size
+  end
+
+  def test_direction_cannot_change_or_introduce_unlocked_repositories
+    count = []
+    dispatcher(direction: direction_file, planner_factory: refill_factory(count)).run(once: true)
+    data = JSON.parse(File.read(direction_file)); data["briefs"].first["owner_direction"] = "Changed scope"
+    File.write(direction_file, JSON.pretty_generate(data))
+    assert_raises(Council::Error) { dispatcher(direction: direction_file).run(once: true) }
+    assert_empty count
+    # A separately started dispatcher must acquire every repository lock up front, not add new roots mid-run.
+    other = File.join(@tmp, "other"); git("init", "-q", other, cwd: @tmp)
+    path = data["configs"]["engineer"]; cfg = JSON.parse(File.read(path)); cfg["game_repo"] = other; File.write(path, JSON.generate(cfg))
+    assert_raises(Council::Error) { dispatcher(root: File.join(@tmp, "other-state"), direction: direction_file).run(once: true) }
+  end
+
+  def test_stop_file_prevents_a_planner_call
+    count = []; factory = refill_factory(count)
+    dispatcher(direction: direction_file, planner_factory: factory).run(once: true)
+    File.write(File.join(@root, "STOP"), "drain")
+    assert_equal "stopped", dispatcher(direction: direction_file, planner_factory: factory).run["status"]
+    assert_empty count
+  end
+
+  def test_explicit_draft_handoff_runs_after_once_jobs_finish_and_does_not_repeat
+    published = []
+    options = {factory: method(:full_candidate_cycle), publish_candidates: true, handoff_factory: draft_factory(published)}
+    dispatcher(**options).run(once: true)
+    assert_equal 2, published.size
+    assert published.all? { |_ticket, _candidate, options| options[:publish] }
+    assert saved["jobs"].values.all? { |job| job.dig("handoff", "draft") && job["status"] == "ready" }
+    refute @linear.moves.any? { |_id, state| state == "Done" }
+    dispatcher(**options).run(once: true)
+    assert_equal 2, published.size
+  end
+
+  def test_default_execution_never_calls_a_publisher
+    dispatcher(factory: method(:full_candidate_cycle), handoff_factory: ->(*) { flunk "not opted in" }).run(once: true)
+    refute saved["jobs"].values.any? { |job| job.key?("handoff") }
+  end
+
+  def test_publication_authority_is_pinned_and_interrupted_intents_do_not_replay
+    published = []; options = {factory: method(:full_candidate_cycle), publish_candidates: true, handoff_factory: draft_factory(published)}
+    dispatcher(**options).run(once: true)
+    assert_raises(Council::Error) { dispatcher(publish_candidates: false).run(once: true) }
+    data = saved; data["jobs"]["CHUNKY-1"]["handoff"]["status"] = "publishing"; File.write(File.join(@root, "dispatch.json"), JSON.generate(data))
+    assert_equal "attention", dispatcher(**options).run(once: true)["status"]
+    assert_equal 2, published.size
+  end
+
+  def test_tracker_drift_after_review_transition_blocks_publication
+    original = @linear.method(:transition)
+    @linear.define_singleton_method(:transition) do |issue, name|
+      original.call(issue, name)
+      issue["description"] = "drift" if name == "In Review"
+    end
+    published = []
+    result = dispatcher(factory: method(:full_candidate_cycle), publish_candidates: true, handoff_factory: draft_factory(published)).run(once: true)
+    assert_equal "attention", result["status"]
+    assert_empty published
+    assert result["jobs"].values.any? { |job| job.dig("handoff", "status") == "failed" }
   end
 
   def test_two_lanes_really_overlap_but_never_land_or_mark_done
